@@ -1,0 +1,66 @@
+I want to build an app that helps me keep track of several media products (we'll call them stories) mostly in progress, that I keep forgetting their key characters, events and details about them. Some belong to an universe. Stories include:
+	• Visual Novels: Typically a single release, though they may be part of a universe, linked to sequels and prequels.
+	• TV Series: Always episodic. In rare cases, a part of a larger universe. For example, "Agents of S.H.I.E.L.D." belongs to a Marvel Universe, but many Marvel characters and events are not shown or mentioned in the series.
+	• Movies: Typically a single release, though they may be part of a universe, linked to sequels and prequels.
+	• Games: Typically a single release, though they may be part of a universe, linked to sequels and prequels.
+
+
+My goal is to have a GUI app in Python where I can:
+	• Be able through a settings window to select a folder where I all the user data will be stored. For reference, we'll call it [USER FOLDER] in this description.
+		○ The user selected folder [USER FOLDER] will contain:
+			§ A "Stories" subfolder. [STORY FOLDER] for reference.
+			§ Every story the user adds will be assigned to a sub-folder in [USER FOLDER]/[STORY FOLDER].
+				□ [USER FOLDER]/[STORY FOLDER] will have another subfolder called "images"
+	• Create a new Story and assign it to a [STORY FOLDER]
+	• Be able to save any changes I make to that [STORY FOLDER]
+	• Be able to load any saved Stories (from a [STORY FOLDER])
+	• For each Story, be able to add any number of characters. A typical story can contain anything between 2 and a couple dozen characters. But I really want them to be able to contain up to a couple hundred, if needed.
+	• Each character will have:
+		○ An identifier, generated
+		○ A name and optional aliases. A name can be initially assigned by default because some characters names are not initially revealed. It can be something like Unnamed 1, Unnamed 2, etc.
+		○ An optional "MC" (Main character) attribute. This denotes the character is the protagonist. It is False by default and it can be applied to more than 1 character.
+		○ Age
+			§ Can be an integer indicating the actual age
+			§ Or it can be an age range label, like:
+				□ Minor
+				□ Teen
+				□ Young
+				□ Adult
+				□ Middle-aged
+				□ Mature
+				□ Old
+				□ (Option to add more age categories)
+		○ Gender:
+			§ Male
+			§ Female
+			§ Not specified (default)
+			§ Futa
+			§ (Option to add more gender categories)
+		○ Role/relationship. This is fundamental. I need to be able to trace relationships between characters. i.e. John is Josh's father, Martha is John's sister, Josh is Martha's nephew; Matt is Sandra's coworker, Lorna is Wanda's enemy etc. (Note 1)
+			§ Some relationships are bidirectional and pretty straightforward. Like John is Mary's coworker and Mary is John's coworker
+			§ Some relationships are a little bit less straightforward:
+				□ John is Reese's father, but Reese can be either John's son or daughter
+			§ Some others can be just one direction
+				□ John is Matt's sworn enemy, but Matt doesn't even know John
+		○ Traits: Like "possessive", "Liar", "Spoiled", "nerd", etc.
+		○ Details: Custom annotations on the character. As a list of Free text items.
+		○ Group/Organization/Clan/Association: One or more associations that tie several characters together  and their role there (optional), for example: 
+			§ School soccer team - goalkeeper
+			§ Nostromo Crew - Mechanic
+			§ Victims - [No role assigned yet]
+			§ S.H.I.E.L.D. - Agent
+		○ Achievements/actions. Things or events a character has achieved, either alone, with the Main Character, or between any number of characters. For example:
+			§ Phil Coulson died and came back to life
+			§ Daenerys Targaryen married Jon Snow
+			§ The Nostromo Crew dined together
+			§ Jane, Mike, and Mary made a trip together
+		○ Avatar. A single picture referencing the character. It will need to be pasted from the clipboard or copied from local storage.
+		○ Tagged pictures. Pictures from the gallery where the character is present. I will explain the gallery later (Note 2)
+	• I want one of the screens in the app to look like a detective's crime investigation board, we'll call it Story Board. For two different characters, be able to trace lines between them where each line describes the relationship (Note 1), as specified earlier in the role/relationship item. For example, If I already have two characters Jane and John, be able to trace a line like a thread, a dropbox appears and I can stablish their relationship.
+	• I will need a gallery for each Story. If possible, as easy as pasting an image from the clipboard or look for an image file and copy it from the local storage.
+		○ Then, be able to tag characters to that image (Note 2). Better yet if I can tag several characters to a single picture
+		○ I want to be able to access the whole gallery, but also be able to see a character's tagged pictures.
+		○ Be able to delete pictures and/or tags from the gallery
+
+I want this project to be initially build on Python, as a desktop app for Windows, PyQT 6 for GUI, and local database support with JSON files when it is more suitable
+
