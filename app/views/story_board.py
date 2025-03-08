@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QGraphicsLineItem, QGraphicsTextItem, QGraphicsRectItem, QMenu, QInputDialog,
     QColorDialog, QMessageBox, QGraphicsSceneMouseEvent, QGraphicsSceneContextMenuEvent,
     QGraphicsSceneHoverEvent, QGraphicsSceneDragDropEvent, QGraphicsSceneWheelEvent,
-    QGraphicsItemGroup, QToolBar, QSizePolicy, QGraphicsEllipseItem
+    QGraphicsItemGroup, QToolBar, QSizePolicy, QGraphicsEllipseItem, QFrame
 )
 from PyQt6.QtCore import Qt, QSize, QPointF, QRectF, QLineF, pyqtSignal, QTimer
 from PyQt6.QtGui import (
@@ -32,6 +32,20 @@ from app.db_sqlite import (
     get_story_board_views, get_story_board_view, create_story_board_view,
     update_story_board_view_layout
 )
+
+
+def create_vertical_line() -> QFrame:
+    """Create a vertical line for use as a separator.
+    
+    Returns:
+        A vertical line widget
+    """
+    line = QFrame()
+    line.setFrameShape(QFrame.Shape.VLine)
+    line.setFrameShadow(QFrame.Shadow.Sunken)
+    line.setFixedWidth(2)
+    line.setFixedHeight(24)
+    return line
 
 
 class CharacterCard(QGraphicsItemGroup):
@@ -65,71 +79,100 @@ class CharacterCard(QGraphicsItemGroup):
     def create_card(self) -> None:
         """Create the card components."""
         # Card dimensions
-        card_width = 150
-        card_height = 200
+        card_width = 180
+        card_height = 240
         
-        # Create card background
+        # Create polaroid-style card background (white with a border)
         self.background = QGraphicsRectItem(0, 0, card_width, card_height)
-        self.background.setBrush(QBrush(QColor("#F5F5DC")))  # Beige color
+        self.background.setBrush(QBrush(QColor("#FFFFFF")))  # White color
         self.background.setPen(QPen(QColor("#000000"), 2))
         self.addToGroup(self.background)
+        
+        # Create shadow effect
+        shadow_rect = QGraphicsRectItem(5, 5, card_width, card_height)
+        shadow_rect.setBrush(QBrush(QColor(0, 0, 0, 40)))  # Semi-transparent black
+        shadow_rect.setPen(QPen(Qt.PenStyle.NoPen))  # No border
+        self.addToGroup(shadow_rect)
+        self.background.setZValue(1)  # Ensure background is above shadow
         
         # Create pushpin
         pin_size = 20
         pin = QGraphicsEllipseItem(card_width / 2 - pin_size / 2, -pin_size / 2, pin_size, pin_size)
         pin.setBrush(QBrush(QColor("#FF0000")))  # Red color
         pin.setPen(QPen(QColor("#800000"), 1))  # Dark red border
+        pin.setZValue(2)  # Ensure pin is above background
         self.addToGroup(pin)
         
-        # Create character name
-        name = QGraphicsTextItem(self.character_data['name'])
-        name.setPos(10, 10)
-        name.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        name.setTextWidth(card_width - 20)
-        self.addToGroup(name)
+        # Create photo area (slightly inset from the card)
+        photo_margin = 15
+        photo_width = card_width - (photo_margin * 2)
+        photo_height = card_height - (photo_margin * 2) - 40  # Leave space for name at bottom
         
-        # Create avatar placeholder or actual avatar
-        avatar_rect = QGraphicsRectItem(10, 40, card_width - 20, card_height - 60)
-        avatar_rect.setBrush(QBrush(QColor("#CCCCCC")))  # Gray color
-        avatar_rect.setPen(QPen(QColor("#999999"), 1))  # Darker gray border
-        self.addToGroup(avatar_rect)
+        photo_rect = QGraphicsRectItem(photo_margin, photo_margin, photo_width, photo_height)
+        photo_rect.setBrush(QBrush(QColor("#EEEEEE")))  # Light gray color
+        photo_rect.setPen(QPen(QColor("#CCCCCC"), 1))  # Light gray border
+        photo_rect.setZValue(1.5)  # Ensure photo area is above background but below pin
+        self.addToGroup(photo_rect)
         
         # If avatar exists, load it
         if self.character_data['avatar_path'] and os.path.exists(self.character_data['avatar_path']):
             try:
                 pixmap = QPixmap(self.character_data['avatar_path'])
-                if not pixmap.isNull():
-                    avatar = QGraphicsPixmapItem(pixmap.scaled(
-                        int(card_width - 20), int(card_height - 60),
+                pixmap_item = QGraphicsPixmapItem(
+                    pixmap.scaled(
+                        photo_width,
+                        photo_height,
                         Qt.AspectRatioMode.KeepAspectRatio,
                         Qt.TransformationMode.SmoothTransformation
-                    ))
-                    avatar.setPos(10, 40)
-                    self.addToGroup(avatar)
+                    )
+                )
+                
+                # Center the pixmap in the photo area
+                pixmap_width = pixmap_item.pixmap().width()
+                pixmap_height = pixmap_item.pixmap().height()
+                pixmap_x = photo_margin + (photo_width - pixmap_width) / 2
+                pixmap_y = photo_margin + (photo_height - pixmap_height) / 2
+                
+                pixmap_item.setPos(pixmap_x, pixmap_y)
+                pixmap_item.setZValue(1.6)  # Ensure pixmap is above photo area
+                self.addToGroup(pixmap_item)
             except Exception as e:
                 print(f"Error loading avatar: {e}")
         
-        # Create character info
-        info_text = ""
-        if self.character_data['is_main_character']:
-            info_text += "Main Character\n"
+        # Create character name (at the bottom of the polaroid)
+        name_y = card_height - 35
+        name = QGraphicsTextItem(self.character_data['name'])
+        name.setPos(card_width / 2 - name.boundingRect().width() / 2, name_y)
+        name.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        name.setDefaultTextColor(QColor("#000000"))
+        name.setZValue(1.7)  # Ensure name is above everything
+        self.addToGroup(name)
         
-        if self.character_data['gender'] and self.character_data['gender'] != "NOT_SPECIFIED":
-            info_text += f"Gender: {self.character_data['gender'].title()}\n"
-        
-        if self.character_data['age_value'] is not None:
-            info_text += f"Age: {self.character_data['age_value']}\n"
-        elif self.character_data['age_category']:
-            info_text += f"Age: {self.character_data['age_category']}\n"
-        
-        if info_text:
-            info = QGraphicsTextItem(info_text)
-            info.setPos(10, card_height - 40)
-            info.setFont(QFont("Arial", 8))
-            info.setTextWidth(card_width - 20)
-            self.addToGroup(info)
+        # Add a small indicator if this is a main character
+        if self.character_data.get('is_main_character', False):
+            star_size = 15
+            star_x = card_width - star_size - 5
+            star_y = card_height - star_size - 5
+            
+            # Create a simple star indicator (just a yellow circle for now)
+            star = QGraphicsEllipseItem(star_x, star_y, star_size, star_size)
+            star.setBrush(QBrush(QColor("#FFD700")))  # Gold color
+            star.setPen(QPen(QColor("#DAA520"), 1))  # Darker gold border
+            star.setZValue(1.8)  # Ensure star is above everything
+            self.addToGroup(star)
+            
+            # Add "MC" text
+            mc_text = QGraphicsTextItem("MC")
+            mc_text.setFont(QFont("Arial", 7, QFont.Weight.Bold))
+            mc_text.setDefaultTextColor(QColor("#000000"))
+            mc_text.setPos(
+                star_x + (star_size - mc_text.boundingRect().width()) / 2,
+                star_y + (star_size - mc_text.boundingRect().height()) / 2
+            )
+            mc_text.setZValue(1.9)  # Ensure text is above star
+            self.addToGroup(mc_text)
     
-    def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value: Any) -> Any:
+    def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value) -> Any:
         """Handle item changes.
         
         Args:
@@ -140,7 +183,7 @@ class CharacterCard(QGraphicsItemGroup):
             Modified value
         """
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene():
-            # Update connected relationships
+            # Update connected relationship lines
             for relationship in self.relationships:
                 relationship.update_position()
         
@@ -171,11 +214,19 @@ class CharacterCard(QGraphicsItemGroup):
         """
         menu = QMenu()
         
-        # Add actions
         edit_action = menu.addAction("Edit Character")
         delete_action = menu.addAction("Delete Character")
         
-        # Show menu and handle actions
+        # Add relationship submenu
+        relationship_menu = menu.addMenu("Add Relationship")
+        
+        # Get all characters in the scene
+        scene = self.scene()
+        if scene:
+            for character_id, card in scene.character_cards.items():
+                if character_id != self.character_id:
+                    relationship_menu.addAction(f"To: {card.character_data['name']}")
+        
         action = menu.exec(event.screenPos())
         
         if action == edit_action:
@@ -184,6 +235,10 @@ class CharacterCard(QGraphicsItemGroup):
         elif action == delete_action:
             # TODO: Implement character deletion
             QMessageBox.information(None, "Not Implemented", "Character deletion is not yet implemented.")
+        elif action and action.text().startswith("To: "):
+            # TODO: Implement relationship creation
+            target_name = action.text()[4:]  # Remove "To: " prefix
+            QMessageBox.information(None, "Not Implemented", f"Creating relationship to {target_name} is not yet implemented.")
 
 
 class RelationshipLine(QGraphicsLineItem):
@@ -479,9 +534,9 @@ class StoryBoardWidget(QWidget):
         super().__init__()
         
         self.db_conn = db_conn
-        self.current_story_id: Optional[int] = None
-        self.current_story_data: Optional[Dict[str, Any]] = None
-        self.current_view_id: Optional[int] = None
+        self.current_story_id = None
+        self.current_story_data = None
+        self.current_view_id = None
         
         self.init_ui()
     
@@ -491,16 +546,16 @@ class StoryBoardWidget(QWidget):
         main_layout = QVBoxLayout(self)
         
         # Create toolbar
-        toolbar = QToolBar()
-        toolbar.setIconSize(QSize(24, 24))
+        toolbar = QHBoxLayout()
         
         # Create view selector
         self.view_selector = QComboBox()
-        self.view_selector.setMinimumWidth(200)
         self.view_selector.currentIndexChanged.connect(self.on_view_changed)
         toolbar.addWidget(QLabel("View:"))
         toolbar.addWidget(self.view_selector)
-        toolbar.addSeparator()
+        
+        # Add spacer
+        toolbar.addWidget(create_vertical_line())
         
         # Create view buttons
         self.new_view_button = QPushButton("New View")
@@ -511,7 +566,16 @@ class StoryBoardWidget(QWidget):
         self.save_view_button.clicked.connect(self.on_save_view)
         toolbar.addWidget(self.save_view_button)
         
-        toolbar.addSeparator()
+        # Add spacer
+        toolbar.addWidget(create_vertical_line())
+        
+        # Create character button
+        self.add_character_button = QPushButton("Add Character")
+        self.add_character_button.clicked.connect(self.on_add_character)
+        toolbar.addWidget(self.add_character_button)
+        
+        # Add spacer
+        toolbar.addWidget(create_vertical_line())
         
         # Create zoom buttons
         self.zoom_in_button = QPushButton("Zoom In")
@@ -526,7 +590,7 @@ class StoryBoardWidget(QWidget):
         self.reset_zoom_button.clicked.connect(self.on_reset_zoom)
         toolbar.addWidget(self.reset_zoom_button)
         
-        main_layout.addWidget(toolbar)
+        main_layout.addLayout(toolbar)
         
         # Create graphics view
         self.scene = StoryBoardScene(self)
@@ -538,6 +602,7 @@ class StoryBoardWidget(QWidget):
         self.view_selector.setEnabled(False)
         self.new_view_button.setEnabled(False)
         self.save_view_button.setEnabled(False)
+        self.add_character_button.setEnabled(False)
         self.zoom_in_button.setEnabled(False)
         self.zoom_out_button.setEnabled(False)
         self.reset_zoom_button.setEnabled(False)
@@ -556,6 +621,7 @@ class StoryBoardWidget(QWidget):
         self.view_selector.setEnabled(True)
         self.new_view_button.setEnabled(True)
         self.save_view_button.setEnabled(True)
+        self.add_character_button.setEnabled(True)
         self.zoom_in_button.setEnabled(True)
         self.zoom_out_button.setEnabled(True)
         self.reset_zoom_button.setEnabled(True)
@@ -785,4 +851,65 @@ class StoryBoardWidget(QWidget):
     def on_reset_zoom(self) -> None:
         """Handle reset zoom button click."""
         self.view.current_zoom = 1.0
-        self.view.setTransform(QTransform()) 
+        self.view.setTransform(QTransform())
+    
+    def on_add_character(self) -> None:
+        """Handle add character button click."""
+        if not self.current_story_id:
+            return
+        
+        # Import here to avoid circular imports
+        from app.views.character_dialog import CharacterDialog
+        
+        # Create and show the character dialog
+        dialog = CharacterDialog(self, self.current_story_id)
+        if dialog.exec():
+            character_data = dialog.get_character_data()
+            
+            # Create the character in the database
+            from app.db_sqlite import create_character
+            
+            character_id = create_character(
+                self.db_conn,
+                name=character_data['name'],
+                story_id=self.current_story_id,
+                aliases=character_data['aliases'],
+                is_main_character=character_data['is_main_character'],
+                age_value=character_data['age_value'],
+                age_category=character_data['age_category'],
+                gender=character_data['gender'],
+                avatar_path=character_data['avatar_path']
+            )
+            
+            # Add the character to the current view
+            if self.current_view_id:
+                # Get the current layout
+                from app.db_sqlite import get_story_board_view
+                view = get_story_board_view(self.db_conn, self.current_view_id)
+                layout = json.loads(view['layout_data'])
+                
+                # Add the character to the layout
+                # Position it in the center of the view
+                layout['characters'].append({
+                    'id': character_id,
+                    'x': 500,  # Center of the scene
+                    'y': 300   # Center of the scene
+                })
+                
+                # Update the layout
+                from app.db_sqlite import update_story_board_view_layout
+                update_story_board_view_layout(
+                    self.db_conn,
+                    self.current_view_id,
+                    json.dumps(layout)
+                )
+                
+                # Reload the view
+                self.load_view(self.current_view_id)
+            
+            # Show a success message
+            QMessageBox.information(
+                self,
+                "Character Created",
+                f"Character '{character_data['name']}' created successfully."
+            ) 
