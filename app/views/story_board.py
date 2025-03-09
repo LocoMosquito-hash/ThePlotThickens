@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QGraphicsSceneHoverEvent, QGraphicsSceneDragDropEvent, QGraphicsSceneWheelEvent,
     QGraphicsItemGroup, QToolBar, QSizePolicy, QGraphicsEllipseItem, QFrame
 )
-from PyQt6.QtCore import Qt, QSize, QPointF, QRectF, QLineF, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, QSize, QPointF, QRectF, QLineF, pyqtSignal, QTimer, QObject
 from PyQt6.QtGui import (
     QPixmap, QImage, QColor, QPen, QBrush, QFont, QPainter, QPainterPath,
     QTransform, QCursor, QDrag, QMouseEvent, QWheelEvent, QKeyEvent
@@ -48,10 +48,14 @@ def create_vertical_line() -> QFrame:
     return line
 
 
+# Create a custom class that combines QObject and QGraphicsItemGroup
+class CharacterCardSignals(QObject):
+    """Signals for the CharacterCard class."""
+    position_changed = pyqtSignal(int)  # Signal emitted when position changes, with character ID
+
+
 class CharacterCard(QGraphicsItemGroup):
     """A graphical item representing a character on the story board."""
-    
-    position_changed = pyqtSignal(int)  # Signal emitted when position changes, with character ID
     
     def __init__(self, character_id: int, character_data: Dict[str, Any], x: float = 0, y: float = 0) -> None:
         """Initialize the character card.
@@ -63,6 +67,10 @@ class CharacterCard(QGraphicsItemGroup):
             y: Y coordinate
         """
         super().__init__()
+        
+        # Create signals object
+        self.signals = CharacterCardSignals()
+        self.position_changed = self.signals.position_changed
         
         self.character_id = character_id
         self.character_data = character_data
@@ -199,7 +207,7 @@ class CharacterCard(QGraphicsItemGroup):
             # Position has changed, emit signal
             self.is_moving = False
             # Use QTimer to emit the signal after a short delay to avoid excessive updates
-            QTimer.singleShot(100, lambda: self.position_changed.emit(self.character_id))
+            QTimer.singleShot(100, lambda: self.signals.position_changed.emit(self.character_id))
         
         return super().itemChange(change, value)
     
