@@ -51,6 +51,8 @@ def create_vertical_line() -> QFrame:
 class CharacterCard(QGraphicsItemGroup):
     """A graphical item representing a character on the story board."""
     
+    position_changed = pyqtSignal(int)  # Signal emitted when position changes, with character ID
+    
     def __init__(self, character_id: int, character_data: Dict[str, Any], x: float = 0, y: float = 0) -> None:
         """Initialize the character card.
         
@@ -75,6 +77,9 @@ class CharacterCard(QGraphicsItemGroup):
         
         # Track connected relationships
         self.relationships: List[RelationshipLine] = []
+        
+        # Track if we're currently moving
+        self.is_moving = False
     
     def create_card(self) -> None:
         """Create the card components."""
@@ -186,6 +191,15 @@ class CharacterCard(QGraphicsItemGroup):
             # Update connected relationship lines
             for relationship in self.relationships:
                 relationship.update_position()
+            
+            # Set moving flag
+            self.is_moving = True
+        
+        elif change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged and self.is_moving:
+            # Position has changed, emit signal
+            self.is_moving = False
+            # Use QTimer to emit the signal after a short delay to avoid excessive updates
+            QTimer.singleShot(100, lambda: self.position_changed.emit(self.character_id))
         
         return super().itemChange(change, value)
     
@@ -359,6 +373,8 @@ class RelationshipLine(QGraphicsLineItem):
 class StoryBoardScene(QGraphicsScene):
     """Custom graphics scene for the story board."""
     
+    layout_changed = pyqtSignal()  # Signal emitted when layout changes
+    
     def __init__(self, parent=None) -> None:
         """Initialize the story board scene.
         
@@ -395,6 +411,10 @@ class StoryBoardScene(QGraphicsScene):
         card = CharacterCard(character_id, character_data, x, y)
         self.addItem(card)
         self.character_cards[character_id] = card
+        
+        # Connect to position changed signal
+        card.position_changed.connect(self.on_character_position_changed)
+        
         return card
     
     def add_relationship_line(self, relationship_id: int, relationship_data: Dict[str, Any],
@@ -467,6 +487,15 @@ class StoryBoardScene(QGraphicsScene):
             event: Mouse press event
         """
         super().mousePressEvent(event)
+    
+    def on_character_position_changed(self, character_id: int) -> None:
+        """Handle character position change.
+        
+        Args:
+            character_id: ID of the character that moved
+        """
+        # Emit layout changed signal
+        self.layout_changed.emit()
 
 
 class StoryBoardView(QGraphicsView):
@@ -594,6 +623,7 @@ class StoryBoardWidget(QWidget):
         
         # Create graphics view
         self.scene = StoryBoardScene(self)
+        self.scene.layout_changed.connect(self.on_layout_changed)
         self.view = StoryBoardView(self)
         self.view.setScene(self.scene)
         main_layout.addWidget(self.view)
@@ -606,6 +636,12 @@ class StoryBoardWidget(QWidget):
         self.zoom_in_button.setEnabled(False)
         self.zoom_out_button.setEnabled(False)
         self.reset_zoom_button.setEnabled(False)
+        
+        # Auto-save timer
+        self.auto_save_timer = QTimer(self)
+        self.auto_save_timer.setInterval(2000)  # 2 seconds
+        self.auto_save_timer.timeout.connect(self.save_current_view)
+        self.auto_save_timer.setSingleShot(True)
     
     def set_story(self, story_id: int, story_data: Dict[str, Any]) -> None:
         """Set the current story.
@@ -912,4 +948,27 @@ class StoryBoardWidget(QWidget):
                 self,
                 "Character Created",
                 f"Character '{character_data['name']}' created successfully."
-            ) 
+            )
+    
+    def on_layout_changed(self) -> None:
+        """Handle layout changed signal."""
+        # Start auto-save timer
+        self.auto_save_timer.start()
+    
+    def save_current_view(self) -> None:
+        """Save the current view layout."""
+        if not self.current_story_id or not self.current_view_id:
+            return
+        
+        # Get layout data
+        layout_data = self.scene.get_layout_data()
+        
+        # Update view
+        update_story_board_view_layout(
+            self.db_conn,
+            self.current_view_id,
+            json.dumps(layout_data)
+        )
+        
+        # Show a brief status message
+        self.parent().status_bar.showMessage("View layout saved", 2000) 

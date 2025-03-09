@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QStatusBar, QMessageBox, QFileDialog,
     QMenuBar, QMenu
 )
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QSettings
 from PyQt6.QtGui import QAction, QIcon
 
 from app.views.story_manager import StoryManagerWidget
@@ -37,8 +37,10 @@ class MainWindow(QMainWindow):
         
         self.db_conn = db_conn
         self.current_story_id: Optional[int] = None
+        self.settings = QSettings("ThePlotThickens", "ThePlotThickens")
         
         self.init_ui()
+        self.restore_window_state()
     
     def init_ui(self) -> None:
         """Set up the user interface."""
@@ -184,7 +186,38 @@ class MainWindow(QMainWindow):
         self.tab_widget.setCurrentIndex(self.story_board_tab_index)
         self.status_bar.showMessage(f"Loaded story: {story_data['title']}")
     
+    def restore_window_state(self) -> None:
+        """Restore the window state from settings."""
+        # Restore window geometry
+        geometry = self.settings.value("window/geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+        
+        # Restore window state (maximized, etc.)
+        state = self.settings.value("window/state")
+        if state:
+            self.restoreState(state)
+        
+        # Restore maximized state
+        is_maximized = self.settings.value("window/maximized", False, type=bool)
+        if is_maximized:
+            self.showMaximized()
+    
+    def save_window_state(self) -> None:
+        """Save the window state to settings."""
+        # Save window geometry
+        self.settings.setValue("window/geometry", self.saveGeometry())
+        
+        # Save window state (maximized, etc.)
+        self.settings.setValue("window/state", self.saveState())
+        
+        # Save maximized state
+        self.settings.setValue("window/maximized", self.isMaximized())
+    
     def closeEvent(self, event) -> None:
         """Handle window close event."""
-        # TODO: Check for unsaved changes
+        # Save window state
+        self.save_window_state()
+        
+        # Accept the event
         event.accept() 
