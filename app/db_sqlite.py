@@ -247,6 +247,67 @@ def get_character_relationships(conn: sqlite3.Connection, character_id: int) -> 
     return [dict(row) for row in cursor.fetchall()]
 
 
+def get_relationship_types(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+    """Get all relationship types from the database."""
+    cursor = conn.cursor()
+    
+    # Check if relationship_types table exists
+    cursor.execute('''
+    SELECT name FROM sqlite_master 
+    WHERE type='table' AND name='relationship_types'
+    ''')
+    
+    if cursor.fetchone():
+        # If the table exists, get all relationship types
+        cursor.execute('SELECT * FROM relationship_types')
+        return [dict(row) for row in cursor.fetchall()]
+    else:
+        # If the table doesn't exist, return a list of default relationship types
+        return [
+            {"id": 1, "name": "Father", "has_inverse": True, "male_variant": "Son", "female_variant": "Daughter"},
+            {"id": 2, "name": "Mother", "has_inverse": True, "male_variant": "Son", "female_variant": "Daughter"},
+            {"id": 3, "name": "Son", "has_inverse": True},
+            {"id": 4, "name": "Daughter", "has_inverse": True},
+            {"id": 5, "name": "Brother", "has_inverse": True, "male_variant": "Brother", "female_variant": "Sister"},
+            {"id": 6, "name": "Sister", "has_inverse": True, "male_variant": "Brother", "female_variant": "Sister"},
+            {"id": 7, "name": "Friend", "has_inverse": True},
+            {"id": 8, "name": "Enemy", "has_inverse": True},
+            {"id": 9, "name": "Coworker", "has_inverse": True},
+            {"id": 10, "name": "Boss", "has_inverse": True, "inverse_name": "Employee"},
+            {"id": 11, "name": "Employee", "has_inverse": True, "inverse_name": "Boss"},
+            {"id": 12, "name": "Spouse", "has_inverse": True},
+            {"id": 13, "name": "Boyfriend", "has_inverse": True, "inverse_name": "Girlfriend"},
+            {"id": 14, "name": "Girlfriend", "has_inverse": True, "inverse_name": "Boyfriend"},
+            {"id": 15, "name": "Mentor", "has_inverse": True, "inverse_name": "Student"},
+            {"id": 16, "name": "Student", "has_inverse": True, "inverse_name": "Mentor"}
+        ]
+
+
+def get_used_relationship_types(conn: sqlite3.Connection) -> List[str]:
+    """Get all unique relationship types that have been used in the database.
+    
+    Args:
+        conn: Database connection
+        
+    Returns:
+        List of unique relationship type names
+    """
+    cursor = conn.cursor()
+    cursor.execute('SELECT DISTINCT relationship_type FROM relationships')
+    return [row[0] for row in cursor.fetchall()]
+
+
+def get_story_relationships(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
+    """Get all relationships for a story."""
+    cursor = conn.cursor()
+    cursor.execute('''
+    SELECT r.* FROM relationships r
+    JOIN characters c1 ON r.source_id = c1.id
+    WHERE c1.story_id = ?
+    ''', (story_id,))
+    return [dict(row) for row in cursor.fetchall()]
+
+
 # Story Board View functions
 def create_story_board_view(conn: sqlite3.Connection, name: str, story_id: int, layout_data: str,
                            description: Optional[str] = None) -> int:

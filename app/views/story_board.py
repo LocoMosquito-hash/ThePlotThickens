@@ -19,7 +19,8 @@ from PyQt6.QtWidgets import (
     QGraphicsLineItem, QGraphicsTextItem, QGraphicsRectItem, QMenu, QInputDialog,
     QColorDialog, QMessageBox, QGraphicsSceneMouseEvent, QGraphicsSceneContextMenuEvent,
     QGraphicsSceneHoverEvent, QGraphicsSceneDragDropEvent, QGraphicsSceneWheelEvent,
-    QGraphicsItemGroup, QToolBar, QSizePolicy, QGraphicsEllipseItem, QFrame
+    QGraphicsItemGroup, QToolBar, QSizePolicy, QGraphicsEllipseItem, QFrame,
+    QDialog, QDialogButtonBox
 )
 from PyQt6.QtCore import Qt, QSize, QPointF, QRectF, QLineF, pyqtSignal, QTimer, QObject
 from PyQt6.QtGui import (
@@ -30,7 +31,8 @@ from PyQt6.QtGui import (
 from app.db_sqlite import (
     get_story, get_story_characters, get_character_relationships,
     get_story_board_views, get_story_board_view, create_story_board_view,
-    update_story_board_view_layout
+    update_story_board_view_layout, get_relationship_types, create_relationship,
+    get_story_relationships, get_used_relationship_types
 )
 
 
@@ -254,7 +256,8 @@ class CharacterCard(QGraphicsItemGroup):
         if scene:
             for character_id, card in scene.character_cards.items():
                 if character_id != self.character_id:
-                    relationship_menu.addAction(f"To: {card.character_data['name']}")
+                    target_action = relationship_menu.addAction(f"To: {card.character_data['name']}")
+                    target_action.setData(character_id)
         
         action = menu.exec(event.screenPos())
         
@@ -265,9 +268,199 @@ class CharacterCard(QGraphicsItemGroup):
             # TODO: Implement character deletion
             QMessageBox.information(None, "Not Implemented", "Character deletion is not yet implemented.")
         elif action and action.text().startswith("To: "):
-            # TODO: Implement relationship creation
-            target_name = action.text()[4:]  # Remove "To: " prefix
-            QMessageBox.information(None, "Not Implemented", f"Creating relationship to {target_name} is not yet implemented.")
+            # Get the target character ID
+            target_id = action.data()
+            target_card = scene.character_cards[target_id]
+            target_name = target_card.character_data['name']
+            
+            # Show relationship type selection dialog
+            self.show_relationship_dialog(target_id, target_name)
+    
+    def show_relationship_dialog(self, target_id: int, target_name: str) -> None:
+        """Show a dialog to select the relationship type.
+        
+        Args:
+            target_id: ID of the target character
+            target_name: Name of the target character
+        """
+        # Get the scene and database connection
+        scene = self.scene()
+        if not scene or not hasattr(scene, 'db_conn'):
+            return
+        
+        # Get standard relationship types
+        standard_types = get_relationship_types(scene.db_conn)
+        
+        # Get previously used relationship types
+        used_types = get_used_relationship_types(scene.db_conn)
+        
+        # Create a combined list with used types at the top
+        relationship_items = []
+        
+        # Add used types first (if they exist)
+        if used_types:
+            relationship_items.extend(used_types)
+            relationship_items.append("---")  # Separator
+        
+        # Add standard types
+        relationship_items.extend([rt['name'] for rt in standard_types])
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_items = []
+        for item in relationship_items:
+            if item not in seen and item != "---":
+                seen.add(item)
+                unique_items.append(item)
+            elif item == "---" and unique_items:  # Only add separator if we have items before it
+                unique_items.append(item)
+        
+        # Create a custom dialog with autocomplete
+        dialog = QDialog()
+        dialog.setWindowTitle(f"Add Relationship to {target_name}")
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Add label
+        label = QLabel(f"Select relationship type from {self.character_data['name']} to {target_name}:")
+        layout.addWidget(label)
+        
+        # Add combobox with autocomplete
+        combo = QComboBox()
+        combo.setEditable(True)
+        combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)  # Don't add items when typing
+        combo.addItems(unique_items)
+        combo.setCurrentIndex(-1)  # No selection by default
+        
+        # Enable autocomplete
+        combo.setCompleter(combo.completer())
+        combo.completer().setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        
+        layout.addWidget(combo)
+        
+        # Add buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        # Show dialog
+        if dialog.exec():
+            relationship_type = combo.currentText()
+            
+            # Skip if empty or separator
+            if not relationship_type or relationship_type == "---":
+                return
+            
+            # Find the selected relationship type in standard types
+            selected_type = None
+            for rt in standard_types:
+                if rt['name'] == relationship_type:
+                    selected_type = rt
+                    break
+            
+            # If the relationship type doesn't exist in standard types, create a custom one
+            if not selected_type:
+                selected_type = {
+                    'id': -1,  # Temporary ID for custom type
+                    'name': relationship_type,
+                    'has_inverse': False
+                }
+            
+            # Create the relationship
+            self.create_relationship(target_id, selected_type)
+    
+    def create_relationship(self, target_id: int, relationship_type: Dict[str, Any]) -> None:
+        """Create a relationship to another character.
+        
+        Args:
+            target_id: ID of the target character
+            relationship_type: Relationship type data
+        """
+        from app.db_sqlite import create_relationship
+        
+        # Get the scene and database connection
+        scene = self.scene()
+        if not scene or not hasattr(scene, 'db_conn'):
+            return
+        
+        # Create the relationship in the database
+        relationship_data = {
+            'relationship_type': relationship_type['name'],
+            'color': "#FF0000",  # Default color
+            'width': 1.0  # Default width
+        }
+        
+        relationship_id = create_relationship(
+            scene.db_conn,
+            self.character_id,
+            target_id,
+            relationship_type['name']
+        )
+        
+        # Add the relationship line to the scene
+        scene.add_relationship_line(
+            relationship_id,
+            relationship_data,
+            self.character_id,
+            target_id
+        )
+        
+        # If the relationship type has an inverse, create the inverse relationship
+        if relationship_type.get('has_inverse', False):
+            # Determine the inverse relationship type
+            inverse_name = relationship_type.get('inverse_name')
+            
+            # If no explicit inverse name, check gender-specific variants
+            if not inverse_name:
+                target_card = scene.character_cards[target_id]
+                target_gender = target_card.character_data.get('gender', 'NOT_SPECIFIED')
+                
+                if target_gender == 'MALE' and relationship_type.get('male_variant'):
+                    inverse_name = relationship_type['male_variant']
+                elif target_gender == 'FEMALE' and relationship_type.get('female_variant'):
+                    inverse_name = relationship_type['female_variant']
+            
+            # If still no inverse name, use the same name
+            if not inverse_name:
+                inverse_name = relationship_type['name']
+            
+            # Create the inverse relationship
+            inverse_data = {
+                'relationship_type': inverse_name,
+                'color': "#FF0000",  # Default color
+                'width': 1.0  # Default width
+            }
+            
+            # Ask user if they want to create the inverse relationship
+            reply = QMessageBox.question(
+                None,
+                "Create Inverse Relationship",
+                f"Do you want to create the inverse relationship?\n{target_card.character_data['name']} is {inverse_name} of {self.character_data['name']}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Create the inverse relationship in the database
+                inverse_id = create_relationship(
+                    scene.db_conn,
+                    target_id,
+                    self.character_id,
+                    inverse_name
+                )
+                
+                # Add the inverse relationship line to the scene
+                scene.add_relationship_line(
+                    inverse_id,
+                    inverse_data,
+                    target_id,
+                    self.character_id
+                )
+        
+        # Emit layout changed signal
+        if hasattr(scene, 'layout_changed'):
+            scene.layout_changed.emit()
 
 
 class RelationshipLine(QGraphicsLineItem):
@@ -295,49 +488,147 @@ class RelationshipLine(QGraphicsLineItem):
         self.target_card.add_relationship(self)
         
         # Set line properties
-        color = QColor(relationship_data['color']) if relationship_data['color'] else QColor("#FF0000")
-        width = float(relationship_data['width']) if relationship_data['width'] else 1.0
-        self.setPen(QPen(color, width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        self.normal_color = QColor(relationship_data['color']) if relationship_data['color'] else QColor("#FF0000")
+        self.hover_color = self.normal_color.lighter(130)  # Lighter version for hover
+        self.normal_width = float(relationship_data['width']) if relationship_data['width'] else 1.0
+        self.hover_width = self.normal_width * 2  # Thicker on hover
+        
+        # Set initial pen
+        self.setPen(QPen(self.normal_color, int(self.normal_width), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
         
         # Set flags
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setAcceptHoverEvents(True)
         
         # Create label
-        self.label = QGraphicsTextItem()
+        self.label = QGraphicsTextItem(self)  # Make the label a child of the line
         self.label.setPlainText(relationship_data['relationship_type'])
         self.label.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-        self.label.setDefaultTextColor(color)
+        self.label.setDefaultTextColor(self.normal_color)
+        
+        # Create a background for the label to make it more readable
+        self.label_background = QGraphicsRectItem(self)
+        self.label_background.setBrush(QBrush(QColor(40, 40, 40, 180)))  # Semi-transparent dark background
+        self.label_background.setPen(QPen(Qt.PenStyle.NoPen))  # No border
+        
+        # Track hover state
+        self.is_hovered = False
         
         # Update position
         self.update_position()
     
+    def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent) -> None:
+        """Handle hover enter events.
+        
+        Args:
+            event: Hover enter event
+        """
+        self.is_hovered = True
+        
+        # Change line appearance
+        pen = self.pen()
+        pen.setColor(self.hover_color)
+        pen.setWidth(int(self.hover_width))  # Convert to int
+        self.setPen(pen)
+        
+        # Change label appearance
+        self.label.setDefaultTextColor(self.hover_color)
+        self.label.setFont(QFont("Arial", 9, QFont.Weight.Bold))  # Slightly larger font
+        
+        # Update the background to match the new label size
+        self.update_position()
+        
+        # Bring to front
+        self.setZValue(2)
+        
+        super().hoverEnterEvent(event)
+    
+    def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
+        """Handle hover leave events.
+        
+        Args:
+            event: Hover leave event
+        """
+        self.is_hovered = False
+        
+        # Restore line appearance
+        pen = self.pen()
+        pen.setColor(self.normal_color)
+        pen.setWidth(int(self.normal_width))  # Convert to int
+        self.setPen(pen)
+        
+        # Restore label appearance
+        self.label.setDefaultTextColor(self.normal_color)
+        self.label.setFont(QFont("Arial", 8, QFont.Weight.Bold))  # Original font size
+        
+        # Update the background to match the new label size
+        self.update_position()
+        
+        # Restore z-value
+        self.setZValue(0)
+        
+        super().hoverLeaveEvent(event)
+    
     def update_position(self) -> None:
         """Update the position of the line and label."""
-        # Get the center points of the character cards
-        source_center = self.source_card.sceneBoundingRect().center()
-        target_center = self.target_card.sceneBoundingRect().center()
+        # Get the bounding rectangles of the character cards
+        source_rect = self.source_card.sceneBoundingRect()
+        target_rect = self.target_card.sceneBoundingRect()
         
-        # Set the line
-        self.setLine(QLineF(source_center, target_center))
+        # Calculate pin positions (centered at the top of each card)
+        card_width = 180  # Width of the character card
+        pin_size = 20     # Size of the pin
         
-        # Update label position
-        if self.label.scene():
-            # Position the label at the midpoint of the line
-            midpoint = QPointF(
-                (source_center.x() + target_center.x()) / 2,
-                (source_center.y() + target_center.y()) / 2
-            )
-            
-            # Offset the label to avoid overlapping with the line
-            angle = math.atan2(target_center.y() - source_center.y(), target_center.x() - source_center.x())
-            offset = 10  # Offset distance
-            label_pos = QPointF(
-                midpoint.x() + offset * math.sin(angle),
-                midpoint.y() - offset * math.cos(angle)
-            )
-            
-            self.label.setPos(label_pos)
+        # Calculate the center of the pin for each card
+        source_pin = QPointF(
+            source_rect.x() + card_width / 2,  # Center of the card horizontally
+            source_rect.y()                     # Top of the card
+        )
+        
+        target_pin = QPointF(
+            target_rect.x() + card_width / 2,  # Center of the card horizontally
+            target_rect.y()                     # Top of the card
+        )
+        
+        # Set the line to connect the pins
+        self.setLine(QLineF(source_pin, target_pin))
+        
+        # Calculate midpoint of the line
+        midpoint = QPointF(
+            (source_pin.x() + target_pin.x()) / 2,
+            (source_pin.y() + target_pin.y()) / 2
+        )
+        
+        # Calculate angle of the line
+        angle = math.atan2(target_pin.y() - source_pin.y(), target_pin.x() - source_pin.x())
+        
+        # Calculate label position
+        # Convert to local coordinates since the label is now a child item
+        local_midpoint = self.mapFromScene(midpoint)
+        
+        # Get label dimensions
+        label_rect = self.label.boundingRect()
+        label_width = label_rect.width()
+        label_height = label_rect.height()
+        
+        # Position the label centered on the midpoint of the line
+        label_pos = QPointF(
+            local_midpoint.x() - label_width / 2,
+            local_midpoint.y() - label_height / 2
+        )
+        
+        # Set the background rectangle to match the label size with some padding
+        padding = 4
+        self.label_background.setRect(
+            label_pos.x() - padding,
+            label_pos.y() - padding,
+            label_width + padding * 2,
+            label_height + padding * 2
+        )
+        
+        # Set the positions
+        self.label_background.setPos(0, 0)  # Already positioned by its rect
+        self.label.setPos(label_pos)
     
     def contextMenuEvent(self, event: QGraphicsSceneContextMenuEvent) -> None:
         """Handle context menu events.
@@ -390,26 +681,38 @@ class StoryBoardScene(QGraphicsScene):
     
     layout_changed = pyqtSignal()  # Signal emitted when layout changes
     
-    def __init__(self, parent=None) -> None:
-        """Initialize the story board scene.
+    def __init__(self, parent=None, db_conn=None) -> None:
+        """Initialize the scene.
         
         Args:
             parent: Parent widget
+            db_conn: Database connection
         """
         super().__init__(parent)
         
-        # Set scene properties
-        self.setSceneRect(0, 0, 10000, 10000)  # Increase scene size to accommodate larger positions
-        self.setBackgroundBrush(QBrush(QColor("#2D2D30")))  # Dark background
+        # Store database connection
+        self.db_conn = db_conn
         
-        # Track items
+        # Track character cards and relationship lines
         self.character_cards: Dict[int, CharacterCard] = {}
         self.relationship_lines: Dict[int, RelationshipLine] = {}
         
-        # Track state
-        self.is_creating_relationship = False
-        self.relationship_start_card = None
-        self.temp_line = None
+        # Set scene size
+        self.setSceneRect(0, 0, 10000, 10000)
+        
+        # Connect signals
+        self.selectionChanged.connect(self.on_selection_changed)
+    
+    def on_selection_changed(self) -> None:
+        """Handle selection changes."""
+        # Bring selected items to front
+        for item in self.selectedItems():
+            item.setZValue(1)
+        
+        # Reset z-value for non-selected items
+        for item in self.items():
+            if not item.isSelected():
+                item.setZValue(0)
     
     def add_character_card(self, character_id: int, character_data: Dict[str, Any], x: float = 0, y: float = 0) -> CharacterCard:
         """Add a character card to the scene.
@@ -454,8 +757,7 @@ class StoryBoardScene(QGraphicsScene):
         line = RelationshipLine(relationship_id, relationship_data, source_card, target_card)
         self.addItem(line)
         
-        # Add the label to the scene
-        self.addItem(line.label)
+        # No need to add the label separately as it's now a child item of the line
         
         self.relationship_lines[relationship_id] = line
         return line
@@ -472,12 +774,12 @@ class StoryBoardScene(QGraphicsScene):
         Returns:
             Layout data as a dictionary
         """
-        layout = {}
+        layout = {"characters": {}}
         
         # Add character positions
         for character_id, card in self.character_cards.items():
             pos = card.pos()
-            layout[str(character_id)] = {"x": pos.x(), "y": pos.y()}
+            layout["characters"][str(character_id)] = {"x": pos.x(), "y": pos.y()}
         
         return layout
     
@@ -722,7 +1024,7 @@ class StoryBoardWidget(QWidget):
         main_layout.addLayout(toolbar)
         
         # Create graphics view
-        self.scene = StoryBoardScene(self)
+        self.scene = StoryBoardScene(self, self.db_conn)
         self.scene.layout_changed.connect(self.on_layout_changed)
         self.view = StoryBoardView(self)
         self.view.setScene(self.scene)
@@ -797,8 +1099,8 @@ class StoryBoardWidget(QWidget):
         if not self.current_story_id:
             return
         
-        # Create empty layout
-        layout = {}
+        # Create empty layout with characters dictionary
+        layout = {"characters": {}}
         
         # Get all characters
         characters = get_story_characters(self.db_conn, self.current_story_id)
@@ -814,7 +1116,7 @@ class StoryBoardWidget(QWidget):
             x = 100 + col * 200
             y = 100 + row * 250
             
-            layout[str(character_id)] = {"x": x, "y": y}
+            layout["characters"][str(character_id)] = {"x": x, "y": y}
         
         # Create view
         view_id = create_story_board_view(
@@ -832,88 +1134,69 @@ class StoryBoardWidget(QWidget):
         self.load_view(view_id)
     
     def load_view(self, view_id: int) -> None:
-        """Load a specific view.
+        """Load a view from the database.
         
         Args:
-            view_id: ID of the view
+            view_id: ID of the view to load
         """
-        print(f"\nDEBUG: Loading view {view_id}")
-        
-        # Get view data
-        view = get_story_board_view(self.db_conn, view_id)
-        if not view:
-            print("DEBUG: Could not find view data")
+        if not self.current_story_id:
             return
         
-        print(f"DEBUG: Retrieved view data: {view}")
+        # Get view data
+        view_data = get_story_board_view(self.db_conn, view_id)
+        if not view_data:
+            return
         
-        # Set current view
+        # Update current view
         self.current_view_id = view_id
         
-        # Reset view transform and scene
-        print("DEBUG: Resetting view transform")
-        self.view.setTransform(QTransform())
-        self.view.current_zoom = 1.0
-        
-        # Clear the scene and set its rect
-        print("DEBUG: Clearing scene")
+        # Clear the scene
         self.scene.clear_board()
-        self.scene.setSceneRect(0, 0, 10000, 10000)
         
-        # Load layout
-        layout = json.loads(view['layout_data'])
-        print(f"DEBUG: Parsed layout data: {layout}")
+        # Parse layout data
+        try:
+            layout_data = json.loads(view_data['layout_data'])
+        except json.JSONDecodeError:
+            layout_data = {}
         
-        # Load characters
+        # Get characters
         characters = get_story_characters(self.db_conn, self.current_story_id)
-        print(f"DEBUG: Found {len(characters)} characters")
         
         # Add character cards to the scene
         for character in characters:
             character_id = character['id']
             
-            # Check if we have layout data for this character
+            # Get position from layout data
             x, y = 0, 0
-            if str(character_id) in layout:
-                position = layout[str(character_id)]
-                x = float(position.get('x', 0))
-                y = float(position.get('y', 0))
-                print(f"DEBUG: Found position for character {character_id}: ({x}, {y})")
-            else:
-                # Default position if none is specified
-                x = 100 + (character_id % 5) * 200
-                y = 100 + (character_id // 5) * 300
-                print(f"DEBUG: Using default position for character {character_id}: ({x}, {y})")
+            if 'characters' in layout_data and str(character_id) in layout_data['characters']:
+                char_pos = layout_data['characters'][str(character_id)]
+                x = float(char_pos['x'])
+                y = float(char_pos['y'])
             
-            # Add the character card to the scene
-            card = self.scene.add_character_card(character_id, character, x, y)
-            
-            # Verify position was set correctly
-            pos = card.pos()
-            print(f"DEBUG: Character {character_id} position after adding to scene: ({pos.x()}, {pos.y()})")
+            # Add character card
+            self.scene.add_character_card(character_id, character, x, y)
         
-        # Update relationships
-        for character in characters:
-            relationships = get_character_relationships(self.db_conn, character['id'])
-            for relationship in relationships:
-                # Check if both characters are in the scene
-                if relationship['source_id'] in self.scene.character_cards and relationship['target_id'] in self.scene.character_cards:
-                    # Add the relationship line
-                    self.scene.add_relationship_line(
-                        relationship['id'],
-                        relationship,
-                        relationship['source_id'],
-                        relationship['target_id']
-                    )
+        # Get relationships for this story
+        relationships = get_story_relationships(self.db_conn, self.current_story_id)
+        
+        # Add relationship lines to the scene
+        for relationship in relationships:
+            relationship_id = relationship['id']
+            source_id = relationship['source_id']
+            target_id = relationship['target_id']
+            
+            # Create relationship data
+            relationship_data = {
+                'relationship_type': relationship['relationship_type'],
+                'color': relationship['color'],
+                'width': relationship['width']
+            }
+            
+            # Add relationship line
+            self.scene.add_relationship_line(relationship_id, relationship_data, source_id, target_id)
         
         # Center the view on the characters
-        print("DEBUG: Centering view on characters")
         self.view.center_on_characters()
-        
-        # Force the view to update
-        print("DEBUG: Updating viewport")
-        self.view.viewport().update()
-        print("DEBUG: View loading complete")
     
     def on_view_changed(self, index: int) -> None:
         """Handle view selection change.
@@ -937,8 +1220,8 @@ class StoryBoardWidget(QWidget):
         if not ok or not name:
             return
         
-        # Create empty layout
-        layout = {}
+        # Create empty layout with characters dictionary
+        layout = {"characters": {}}
         
         # Get all characters
         characters = get_story_characters(self.db_conn, self.current_story_id)
@@ -954,7 +1237,7 @@ class StoryBoardWidget(QWidget):
             x = 100 + col * 200
             y = 100 + row * 250
             
-            layout[str(character_id)] = {"x": x, "y": y}
+            layout["characters"][str(character_id)] = {"x": x, "y": y}
         
         # Create view
         view_id = create_story_board_view(
@@ -967,6 +1250,9 @@ class StoryBoardWidget(QWidget):
         # Add to selector and select it
         self.view_selector.addItem(name, view_id)
         self.view_selector.setCurrentIndex(self.view_selector.count() - 1)
+        
+        # Load the view
+        self.load_view(view_id)
     
     def on_save_view(self) -> None:
         """Handle save view button click."""
