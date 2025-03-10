@@ -14,6 +14,7 @@ rules:
 • Avoid Overengineering: Implement straightforward solutions that are easy to maintain and extend. Prefer simplicity and readability over complex abstractions.
 • Use Type Hints: Enforce Python type annotations to improve code readability and catch issues early.
 • Optimize File Organization: Keep a logical directory structure. Separate UI components, business logic, and data handling into their respective modules.
+• GIT commiting by demand only. DON'T EVER SUGGEST GIT COMMANDS unless you're asked to.
 
 examples:
 • If asked to create a new feature, first ask about the expected user interaction and UI behavior before coding.
