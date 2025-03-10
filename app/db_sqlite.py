@@ -222,6 +222,46 @@ def get_story_characters(conn: sqlite3.Connection, story_id: int) -> List[Dict[s
     return [dict(row) for row in cursor.fetchall()]
 
 
+def update_character(conn: sqlite3.Connection, character_id: int, name: str, aliases: Optional[str] = None,
+                    is_main_character: bool = False, age_value: Optional[int] = None, age_category: Optional[str] = None,
+                    gender: str = "NOT_SPECIFIED", avatar_path: Optional[str] = None) -> Dict[str, Any]:
+    """Update an existing character in the database.
+    
+    Args:
+        conn: Database connection
+        character_id: ID of the character to update
+        name: Character name
+        aliases: Character aliases (comma-separated)
+        is_main_character: Whether this is a main character
+        age_value: Numeric age value
+        age_category: Age category
+        gender: Gender
+        avatar_path: Path to avatar image
+        
+    Returns:
+        Updated character data
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    UPDATE characters SET
+        name = ?,
+        aliases = ?,
+        is_main_character = ?,
+        age_value = ?,
+        age_category = ?,
+        gender = ?,
+        avatar_path = ?,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+    ''', (name, aliases, 1 if is_main_character else 0, age_value, age_category, gender, avatar_path, character_id))
+    
+    conn.commit()
+    
+    # Return the updated character data
+    return get_character(conn, character_id)
+
+
 # Relationship functions
 def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int, relationship_type: str,
                        description: Optional[str] = None, color: str = "#FF0000", width: float = 1.0) -> int:

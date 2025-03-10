@@ -262,8 +262,7 @@ class CharacterCard(QGraphicsItemGroup):
         action = menu.exec(event.screenPos())
         
         if action == edit_action:
-            # TODO: Implement character editing
-            QMessageBox.information(None, "Not Implemented", "Character editing is not yet implemented.")
+            self.edit_character()
         elif action == delete_action:
             # TODO: Implement character deletion
             QMessageBox.information(None, "Not Implemented", "Character deletion is not yet implemented.")
@@ -275,6 +274,44 @@ class CharacterCard(QGraphicsItemGroup):
             
             # Show relationship type selection dialog
             self.show_relationship_dialog(target_id, target_name)
+    
+    def edit_character(self) -> None:
+        """Open the character edit dialog."""
+        from app.views.character_dialog import CharacterDialog
+        
+        scene = self.scene()
+        if not scene or not hasattr(scene, 'db_conn'):
+            return
+        
+        # Create and show the dialog
+        dialog = CharacterDialog(scene.db_conn, self.character_id)
+        
+        # Connect the character_updated signal
+        dialog.character_updated.connect(self.on_character_updated)
+        
+        # Show the dialog
+        dialog.exec()
+    
+    def on_character_updated(self, character_id: int, character_data: Dict[str, Any]) -> None:
+        """Handle character update.
+        
+        Args:
+            character_id: ID of the updated character
+            character_data: Updated character data
+        """
+        # Update the character data
+        self.character_data = character_data
+        
+        # Clear the existing items
+        for item in self.childItems():
+            self.removeFromGroup(item)
+        
+        # Recreate the card with the updated data
+        self.create_card()
+        
+        # Update connected relationship lines
+        for relationship in self.relationships:
+            relationship.update_position()
     
     def show_relationship_dialog(self, target_id: int, target_name: str) -> None:
         """Show a dialog to select the relationship type.
