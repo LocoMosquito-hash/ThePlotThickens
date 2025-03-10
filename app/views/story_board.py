@@ -74,7 +74,8 @@ class CharacterCard(QGraphicsItemGroup):
         
         self.character_id = character_id
         self.character_data = character_data
-        self.setPos(x, y)
+        
+        # Set flags before setting position
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
@@ -88,6 +89,12 @@ class CharacterCard(QGraphicsItemGroup):
         
         # Track if we're currently moving
         self.is_moving = False
+        
+        # Set position after everything else is set up
+        print(f"DEBUG: Setting initial position for character {character_id} to ({x}, {y})")
+        self.setPos(x, y)
+        pos = self.pos()
+        print(f"DEBUG: Position after setPos: ({pos.x()}, {pos.y()})")
     
     def create_card(self) -> None:
         """Create the card components."""
@@ -392,7 +399,7 @@ class StoryBoardScene(QGraphicsScene):
         super().__init__(parent)
         
         # Set scene properties
-        self.setSceneRect(0, 0, 2000, 2000)
+        self.setSceneRect(0, 0, 10000, 10000)  # Increase scene size to accommodate larger positions
         self.setBackgroundBrush(QBrush(QColor("#2D2D30")))  # Dark background
         
         # Track items
@@ -465,26 +472,12 @@ class StoryBoardScene(QGraphicsScene):
         Returns:
             Layout data as a dictionary
         """
-        layout = {
-            "characters": [],
-            "relationships": []
-        }
+        layout = {}
         
         # Add character positions
         for character_id, card in self.character_cards.items():
-            layout["characters"].append({
-                "id": character_id,
-                "x": card.x(),
-                "y": card.y()
-            })
-        
-        # Add relationship data
-        for relationship_id, line in self.relationship_lines.items():
-            layout["relationships"].append({
-                "id": relationship_id,
-                "color": line.pen().color().name(),
-                "width": line.pen().width()
-            })
+            pos = card.pos()
+            layout[str(character_id)] = {"x": pos.x(), "y": pos.y()}
         
         return layout
     
@@ -520,16 +513,20 @@ class StoryBoardView(QGraphicsView):
         # Set view properties
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
+        self.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         
-        # Set up zoom
-        self.zoom_factor = 1.15
-        self.min_zoom = 0.1
-        self.max_zoom = 10.0
+        # Set zoom properties
         self.current_zoom = 1.0
+        self.min_zoom = 0.1
+        self.max_zoom = 4.0
+        self.zoom_factor = 1.25
+        
+        # Set scene rect to be large enough to accommodate all character positions
+        self.setSceneRect(0, 0, 10000, 10000)
     
     def wheelEvent(self, event: QWheelEvent) -> None:
         """Handle wheel events for zooming.
@@ -537,26 +534,103 @@ class StoryBoardView(QGraphicsView):
         Args:
             event: Wheel event
         """
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            # Zoom with Ctrl+Wheel
-            zoom_in = event.angleDelta().y() > 0
-            
-            if zoom_in:
-                zoom_factor = self.zoom_factor
-            else:
-                zoom_factor = 1.0 / self.zoom_factor
-            
-            new_zoom = self.current_zoom * zoom_factor
-            
-            # Limit zoom level
-            if self.min_zoom <= new_zoom <= self.max_zoom:
-                self.current_zoom = new_zoom
-                self.setTransform(QTransform().scale(self.current_zoom, self.current_zoom))
-            
-            event.accept()
+        # Get the wheel delta
+        delta = event.angleDelta().y()
+        
+        # Determine zoom direction
+        if delta > 0:
+            # Zoom in
+            self.current_zoom *= self.zoom_factor
+            if self.current_zoom > self.max_zoom:
+                self.current_zoom = self.max_zoom
         else:
-            # Normal scrolling
-            super().wheelEvent(event)
+            # Zoom out
+            self.current_zoom /= self.zoom_factor
+            if self.current_zoom < self.min_zoom:
+                self.current_zoom = self.min_zoom
+        
+        # Apply zoom
+        self.setTransform(QTransform().scale(self.current_zoom, self.current_zoom))
+    
+    def center_on_characters(self) -> None:
+        """Center the view on the characters in the scene."""
+        print("DEBUG: Starting center_on_characters")
+        
+        # Get the scene object
+        scene_obj = self.scene()
+        
+        # Check if we have a scene and character cards
+        if not scene_obj:
+            print("DEBUG: No scene object")
+            return
+            
+        # If no characters, return
+        if not hasattr(scene_obj, 'character_cards') or not scene_obj.character_cards:
+            print("DEBUG: No character cards in scene")
+            return
+        
+        print(f"DEBUG: Found {len(scene_obj.character_cards)} character cards")
+        
+        # Find the min and max coordinates of all cards
+        min_x = float('inf')
+        min_y = float('inf')
+        max_x = float('-inf')
+        max_y = float('-inf')
+        
+        card_width = 180  # Approximate width of a card
+        card_height = 240  # Approximate height of a card
+        
+        # First pass: get the bounding box
+        for character_id, card in scene_obj.character_cards.items():
+            pos = card.pos()
+            print(f"DEBUG: Character {character_id} position: ({pos.x()}, {pos.y()})")
+            
+            # Update min/max coordinates
+            min_x = min(min_x, pos.x())
+            min_y = min(min_y, pos.y())
+            max_x = max(max_x, pos.x() + card_width)
+            max_y = max(max_y, pos.y() + card_height)
+        
+        print(f"DEBUG: Bounding box: ({min_x}, {min_y}) to ({max_x}, {max_y})")
+        
+        # Create a rectangle that encompasses all cards
+        scene_rect = QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
+        print(f"DEBUG: Scene rect before padding: {scene_rect}")
+        
+        if not scene_rect.isEmpty():
+            # Add padding (20% of the width/height)
+            padding_x = scene_rect.width() * 0.2
+            padding_y = scene_rect.height() * 0.2
+            scene_rect.adjust(-padding_x, -padding_y, padding_x, padding_y)
+            print(f"DEBUG: Scene rect after padding: {scene_rect}")
+            
+            # Calculate the center point
+            center_x = scene_rect.center().x()
+            center_y = scene_rect.center().y()
+            
+            # Reset the view transform
+            self.setTransform(QTransform())
+            
+            # Center on the calculated point
+            self.centerOn(center_x, center_y)
+            
+            # Calculate the scale to fit the view while maintaining a minimum scale
+            view_rect = self.viewport().rect()
+            scale_x = view_rect.width() / scene_rect.width()
+            scale_y = view_rect.height() / scene_rect.height()
+            scale = min(scale_x, scale_y)
+            
+            # Don't let the scale get too small
+            min_scale = 0.5
+            if scale < min_scale:
+                scale = min_scale
+            
+            # Apply the scale transformation
+            self.scale(scale, scale)
+            
+            print(f"DEBUG: Applied scale: {scale}")
+            transform = self.transform()
+            print(f"DEBUG: Final transform: m11={transform.m11()}, m12={transform.m12()}, m21={transform.m21()}, m22={transform.m22()}, dx={transform.dx()}, dy={transform.dy()}")
 
 
 class StoryBoardWidget(QWidget):
@@ -627,6 +701,24 @@ class StoryBoardWidget(QWidget):
         self.reset_zoom_button.clicked.connect(self.on_reset_zoom)
         toolbar.addWidget(self.reset_zoom_button)
         
+        # Add spacer
+        toolbar.addWidget(create_vertical_line())
+        
+        # Create reset positions button
+        self.reset_positions_button = QPushButton("Reset Positions")
+        self.reset_positions_button.clicked.connect(self.reset_character_positions)
+        self.reset_positions_button.setToolTip("Reset character positions to a default grid layout")
+        toolbar.addWidget(self.reset_positions_button)
+        
+        # Add spacer
+        toolbar.addWidget(create_vertical_line())
+        
+        # Create position cards button
+        self.position_cards_button = QPushButton("Position Cards")
+        self.position_cards_button.clicked.connect(self.position_cards)
+        self.position_cards_button.setToolTip("Position cards according to saved layout")
+        toolbar.addWidget(self.position_cards_button)
+        
         main_layout.addLayout(toolbar)
         
         # Create graphics view
@@ -644,6 +736,8 @@ class StoryBoardWidget(QWidget):
         self.zoom_in_button.setEnabled(False)
         self.zoom_out_button.setEnabled(False)
         self.reset_zoom_button.setEnabled(False)
+        self.reset_positions_button.setEnabled(False)
+        self.position_cards_button.setEnabled(False)
         
         # Auto-save timer
         self.auto_save_timer = QTimer(self)
@@ -661,7 +755,7 @@ class StoryBoardWidget(QWidget):
         self.current_story_id = story_id
         self.current_story_data = story_data
         
-        # Enable controls
+        # Enable UI controls
         self.view_selector.setEnabled(True)
         self.new_view_button.setEnabled(True)
         self.save_view_button.setEnabled(True)
@@ -669,6 +763,8 @@ class StoryBoardWidget(QWidget):
         self.zoom_in_button.setEnabled(True)
         self.zoom_out_button.setEnabled(True)
         self.reset_zoom_button.setEnabled(True)
+        self.reset_positions_button.setEnabled(True)
+        self.position_cards_button.setEnabled(True)
         
         # Load views
         self.load_views()
@@ -678,21 +774,23 @@ class StoryBoardWidget(QWidget):
         if not self.current_story_id:
             return
         
-        # Get views
-        views = get_story_board_views(self.db_conn, self.current_story_id)
-        
-        # Update view selector
+        # Clear the view selector
         self.view_selector.clear()
         
-        if views:
-            for view in views:
-                self.view_selector.addItem(view['name'], view['id'])
-            
+        # Get views from database
+        views = get_story_board_views(self.db_conn, self.current_story_id)
+        
+        # Add views to selector
+        for view in views:
+            self.view_selector.addItem(view['name'], view['id'])
+        
+        # If no views, create a default one
+        if not views:
+            self.create_default_view()
+        else:
             # Select the first view
             self.view_selector.setCurrentIndex(0)
-        else:
-            # Create a default "Main" view without showing the input dialog
-            self.create_default_view()
+            self.load_view(views[0]['id'])
     
     def create_default_view(self) -> None:
         """Create a default 'Main' view for the story."""
@@ -700,10 +798,7 @@ class StoryBoardWidget(QWidget):
             return
         
         # Create empty layout
-        layout = {
-            "characters": [],
-            "relationships": []
-        }
+        layout = {}
         
         # Get all characters
         characters = get_story_characters(self.db_conn, self.current_story_id)
@@ -715,11 +810,11 @@ class StoryBoardWidget(QWidget):
             row = i // cols
             col = i % cols
             
-            layout["characters"].append({
-                "id": character['id'],
-                "x": 100 + col * 200,
-                "y": 100 + row * 250
-            })
+            character_id = character['id']
+            x = 100 + col * 200
+            y = 100 + row * 250
+            
+            layout[str(character_id)] = {"x": x, "y": y}
         
         # Create view
         view_id = create_story_board_view(
@@ -742,63 +837,83 @@ class StoryBoardWidget(QWidget):
         Args:
             view_id: ID of the view
         """
+        print(f"\nDEBUG: Loading view {view_id}")
+        
         # Get view data
         view = get_story_board_view(self.db_conn, view_id)
         if not view:
+            print("DEBUG: Could not find view data")
             return
+        
+        print(f"DEBUG: Retrieved view data: {view}")
         
         # Set current view
         self.current_view_id = view_id
         
-        # Clear the scene
+        # Reset view transform and scene
+        print("DEBUG: Resetting view transform")
+        self.view.setTransform(QTransform())
+        self.view.current_zoom = 1.0
+        
+        # Clear the scene and set its rect
+        print("DEBUG: Clearing scene")
         self.scene.clear_board()
+        self.scene.setSceneRect(0, 0, 10000, 10000)
         
         # Load layout
         layout = json.loads(view['layout_data'])
+        print(f"DEBUG: Parsed layout data: {layout}")
         
         # Load characters
         characters = get_story_characters(self.db_conn, self.current_story_id)
-        character_dict = {character['id']: character for character in characters}
+        print(f"DEBUG: Found {len(characters)} characters")
         
-        # Add character cards
-        for character_data in layout.get('characters', []):
-            character_id = character_data['id']
-            if character_id in character_dict:
-                self.scene.add_character_card(
-                    character_id,
-                    character_dict[character_id],
-                    character_data.get('x', 0),
-                    character_data.get('y', 0)
-                )
+        # Add character cards to the scene
+        for character in characters:
+            character_id = character['id']
+            
+            # Check if we have layout data for this character
+            x, y = 0, 0
+            if str(character_id) in layout:
+                position = layout[str(character_id)]
+                x = float(position.get('x', 0))
+                y = float(position.get('y', 0))
+                print(f"DEBUG: Found position for character {character_id}: ({x}, {y})")
+            else:
+                # Default position if none is specified
+                x = 100 + (character_id % 5) * 200
+                y = 100 + (character_id // 5) * 300
+                print(f"DEBUG: Using default position for character {character_id}: ({x}, {y})")
+            
+            # Add the character card to the scene
+            card = self.scene.add_character_card(character_id, character, x, y)
+            
+            # Verify position was set correctly
+            pos = card.pos()
+            print(f"DEBUG: Character {character_id} position after adding to scene: ({pos.x()}, {pos.y()})")
         
-        # Load relationships
+        # Update relationships
         for character in characters:
             relationships = get_character_relationships(self.db_conn, character['id'])
             for relationship in relationships:
-                # Only add relationships where this character is the source
-                # to avoid adding the same relationship twice
-                if relationship['source_id'] == character['id']:
-                    # Find relationship in layout
-                    relationship_layout = None
-                    for rel_data in layout.get('relationships', []):
-                        if rel_data['id'] == relationship['id']:
-                            relationship_layout = rel_data
-                            break
-                    
-                    # Update relationship data with layout data
-                    if relationship_layout:
-                        if 'color' in relationship_layout:
-                            relationship['color'] = relationship_layout['color']
-                        if 'width' in relationship_layout:
-                            relationship['width'] = relationship_layout['width']
-                    
-                    # Add relationship line
+                # Check if both characters are in the scene
+                if relationship['source_id'] in self.scene.character_cards and relationship['target_id'] in self.scene.character_cards:
+                    # Add the relationship line
                     self.scene.add_relationship_line(
                         relationship['id'],
                         relationship,
                         relationship['source_id'],
                         relationship['target_id']
                     )
+        
+        # Center the view on the characters
+        print("DEBUG: Centering view on characters")
+        self.view.center_on_characters()
+        
+        # Force the view to update
+        print("DEBUG: Updating viewport")
+        self.view.viewport().update()
+        print("DEBUG: View loading complete")
     
     def on_view_changed(self, index: int) -> None:
         """Handle view selection change.
@@ -823,10 +938,7 @@ class StoryBoardWidget(QWidget):
             return
         
         # Create empty layout
-        layout = {
-            "characters": [],
-            "relationships": []
-        }
+        layout = {}
         
         # Get all characters
         characters = get_story_characters(self.db_conn, self.current_story_id)
@@ -838,11 +950,11 @@ class StoryBoardWidget(QWidget):
             row = i // cols
             col = i % cols
             
-            layout["characters"].append({
-                "id": character['id'],
-                "x": 100 + col * 200,
-                "y": 100 + row * 250
-            })
+            character_id = character['id']
+            x = 100 + col * 200
+            y = 100 + row * 250
+            
+            layout[str(character_id)] = {"x": x, "y": y}
         
         # Create view
         view_id = create_story_board_view(
@@ -852,14 +964,9 @@ class StoryBoardWidget(QWidget):
             layout_data=json.dumps(layout)
         )
         
-        # Reload views
-        self.load_views()
-        
-        # Select the new view
-        for i in range(self.view_selector.count()):
-            if self.view_selector.itemData(i) == view_id:
-                self.view_selector.setCurrentIndex(i)
-                break
+        # Add to selector and select it
+        self.view_selector.addItem(name, view_id)
+        self.view_selector.setCurrentIndex(self.view_selector.count() - 1)
     
     def on_save_view(self) -> None:
         """Handle save view button click."""
@@ -978,5 +1085,112 @@ class StoryBoardWidget(QWidget):
             json.dumps(layout_data)
         )
         
+        # Verify the save by reading back from the database
+        view = get_story_board_view(self.db_conn, self.current_view_id)
+        saved_layout = json.loads(view['layout_data'])
+        
         # Show a brief status message
-        self.parent().status_bar.showMessage("View layout saved", 2000) 
+        main_window = self.window()
+        if hasattr(main_window, 'status_bar'):
+            main_window.status_bar.showMessage("View layout saved", 2000)
+    
+    def reset_character_positions(self) -> None:
+        """Reset character positions to a default layout.
+        
+        This is useful when characters are placed too far apart or outside the visible area.
+        """
+        if not self.scene or not hasattr(self.scene, 'character_cards') or not self.scene.character_cards:
+            return
+        
+        # Get the number of characters
+        num_characters = len(self.scene.character_cards)
+        
+        # Calculate grid dimensions
+        cols = max(1, int(math.sqrt(num_characters)))
+        rows = (num_characters + cols - 1) // cols  # Ceiling division
+        
+        # Calculate spacing
+        spacing_x = 200
+        spacing_y = 250
+        
+        # Start position
+        start_x = 100
+        start_y = 100
+        
+        # Arrange characters in a grid
+        for i, (character_id, card) in enumerate(self.scene.character_cards.items()):
+            row = i // cols
+            col = i % cols
+            
+            # Calculate new position
+            new_x = start_x + col * spacing_x
+            new_y = start_y + row * spacing_y
+            
+            # Set new position
+            card.setPos(new_x, new_y)
+        
+        # Center on the characters
+        self.view.center_on_characters()
+        
+        # Save the new layout
+        self.save_current_view()
+        
+        # Force the view to update
+        self.view.viewport().update()
+    
+    def position_cards(self) -> None:
+        """Position cards according to saved layout and show debug info."""
+        if not self.current_story_id or not self.current_view_id:
+            print("DEBUG: No current story or view")
+            return
+        
+        # Get the current view data
+        view = get_story_board_view(self.db_conn, self.current_view_id)
+        if not view:
+            print("DEBUG: Could not find view data")
+            return
+            
+        print(f"\nDEBUG: Retrieved view data: {view}")
+        
+        # Load layout
+        layout = json.loads(view['layout_data'])
+        print(f"\nDEBUG: Parsed layout data: {layout}")
+        
+        # Get all characters
+        characters = get_story_characters(self.db_conn, self.current_story_id)
+        print(f"\nDEBUG: Found {len(characters)} characters")
+        
+        # Position each character
+        for character in characters:
+            character_id = character['id']
+            card = self.scene.character_cards.get(character_id)
+            
+            if not card:
+                print(f"DEBUG: No card found for character {character_id}")
+                continue
+            
+            # Get saved position
+            if str(character_id) in layout:
+                position = layout[str(character_id)]
+                x = position.get('x', 0)
+                y = position.get('y', 0)
+                print(f"DEBUG: Setting character {character_id} position to ({x}, {y})")
+                
+                # Get current position before setting new one
+                current_pos = card.pos()
+                print(f"DEBUG: Current position for character {character_id}: ({current_pos.x()}, {current_pos.y()})")
+                
+                # Set new position
+                card.setPos(x, y)
+                
+                # Verify position was set
+                new_pos = card.pos()
+                print(f"DEBUG: New position for character {character_id}: ({new_pos.x()}, {new_pos.y()})")
+            else:
+                print(f"DEBUG: No position data found for character {character_id}")
+        
+        # Center on the characters
+        self.view.center_on_characters()
+        
+        # Force the view to update
+        self.view.viewport().update() 
