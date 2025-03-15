@@ -22,6 +22,7 @@ from PyQt6.QtGui import QAction, QIcon
 from app.views.story_manager import StoryManagerWidget
 from app.views.story_board import StoryBoardWidget
 from app.views.settings_dialog import SettingsDialog
+from app.views.gallery_widget import GalleryWidget
 
 
 class MainWindow(QMainWindow):
@@ -79,6 +80,11 @@ class MainWindow(QMainWindow):
         self.story_board = StoryBoardWidget(self.db_conn)
         self.story_board_tab_index = self.tab_widget.addTab(self.story_board, "Story Board")
         self.tab_widget.setTabEnabled(self.story_board_tab_index, False)
+        
+        # Create gallery tab (initially disabled)
+        self.gallery = GalleryWidget(self.db_conn)
+        self.gallery_tab_index = self.tab_widget.addTab(self.gallery, "Gallery")
+        self.tab_widget.setTabEnabled(self.gallery_tab_index, False)
         
         # Create status bar
         self.status_bar = QStatusBar()
@@ -192,7 +198,9 @@ class MainWindow(QMainWindow):
         """
         self.current_story_id = story_id
         self.story_board.set_story(story_id, story_data)
+        self.gallery.set_story(story_id, story_data)
         self.tab_widget.setTabEnabled(self.story_board_tab_index, True)
+        self.tab_widget.setTabEnabled(self.gallery_tab_index, True)
         self.tab_widget.setCurrentIndex(self.story_board_tab_index)
         self.status_bar.showMessage(f"Loaded story: {story_data['title']}")
     
