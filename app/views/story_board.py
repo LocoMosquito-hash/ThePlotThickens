@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QColorDialog, QMessageBox, QGraphicsSceneMouseEvent, QGraphicsSceneContextMenuEvent,
     QGraphicsSceneHoverEvent, QGraphicsSceneDragDropEvent, QGraphicsSceneWheelEvent,
     QGraphicsItemGroup, QToolBar, QSizePolicy, QGraphicsEllipseItem, QFrame,
-    QDialog, QDialogButtonBox
+    QDialog, QDialogButtonBox, QStyleOptionGraphicsItem
 )
 from PyQt6.QtCore import Qt, QSize, QPointF, QRectF, QLineF, pyqtSignal, QTimer, QObject
 from PyQt6.QtGui import (
@@ -32,7 +32,8 @@ from app.db_sqlite import (
     get_story, get_story_characters, get_character_relationships,
     get_story_board_views, get_story_board_view, create_story_board_view,
     update_story_board_view_layout, get_relationship_types, create_relationship,
-    get_story_relationships, get_used_relationship_types
+    get_story_relationships, get_used_relationship_types, delete_character,
+    get_character
 )
 
 
@@ -74,7 +75,7 @@ class CharacterCard(QGraphicsItemGroup):
         self.signals = CharacterCardSignals()
         self.position_changed = self.signals.position_changed
         
-        self.character_id = character_id
+        self._character_id = character_id  # Store as private attribute
         self.character_data = character_data
         
         # Set flags before setting position
@@ -83,20 +84,27 @@ class CharacterCard(QGraphicsItemGroup):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         self.setAcceptHoverEvents(True)
         
+        # Flags for controlling position updates
+        self.is_moving = False
+        self.suppress_position_updates = False
+        
         # Create card components
         self.create_card()
         
         # Track connected relationships
         self.relationships: List[RelationshipLine] = []
         
-        # Track if we're currently moving
-        self.is_moving = False
-        
         # Set position after everything else is set up
-        print(f"DEBUG: Setting initial position for character {character_id} to ({x}, {y})")
         self.setPos(x, y)
-        pos = self.pos()
-        print(f"DEBUG: Position after setPos: ({pos.x()}, {pos.y()})")
+    
+    @property
+    def character_id(self) -> int:
+        """Get the character ID.
+        
+        Returns:
+            The character ID
+        """
+        return self._character_id
     
     def create_card(self) -> None:
         """Create the card components."""
@@ -104,84 +112,68 @@ class CharacterCard(QGraphicsItemGroup):
         card_width = 180
         card_height = 240
         
-        # Create polaroid-style card background (white with a border)
-        self.background = QGraphicsRectItem(0, 0, card_width, card_height)
-        self.background.setBrush(QBrush(QColor("#FFFFFF")))  # White color
-        self.background.setPen(QPen(QColor("#000000"), 2))
-        self.addToGroup(self.background)
+        # Create card background
+        card_rect = QGraphicsRectItem(0, 0, card_width, card_height)
+        card_rect.setBrush(QBrush(QColor("#ffffff")))
+        card_rect.setPen(QPen(QColor("#000000"), 1))
+        card_rect.setZValue(1.0)
+        self.addToGroup(card_rect)
         
-        # Create shadow effect
-        shadow_rect = QGraphicsRectItem(5, 5, card_width, card_height)
-        shadow_rect.setBrush(QBrush(QColor(0, 0, 0, 40)))  # Semi-transparent black
-        shadow_rect.setPen(QPen(Qt.PenStyle.NoPen))  # No border
-        self.addToGroup(shadow_rect)
-        self.background.setZValue(1)  # Ensure background is above shadow
-        
-        # Create pushpin
-        pin_size = 20
-        pin = QGraphicsEllipseItem(card_width / 2 - pin_size / 2, -pin_size / 2, pin_size, pin_size)
-        pin.setBrush(QBrush(QColor("#FF0000")))  # Red color
-        pin.setPen(QPen(QColor("#800000"), 1))  # Dark red border
-        pin.setZValue(2)  # Ensure pin is above background
-        self.addToGroup(pin)
-        
-        # Create photo area (slightly inset from the card)
+        # Create photo area
         photo_margin = 15
         photo_width = card_width - (photo_margin * 2)
         photo_height = card_height - (photo_margin * 2) - 40  # Leave space for name at bottom
-        
         photo_rect = QGraphicsRectItem(photo_margin, photo_margin, photo_width, photo_height)
-        photo_rect.setBrush(QBrush(QColor("#EEEEEE")))  # Light gray color
-        photo_rect.setPen(QPen(QColor("#CCCCCC"), 1))  # Light gray border
-        photo_rect.setZValue(1.5)  # Ensure photo area is above background but below pin
+        photo_rect.setBrush(QBrush(QColor("#eeeeee")))
+        photo_rect.setPen(QPen(QColor("#cccccc"), 1))
+        photo_rect.setZValue(1.5)
         self.addToGroup(photo_rect)
         
-        # If avatar exists, load it
+        # Add avatar if it exists
         if self.character_data['avatar_path'] and os.path.exists(self.character_data['avatar_path']):
             try:
                 pixmap = QPixmap(self.character_data['avatar_path'])
-                pixmap_item = QGraphicsPixmapItem(
-                    pixmap.scaled(
-                        photo_width,
-                        photo_height,
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation
-                    )
+                scaled_pixmap = pixmap.scaled(
+                    photo_width,
+                    photo_height,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
                 )
                 
                 # Center the pixmap in the photo area
-                pixmap_width = pixmap_item.pixmap().width()
-                pixmap_height = pixmap_item.pixmap().height()
+                pixmap_width = scaled_pixmap.width()
+                pixmap_height = scaled_pixmap.height()
                 pixmap_x = photo_margin + (photo_width - pixmap_width) / 2
                 pixmap_y = photo_margin + (photo_height - pixmap_height) / 2
                 
+                pixmap_item = QGraphicsPixmapItem(scaled_pixmap)
                 pixmap_item.setPos(pixmap_x, pixmap_y)
                 pixmap_item.setZValue(1.6)  # Ensure pixmap is above photo area
                 self.addToGroup(pixmap_item)
             except Exception as e:
                 print(f"Error loading avatar: {e}")
         
-        # Create character name (at the bottom of the polaroid)
+        # Add character name
+        name_text = QGraphicsTextItem(self.character_data['name'])
+        name_text.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        name_text.setDefaultTextColor(QColor("#000000"))
         name_y = card_height - 35
-        name = QGraphicsTextItem(self.character_data['name'])
-        name.setPos(card_width / 2 - name.boundingRect().width() / 2, name_y)
-        name.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        name.setDefaultTextColor(QColor("#000000"))
-        name.setZValue(1.7)  # Ensure name is above everything
-        self.addToGroup(name)
+        name_text.setPos(card_width / 2 - name_text.boundingRect().width() / 2, name_y)
+        name_text.setZValue(1.7)  # Ensure text is above everything
+        self.addToGroup(name_text)
         
-        # Add a small indicator if this is a main character
+        # Add main character indicator if applicable
         if self.character_data.get('is_main_character', False):
             star_size = 15
             star_x = card_width - star_size - 5
             star_y = card_height - star_size - 5
             
-            # Create a simple star indicator (just a yellow circle for now)
-            star = QGraphicsEllipseItem(star_x, star_y, star_size, star_size)
-            star.setBrush(QBrush(QColor("#FFD700")))  # Gold color
-            star.setPen(QPen(QColor("#DAA520"), 1))  # Darker gold border
-            star.setZValue(1.8)  # Ensure star is above everything
-            self.addToGroup(star)
+            # Create a simple star indicator 
+            mc_indicator = QGraphicsEllipseItem(star_x, star_y, star_size, star_size)
+            mc_indicator.setBrush(QBrush(QColor("#FFD700")))  # Gold color
+            mc_indicator.setPen(QPen(QColor("#DAA520"), 1))  # Darker gold border
+            mc_indicator.setZValue(1.8)  # Ensure star is above everything
+            self.addToGroup(mc_indicator)
             
             # Add "MC" text
             mc_text = QGraphicsTextItem("MC")
@@ -193,6 +185,38 @@ class CharacterCard(QGraphicsItemGroup):
             )
             mc_text.setZValue(1.9)  # Ensure text is above star
             self.addToGroup(mc_text)
+        
+        # Make the group container visible with a border and opacity
+        self.setOpacity(0.95)  # Slight transparency to see the group
+        
+        # Add a visible border around the entire group
+        # We need to use a custom paint method for this
+        self.setBoundingRectVisible(True)
+    
+    def setBoundingRectVisible(self, visible: bool) -> None:
+        """Set whether the bounding rect is visible.
+        
+        Args:
+            visible: Whether the bounding rect should be visible
+        """
+        self._show_bounding_rect = visible
+    
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None) -> None:
+        """Paint the item.
+        
+        Args:
+            painter: Painter to use
+            option: Style options
+            widget: Widget being painted on
+        """
+        # Call the parent class paint method
+        super().paint(painter, option, widget)
+        
+        # Draw the bounding rect if enabled
+        if hasattr(self, '_show_bounding_rect') and self._show_bounding_rect:
+            # Draw a dashed red border around the bounding rect
+            painter.setPen(QPen(QColor("#ff0000"), 2, Qt.PenStyle.DashLine))
+            painter.drawRect(self.boundingRect())
     
     def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value) -> Any:
         """Handle item changes.
@@ -209,16 +233,34 @@ class CharacterCard(QGraphicsItemGroup):
             for relationship in self.relationships:
                 relationship.update_position()
             
-            # Set moving flag
-            self.is_moving = True
+            # Only set moving flag if not suppressing updates
+            if not self.suppress_position_updates:
+                self.is_moving = True
         
         elif change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged and self.is_moving:
-            # Position has changed, emit signal
-            self.is_moving = False
-            # Use QTimer to emit the signal after a short delay to avoid excessive updates
-            QTimer.singleShot(100, lambda: self.signals.position_changed.emit(self.character_id))
+            # Position has changed, emit signal only if not suppressing updates
+            if not self.suppress_position_updates:
+                self.is_moving = False
+                # Use QTimer to emit the signal after a short delay to avoid excessive updates
+                QTimer.singleShot(100, lambda: self.signals.position_changed.emit(self._character_id))
         
         return super().itemChange(change, value)
+    
+    def get_position_change_source(self) -> str:
+        """Get the source of the position change by inspecting the call stack.
+        
+        Returns:
+            A string describing where the position change was triggered from
+        """
+        import traceback
+        stack = traceback.extract_stack()
+        # Look for relevant method names in the call stack
+        for frame in stack:
+            method_name = frame.name
+            if method_name in ['on_character_updated', 'create_card', 'load_view', 
+                             'reset_character_positions', 'position_cards', 'setPos']:
+                return f"Method: {method_name}"
+        return "Unknown source"
     
     def add_relationship(self, relationship: 'RelationshipLine') -> None:
         """Add a relationship to this character.
@@ -236,6 +278,62 @@ class CharacterCard(QGraphicsItemGroup):
         """
         if relationship in self.relationships:
             self.relationships.remove(relationship)
+    
+    def delete_character(self) -> None:
+        """Delete the character and its relationships."""
+        # Get the scene
+        scene = self.scene()
+        if not scene or not hasattr(scene, 'db_conn'):
+            return
+            
+        # Ask for confirmation
+        reply = QMessageBox.question(
+            None,
+            "Delete Character",
+            f"Are you sure you want to delete '{self.character_data['name']}'?\n\nThis will also delete all relationships involving this character.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Import the delete function
+        from app.db_sqlite import delete_character
+        
+        # Delete the character from the database
+        if delete_character(scene.db_conn, self._character_id):
+            # Remove all relationships involving this character
+            relationships_to_remove = self.relationships.copy()  # Create a copy to avoid modifying while iterating
+            for relationship in relationships_to_remove:
+                # Remove the relationship line from the scene
+                scene.removeItem(relationship)
+                # Remove from scene's relationship tracking
+                if relationship.relationship_id in scene.relationship_lines:
+                    del scene.relationship_lines[relationship.relationship_id]
+            
+            # Remove the character card from the scene
+            scene.removeItem(self)
+            # Remove from scene's character tracking
+            if self._character_id in scene.character_cards:
+                del scene.character_cards[self._character_id]
+            
+            # Emit layout changed signal to trigger auto-save
+            scene.layout_changed.emit()
+            
+            # Show success message
+            QMessageBox.information(
+                None,
+                "Success",
+                f"Character '{self.character_data['name']}' deleted successfully."
+            )
+        else:
+            # Show error message
+            QMessageBox.critical(
+                None,
+                "Error",
+                f"Failed to delete character '{self.character_data['name']}'."
+            )
     
     def contextMenuEvent(self, event: QGraphicsSceneContextMenuEvent) -> None:
         """Handle context menu events.
@@ -255,7 +353,7 @@ class CharacterCard(QGraphicsItemGroup):
         scene = self.scene()
         if scene:
             for character_id, card in scene.character_cards.items():
-                if character_id != self.character_id:
+                if character_id != self._character_id:
                     target_action = relationship_menu.addAction(f"To: {card.character_data['name']}")
                     target_action.setData(character_id)
         
@@ -264,8 +362,7 @@ class CharacterCard(QGraphicsItemGroup):
         if action == edit_action:
             self.edit_character()
         elif action == delete_action:
-            # TODO: Implement character deletion
-            QMessageBox.information(None, "Not Implemented", "Character deletion is not yet implemented.")
+            self.delete_character()
         elif action and action.text().startswith("To: "):
             # Get the target character ID
             target_id = action.data()
@@ -283,35 +380,24 @@ class CharacterCard(QGraphicsItemGroup):
         if not scene or not hasattr(scene, 'db_conn'):
             return
         
-        # Create and show the dialog
-        dialog = CharacterDialog(scene.db_conn, self.character_id)
+        # Get the parent widget (StoryBoardWidget)
+        parent_widget = scene.views()[0].parent() if scene.views() else None
+        if not parent_widget:
+            return
         
-        # Connect the character_updated signal
-        dialog.character_updated.connect(self.on_character_updated)
+        # Create and show the dialog
+        dialog = CharacterDialog(
+            db_conn=scene.db_conn,
+            story_id=self.character_data['story_id'],
+            character_id=self._character_id,
+            parent=parent_widget
+        )
+        
+        # Connect the character_updated signal to the parent widget's handler
+        dialog.character_updated.connect(parent_widget.on_character_updated)
         
         # Show the dialog
         dialog.exec()
-    
-    def on_character_updated(self, character_id: int, character_data: Dict[str, Any]) -> None:
-        """Handle character update.
-        
-        Args:
-            character_id: ID of the updated character
-            character_data: Updated character data
-        """
-        # Update the character data
-        self.character_data = character_data
-        
-        # Clear the existing items
-        for item in self.childItems():
-            self.removeFromGroup(item)
-        
-        # Recreate the card with the updated data
-        self.create_card()
-        
-        # Update connected relationship lines
-        for relationship in self.relationships:
-            relationship.update_position()
     
     def show_relationship_dialog(self, target_id: int, target_name: str) -> None:
         """Show a dialog to select the relationship type.
@@ -430,7 +516,7 @@ class CharacterCard(QGraphicsItemGroup):
         
         relationship_id = create_relationship(
             scene.db_conn,
-            self.character_id,
+            self._character_id,
             target_id,
             relationship_type['name']
         )
@@ -439,7 +525,7 @@ class CharacterCard(QGraphicsItemGroup):
         scene.add_relationship_line(
             relationship_id,
             relationship_data,
-            self.character_id,
+            self._character_id,
             target_id
         )
         
@@ -483,7 +569,7 @@ class CharacterCard(QGraphicsItemGroup):
                 inverse_id = create_relationship(
                     scene.db_conn,
                     target_id,
-                    self.character_id,
+                    self._character_id,
                     inverse_name
                 )
                 
@@ -492,12 +578,135 @@ class CharacterCard(QGraphicsItemGroup):
                     inverse_id,
                     inverse_data,
                     target_id,
-                    self.character_id
+                    self._character_id
                 )
         
         # Emit layout changed signal
         if hasattr(scene, 'layout_changed'):
             scene.layout_changed.emit()
+
+    def update_card(self) -> None:
+        """Update the card components without recreating it."""
+        # Find existing components by type
+        pixmap_item = None
+        photo_rect = None
+        name_text = None
+        mc_indicator = None
+        mc_text = None
+        
+        # Identify existing components
+        for item in self.childItems():
+            if isinstance(item, QGraphicsPixmapItem):
+                pixmap_item = item
+            elif isinstance(item, QGraphicsRectItem):
+                # Check if this is the photo area (light gray background)
+                if item.brush().color().name() == "#eeeeee":
+                    photo_rect = item
+            elif isinstance(item, QGraphicsTextItem):
+                name_text = item
+            elif isinstance(item, QGraphicsEllipseItem) and item.brush().color().name() == "#ffd700":  # Gold color for MC
+                mc_indicator = item
+                # Find the MC text which is usually added right after the indicator
+                for i in range(self.childItems().index(item) + 1, len(self.childItems())):
+                    if isinstance(self.childItems()[i], QGraphicsTextItem) and self.childItems()[i].toPlainText() == "MC":
+                        mc_text = self.childItems()[i]
+                        break
+        
+        # Card dimensions
+        card_width = 180
+        card_height = 240
+        
+        # Photo area dimensions
+        photo_margin = 15
+        photo_width = card_width - (photo_margin * 2)
+        photo_height = card_height - (photo_margin * 2) - 40  # Leave space for name at bottom
+        
+        # Update avatar if it exists
+        if self.character_data['avatar_path'] and os.path.exists(self.character_data['avatar_path']):
+            try:
+                # Load new pixmap
+                pixmap = QPixmap(self.character_data['avatar_path'])
+                scaled_pixmap = pixmap.scaled(
+                    photo_width,
+                    photo_height,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                
+                # Center the pixmap in the photo area
+                pixmap_width = scaled_pixmap.width()
+                pixmap_height = scaled_pixmap.height()
+                pixmap_x = photo_margin + (photo_width - pixmap_width) / 2
+                pixmap_y = photo_margin + (photo_height - pixmap_height) / 2
+                
+                # If we have an existing pixmap item, update it
+                if pixmap_item:
+                    # Remove the old pixmap item first
+                    self.removeFromGroup(pixmap_item)
+                    scene = self.scene()
+                    if scene:
+                        scene.removeItem(pixmap_item)
+                
+                # Create a new pixmap item
+                pixmap_item = QGraphicsPixmapItem(scaled_pixmap)
+                pixmap_item.setPos(pixmap_x, pixmap_y)
+                pixmap_item.setZValue(1.6)  # Ensure pixmap is above photo area
+                self.addToGroup(pixmap_item)
+                
+            except Exception as e:
+                print(f"Error updating avatar: {e}")
+        elif pixmap_item:
+            # If there's no avatar path but we have a pixmap item, remove it
+            self.removeFromGroup(pixmap_item)
+            scene = self.scene()
+            if scene:
+                scene.removeItem(pixmap_item)
+        
+        # Update character name
+        if name_text:
+            name_text.setPlainText(self.character_data['name'])
+            # Recenter name
+            name_y = card_height - 35
+            name_text.setPos(card_width / 2 - name_text.boundingRect().width() / 2, name_y)
+        
+        # Update main character indicator
+        is_main_character = self.character_data.get('is_main_character', False)
+        
+        if is_main_character and not mc_indicator:
+            # Add MC indicator if it doesn't exist
+            star_size = 15
+            star_x = card_width - star_size - 5
+            star_y = card_height - star_size - 5
+            
+            # Create a simple star indicator 
+            mc_indicator = QGraphicsEllipseItem(star_x, star_y, star_size, star_size)
+            mc_indicator.setBrush(QBrush(QColor("#FFD700")))  # Gold color
+            mc_indicator.setPen(QPen(QColor("#DAA520"), 1))  # Darker gold border
+            mc_indicator.setZValue(1.8)  # Ensure star is above everything
+            self.addToGroup(mc_indicator)
+            
+            # Add "MC" text
+            mc_text = QGraphicsTextItem("MC")
+            mc_text.setFont(QFont("Arial", 7, QFont.Weight.Bold))
+            mc_text.setDefaultTextColor(QColor("#000000"))
+            mc_text.setPos(
+                star_x + (star_size - mc_text.boundingRect().width()) / 2,
+                star_y + (star_size - mc_text.boundingRect().height()) / 2
+            )
+            mc_text.setZValue(1.9)  # Ensure text is above star
+            self.addToGroup(mc_text)
+        elif not is_main_character and mc_indicator:
+            # Remove MC indicator if character is no longer a main character
+            self.removeFromGroup(mc_indicator)
+            if mc_text:
+                self.removeFromGroup(mc_text)
+            # Actually remove them from the scene
+            scene = self.scene()
+            if scene:
+                if mc_indicator:
+                    scene.removeItem(mc_indicator)
+                if mc_text:
+                    scene.removeItem(mc_text)
 
 
 class RelationshipLine(QGraphicsLineItem):
@@ -763,12 +972,20 @@ class StoryBoardScene(QGraphicsScene):
         Returns:
             The created character card
         """
+        print(f"ADD CARD: Adding character {character_id} at position ({x}, {y})")
+        
+        # Check if card already exists
+        if character_id in self.character_cards:
+            print(f"ADD CARD: WARNING - Character {character_id} already exists in scene!")
+        
         card = CharacterCard(character_id, character_data, x, y)
         self.addItem(card)
         self.character_cards[character_id] = card
         
         # Connect to position changed signal
         card.position_changed.connect(self.on_character_position_changed)
+        
+        print(f"ADD CARD: Character {character_id} added successfully. Total cards: {len(self.character_cards)}")
         
         return card
     
@@ -836,6 +1053,100 @@ class StoryBoardScene(QGraphicsScene):
         """
         # Emit layout changed signal
         self.layout_changed.emit()
+    
+    def contextMenuEvent(self, event: QGraphicsSceneContextMenuEvent) -> None:
+        """Handle context menu events.
+        
+        Args:
+            event: Context menu event
+        """
+        # Get the clicked position in scene coordinates
+        scene_pos = event.scenePos()
+        
+        # Check if we clicked on an item
+        clicked_item = self.itemAt(scene_pos, QTransform())
+        if clicked_item:
+            # Let the item handle its own context menu
+            super().contextMenuEvent(event)
+            return
+            
+        # Create menu for empty space click
+        menu = QMenu()
+        add_character_action = menu.addAction("Add Character Here")
+        
+        # Show menu and handle actions
+        action = menu.exec(event.screenPos())
+        
+        if action == add_character_action:
+            # Import here to avoid circular imports
+            from app.views.character_dialog import CharacterDialog
+            
+            # Get the parent widget (StoryBoardWidget)
+            parent_widget = self.views()[0].parent() if self.views() else None
+            if not parent_widget or not hasattr(parent_widget, 'current_story_id'):
+                return
+            
+            # Get current character count in database
+            from app.db_sqlite import get_story_characters
+            current_characters = get_story_characters(self.db_conn, parent_widget.current_story_id)
+            print(f"ADD CHAR: Before adding - {len(current_characters)} characters in database for story {parent_widget.current_story_id}")
+            
+            # Log card count before adding character
+            print(f"ADD CHAR: Before adding - {len(self.character_cards)} cards in scene")
+                
+            # Create and show the character dialog
+            dialog = CharacterDialog(self.db_conn, parent_widget.current_story_id, parent=parent_widget)
+            if dialog.exec():
+                # Get the character ID from the dialog
+                character_id = dialog.character_id
+                print(f"DEBUG: Got character ID {character_id} from dialog")
+                
+                # Check character count in database after adding
+                new_characters = get_story_characters(self.db_conn, parent_widget.current_story_id)
+                print(f"ADD CHAR: After adding - {len(new_characters)} characters in database for story {parent_widget.current_story_id}")
+                
+                # Add the character to the current view's layout
+                if parent_widget.current_view_id and character_id:
+                    # Get the current layout
+                    from app.db_sqlite import get_story_board_view, update_story_board_view_layout, get_character
+                    view = get_story_board_view(self.db_conn, parent_widget.current_view_id)
+                    layout = json.loads(view['layout_data']) if view['layout_data'] else {}
+                    
+                    # Initialize characters dictionary if it doesn't exist
+                    if 'characters' not in layout:
+                        layout['characters'] = {}
+                    
+                    # Add the character to the layout at the clicked position
+                    layout['characters'][str(character_id)] = {
+                        'x': scene_pos.x(),
+                        'y': scene_pos.y()
+                    }
+                    
+                    # Update the layout
+                    update_story_board_view_layout(
+                        self.db_conn,
+                        parent_widget.current_view_id,
+                        json.dumps(layout)
+                    )
+                    
+                    # Get the complete character data from the database
+                    complete_character_data = get_character(self.db_conn, character_id)
+                    
+                    # Add the character card directly to the scene at the clicked position
+                    self.add_character_card(character_id, complete_character_data, scene_pos.x(), scene_pos.y())
+                    
+                    # Save the view without triggering a reload
+                    parent_widget.save_current_view()
+                    
+                    # Log card count after adding character
+                    print(f"ADD CHAR: After adding - {len(self.character_cards)} cards in scene")
+                    
+                    # Show success message
+                    QMessageBox.information(
+                        parent_widget,
+                        "Character Created",
+                        f"Character '{complete_character_data['name']}' created successfully."
+                    )
 
 
 class StoryBoardView(QGraphicsView):
@@ -1019,14 +1330,6 @@ class StoryBoardWidget(QWidget):
         # Add spacer
         toolbar.addWidget(create_vertical_line())
         
-        # Create character button
-        self.add_character_button = QPushButton("Add Character")
-        self.add_character_button.clicked.connect(self.on_add_character)
-        toolbar.addWidget(self.add_character_button)
-        
-        # Add spacer
-        toolbar.addWidget(create_vertical_line())
-        
         # Create zoom buttons
         self.zoom_in_button = QPushButton("Zoom In")
         self.zoom_in_button.clicked.connect(self.on_zoom_in)
@@ -1071,7 +1374,6 @@ class StoryBoardWidget(QWidget):
         self.view_selector.setEnabled(False)
         self.new_view_button.setEnabled(False)
         self.save_view_button.setEnabled(False)
-        self.add_character_button.setEnabled(False)
         self.zoom_in_button.setEnabled(False)
         self.zoom_out_button.setEnabled(False)
         self.reset_zoom_button.setEnabled(False)
@@ -1098,7 +1400,6 @@ class StoryBoardWidget(QWidget):
         self.view_selector.setEnabled(True)
         self.new_view_button.setEnabled(True)
         self.save_view_button.setEnabled(True)
-        self.add_character_button.setEnabled(True)
         self.zoom_in_button.setEnabled(True)
         self.zoom_out_button.setEnabled(True)
         self.reset_zoom_button.setEnabled(True)
@@ -1176,8 +1477,17 @@ class StoryBoardWidget(QWidget):
         Args:
             view_id: ID of the view to load
         """
+        print(f"LOAD VIEW: Loading view {view_id}")
+        
         if not self.current_story_id:
             return
+        
+        # Store current positions before clearing
+        current_positions = {}
+        if self.scene and hasattr(self.scene, 'character_cards'):
+            for character_id, card in self.scene.character_cards.items():
+                pos = card.pos()
+                current_positions[character_id] = (pos.x(), pos.y())
         
         # Get view data
         view_data = get_story_board_view(self.db_conn, view_id)
@@ -1186,6 +1496,9 @@ class StoryBoardWidget(QWidget):
         
         # Update current view
         self.current_view_id = view_id
+        
+        # Log card count before clearing
+        print(f"LOAD VIEW: Before clearing - {len(self.scene.character_cards)} cards in scene")
         
         # Clear the scene
         self.scene.clear_board()
@@ -1198,20 +1511,31 @@ class StoryBoardWidget(QWidget):
         
         # Get characters
         characters = get_story_characters(self.db_conn, self.current_story_id)
+        print(f"LOAD VIEW: Found {len(characters)} characters in database for story {self.current_story_id}")
         
         # Add character cards to the scene
         for character in characters:
             character_id = character['id']
             
-            # Get position from layout data
+            # Get position from layout data or current positions
             x, y = 0, 0
-            if 'characters' in layout_data and str(character_id) in layout_data['characters']:
+            if str(character_id) in current_positions:
+                # Use current position if available
+                x, y = current_positions[str(character_id)]
+            elif 'characters' in layout_data and str(character_id) in layout_data['characters']:
+                # Fall back to layout data
                 char_pos = layout_data['characters'][str(character_id)]
                 x = float(char_pos['x'])
                 y = float(char_pos['y'])
             
-            # Add character card
-            self.scene.add_character_card(character_id, character, x, y)
+            # Add character card with position suppression
+            card = self.scene.add_character_card(character_id, character, x, y)
+            if card:
+                card.suppress_position_updates = True
+                try:
+                    card.setPos(x, y)
+                finally:
+                    card.suppress_position_updates = False
         
         # Get relationships for this story
         relationships = get_story_relationships(self.db_conn, self.current_story_id)
@@ -1232,8 +1556,12 @@ class StoryBoardWidget(QWidget):
             # Add relationship line
             self.scene.add_relationship_line(relationship_id, relationship_data, source_id, target_id)
         
-        # Center the view on the characters
-        self.view.center_on_characters()
+        # Log card count after loading
+        print(f"LOAD VIEW: After loading - {len(self.scene.character_cards)} cards in scene")
+        
+        # Only center if this is the first load (no current positions)
+        if not current_positions:
+            self.view.center_on_characters()
     
     def on_view_changed(self, index: int) -> None:
         """Handle view selection change.
@@ -1325,97 +1653,107 @@ class StoryBoardWidget(QWidget):
     def on_reset_zoom(self) -> None:
         """Handle reset zoom button click."""
         self.view.current_zoom = 1.0
-        self.view.setTransform(QTransform())
-    
-    def on_add_character(self) -> None:
-        """Handle add character button click."""
-        if not self.current_story_id:
-            return
-        
-        # Import here to avoid circular imports
-        from app.views.character_dialog import CharacterDialog
-        
-        # Create and show the character dialog
-        dialog = CharacterDialog(self, self.current_story_id)
-        if dialog.exec():
-            character_data = dialog.get_character_data()
-            
-            # Create the character in the database
-            from app.db_sqlite import create_character
-            
-            character_id = create_character(
-                self.db_conn,
-                name=character_data['name'],
-                story_id=self.current_story_id,
-                aliases=character_data['aliases'],
-                is_main_character=character_data['is_main_character'],
-                age_value=character_data['age_value'],
-                age_category=character_data['age_category'],
-                gender=character_data['gender'],
-                avatar_path=character_data['avatar_path']
-            )
-            
-            # Add the character to the current view
-            if self.current_view_id:
-                # Get the current layout
-                from app.db_sqlite import get_story_board_view
-                view = get_story_board_view(self.db_conn, self.current_view_id)
-                layout = json.loads(view['layout_data'])
-                
-                # Add the character to the layout
-                # Position it in the center of the view
-                layout['characters'].append({
-                    'id': character_id,
-                    'x': 500,  # Center of the scene
-                    'y': 300   # Center of the scene
-                })
-                
-                # Update the layout
-                from app.db_sqlite import update_story_board_view_layout
-                update_story_board_view_layout(
-                    self.db_conn,
-                    self.current_view_id,
-                    json.dumps(layout)
-                )
-                
-                # Reload the view
-                self.load_view(self.current_view_id)
-            
-            # Show a success message
-            QMessageBox.information(
-                self,
-                "Character Created",
-                f"Character '{character_data['name']}' created successfully."
-            )
+        self.view.setTransform(QTransform()) 
     
     def on_layout_changed(self) -> None:
         """Handle layout changed signal."""
-        # Start auto-save timer
-        self.auto_save_timer.start()
+        # Only start auto-save timer if it's not already running
+        if not self.auto_save_timer.isActive():
+            self.auto_save_timer.start()
     
     def save_current_view(self) -> None:
         """Save the current view layout."""
+        print(f"SAVE VIEW: Saving view {self.current_view_id}")
+        
         if not self.current_story_id or not self.current_view_id:
             return
         
         # Get layout data
         layout_data = self.scene.get_layout_data()
         
-        # Update view
+        # Update view without triggering a reload
         update_story_board_view_layout(
             self.db_conn,
             self.current_view_id,
             json.dumps(layout_data)
         )
         
-        # Verify the save by reading back from the database
-        view = get_story_board_view(self.db_conn, self.current_view_id)
-        saved_layout = json.loads(view['layout_data'])
+        print(f"SAVE VIEW: View {self.current_view_id} saved successfully")
         
         # Show a brief status message
         main_window = self.window()
         if hasattr(main_window, 'status_bar'):
             main_window.status_bar.showMessage("View layout saved", 2000)
+
+    def on_character_updated(self, character_id: int, character_data: Dict[str, Any]) -> None:
+        """Handle character update in the scene.
+        
+        Args:
+            character_id: ID of the updated character
+            character_data: Updated character data
+        """
+        # Log card count before update
+        print(f"CARD COUNT: Before character update - {len(self.scene.character_cards)} cards in scene")
+        
+        # Find the card
+        old_card = self.scene.character_cards.get(character_id)
+        if not old_card:
+            return
+            
+        # Store current position
+        current_pos = old_card.pos()
+        print(f"DEBUG: Stored position for character {character_id}: ({current_pos.x()}, {current_pos.y()})")
+        
+        # Store relationships
+        relationships = old_card.relationships.copy()
+        
+        # Remove the old card from the scene's tracking dictionary FIRST
+        # This is important to prevent any references to the old card
+        del self.scene.character_cards[character_id]
+        
+        # Remove the old card from the scene
+        self.scene.removeItem(old_card)
+        
+        # Force a scene update to ensure the old card is completely removed
+        self.scene.update()
+        
+        # Create a new card at the same position
+        new_card = CharacterCard(character_id, character_data, current_pos.x(), current_pos.y())
+        
+        # Add the new card to the scene
+        self.scene.addItem(new_card)
+        
+        # Update the scene's tracking of character cards
+        self.scene.character_cards[character_id] = new_card
+        
+        # Connect to position changed signal
+        new_card.position_changed.connect(self.scene.on_character_position_changed)
+        
+        # Update relationships
+        for relationship in relationships:
+            # Update the relationship to use the new card
+            if relationship.source_card == old_card:
+                relationship.source_card = new_card
+                new_card.add_relationship(relationship)
+            elif relationship.target_card == old_card:
+                relationship.target_card = new_card
+                new_card.add_relationship(relationship)
+            
+            # Update the relationship position
+            relationship.update_position()
+        
+        # Verify the new card's position
+        new_pos = new_card.pos()
+        print(f"DEBUG: New card position for character {character_id}: ({new_pos.x()}, {new_pos.y()})")
+        
+        # Save the view without reloading
+        self.save_current_view()
+        
+        # Log card count after update
+        print(f"CARD COUNT: After character update - {len(self.scene.character_cards)} cards in scene")
+        
+        # Force the view to update
+        self.view.viewport().update()
     
     def reset_character_positions(self) -> None:
         """Reset character positions to a default layout.

@@ -48,6 +48,16 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("The Plot Thickens")
         self.setMinimumSize(1200, 800)
         
+        # Set window icon
+        try:
+            icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "resources", "icons", "favicon.ico")
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
+            else:
+                print(f"Warning: Favicon not found at {icon_path}")
+        except Exception as e:
+            print(f"Warning: Failed to load favicon: {e}")
+        
         # Create menu bar
         self.create_menus()
         
