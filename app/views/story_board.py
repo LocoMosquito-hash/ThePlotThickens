@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QColorDialog, QMessageBox, QGraphicsSceneMouseEvent, QGraphicsSceneContextMenuEvent,
     QGraphicsSceneHoverEvent, QGraphicsSceneDragDropEvent, QGraphicsSceneWheelEvent,
     QGraphicsItemGroup, QToolBar, QSizePolicy, QGraphicsEllipseItem, QFrame,
-    QDialog, QDialogButtonBox, QStyleOptionGraphicsItem
+    QDialog, QDialogButtonBox, QStyleOptionGraphicsItem, QCheckBox, QLineEdit
 )
 from PyQt6.QtCore import Qt, QSize, QPointF, QRectF, QLineF, pyqtSignal, QTimer, QObject
 from PyQt6.QtGui import (
@@ -157,8 +157,7 @@ class CharacterCard(QGraphicsItemGroup):
         name_text = QGraphicsTextItem(self.character_data['name'])
         name_text.setFont(QFont("Arial", 10, QFont.Weight.Bold))
         name_text.setDefaultTextColor(QColor("#000000"))
-        name_y = card_height - 35
-        name_text.setPos(card_width / 2 - name_text.boundingRect().width() / 2, name_y)
+        name_text.setPos(card_width / 2 - name_text.boundingRect().width() / 2, card_height - 35)
         name_text.setZValue(1.7)  # Ensure text is above everything
         self.addToGroup(name_text)
         
@@ -212,11 +211,11 @@ class CharacterCard(QGraphicsItemGroup):
         # Call the parent class paint method
         super().paint(painter, option, widget)
         
-        # Draw the bounding rect if enabled
-        if hasattr(self, '_show_bounding_rect') and self._show_bounding_rect:
-            # Draw a dashed red border around the bounding rect
-            painter.setPen(QPen(QColor("#ff0000"), 2, Qt.PenStyle.DashLine))
-            painter.drawRect(self.boundingRect())
+        # Draw the bounding rect if enabled - removed to eliminate dashed line
+        # if hasattr(self, '_show_bounding_rect') and self._show_bounding_rect:
+        #     # Draw a dashed red border around the bounding rect
+        #     painter.setPen(QPen(QColor("#ff0000"), 2, Qt.PenStyle.DashLine))
+        #     painter.drawRect(self.boundingRect())
     
     def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value) -> Any:
         """Handle item changes.
@@ -229,6 +228,21 @@ class CharacterCard(QGraphicsItemGroup):
             Modified value
         """
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene():
+            # Check if grid snapping is enabled in the scene
+            if hasattr(self.scene(), 'grid_snap_enabled') and self.scene().grid_snap_enabled:
+                # Get the new position
+                new_pos = value
+                
+                # Get the grid size from the scene
+                grid_size = getattr(self.scene(), 'grid_size', 50)
+                
+                # Snap to grid
+                snapped_x = round(new_pos.x() / grid_size) * grid_size
+                snapped_y = round(new_pos.y() / grid_size) * grid_size
+                
+                # Return the snapped position
+                value = QPointF(snapped_x, snapped_y)
+            
             # Update connected relationship lines
             for relationship in self.relationships:
                 relationship.update_position()
@@ -749,13 +763,19 @@ class RelationshipLine(QGraphicsLineItem):
         # Create label
         self.label = QGraphicsTextItem(self)  # Make the label a child of the line
         self.label.setPlainText(relationship_data['relationship_type'])
-        self.label.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-        self.label.setDefaultTextColor(self.normal_color)
+        self.label.setFont(QFont("Arial", 9, QFont.Weight.Bold))  # Increased font size
+        
+        # Ensure text color has good contrast with background
+        # Use white text for better readability against dark background
+        self.label.setDefaultTextColor(QColor(255, 255, 255))
         
         # Create a background for the label to make it more readable
         self.label_background = QGraphicsRectItem(self)
-        self.label_background.setBrush(QBrush(QColor(40, 40, 40, 180)))  # Semi-transparent dark background
-        self.label_background.setPen(QPen(Qt.PenStyle.NoPen))  # No border
+        self.label_background.setBrush(QBrush(QColor(40, 40, 40, 230)))  # More opaque dark background
+        
+        # Add a thin border with the relationship color for better visibility
+        border_pen = QPen(self.normal_color, 1)  # Use integer for width
+        self.label_background.setPen(border_pen)
         
         # Track hover state
         self.is_hovered = False
@@ -778,8 +798,12 @@ class RelationshipLine(QGraphicsLineItem):
         self.setPen(pen)
         
         # Change label appearance
-        self.label.setDefaultTextColor(self.hover_color)
-        self.label.setFont(QFont("Arial", 9, QFont.Weight.Bold))  # Slightly larger font
+        self.label.setFont(QFont("Arial", 10, QFont.Weight.Bold))  # Slightly larger font
+        # Keep white text for readability, but update the border color
+        border_pen = self.label_background.pen()
+        border_pen.setColor(self.hover_color)
+        border_pen.setWidth(2)  # Slightly thicker border on hover (integer value)
+        self.label_background.setPen(border_pen)
         
         # Update the background to match the new label size
         self.update_position()
@@ -804,8 +828,12 @@ class RelationshipLine(QGraphicsLineItem):
         self.setPen(pen)
         
         # Restore label appearance
-        self.label.setDefaultTextColor(self.normal_color)
-        self.label.setFont(QFont("Arial", 8, QFont.Weight.Bold))  # Original font size
+        self.label.setFont(QFont("Arial", 9, QFont.Weight.Bold))  # Original font size
+        # Keep white text for readability, but restore the border color and width
+        border_pen = self.label_background.pen()
+        border_pen.setColor(self.normal_color)
+        border_pen.setWidth(1)  # Restore original border width (integer value)
+        self.label_background.setPen(border_pen)
         
         # Update the background to match the new label size
         self.update_position()
@@ -863,8 +891,8 @@ class RelationshipLine(QGraphicsLineItem):
             local_midpoint.y() - label_height / 2
         )
         
-        # Set the background rectangle to match the label size with some padding
-        padding = 4
+        # Set the background rectangle to match the label size with increased padding
+        padding = 6  # Increased padding for better readability
         self.label_background.setRect(
             label_pos.x() - padding,
             label_pos.y() - padding,
@@ -943,11 +971,77 @@ class StoryBoardScene(QGraphicsScene):
         self.character_cards: Dict[int, CharacterCard] = {}
         self.relationship_lines: Dict[int, RelationshipLine] = {}
         
+        # Grid snapping settings
+        self.grid_snap_enabled = False
+        self.grid_size = 50
+        self.grid_visible = False
+        
         # Set scene size
         self.setSceneRect(0, 0, 10000, 10000)
         
         # Connect signals
         self.selectionChanged.connect(self.on_selection_changed)
+    
+    def set_grid_snap(self, enabled: bool) -> None:
+        """Enable or disable grid snapping.
+        
+        Args:
+            enabled: Whether grid snapping should be enabled
+        """
+        self.grid_snap_enabled = enabled
+        self.update()
+    
+    def set_grid_size(self, size: int) -> None:
+        """Set the grid size.
+        
+        Args:
+            size: Grid size in pixels
+        """
+        self.grid_size = size
+        self.update()
+    
+    def set_grid_visible(self, visible: bool) -> None:
+        """Set grid visibility.
+        
+        Args:
+            visible: Whether the grid should be visible
+        """
+        self.grid_visible = visible
+        self.update()
+    
+    def drawBackground(self, painter: QPainter, rect: QRectF) -> None:
+        """Draw the scene background.
+        
+        Args:
+            painter: Painter to use
+            rect: Rectangle to draw in
+        """
+        super().drawBackground(painter, rect)
+        
+        # Draw grid if visible
+        if self.grid_visible:
+            # Save the painter state
+            painter.save()
+            
+            # Set up the pen for grid lines
+            painter.setPen(QPen(QColor(200, 200, 200, 100), 1, Qt.PenStyle.DotLine))
+            
+            # Calculate grid boundaries
+            left = int(rect.left() - (rect.left() % self.grid_size))
+            top = int(rect.top() - (rect.top() % self.grid_size))
+            right = int(rect.right())
+            bottom = int(rect.bottom())
+            
+            # Draw vertical grid lines
+            for x in range(left, right + 1, self.grid_size):
+                painter.drawLine(x, top, x, bottom)
+            
+            # Draw horizontal grid lines
+            for y in range(top, bottom + 1, self.grid_size):
+                painter.drawLine(left, y, right, y)
+            
+            # Restore the painter state
+            painter.restore()
     
     def on_selection_changed(self) -> None:
         """Handle selection changes."""
@@ -1140,13 +1234,6 @@ class StoryBoardScene(QGraphicsScene):
                     
                     # Log card count after adding character
                     print(f"ADD CHAR: After adding - {len(self.character_cards)} cards in scene")
-                    
-                    # Show success message
-                    QMessageBox.information(
-                        parent_widget,
-                        "Character Created",
-                        f"Character '{complete_character_data['name']}' created successfully."
-                    )
 
 
 class StoryBoardView(QGraphicsView):
@@ -1307,30 +1394,35 @@ class StoryBoardWidget(QWidget):
         main_layout = QVBoxLayout(self)
         
         # Create toolbar
-        toolbar = QHBoxLayout()
+        toolbar = QToolBar()
         
-        # Create view selector
+        # Add view selector
         self.view_selector = QComboBox()
-        self.view_selector.currentIndexChanged.connect(self.on_view_changed)
+        self.view_selector.setMinimumWidth(200)
+        self.view_selector.currentIndexChanged.connect(self.on_view_selected)
         toolbar.addWidget(QLabel("View:"))
         toolbar.addWidget(self.view_selector)
         
-        # Add spacer
-        toolbar.addWidget(create_vertical_line())
+        # Add view management buttons
+        self.add_view_button = QPushButton("New View")
+        self.add_view_button.clicked.connect(self.on_add_view)
+        toolbar.addWidget(self.add_view_button)
         
-        # Create view buttons
-        self.new_view_button = QPushButton("New View")
-        self.new_view_button.clicked.connect(self.on_new_view)
-        toolbar.addWidget(self.new_view_button)
+        self.rename_view_button = QPushButton("Rename")
+        self.rename_view_button.clicked.connect(self.on_rename_view)
+        toolbar.addWidget(self.rename_view_button)
         
         self.save_view_button = QPushButton("Save View")
         self.save_view_button.clicked.connect(self.on_save_view)
         toolbar.addWidget(self.save_view_button)
         
-        # Add spacer
-        toolbar.addWidget(create_vertical_line())
+        self.delete_view_button = QPushButton("Delete")
+        self.delete_view_button.clicked.connect(self.on_delete_view)
+        toolbar.addWidget(self.delete_view_button)
         
-        # Create zoom buttons
+        toolbar.addSeparator()
+        
+        # Add zoom controls
         self.zoom_in_button = QPushButton("Zoom In")
         self.zoom_in_button.clicked.connect(self.on_zoom_in)
         toolbar.addWidget(self.zoom_in_button)
@@ -1343,17 +1435,34 @@ class StoryBoardWidget(QWidget):
         self.reset_zoom_button.clicked.connect(self.on_reset_zoom)
         toolbar.addWidget(self.reset_zoom_button)
         
-        # Add spacer
-        toolbar.addWidget(create_vertical_line())
+        toolbar.addSeparator()
         
-        # Create reset positions button
+        # Add grid snapping controls
+        self.grid_snap_checkbox = QCheckBox("Snap to Grid")
+        self.grid_snap_checkbox.setChecked(False)
+        self.grid_snap_checkbox.stateChanged.connect(self.on_grid_snap_changed)
+        toolbar.addWidget(self.grid_snap_checkbox)
+        
+        self.grid_visible_checkbox = QCheckBox("Show Grid")
+        self.grid_visible_checkbox.setChecked(False)
+        self.grid_visible_checkbox.stateChanged.connect(self.on_grid_visible_changed)
+        toolbar.addWidget(self.grid_visible_checkbox)
+        
+        self.grid_size_label = QLabel("Grid Size:")
+        toolbar.addWidget(self.grid_size_label)
+        
+        self.grid_size_combo = QComboBox()
+        self.grid_size_combo.addItems(["25", "50", "75", "100"])
+        self.grid_size_combo.setCurrentIndex(1)  # Default to 50
+        self.grid_size_combo.currentIndexChanged.connect(self.on_grid_size_changed)
+        toolbar.addWidget(self.grid_size_combo)
+        
+        toolbar.addSeparator()
+        
+        # Add layout controls
         self.reset_positions_button = QPushButton("Reset Positions")
         self.reset_positions_button.clicked.connect(self.reset_character_positions)
-        self.reset_positions_button.setToolTip("Reset character positions to a default grid layout")
         toolbar.addWidget(self.reset_positions_button)
-        
-        # Add spacer
-        toolbar.addWidget(create_vertical_line())
         
         # Create position cards button
         self.position_cards_button = QPushButton("Position Cards")
@@ -1361,24 +1470,33 @@ class StoryBoardWidget(QWidget):
         self.position_cards_button.setToolTip("Position cards according to saved layout")
         toolbar.addWidget(self.position_cards_button)
         
-        main_layout.addLayout(toolbar)
+        main_layout.addWidget(toolbar)
         
         # Create graphics view
-        self.scene = StoryBoardScene(self, self.db_conn)
-        self.scene.layout_changed.connect(self.on_layout_changed)
-        self.view = StoryBoardView(self)
-        self.view.setScene(self.scene)
+        self.view = StoryBoardView()
         main_layout.addWidget(self.view)
+        
+        # Create scene
+        self.scene = StoryBoardScene(self, self.db_conn)
+        self.view.setScene(self.scene)
+        
+        # Connect signals
+        self.scene.layout_changed.connect(self.on_layout_changed)
         
         # Disable controls initially
         self.view_selector.setEnabled(False)
-        self.new_view_button.setEnabled(False)
+        self.add_view_button.setEnabled(False)
+        self.rename_view_button.setEnabled(False)
         self.save_view_button.setEnabled(False)
+        self.delete_view_button.setEnabled(False)
         self.zoom_in_button.setEnabled(False)
         self.zoom_out_button.setEnabled(False)
         self.reset_zoom_button.setEnabled(False)
         self.reset_positions_button.setEnabled(False)
         self.position_cards_button.setEnabled(False)
+        self.grid_snap_checkbox.setEnabled(False)
+        self.grid_visible_checkbox.setEnabled(False)
+        self.grid_size_combo.setEnabled(False)
         
         # Auto-save timer
         self.auto_save_timer = QTimer(self)
@@ -1398,13 +1516,18 @@ class StoryBoardWidget(QWidget):
         
         # Enable UI controls
         self.view_selector.setEnabled(True)
-        self.new_view_button.setEnabled(True)
+        self.add_view_button.setEnabled(True)
+        self.rename_view_button.setEnabled(True)
         self.save_view_button.setEnabled(True)
+        self.delete_view_button.setEnabled(True)
         self.zoom_in_button.setEnabled(True)
         self.zoom_out_button.setEnabled(True)
         self.reset_zoom_button.setEnabled(True)
         self.reset_positions_button.setEnabled(True)
         self.position_cards_button.setEnabled(True)
+        self.grid_snap_checkbox.setEnabled(True)
+        self.grid_visible_checkbox.setEnabled(True)
+        self.grid_size_combo.setEnabled(True)
         
         # Load views
         self.load_views()
@@ -1563,19 +1686,22 @@ class StoryBoardWidget(QWidget):
         if not current_positions:
             self.view.center_on_characters()
     
-    def on_view_changed(self, index: int) -> None:
+    def on_view_selected(self, index: int) -> None:
         """Handle view selection change.
         
         Args:
-            index: Index of the selected view
+            index: Selected index
         """
-        if index < 0:
+        if index < 0 or not self.current_story_id:
             return
         
+        # Get the view ID
         view_id = self.view_selector.itemData(index)
+        
+        # Load the view
         self.load_view(view_id)
     
-    def on_new_view(self) -> None:
+    def on_add_view(self) -> None:
         """Handle new view button click."""
         if not self.current_story_id:
             return
@@ -1619,6 +1745,11 @@ class StoryBoardWidget(QWidget):
         # Load the view
         self.load_view(view_id)
     
+    def on_rename_view(self) -> None:
+        """Handle rename view button click."""
+        # TODO: Implement rename view functionality
+        QMessageBox.information(self, "Not Implemented", "Rename view functionality is not yet implemented.")
+    
     def on_save_view(self) -> None:
         """Handle save view button click."""
         if not self.current_story_id or not self.current_view_id:
@@ -1635,6 +1766,11 @@ class StoryBoardWidget(QWidget):
         )
         
         QMessageBox.information(self, "Success", "View saved successfully.")
+    
+    def on_delete_view(self) -> None:
+        """Handle delete view button click."""
+        # TODO: Implement delete view functionality
+        QMessageBox.information(self, "Not Implemented", "Delete view functionality is not yet implemented.")
     
     def on_zoom_in(self) -> None:
         """Handle zoom in button click."""
@@ -1671,7 +1807,7 @@ class StoryBoardWidget(QWidget):
         # Get layout data
         layout_data = self.scene.get_layout_data()
         
-        # Update view without triggering a reload
+        # Update view
         update_story_board_view_layout(
             self.db_conn,
             self.current_view_id,
@@ -1798,6 +1934,34 @@ class StoryBoardWidget(QWidget):
         
         # Force the view to update
         self.view.viewport().update()
+    
+    def on_grid_snap_changed(self, state: int) -> None:
+        """Handle grid snap checkbox state change.
+        
+        Args:
+            state: Checkbox state
+        """
+        if self.scene:
+            self.scene.set_grid_snap(state == Qt.CheckState.Checked.value)
+    
+    def on_grid_visible_changed(self, state: int) -> None:
+        """Handle grid visibility checkbox state change.
+        
+        Args:
+            state: Checkbox state
+        """
+        if self.scene:
+            self.scene.set_grid_visible(state == Qt.CheckState.Checked.value)
+    
+    def on_grid_size_changed(self, index: int) -> None:
+        """Handle grid size combo box change.
+        
+        Args:
+            index: Selected index
+        """
+        if self.scene:
+            grid_size = int(self.grid_size_combo.currentText())
+            self.scene.set_grid_size(grid_size)
     
     def position_cards(self) -> None:
         """Position cards according to saved layout and show debug info."""

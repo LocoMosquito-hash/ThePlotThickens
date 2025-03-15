@@ -129,6 +129,7 @@ class CharacterDialog(QDialog):
         
         # Name field
         self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("Optional - will generate 'Unnamed X' if empty")
         self.name_edit.textChanged.connect(self.on_field_changed)
         form_layout.addRow("Name:", self.name_edit)
         
@@ -414,6 +415,20 @@ class CharacterDialog(QDialog):
         # Get the character data from the form
         character_data = self.get_character_data()
         
+        # Generate a default name if none is provided
+        if not character_data['name']:
+            # Get the count of unnamed characters in this story to generate a unique name
+            cursor = self.db_conn.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) as count FROM characters WHERE story_id = ? AND name LIKE 'Unnamed %'",
+                (self.story_id,)
+            )
+            count = cursor.fetchone()['count']
+            
+            # Generate a name like "Unnamed 1", "Unnamed 2", etc.
+            character_data['name'] = f"Unnamed {count + 1}"
+            print(f"DEBUG: Generated default name: {character_data['name']}")
+        
         # Print debug info
         print(f"DEBUG: Initial character data: {character_data}")
         
@@ -502,11 +517,8 @@ class CharacterDialog(QDialog):
         Returns:
             Dictionary of character data
         """
-        # Validate name
+        # Get name (can be empty, will generate a default name later if needed)
         name = self.name_edit.text().strip()
-        if not name:
-            QMessageBox.warning(self, "Validation Error", "Name is required.")
-            return {}
         
         # Get aliases
         aliases = self.aliases_edit.text().strip()
