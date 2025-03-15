@@ -14,6 +14,7 @@ My goal is to have a GUI app in Python where I can:
 			for example, [USER FOLDER]/[STORIES FOLDER]/[NEW STORY NAME + GENERATED ID] ([STORY FOLDER] for reference)
 				□ Each story folder will have another subfolder called "images"
 				□ And yet another subfolder called "thumbnails", at the same level as "images"
+				□ Another subfolder called "avatars", at the same level as "images" and "thumbnails"
 	• Create a new Story and assign it to a [STORY FOLDER]
 	• Be able to save any changes I make to that [STORY FOLDER]
 	• Be able to load any saved Stories (from a [STORY FOLDER])

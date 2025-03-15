@@ -764,6 +764,7 @@ def get_story_folder_paths(story_data: Dict[str, Any]) -> Dict[str, str]:
         'folder_path': folder_path,
         'images_folder': os.path.join(folder_path, "images"),
         'thumbnails_folder': os.path.join(folder_path, "thumbnails"),
+        'avatars_folder': os.path.join(folder_path, "avatars"),
         'backups_folder': os.path.join(folder_path, "backups")
     }
 

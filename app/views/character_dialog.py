@@ -141,7 +141,7 @@ class CharacterDialog(QDialog):
         self.avatar_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.avatar_preview.setMinimumSize(180, 180)
         self.avatar_preview.setMaximumSize(300, 300)
-        self.avatar_preview.setScaledContents(True)
+        self.avatar_preview.setScaledContents(False)
         avatar_layout.addWidget(self.avatar_preview)
         
         # Avatar buttons
@@ -261,7 +261,8 @@ class CharacterDialog(QDialog):
                         print(f"DEBUG: Error resolving avatar path: {str(e)}")
             
             if not pixmap.isNull():
-                self.avatar_preview.setPixmap(pixmap)
+                scaled_pixmap = self._scale_pixmap_for_avatar(pixmap)
+                self.avatar_preview.setPixmap(scaled_pixmap)
                 print(f"DEBUG: Avatar loaded successfully")
             else:
                 self.avatar_preview.setText("No Avatar")
@@ -316,7 +317,8 @@ class CharacterDialog(QDialog):
         if file_path:
             pixmap = QPixmap(file_path)
             if not pixmap.isNull():
-                self.avatar_preview.setPixmap(pixmap)
+                scaled_pixmap = self._scale_pixmap_for_avatar(pixmap)
+                self.avatar_preview.setPixmap(scaled_pixmap)
                 self.avatar_path = file_path
                 self.avatar_changed = True
                 self.on_field_changed()
@@ -331,7 +333,8 @@ class CharacterDialog(QDialog):
             image = QImage(clipboard.image())
             if not image.isNull():
                 pixmap = QPixmap.fromImage(image)
-                self.avatar_preview.setPixmap(pixmap)
+                scaled_pixmap = self._scale_pixmap_for_avatar(pixmap)
+                self.avatar_preview.setPixmap(scaled_pixmap)
                 # We set avatar_path to None to indicate it's a pasted image
                 # but we'll still have the pixmap in avatar_preview
                 self.avatar_path = None
@@ -353,46 +356,33 @@ class CharacterDialog(QDialog):
         self.on_field_changed()
     
     def save_avatar(self) -> str:
-        """Save the avatar and return the path.
+        """Save the avatar image to the story folder.
         
         Returns:
-            Path to the saved avatar, or empty string if no avatar
+            Path to the saved avatar image, or empty string if no avatar
         """
-        print(f"DEBUG: Saving avatar, avatar_path={self.avatar_path}, has_pixmap={self.avatar_preview.pixmap() is not None}")
+        if not self.avatar_changed:
+            print("DEBUG: Avatar not changed, returning existing path")
+            return self.character_data.get('avatar_path', '')
         
-        # If avatar was deleted, return empty string
-        if self.avatar_path is None and not self.avatar_preview.pixmap():
-            print("DEBUG: No avatar to save, returning empty string")
-            return ""
+        # Get the story folder
+        cursor = self.db_conn.cursor()
+        cursor.execute("SELECT folder_path FROM stories WHERE id = ?", (self.story_id,))
+        story_folder = cursor.fetchone()['folder_path']
         
-        # Get the user folder from settings
-        settings = QSettings("ThePlotThickens", "ThePlotThickens")
-        user_folder = settings.value("user_folder", "")
+        # Ensure the avatars folder exists
+        avatars_folder = os.path.join(story_folder, "avatars")
+        os.makedirs(avatars_folder, exist_ok=True)
         
-        if not user_folder:
-            print("DEBUG: User folder not set in settings, using relative path")
-            # Fallback to relative path if user folder is not set
-            story_folder = os.path.join("stories", f"story_{self.story_id}")
-        else:
-            print(f"DEBUG: Using user folder from settings: {user_folder}")
-            # Get the story folder path from the database
-            story_data = get_story(self.db_conn, self.story_id)
-            story_folder = story_data['folder_path']
-            print(f"DEBUG: Story folder path from database: {story_folder}")
-        
-        # Create the images folder if it doesn't exist
-        images_folder = os.path.join(story_folder, "images")
-        os.makedirs(images_folder, exist_ok=True)
-        
-        # Get absolute paths for logging
+        # Get absolute paths for debugging
         abs_story_folder = os.path.abspath(story_folder)
-        abs_images_folder = os.path.abspath(images_folder)
+        abs_avatars_folder = os.path.abspath(avatars_folder)
         print(f"DEBUG: Story folder absolute path: {abs_story_folder}")
-        print(f"DEBUG: Images folder absolute path: {abs_images_folder}")
+        print(f"DEBUG: Avatars folder absolute path: {abs_avatars_folder}")
         
         # Generate a filename for the avatar
         filename = f"avatar_temp_{int(time.time())}.png" if self.character_id is None else f"avatar_{self.character_id}.png"
-        avatar_path = os.path.join(images_folder, filename)
+        avatar_path = os.path.join(avatars_folder, filename)
         abs_avatar_path = os.path.abspath(avatar_path)
         print(f"DEBUG: Avatar will be saved to: {avatar_path}")
         print(f"DEBUG: Avatar absolute path: {abs_avatar_path}")
@@ -547,4 +537,33 @@ class CharacterDialog(QDialog):
             'age_category': age_category,
             'gender': gender,
             'avatar_path': avatar_path
-        } 
+        }
+
+    def _scale_pixmap_for_avatar(self, pixmap: QPixmap) -> QPixmap:
+        """Scale a pixmap to fit the avatar preview while maintaining aspect ratio.
+        
+        Args:
+            pixmap: The original pixmap
+            
+        Returns:
+            Scaled pixmap
+        """
+        if pixmap.isNull():
+            return pixmap
+            
+        # Get the size of the avatar preview
+        preview_size = self.avatar_preview.size()
+        max_width = preview_size.width()
+        max_height = preview_size.height()
+        
+        # If the pixmap is smaller than the preview, no need to scale
+        if pixmap.width() <= max_width and pixmap.height() <= max_height:
+            return pixmap
+            
+        # Scale the pixmap to fit the preview while maintaining aspect ratio
+        return pixmap.scaled(
+            max_width, 
+            max_height,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        ) 
