@@ -9,6 +9,9 @@ This module defines the widget for managing stories.
 
 import os
 import sys
+import uuid
+import random
+import string
 from typing import Optional, List, Dict, Any
 
 from PyQt6.QtWidgets import (
@@ -17,6 +20,7 @@ from PyQt6.QtWidgets import (
     QGroupBox, QFileDialog, QMessageBox, QSplitter
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QSettings
+from PyQt6.QtGui import QFont
 
 from app.db_sqlite import (
     StoryType, create_story, get_all_stories, get_story, update_story_folder_path
@@ -198,35 +202,92 @@ class StoryManagerWidget(QWidget):
         # Emit the story selected signal
         self.story_selected.emit(story_id, story_data)
     
+    def generate_random_id(self, length: int = 6) -> str:
+        """Generate a random alphanumeric ID.
+        
+        Args:
+            length: Length of the ID
+            
+        Returns:
+            Random alphanumeric ID
+        """
+        # Use uppercase letters and digits for better readability
+        chars = string.ascii_uppercase + string.digits
+        return ''.join(random.choice(chars) for _ in range(length))
+    
     def on_new_story(self) -> None:
         """Handle new story button click."""
-        # Clear the form
-        self.title_edit.clear()
-        self.description_edit.clear()
-        self.type_combo.setCurrentIndex(0)
+        # Get the story data from the form
+        title = self.title_edit.text().strip()
+        if not title:
+            QMessageBox.warning(self, "Validation Error", "Title is required.")
+            return
         
-        # Get the user folder from settings
-        user_folder = self.settings.value("user_folder", "")
+        description = self.description_edit.toPlainText().strip()
+        
+        # Get the story type
+        type_name = self.type_combo.currentData()
+        
+        # Get the universe
+        universe = self.universe_edit.text().strip()
+        
+        # Get the series info
+        is_part_of_series = self.series_check.currentData()
+        series_name = self.series_name_edit.text().strip() if is_part_of_series else None
+        series_order = self.series_order_edit.text().strip() if is_part_of_series else None
+        
+        # Get the author
+        author = self.author_edit.text().strip()
+        
+        # Get the year
+        year = self.year_edit.text().strip()
+        
+        # Get the stories folder from settings
+        settings = QSettings("ThePlotThickens", "ThePlotThickens")
+        user_folder = settings.value("user_folder", "")
         
         if not user_folder:
-            # If user folder is not set, show a message and open settings dialog
-            QMessageBox.warning(
-                self,
-                "User Folder Not Set",
-                "Please set the User Folder in Settings before creating a new story."
+            QMessageBox.warning(self, "Settings Error", "User folder is not set. Please set it in the settings dialog.")
+            return
+        
+        # Create the stories folder if it doesn't exist
+        stories_folder = os.path.join(user_folder, "Stories")
+        os.makedirs(stories_folder, exist_ok=True)
+        
+        try:
+            # Create a new story in the database with an empty folder path initially
+            story_id, story_data = create_story(
+                self.db_conn,
+                title=title,
+                description=description,
+                type_name=type_name,
+                folder_path=""  # Temporary, will be updated after we get the ID
             )
-            settings_dialog = SettingsDialog(self.window())
-            if settings_dialog.exec():
-                user_folder = self.settings.value("user_folder", "")
-            else:
-                return
-        
-        # Set the default folder path (will be updated when saving)
-        self.folder_edit.clear()
-        
-        # Deselect any selected story
-        self.story_list.clearSelection()
-        self.load_story_button.setEnabled(False)
+            
+            # Create the story folder with a random ID to avoid conflicts with saga titles
+            random_id = self.generate_random_id()
+            story_folder_name = f"{title.replace(' ', '_')}_{random_id}"
+            story_folder = os.path.join(stories_folder, story_folder_name)
+            
+            # Update the story with the folder path
+            story_data = update_story_folder_path(self.db_conn, story_id, story_folder)
+            
+            # Add the story to the list
+            self.stories.append(story_data)
+            
+            # Add the story to the list widget
+            self.add_story_to_list(story_data)
+            
+            # Clear the form
+            self.clear_form()
+            
+            # Show success message
+            QMessageBox.information(self, "Success", f"Story '{title}' created successfully.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to create story: {str(e)}")
+            print(f"Error creating story: {e}")
+            import traceback
+            traceback.print_exc()
     
     def on_save_story(self) -> None:
         """Handle save story button click."""
@@ -298,8 +359,9 @@ class StoryManagerWidget(QWidget):
                 folder_path=""  # Temporary, will be updated after we get the ID
             )
             
-            # Create the story folder with ID in the name to avoid conflicts
-            story_folder_name = f"{title.replace(' ', '_')}_{story_id}"
+            # Create the story folder with a random ID to avoid conflicts with saga titles
+            random_id = self.generate_random_id()
+            story_folder_name = f"{title.replace(' ', '_')}_{random_id}"
             story_folder = os.path.join(stories_folder, story_folder_name)
             
             # Update the story with the folder path

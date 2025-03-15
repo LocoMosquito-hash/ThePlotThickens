@@ -122,6 +122,10 @@ class Story(Base):
         return os.path.join(self.folder_path, "thumbnails")
     
     @property
+    def avatars_folder(self):
+        return os.path.join(self.folder_path, "avatars")
+    
+    @property
     def backups_folder(self):
         return os.path.join(self.folder_path, "backups")
     
@@ -129,6 +133,7 @@ class Story(Base):
         os.makedirs(self.folder_path, exist_ok=True)
         os.makedirs(self.images_folder, exist_ok=True)
         os.makedirs(self.thumbnails_folder, exist_ok=True)
+        os.makedirs(self.avatars_folder, exist_ok=True)
         os.makedirs(self.backups_folder, exist_ok=True)
 
 
