@@ -115,6 +115,46 @@ def create_tables(conn: sqlite3.Connection) -> None:
     )
     ''')
     
+    # Create images table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS images (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        filename TEXT NOT NULL,
+        path TEXT NOT NULL,
+        title TEXT,
+        description TEXT,
+        width INTEGER,
+        height INTEGER,
+        file_size INTEGER,
+        mime_type TEXT,
+        is_featured INTEGER DEFAULT 0,
+        date_taken TIMESTAMP,
+        metadata_json TEXT,
+        story_id INTEGER NOT NULL,
+        event_id INTEGER,
+        FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    # Create image_tags table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS image_tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        x REAL,
+        y REAL,
+        width REAL,
+        height REAL,
+        image_id INTEGER NOT NULL,
+        character_id INTEGER NOT NULL,
+        FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE,
+        FOREIGN KEY (character_id) REFERENCES characters (id) ON DELETE CASCADE
+    )
+    ''')
+    
     conn.commit()
 
 
@@ -131,8 +171,9 @@ def create_story(conn: sqlite3.Connection, title: str, description: str, type_na
     
     # Ensure the folder exists if provided
     if folder_path:
-        os.makedirs(folder_path, exist_ok=True)
-        os.makedirs(os.path.join(folder_path, "images"), exist_ok=True)
+        # Create all required folders
+        story_data = {'folder_path': folder_path}
+        ensure_story_folders_exist(story_data)
     
     cursor.execute('''
     INSERT INTO stories (title, description, type_name, folder_path, universe, is_part_of_series, series_name, series_order, author, year)
@@ -471,3 +512,268 @@ def initialize_database(db_path: str) -> sqlite3.Connection:
     conn = create_connection(db_path)
     create_tables(conn)
     return conn 
+
+
+def get_story_images(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
+    """Get all images for a story.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        
+    Returns:
+        List of image dictionaries
+    """
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT * FROM images
+        WHERE story_id = ?
+        ORDER BY created_at DESC
+        """,
+        (story_id,)
+    )
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def get_image(conn: sqlite3.Connection, image_id: int) -> Dict[str, Any]:
+    """Get an image by ID.
+    
+    Args:
+        conn: Database connection
+        image_id: ID of the image
+        
+    Returns:
+        Image dictionary
+    """
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM images WHERE id = ?", (image_id,))
+    return dict(cursor.fetchone())
+
+
+def create_image(conn: sqlite3.Connection, filename: str, path: str, story_id: int, 
+                title: Optional[str] = None, description: Optional[str] = None,
+                width: Optional[int] = None, height: Optional[int] = None,
+                file_size: Optional[int] = None, mime_type: Optional[str] = None,
+                is_featured: bool = False, date_taken: Optional[str] = None,
+                metadata_json: Optional[str] = None, event_id: Optional[int] = None) -> int:
+    """Create a new image.
+    
+    Args:
+        conn: Database connection
+        filename: Name of the image file
+        path: Path to the image file
+        story_id: ID of the story
+        title: Title of the image
+        description: Description of the image
+        width: Width of the image in pixels
+        height: Height of the image in pixels
+        file_size: Size of the image file in bytes
+        mime_type: MIME type of the image
+        is_featured: Whether the image is featured
+        date_taken: Date the image was taken
+        metadata_json: JSON string with metadata
+        event_id: ID of the associated event
+        
+    Returns:
+        ID of the created image
+    """
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO images (
+            filename, path, title, description, width, height,
+            file_size, mime_type, is_featured, date_taken,
+            metadata_json, story_id, event_id,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        """,
+        (
+            filename, path, title, description, width, height,
+            file_size, mime_type, 1 if is_featured else 0, date_taken,
+            metadata_json, story_id, event_id
+        )
+    )
+    conn.commit()
+    return cursor.lastrowid
+
+
+def update_image(conn: sqlite3.Connection, image_id: int, title: Optional[str] = None, 
+                description: Optional[str] = None, is_featured: Optional[bool] = None) -> None:
+    """Update an image.
+    
+    Args:
+        conn: Database connection
+        image_id: ID of the image
+        title: New title
+        description: New description
+        is_featured: New featured status
+    """
+    # Build update query dynamically based on provided parameters
+    update_parts = []
+    params = []
+    
+    if title is not None:
+        update_parts.append("title = ?")
+        params.append(title)
+    
+    if description is not None:
+        update_parts.append("description = ?")
+        params.append(description)
+    
+    if is_featured is not None:
+        update_parts.append("is_featured = ?")
+        params.append(1 if is_featured else 0)
+    
+    if not update_parts:
+        return  # Nothing to update
+    
+    # Add updated_at timestamp
+    update_parts.append("updated_at = datetime('now')")
+    
+    # Build and execute query
+    query = f"UPDATE images SET {', '.join(update_parts)} WHERE id = ?"
+    params.append(image_id)
+    
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    conn.commit()
+
+
+def delete_image(conn: sqlite3.Connection, image_id: int) -> bool:
+    """Delete an image.
+    
+    Args:
+        conn: Database connection
+        image_id: ID of the image
+        
+    Returns:
+        True if the image was deleted, False otherwise
+    """
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM images WHERE id = ?", (image_id,))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def create_image_tag(conn: sqlite3.Connection, image_id: int, character_id: int,
+                    x: Optional[float] = None, y: Optional[float] = None,
+                    width: Optional[float] = None, height: Optional[float] = None) -> int:
+    """Create a new image tag.
+    
+    Args:
+        conn: Database connection
+        image_id: ID of the image
+        character_id: ID of the character
+        x: X coordinate (0.0 to 1.0)
+        y: Y coordinate (0.0 to 1.0)
+        width: Width of the tag box (0.0 to 1.0)
+        height: Height of the tag box (0.0 to 1.0)
+        
+    Returns:
+        ID of the created tag
+    """
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO image_tags (
+            image_id, character_id, x, y, width, height,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        """,
+        (image_id, character_id, x, y, width, height)
+    )
+    conn.commit()
+    return cursor.lastrowid
+
+
+def get_image_tags(conn: sqlite3.Connection, image_id: int) -> List[Dict[str, Any]]:
+    """Get all tags for an image.
+    
+    Args:
+        conn: Database connection
+        image_id: ID of the image
+        
+    Returns:
+        List of tag dictionaries
+    """
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT it.*, c.name as character_name
+        FROM image_tags it
+        JOIN characters c ON it.character_id = c.id
+        WHERE it.image_id = ?
+        """,
+        (image_id,)
+    )
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def get_character_images(conn: sqlite3.Connection, character_id: int) -> List[Dict[str, Any]]:
+    """Get all images for a character.
+    
+    Args:
+        conn: Database connection
+        character_id: ID of the character
+        
+    Returns:
+        List of image dictionaries
+    """
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT i.*
+        FROM images i
+        JOIN image_tags it ON i.id = it.image_id
+        WHERE it.character_id = ?
+        ORDER BY i.created_at DESC
+        """,
+        (character_id,)
+    )
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def delete_image_tag(conn: sqlite3.Connection, tag_id: int) -> bool:
+    """Delete an image tag.
+    
+    Args:
+        conn: Database connection
+        tag_id: ID of the tag
+        
+    Returns:
+        True if the tag was deleted, False otherwise
+    """
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM image_tags WHERE id = ?", (tag_id,))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def get_story_folder_paths(story_data: Dict[str, Any]) -> Dict[str, str]:
+    """Get folder paths for a story.
+    
+    Args:
+        story_data: Story data dictionary
+        
+    Returns:
+        Dictionary of folder paths
+    """
+    folder_path = story_data['folder_path']
+    return {
+        'folder_path': folder_path,
+        'images_folder': os.path.join(folder_path, "images"),
+        'thumbnails_folder': os.path.join(folder_path, "thumbnails"),
+        'backups_folder': os.path.join(folder_path, "backups")
+    }
+
+
+def ensure_story_folders_exist(story_data: Dict[str, Any]) -> None:
+    """Ensure that all required folders for a story exist.
+    
+    Args:
+        story_data: Story data dictionary
+    """
+    folders = get_story_folder_paths(story_data)
+    for folder in folders.values():
+        os.makedirs(folder, exist_ok=True) 
