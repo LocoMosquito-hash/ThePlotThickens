@@ -9,6 +9,7 @@ This module defines the dialog for editing character data.
 
 import os
 import sys
+import time
 from typing import Optional, Dict, Any, List, Tuple, Set
 
 from PyQt6.QtWidgets import (
@@ -16,51 +17,68 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QComboBox, QSpinBox, QCheckBox, QPushButton,
     QFileDialog, QMessageBox, QApplication, QGroupBox
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QBuffer, QByteArray
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QBuffer, QByteArray, QSettings
 from PyQt6.QtGui import QPixmap, QImage, QCloseEvent
 
-from app.db_sqlite import get_character, update_character
+from app.db_sqlite import get_character, update_character, get_story
 
 
 class CharacterDialog(QDialog):
-    """Dialog for editing character data."""
+    """Dialog for creating and editing characters."""
     
-    # Signal emitted when character data is updated
+    # Signal emitted when a character is updated
     character_updated = pyqtSignal(int, dict)
     
-    def __init__(self, db_conn, character_id: int, parent=None) -> None:
-        """Initialize the dialog.
+    def __init__(self, db_conn, story_id: int, character_id: Optional[int] = None, parent=None) -> None:
+        """Initialize the character dialog.
         
         Args:
             db_conn: Database connection
-            character_id: ID of the character to edit
+            story_id: ID of the story
+            character_id: ID of the character to edit (None for new character)
             parent: Parent widget
         """
         super().__init__(parent)
         
         self.db_conn = db_conn
+        self.story_id = story_id
         self.character_id = character_id
-        self.character_data = get_character(db_conn, character_id)
-        self.original_data = self.character_data.copy()
+        self.avatar_path = None
+        self.avatar_changed = False
         self.has_unsaved_changes = False
         
-        # Store the original avatar path
-        self.original_avatar_path = self.character_data.get('avatar_path')
-        self.new_avatar_path = None
-        self.new_avatar_pixmap = None
+        # Initialize character data
+        self.character_data = {
+            'id': character_id,
+            'name': '',
+            'story_id': story_id,
+            'aliases': '',
+            'is_main_character': False,
+            'age_value': None,
+            'age_category': None,
+            'gender': 'NOT_SPECIFIED',
+            'avatar_path': None
+        }
+        
+        # If editing an existing character, load its data
+        if character_id is not None:
+            character = get_character(db_conn, character_id)
+            if character:
+                self.character_data = character
+                self.avatar_path = character['avatar_path']
         
         self.init_ui()
         self.load_character_data()
         
-        # Initially disable the save button
-        self.save_button.setEnabled(False)
+        # Connect signals
+        self.connect_signals()
+        
+        # Set window properties
+        self.setWindowTitle("Character Details")
+        self.resize(800, 600)
     
     def init_ui(self) -> None:
         """Initialize the user interface."""
-        # Set window properties
-        self.setWindowTitle(f"Edit Character: {self.character_data['name']}")
-        self.setMinimumSize(500, 600)
-        
         # Create main layout
         main_layout = QVBoxLayout(self)
         
@@ -210,11 +228,47 @@ class CharacterDialog(QDialog):
         self.name_edit.setText(self.character_data['name'])
         
         # Set avatar
-        if self.character_data['avatar_path'] and os.path.exists(self.character_data['avatar_path']):
-            pixmap = QPixmap(self.character_data['avatar_path'])
-            self.avatar_preview.setPixmap(pixmap)
+        if self.character_data['avatar_path']:
+            avatar_path = self.character_data['avatar_path']
+            print(f"DEBUG: Loading avatar from path: {avatar_path}")
+            
+            # Try to load the avatar
+            pixmap = QPixmap(avatar_path)
+            
+            # If the pixmap is null, try to resolve the path
+            if pixmap.isNull():
+                # Try absolute path
+                if not os.path.isabs(avatar_path):
+                    abs_path = os.path.abspath(avatar_path)
+                    print(f"DEBUG: Trying absolute path: {abs_path}")
+                    pixmap = QPixmap(abs_path)
+                
+                # If still null, try to get the story folder path and construct the path
+                if pixmap.isNull():
+                    try:
+                        # Get the story folder path from the database
+                        story_data = get_story(self.db_conn, self.story_id)
+                        story_folder = story_data['folder_path']
+                        
+                        # Extract the filename from the avatar path
+                        filename = os.path.basename(avatar_path)
+                        
+                        # Construct the new path
+                        new_path = os.path.join(story_folder, "images", filename)
+                        print(f"DEBUG: Trying path with story folder: {new_path}")
+                        pixmap = QPixmap(new_path)
+                    except Exception as e:
+                        print(f"DEBUG: Error resolving avatar path: {str(e)}")
+            
+            if not pixmap.isNull():
+                self.avatar_preview.setPixmap(pixmap)
+                print(f"DEBUG: Avatar loaded successfully")
+            else:
+                self.avatar_preview.setText("No Avatar")
+                print(f"DEBUG: Failed to load avatar from path: {avatar_path}")
         else:
             self.avatar_preview.setText("No Avatar")
+            print(f"DEBUG: No avatar path specified")
         
         # Set aliases
         if self.character_data['aliases']:
@@ -238,6 +292,13 @@ class CharacterDialog(QDialog):
         if index >= 0:
             self.gender_combo.setCurrentIndex(index)
     
+    def connect_signals(self) -> None:
+        """Connect signals to slots."""
+        # Field change signals are already connected in create_summary_tab
+        # Button signals are already connected in init_ui
+        # This method is provided for consistency and future expansion
+        pass
+    
     def on_field_changed(self) -> None:
         """Handle field changes."""
         self.has_unsaved_changes = True
@@ -256,8 +317,8 @@ class CharacterDialog(QDialog):
             pixmap = QPixmap(file_path)
             if not pixmap.isNull():
                 self.avatar_preview.setPixmap(pixmap)
-                self.new_avatar_path = file_path
-                self.new_avatar_pixmap = None
+                self.avatar_path = file_path
+                self.avatar_changed = True
                 self.on_field_changed()
     
     def paste_avatar(self) -> None:
@@ -266,22 +327,29 @@ class CharacterDialog(QDialog):
         mime_data = clipboard.mimeData()
         
         if mime_data.hasImage():
+            print("DEBUG: Found image in clipboard")
             image = QImage(clipboard.image())
             if not image.isNull():
                 pixmap = QPixmap.fromImage(image)
                 self.avatar_preview.setPixmap(pixmap)
-                self.new_avatar_pixmap = pixmap
-                self.new_avatar_path = None
+                # We set avatar_path to None to indicate it's a pasted image
+                # but we'll still have the pixmap in avatar_preview
+                self.avatar_path = None
+                self.avatar_changed = True
                 self.on_field_changed()
+                print("DEBUG: Set pasted image as avatar")
+            else:
+                print("DEBUG: Image from clipboard is null")
         else:
+            print("DEBUG: No image found in clipboard")
             QMessageBox.warning(self, "Paste Failed", "No image found in clipboard.")
     
     def delete_avatar(self) -> None:
         """Delete the avatar."""
         self.avatar_preview.clear()
         self.avatar_preview.setText("No Avatar")
-        self.new_avatar_path = ""  # Empty string to indicate deletion
-        self.new_avatar_pixmap = None
+        self.avatar_path = None
+        self.avatar_changed = True
         self.on_field_changed()
     
     def save_avatar(self) -> str:
@@ -290,99 +358,122 @@ class CharacterDialog(QDialog):
         Returns:
             Path to the saved avatar, or empty string if no avatar
         """
-        # If no changes to avatar, return the original path
-        if self.new_avatar_path is None and self.new_avatar_pixmap is None:
-            return self.original_avatar_path
+        print(f"DEBUG: Saving avatar, avatar_path={self.avatar_path}, has_pixmap={self.avatar_preview.pixmap() is not None}")
         
         # If avatar was deleted, return empty string
-        if self.new_avatar_path == "":
+        if self.avatar_path is None and not self.avatar_preview.pixmap():
+            print("DEBUG: No avatar to save, returning empty string")
             return ""
         
-        # If new avatar was selected from file, copy it to the story folder
-        if self.new_avatar_path:
-            # Get the story folder path
-            story_id = self.character_data['story_id']
-            story_folder = os.path.join("stories", f"story_{story_id}")
-            
-            # Create the images folder if it doesn't exist
-            images_folder = os.path.join(story_folder, "images")
-            os.makedirs(images_folder, exist_ok=True)
-            
-            # Generate a filename for the avatar
-            filename = f"avatar_{self.character_id}.png"
-            avatar_path = os.path.join(images_folder, filename)
-            
-            # Copy the image
-            pixmap = QPixmap(self.new_avatar_path)
-            pixmap.save(avatar_path, "PNG")
-            
-            return avatar_path
+        # Get the user folder from settings
+        settings = QSettings("ThePlotThickens", "ThePlotThickens")
+        user_folder = settings.value("user_folder", "")
         
-        # If new avatar was pasted from clipboard, save it
-        if self.new_avatar_pixmap:
-            # Get the story folder path
-            story_id = self.character_data['story_id']
-            story_folder = os.path.join("stories", f"story_{story_id}")
-            
-            # Create the images folder if it doesn't exist
-            images_folder = os.path.join(story_folder, "images")
-            os.makedirs(images_folder, exist_ok=True)
-            
-            # Generate a filename for the avatar
-            filename = f"avatar_{self.character_id}.png"
-            avatar_path = os.path.join(images_folder, filename)
-            
-            # Save the image
-            self.new_avatar_pixmap.save(avatar_path, "PNG")
-            
-            return avatar_path
+        if not user_folder:
+            print("DEBUG: User folder not set in settings, using relative path")
+            # Fallback to relative path if user folder is not set
+            story_folder = os.path.join("stories", f"story_{self.story_id}")
+        else:
+            print(f"DEBUG: Using user folder from settings: {user_folder}")
+            # Get the story folder path from the database
+            story_data = get_story(self.db_conn, self.story_id)
+            story_folder = story_data['folder_path']
+            print(f"DEBUG: Story folder path from database: {story_folder}")
         
-        # If we get here, something went wrong
-        return self.original_avatar_path
+        # Create the images folder if it doesn't exist
+        images_folder = os.path.join(story_folder, "images")
+        os.makedirs(images_folder, exist_ok=True)
+        
+        # Get absolute paths for logging
+        abs_story_folder = os.path.abspath(story_folder)
+        abs_images_folder = os.path.abspath(images_folder)
+        print(f"DEBUG: Story folder absolute path: {abs_story_folder}")
+        print(f"DEBUG: Images folder absolute path: {abs_images_folder}")
+        
+        # Generate a filename for the avatar
+        filename = f"avatar_temp_{int(time.time())}.png" if self.character_id is None else f"avatar_{self.character_id}.png"
+        avatar_path = os.path.join(images_folder, filename)
+        abs_avatar_path = os.path.abspath(avatar_path)
+        print(f"DEBUG: Avatar will be saved to: {avatar_path}")
+        print(f"DEBUG: Avatar absolute path: {abs_avatar_path}")
+        
+        # If new avatar was selected from file, copy it
+        if self.avatar_path and os.path.exists(self.avatar_path):
+            print(f"DEBUG: Copying avatar from {self.avatar_path}")
+            pixmap = QPixmap(self.avatar_path)
+            saved = pixmap.save(avatar_path, "PNG")
+            print(f"DEBUG: Avatar saved successfully: {saved}")
+            print(f"DEBUG: Final avatar path stored in DB: {abs_avatar_path}")
+            return abs_avatar_path
+        
+        # If avatar was pasted from clipboard (or set programmatically)
+        pixmap = self.avatar_preview.pixmap()
+        if pixmap and not pixmap.isNull():
+            print("DEBUG: Saving pixmap from avatar_preview")
+            saved = pixmap.save(avatar_path, "PNG")
+            print(f"DEBUG: Avatar saved successfully: {saved}")
+            print(f"DEBUG: Final avatar path stored in DB: {abs_avatar_path}")
+            return abs_avatar_path
+        
+        # If we get here, no valid avatar to save
+        print("DEBUG: No valid avatar to save, returning empty string")
+        return ""
     
     def save_character(self) -> None:
         """Save the character data."""
-        # Validate name
-        name = self.name_edit.text().strip()
-        if not name:
-            QMessageBox.warning(self, "Validation Error", "Name is required.")
-            return
+        # Get the character data from the form
+        character_data = self.get_character_data()
         
-        # Get aliases
-        aliases = self.aliases_edit.text().strip()
+        # Print debug info
+        print(f"DEBUG: Initial character data: {character_data}")
         
-        # Get main character flag
-        is_main_character = self.mc_checkbox.isChecked()
+        # Save the avatar if needed and update the avatar path
+        if self.avatar_changed:
+            saved_avatar_path = self.save_avatar()
+            character_data['avatar_path'] = saved_avatar_path
+            print(f"DEBUG: Updated avatar path in character data: {saved_avatar_path}")
         
-        # Get age value
-        age_value = self.age_value_spin.value()
-        if age_value == 0:  # Special value
-            age_value = None
+        # Print final character data
+        print(f"DEBUG: Final character data to be saved: {character_data}")
         
-        # Get age category
-        age_category = self.age_category_combo.currentData()
+        # If this is a new character, create it
+        if self.character_id is None:
+            print(f"DEBUG: Creating new character for story {self.story_id}")
+            from app.db_sqlite import create_character
+            
+            self.character_id = create_character(
+                self.db_conn,
+                name=character_data['name'],
+                story_id=self.story_id,
+                aliases=character_data['aliases'],
+                is_main_character=character_data['is_main_character'],
+                age_value=character_data['age_value'],
+                age_category=character_data['age_category'],
+                gender=character_data['gender'],
+                avatar_path=character_data['avatar_path']
+            )
+            
+            print(f"DEBUG: Created character with ID {self.character_id}")
+        else:
+            # Update existing character
+            print(f"DEBUG: Updating existing character {self.character_id}")
+            from app.db_sqlite import update_character
+            
+            update_character(
+                self.db_conn,
+                self.character_id,
+                name=character_data['name'],
+                aliases=character_data['aliases'],
+                is_main_character=character_data['is_main_character'],
+                age_value=character_data['age_value'],
+                age_category=character_data['age_category'],
+                gender=character_data['gender'],
+                avatar_path=character_data['avatar_path']
+            )
+            print(f"DEBUG: Character {self.character_id} updated successfully")
         
-        # Get gender
-        gender = self.gender_combo.currentData()
-        
-        # Save avatar
-        avatar_path = self.save_avatar()
-        
-        # Update character in database
-        updated_data = update_character(
-            self.db_conn,
-            self.character_id,
-            name,
-            aliases,
-            is_main_character,
-            age_value,
-            age_category,
-            gender,
-            avatar_path
-        )
-        
-        # Emit signal
-        self.character_updated.emit(self.character_id, updated_data)
+        # Emit the character_updated signal
+        self.character_updated.emit(self.character_id, character_data)
         
         # Reset unsaved changes flag
         self.has_unsaved_changes = False
@@ -413,4 +504,47 @@ class CharacterDialog(QDialog):
             else:
                 event.ignore()
         else:
-            event.accept() 
+            event.accept()
+
+    def get_character_data(self) -> Dict[str, Any]:
+        """Get the character data from the form.
+        
+        Returns:
+            Dictionary of character data
+        """
+        # Validate name
+        name = self.name_edit.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Validation Error", "Name is required.")
+            return {}
+        
+        # Get aliases
+        aliases = self.aliases_edit.text().strip()
+        
+        # Get main character flag
+        is_main_character = self.mc_checkbox.isChecked()
+        
+        # Get age value
+        age_value = self.age_value_spin.value()
+        if age_value == 0:  # Special value
+            age_value = None
+        
+        # Get age category
+        age_category = self.age_category_combo.currentData()
+        
+        # Get gender
+        gender = self.gender_combo.currentData()
+        
+        # Get avatar path
+        avatar_path = self.avatar_path if self.avatar_changed else None
+        
+        # Return the data
+        return {
+            'name': name,
+            'aliases': aliases,
+            'is_main_character': is_main_character,
+            'age_value': age_value,
+            'age_category': age_category,
+            'gender': gender,
+            'avatar_path': avatar_path
+        } 

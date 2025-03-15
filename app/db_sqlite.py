@@ -193,19 +193,48 @@ def get_all_stories(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
 
 
 # Character functions
-def create_character(conn: sqlite3.Connection, name: str, story_id: int, aliases: Optional[str] = None,
-                    is_main_character: bool = False, age_value: Optional[int] = None, age_category: Optional[str] = None,
-                    gender: str = "NOT_SPECIFIED", avatar_path: Optional[str] = None) -> int:
-    """Create a new character in the database."""
-    cursor = conn.cursor()
+def create_character(conn, name, story_id, aliases=None, is_main_character=False, age_value=None, age_category=None, gender=None, avatar_path=None):
+    """Create a new character.
     
-    cursor.execute('''
-    INSERT INTO characters (name, story_id, aliases, is_main_character, age_value, age_category, gender, avatar_path)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (name, story_id, aliases, 1 if is_main_character else 0, age_value, age_category, gender, avatar_path))
-    
-    conn.commit()
-    return cursor.lastrowid
+    Args:
+        conn: Database connection
+        name: Character name
+        story_id: ID of the story
+        aliases: Character aliases
+        is_main_character: Whether this is a main character
+        age_value: Age value
+        age_category: Age category
+        gender: Gender
+        avatar_path: Path to avatar image
+        
+    Returns:
+        ID of the created character
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Print debug info
+        print(f"DEBUG: Creating character '{name}' for story {story_id}")
+        
+        # Insert the character
+        cursor.execute("""
+            INSERT INTO characters (name, story_id, aliases, is_main_character, age_value, age_category, gender, avatar_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (name, story_id, aliases, is_main_character, age_value, age_category, gender, avatar_path))
+        
+        # Get the ID of the inserted character
+        character_id = cursor.lastrowid
+        
+        # Commit the changes
+        conn.commit()
+        
+        print(f"DEBUG: Created character with ID {character_id}")
+        
+        return character_id
+    except Exception as e:
+        print(f"Error creating character: {e}")
+        conn.rollback()
+        return None
 
 
 def get_character(conn: sqlite3.Connection, character_id: int) -> Dict[str, Any]:
@@ -260,6 +289,38 @@ def update_character(conn: sqlite3.Connection, character_id: int, name: str, ali
     
     # Return the updated character data
     return get_character(conn, character_id)
+
+
+def delete_character(db_conn, character_id: int) -> bool:
+    """Delete a character and all associated relationships.
+    
+    Args:
+        db_conn: Database connection
+        character_id: ID of the character to delete
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = db_conn.cursor()
+        
+        # First, delete all relationships involving this character
+        cursor.execute("""
+            DELETE FROM relationships 
+            WHERE source_id = ? OR target_id = ?
+        """, (character_id, character_id))
+        
+        # Delete the character
+        cursor.execute("DELETE FROM characters WHERE id = ?", (character_id,))
+        
+        # Commit the changes
+        db_conn.commit()
+        
+        return True
+    except Exception as e:
+        print(f"Error deleting character: {e}")
+        db_conn.rollback()
+        return False
 
 
 # Relationship functions
