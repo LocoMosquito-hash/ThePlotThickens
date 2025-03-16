@@ -366,6 +366,11 @@ class CharacterDialog(QDialog):
             print("DEBUG: Avatar not changed, returning existing path")
             return self.character_data.get('avatar_path', '')
         
+        # If avatar was deleted, return empty string
+        if self.avatar_changed and self.avatar_preview.pixmap() is None:
+            print("DEBUG: Avatar was deleted, returning empty string")
+            return ""
+        
         # Get the story folder
         cursor = self.db_conn.cursor()
         cursor.execute("SELECT folder_path FROM stories WHERE id = ?", (self.story_id,))
@@ -537,8 +542,11 @@ class CharacterDialog(QDialog):
         # Get gender
         gender = self.gender_combo.currentData()
         
-        # Get avatar path
-        avatar_path = self.avatar_path if self.avatar_changed else None
+        # Get avatar path - preserve existing path if not changed
+        if self.avatar_changed:
+            avatar_path = self.avatar_path
+        else:
+            avatar_path = self.character_data.get('avatar_path', None)
         
         # Return the data
         return {

@@ -43,14 +43,11 @@
 - [ ] Implement grouping of characters
 - [ ] Add mini-map for large boards
 - [ ] Add search/filter functionality
-- [ ] Export view as image
 - [ ] Multiple selection and bulk operations
 - [ ] Undo/redo functionality
 
 ### UI/UX Enhancements
 
-- [ ] Add dark/light theme toggle
-- [ ] Implement keyboard shortcuts
 - [ ] Add context-sensitive help
 - [ ] Improve accessibility
 - [ ] Add UI scaling options
@@ -74,6 +71,13 @@
 - [ ] Plot point management
 - [ ] Story templates
 - [ ] Genre-specific features
+
+### UI/UX Enhancements
+
+- [ ] Implement keyboard shortcuts
+- [ ] Customizable interface layout
+- [ ] Advanced theming options
+- [ ] Export view as image
 
 ### Advanced Features
 
