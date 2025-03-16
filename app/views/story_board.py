@@ -402,7 +402,7 @@ class CharacterCard(QGraphicsItemGroup):
         # Create and show the dialog
         dialog = CharacterDialog(
             db_conn=scene.db_conn,
-            story_id=self.character_data['story_id'],
+            story_id=parent_widget.current_story_id,  # Use story_id from parent widget
             character_id=self._character_id,
             parent=parent_widget
         )
