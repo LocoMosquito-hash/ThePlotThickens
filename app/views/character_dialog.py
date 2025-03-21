@@ -15,12 +15,522 @@ from typing import Optional, Dict, Any, List, Tuple, Set
 from PyQt6.QtWidgets import (
     QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QComboBox, QSpinBox, QCheckBox, QPushButton,
-    QFileDialog, QMessageBox, QApplication, QGroupBox
+    QFileDialog, QMessageBox, QApplication, QGroupBox, QListWidget, 
+    QListWidgetItem, QMenu, QInputDialog, QTextEdit, QFrame
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QBuffer, QByteArray, QSettings
-from PyQt6.QtGui import QPixmap, QImage, QCloseEvent
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QBuffer, QByteArray, QSettings, QPoint
+from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QKeyEvent, QTextCursor
 
-from app.db_sqlite import get_character, update_character, get_story
+from app.db_sqlite import (
+    get_character, update_character, get_story, get_character_quick_events,
+    create_quick_event, update_quick_event, delete_quick_event, 
+    get_next_quick_event_sequence_number, get_quick_event_characters,
+    get_story_characters
+)
+
+
+class CharacterTagEditor(QDialog):
+    """Dialog for editing quick event text with character tag support."""
+    
+    def __init__(self, db_conn, character_id: int, text: str = "", parent=None):
+        """Initialize the character tag editor.
+        
+        Args:
+            db_conn: Database connection
+            character_id: ID of the character the quick event belongs to
+            text: Initial text (default empty)
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.db_conn = db_conn
+        self.character_id = character_id
+        self.initial_text = text
+        
+        # Get the story ID for this character
+        character = get_character(db_conn, character_id)
+        self.story_id = character.get('story_id') if character else None
+        
+        # Load available characters
+        self.characters = []
+        if self.story_id:
+            self.characters = get_story_characters(db_conn, self.story_id)
+        
+        self.init_ui()
+        
+        # Create character tag completer
+        self.tag_completer = CharacterTagCompleter(self)
+        self.tag_completer.set_characters(self.characters)
+        self.tag_completer.character_selected.connect(self.insert_character_tag)
+        self.tag_completer.hide()
+        
+    def init_ui(self):
+        """Initialize the user interface."""
+        self.setWindowTitle("Quick Event")
+        self.resize(450, 200)
+        
+        layout = QVBoxLayout(self)
+        
+        # Text edit
+        self.text_edit = QTextEdit()
+        self.text_edit.setPlaceholderText("Enter quick event text. Use @name to tag characters (e.g., @John kissed @Mary)")
+        self.text_edit.setText(self.initial_text)
+        self.text_edit.textChanged.connect(self.check_for_character_tag)
+        layout.addWidget(self.text_edit)
+        
+        # Available characters
+        if self.characters:
+            char_names = [f"@{char['name']}" for char in self.characters]
+            characters_label = QLabel("Available character tags: " + ", ".join(char_names))
+            characters_label.setWordWrap(True)
+            characters_label.setStyleSheet("color: #666; font-style: italic;")
+            layout.addWidget(characters_label)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        save_button = QPushButton("Save")
+        save_button.clicked.connect(self.accept)
+        
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+        
+        button_layout.addStretch()
+        button_layout.addWidget(save_button)
+        button_layout.addWidget(cancel_button)
+        
+        layout.addLayout(button_layout)
+        
+    def get_text(self) -> str:
+        """Get the edited text.
+        
+        Returns:
+            The text from the editor
+        """
+        return self.text_edit.toPlainText()
+        
+    def check_for_character_tag(self):
+        """Check if the user is typing a character tag and provide suggestions."""
+        cursor = self.text_edit.textCursor()
+        text = self.text_edit.toPlainText()
+        
+        # Find the current word being typed
+        pos = cursor.position()
+        start = max(0, pos - 1)
+        
+        # Check if we're in the middle of typing a tag
+        if start >= 0 and pos <= len(text):
+            # Look backward to find the start of the current tag
+            tag_start = text.rfind('@', 0, pos)
+            
+            if tag_start >= 0 and tag_start < pos:
+                # We found a @ character before the cursor
+                # Extract the partial tag text
+                partial_tag = text[tag_start + 1:pos]
+                
+                # Only show suggestions if we're actively typing a tag
+                if tag_start == pos - 1 or partial_tag.strip():
+                    # Position the completer popup below the cursor
+                    cursor_rect = self.text_edit.cursorRect()
+                    global_pos = self.text_edit.mapToGlobal(cursor_rect.bottomLeft())
+                    
+                    self.tag_completer.set_filter(partial_tag)
+                    self.tag_completer.move(global_pos)
+                    return
+                    
+        # Hide the completer if we're not typing a tag
+        self.tag_completer.hide()
+        
+    def insert_character_tag(self, character_name: str):
+        """Insert a character tag at the current cursor position.
+        
+        Args:
+            character_name: Name of the character to tag
+        """
+        cursor = self.text_edit.textCursor()
+        text = self.text_edit.toPlainText()
+        pos = cursor.position()
+        
+        # Find the start of the current tag
+        tag_start = text.rfind('@', 0, pos)
+        
+        if tag_start >= 0:
+            # Replace the partial tag with the full tag
+            cursor.setPosition(tag_start, QTextCursor.MoveMode.MoveAnchor)
+            cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
+            cursor.insertText(f"@{character_name}")
+            
+            # Add a space after the tag
+            cursor.insertText(" ")
+            
+            # Set focus back to the text edit
+            self.text_edit.setFocus()
+
+
+class CharacterTagCompleter(QWidget):
+    """Popup widget for character tag autocompletion."""
+    
+    character_selected = pyqtSignal(str)  # Signal emitted when a character is selected
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        self.characters = []
+        self.filtered_characters = []
+        self.current_filter = ""
+        
+        self.init_ui()
+        
+    def init_ui(self):
+        """Initialize the UI."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Create a list widget for character suggestions
+        self.list_widget = QListWidget()
+        self.list_widget.setFrameShape(QFrame.Shape.NoFrame)
+        self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list_widget.setMaximumHeight(200)
+        self.list_widget.itemClicked.connect(self.on_item_clicked)
+        
+        # Style the list widget
+        self.list_widget.setStyleSheet("""
+            QListWidget {
+                background-color: #2D2D30;
+                color: #FFFFFF;
+                border: 1px solid #3E3E42;
+                border-radius: 3px;
+            }
+            QListWidget::item {
+                padding: 5px;
+            }
+            QListWidget::item:selected {
+                background-color: #007ACC;
+            }
+        """)
+        
+        layout.addWidget(self.list_widget)
+        
+    def set_characters(self, characters: List[Dict[str, Any]]):
+        """Set the available characters for autocompletion.
+        
+        Args:
+            characters: List of character dictionaries
+        """
+        self.characters = characters
+        self.update_suggestions()
+        
+    def set_filter(self, filter_text: str):
+        """Set the filter text for character suggestions.
+        
+        Args:
+            filter_text: Text to filter characters by
+        """
+        self.current_filter = filter_text.lower()
+        self.update_suggestions()
+        
+    def update_suggestions(self):
+        """Update the list of character suggestions based on the current filter."""
+        self.list_widget.clear()
+        
+        if not self.characters:
+            self.hide()
+            return
+            
+        # Filter characters based on the current filter
+        self.filtered_characters = []
+        for char in self.characters:
+            name = char['name']
+            if self.current_filter in name.lower():
+                self.filtered_characters.append(char)
+                
+                # Create a list item with the character name
+                item = QListWidgetItem(name)
+                item.setData(Qt.ItemDataRole.UserRole, char['id'])
+                
+                # Bold for main characters
+                if char.get('is_main_character'):
+                    font = item.font()
+                    font.setBold(True)
+                    item.setFont(font)
+                    
+                self.list_widget.addItem(item)
+                
+        # Show or hide the widget based on whether there are suggestions
+        if self.filtered_characters:
+            self.list_widget.setCurrentRow(0)  # Select the first item
+            self.show()
+        else:
+            self.hide()
+            
+    def on_item_clicked(self, item: QListWidgetItem):
+        """Handle item click events.
+        
+        Args:
+            item: The clicked list item
+        """
+        name = item.text()
+        self.character_selected.emit(name)
+        self.hide()
+        
+    def keyPressEvent(self, event: QKeyEvent):
+        """Handle key press events.
+        
+        Args:
+            event: Key event
+        """
+        key = event.key()
+        
+        if key == Qt.Key.Key_Escape:
+            self.hide()
+            event.accept()
+        elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
+            current_item = self.list_widget.currentItem()
+            if current_item:
+                self.on_item_clicked(current_item)
+            event.accept()
+        elif key == Qt.Key.Key_Up:
+            current_row = self.list_widget.currentRow()
+            if current_row > 0:
+                self.list_widget.setCurrentRow(current_row - 1)
+            event.accept()
+        elif key == Qt.Key.Key_Down:
+            current_row = self.list_widget.currentRow()
+            if current_row < self.list_widget.count() - 1:
+                self.list_widget.setCurrentRow(current_row + 1)
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+
+class QuickEventItem(QListWidgetItem):
+    """List widget item representing a quick event."""
+    
+    def __init__(self, event_data: Dict[str, Any], tagged_characters: List[Dict[str, Any]] = None):
+        """Initialize a quick event item.
+        
+        Args:
+            event_data: Quick event data dictionary
+            tagged_characters: List of tagged character dictionaries
+        """
+        super().__init__()
+        self.event_data = event_data
+        self.event_id = event_data['id']
+        self.text = event_data['text']
+        self.tagged_characters = tagged_characters or []
+        
+        # Set display text
+        self.setText(self.text)
+        
+        # Add character tags to tooltip
+        tooltip = self.text
+        if self.tagged_characters:
+            char_names = [char['name'] for char in self.tagged_characters]
+            tooltip += f"\n\nTagged characters: {', '.join(char_names)}"
+        self.setToolTip(tooltip)
+
+
+class QuickEventsTab(QWidget):
+    """Tab for managing character quick events."""
+    
+    def __init__(self, db_conn, character_id: int, parent=None):
+        """Initialize the quick events tab.
+        
+        Args:
+            db_conn: Database connection
+            character_id: ID of the character
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.db_conn = db_conn
+        self.character_id = character_id
+        self.quick_events = []
+        
+        self.init_ui()
+        self.load_quick_events()
+        
+    def init_ui(self):
+        """Initialize the user interface."""
+        layout = QVBoxLayout(self)
+        
+        # Header with explanation
+        header_label = QLabel(
+            "Quick events are simple actions or moments related to this character. "
+            "Use @name to tag other characters involved in the event."
+        )
+        header_label.setWordWrap(True)
+        layout.addWidget(header_label)
+        
+        # Toolbar
+        toolbar_layout = QHBoxLayout()
+        
+        self.add_event_button = QPushButton("Add Quick Event")
+        self.add_event_button.clicked.connect(self.add_quick_event)
+        toolbar_layout.addWidget(self.add_event_button)
+        
+        toolbar_layout.addStretch()
+        layout.addLayout(toolbar_layout)
+        
+        # Quick events list
+        self.events_list = QListWidget()
+        self.events_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.events_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.events_list.customContextMenuRequested.connect(self.show_context_menu)
+        layout.addWidget(self.events_list)
+        
+    def load_quick_events(self):
+        """Load quick events for the character."""
+        try:
+            self.quick_events = get_character_quick_events(self.db_conn, self.character_id)
+            self.update_events_list()
+        except Exception as e:
+            print(f"Error loading quick events: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to load quick events: {str(e)}")
+    
+    def update_events_list(self):
+        """Update the events list widget with current quick events."""
+        self.events_list.clear()
+        
+        if not self.quick_events:
+            empty_item = QListWidgetItem("No quick events yet. Click 'Add Quick Event' to create one.")
+            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
+            self.events_list.addItem(empty_item)
+            return
+        
+        for event in self.quick_events:
+            # Get tagged characters
+            try:
+                tagged_characters = get_quick_event_characters(self.db_conn, event['id'])
+            except Exception as e:
+                print(f"Error getting tagged characters: {e}")
+                tagged_characters = []
+                
+            item = QuickEventItem(event, tagged_characters)
+            self.events_list.addItem(item)
+    
+    def add_quick_event(self):
+        """Add a new quick event."""
+        dialog = CharacterTagEditor(self.db_conn, self.character_id, parent=self)
+        
+        if dialog.exec():
+            text = dialog.get_text()
+            
+            if not text.strip():
+                QMessageBox.warning(self, "Error", "Quick event text cannot be empty.")
+                return
+                
+            try:
+                # Get the next sequence number to place the event at the end
+                sequence_number = get_next_quick_event_sequence_number(self.db_conn, self.character_id)
+                
+                # Create the quick event
+                quick_event_id = create_quick_event(
+                    self.db_conn,
+                    text,
+                    self.character_id,
+                    sequence_number
+                )
+                
+                if quick_event_id:
+                    # Reload the events
+                    self.load_quick_events()
+                else:
+                    QMessageBox.warning(self, "Error", "Failed to create quick event.")
+            except Exception as e:
+                print(f"Error adding quick event: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to add quick event: {str(e)}")
+    
+    def edit_quick_event(self, event_id: int):
+        """Edit an existing quick event.
+        
+        Args:
+            event_id: ID of the quick event to edit
+        """
+        # Find the event in the list
+        event = next((e for e in self.quick_events if e['id'] == event_id), None)
+        if not event:
+            return
+            
+        dialog = CharacterTagEditor(self.db_conn, self.character_id, event['text'], parent=self)
+        
+        if dialog.exec():
+            text = dialog.get_text()
+            
+            if not text.strip():
+                QMessageBox.warning(self, "Error", "Quick event text cannot be empty.")
+                return
+                
+            try:
+                # Update the quick event
+                success = update_quick_event(
+                    self.db_conn,
+                    event_id,
+                    text=text
+                )
+                
+                if success:
+                    # Reload the events
+                    self.load_quick_events()
+                else:
+                    QMessageBox.warning(self, "Error", "Failed to update quick event.")
+            except Exception as e:
+                print(f"Error updating quick event: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to update quick event: {str(e)}")
+    
+    def delete_quick_event(self, event_id: int):
+        """Delete a quick event.
+        
+        Args:
+            event_id: ID of the quick event to delete
+        """
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            "Are you sure you want to delete this quick event?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if confirm == QMessageBox.StandardButton.Yes:
+            try:
+                success = delete_quick_event(self.db_conn, event_id)
+                
+                if success:
+                    # Reload the events
+                    self.load_quick_events()
+                else:
+                    QMessageBox.warning(self, "Error", "Failed to delete quick event.")
+            except Exception as e:
+                print(f"Error deleting quick event: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to delete quick event: {str(e)}")
+    
+    def show_context_menu(self, position: QPoint):
+        """Show context menu for a quick event.
+        
+        Args:
+            position: Position where the menu should be displayed
+        """
+        item = self.events_list.itemAt(position)
+        
+        if not item or not isinstance(item, QuickEventItem):
+            return
+            
+        event_id = item.event_id
+        
+        menu = QMenu(self)
+        
+        edit_action = QAction("Edit", self)
+        edit_action.triggered.connect(lambda: self.edit_quick_event(event_id))
+        menu.addAction(edit_action)
+        
+        delete_action = QAction("Delete", self)
+        delete_action.triggered.connect(lambda: self.delete_quick_event(event_id))
+        menu.addAction(delete_action)
+        
+        # Show the menu
+        menu.exec(QCursor.pos())
 
 
 class CharacterDialog(QDialog):
@@ -95,6 +605,11 @@ class CharacterDialog(QDialog):
         relationships_layout = QVBoxLayout(self.relationships_tab)
         relationships_layout.addWidget(QLabel("Relationships will be implemented later."))
         self.tab_widget.addTab(self.relationships_tab, "Relationships")
+        
+        # Create quick events tab
+        if self.character_id is not None:  # Only show for existing characters
+            self.quick_events_tab = QuickEventsTab(self.db_conn, self.character_id)
+            self.tab_widget.addTab(self.quick_events_tab, "Quick Events")
         
         # Create gallery tab (placeholder)
         self.gallery_tab = QWidget()
@@ -557,7 +1072,7 @@ class CharacterDialog(QDialog):
             'age_category': age_category,
             'gender': gender,
             'avatar_path': avatar_path
-        }
+        } 
 
     def _scale_pixmap_for_avatar(self, pixmap: QPixmap) -> QPixmap:
         """Scale a pixmap to fit the avatar preview while maintaining aspect ratio.
