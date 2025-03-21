@@ -115,6 +115,85 @@ def create_tables(conn: sqlite3.Connection) -> None:
     )
     ''')
     
+    # Create events table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        title TEXT NOT NULL,
+        description TEXT,
+        event_type TEXT DEFAULT 'SCENE',
+        start_date TEXT,
+        end_date TEXT,
+        location TEXT,
+        importance INTEGER DEFAULT 3,
+        color TEXT DEFAULT '#3498db',
+        is_milestone INTEGER DEFAULT 0,
+        story_id INTEGER NOT NULL,
+        parent_event_id INTEGER,
+        sequence_number INTEGER DEFAULT 0,
+        FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE CASCADE,
+        FOREIGN KEY (parent_event_id) REFERENCES events (id) ON DELETE SET NULL
+    )
+    ''')
+    
+    # Create event_characters table (for character participation in events)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS event_characters (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        event_id INTEGER NOT NULL,
+        character_id INTEGER NOT NULL,
+        role TEXT DEFAULT 'PARTICIPANT',
+        notes TEXT,
+        FOREIGN KEY (event_id) REFERENCES events (id) ON DELETE CASCADE,
+        FOREIGN KEY (character_id) REFERENCES characters (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    # Create quick_events table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS quick_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        text TEXT NOT NULL,
+        sequence_number INTEGER DEFAULT 0,
+        character_id INTEGER NOT NULL,
+        FOREIGN KEY (character_id) REFERENCES characters (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    # Create quick_event_characters table (for character tagging in quick events)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS quick_event_characters (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        quick_event_id INTEGER NOT NULL,
+        character_id INTEGER NOT NULL,
+        FOREIGN KEY (quick_event_id) REFERENCES quick_events (id) ON DELETE CASCADE,
+        FOREIGN KEY (character_id) REFERENCES characters (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    # Create timeline_views table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS timeline_views (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        name TEXT NOT NULL,
+        description TEXT,
+        view_type TEXT DEFAULT 'CHRONOLOGICAL',
+        layout_data TEXT,
+        story_id INTEGER NOT NULL,
+        FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE CASCADE
+    )
+    ''')
+    
     # Create images table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS images (
@@ -134,7 +213,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
         metadata_json TEXT,
         story_id INTEGER NOT NULL,
         event_id INTEGER,
-        FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE CASCADE
+        FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE CASCADE,
+        FOREIGN KEY (event_id) REFERENCES events (id) ON DELETE SET NULL
     )
     ''')
     
@@ -492,26 +572,24 @@ def update_story_board_view_layout(conn: sqlite3.Connection, view_id: int, layou
 
 # Initialize the database
 def initialize_database(db_path: str) -> sqlite3.Connection:
-    """Initialize the database and create tables if they don't exist.
+    """Initialize the database and create the necessary tables.
     
     Args:
-        db_path: Path to the SQLite database, can be a URI format (sqlite:///path) or direct path
+        db_path: Path to the database file
         
     Returns:
-        sqlite3.Connection: Database connection
+        Database connection
     """
-    # Handle sqlite:/// URI format
-    if db_path.startswith('sqlite:///'):
-        db_path = db_path[10:]  # Remove 'sqlite:///'
+    # Create the directory if it doesn't exist
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
     
-    # Ensure directory exists
-    db_dir = os.path.dirname(db_path)
-    if db_dir and not os.path.exists(db_dir):
-        os.makedirs(db_dir)
-    
+    # Create or open the database connection
     conn = create_connection(db_path)
+    
+    # Create tables
     create_tables(conn)
-    return conn 
+    
+    return conn
 
 
 def get_story_images(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
@@ -777,4 +855,756 @@ def ensure_story_folders_exist(story_data: Dict[str, Any]) -> None:
     """
     folders = get_story_folder_paths(story_data)
     for folder in folders.values():
-        os.makedirs(folder, exist_ok=True) 
+        os.makedirs(folder, exist_ok=True)
+
+
+# Timeline and Event functions
+def create_event(conn: sqlite3.Connection, title: str, story_id: int, description: Optional[str] = None,
+                event_type: str = "SCENE", start_date: Optional[str] = None, end_date: Optional[str] = None,
+                location: Optional[str] = None, importance: int = 3, color: str = "#3498db",
+                is_milestone: bool = False, parent_event_id: Optional[int] = None,
+                sequence_number: int = 0) -> int:
+    """Create a new event.
+    
+    Args:
+        conn: Database connection
+        title: Event title
+        story_id: ID of the story
+        description: Event description
+        event_type: Type of event (SCENE, CHAPTER, etc.)
+        start_date: Start date of the event (ISO format or story-specific format)
+        end_date: End date of the event
+        location: Location of the event
+        importance: Importance level (1-5, with 5 being most important)
+        color: Color for the event in the timeline
+        is_milestone: Whether this is a milestone event
+        parent_event_id: ID of the parent event (for hierarchical events)
+        sequence_number: Order in the timeline
+        
+    Returns:
+        ID of the created event
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO events (
+                title, description, event_type, start_date, end_date, location,
+                importance, color, is_milestone, story_id, parent_event_id, sequence_number
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            title, description, event_type, start_date, end_date, location,
+            importance, color, 1 if is_milestone else 0, story_id, parent_event_id, sequence_number
+        ))
+        
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error creating event: {e}")
+        conn.rollback()
+        return None
+
+
+def get_event(conn: sqlite3.Connection, event_id: int) -> Dict[str, Any]:
+    """Get an event by ID.
+    
+    Args:
+        conn: Database connection
+        event_id: ID of the event
+        
+    Returns:
+        Event data as a dictionary
+    """
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM events WHERE id = ?", (event_id,))
+    return dict(cursor.fetchone())
+
+
+def update_event(conn: sqlite3.Connection, event_id: int, title: Optional[str] = None,
+                description: Optional[str] = None, event_type: Optional[str] = None,
+                start_date: Optional[str] = None, end_date: Optional[str] = None,
+                location: Optional[str] = None, importance: Optional[int] = None,
+                color: Optional[str] = None, is_milestone: Optional[bool] = None,
+                parent_event_id: Optional[int] = None, sequence_number: Optional[int] = None) -> bool:
+    """Update an event.
+    
+    Args:
+        conn: Database connection
+        event_id: ID of the event to update
+        title: Event title
+        description: Event description
+        event_type: Type of event
+        start_date: Start date of the event
+        end_date: End date of the event
+        location: Location of the event
+        importance: Importance level
+        color: Color for the event
+        is_milestone: Whether this is a milestone event
+        parent_event_id: ID of the parent event
+        sequence_number: Order in the timeline
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Get current event data
+        cursor.execute("SELECT * FROM events WHERE id = ?", (event_id,))
+        current_data = cursor.fetchone()
+        
+        if not current_data:
+            return False
+            
+        # Update only provided fields
+        updates = {}
+        if title is not None:
+            updates['title'] = title
+        if description is not None:
+            updates['description'] = description
+        if event_type is not None:
+            updates['event_type'] = event_type
+        if start_date is not None:
+            updates['start_date'] = start_date
+        if end_date is not None:
+            updates['end_date'] = end_date
+        if location is not None:
+            updates['location'] = location
+        if importance is not None:
+            updates['importance'] = importance
+        if color is not None:
+            updates['color'] = color
+        if is_milestone is not None:
+            updates['is_milestone'] = 1 if is_milestone else 0
+        if parent_event_id is not None:
+            updates['parent_event_id'] = parent_event_id
+        if sequence_number is not None:
+            updates['sequence_number'] = sequence_number
+        
+        # Add updated_at timestamp
+        updates['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Build the SQL query
+        if not updates:
+            return True  # Nothing to update
+            
+        set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
+        values = list(updates.values())
+        values.append(event_id)
+        
+        cursor.execute(f"UPDATE events SET {set_clause} WHERE id = ?", values)
+        conn.commit()
+        
+        return True
+    except Exception as e:
+        print(f"Error updating event: {e}")
+        conn.rollback()
+        return False
+
+
+def delete_event(conn: sqlite3.Connection, event_id: int) -> bool:
+    """Delete an event.
+    
+    Args:
+        conn: Database connection
+        event_id: ID of the event to delete
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Delete the event
+        cursor.execute("DELETE FROM events WHERE id = ?", (event_id,))
+        
+        # Commit the changes
+        conn.commit()
+        
+        return True
+    except Exception as e:
+        print(f"Error deleting event: {e}")
+        conn.rollback()
+        return False
+
+
+def get_story_events(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
+    """Get all events for a story.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        
+    Returns:
+        List of event dictionaries
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM events 
+        WHERE story_id = ? 
+        ORDER BY sequence_number, start_date, title
+    """, (story_id,))
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def add_character_to_event(conn: sqlite3.Connection, event_id: int, character_id: int,
+                          role: str = "PARTICIPANT", notes: Optional[str] = None) -> int:
+    """Add a character to an event.
+    
+    Args:
+        conn: Database connection
+        event_id: ID of the event
+        character_id: ID of the character
+        role: Role of the character in the event
+        notes: Additional notes
+        
+    Returns:
+        ID of the created event_character entry
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO event_characters (event_id, character_id, role, notes)
+            VALUES (?, ?, ?, ?)
+        """, (event_id, character_id, role, notes))
+        
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error adding character to event: {e}")
+        conn.rollback()
+        return None
+
+
+def remove_character_from_event(conn: sqlite3.Connection, event_id: int, character_id: int) -> bool:
+    """Remove a character from an event.
+    
+    Args:
+        conn: Database connection
+        event_id: ID of the event
+        character_id: ID of the character
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            DELETE FROM event_characters 
+            WHERE event_id = ? AND character_id = ?
+        """, (event_id, character_id))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error removing character from event: {e}")
+        conn.rollback()
+        return False
+
+
+def get_event_characters(conn: sqlite3.Connection, event_id: int) -> List[Dict[str, Any]]:
+    """Get all characters participating in an event.
+    
+    Args:
+        conn: Database connection
+        event_id: ID of the event
+        
+    Returns:
+        List of character dictionaries with role information
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT c.*, ec.role, ec.notes
+        FROM characters c
+        JOIN event_characters ec ON c.id = ec.character_id
+        WHERE ec.event_id = ?
+        ORDER BY c.name
+    """, (event_id,))
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def get_character_events(conn: sqlite3.Connection, character_id: int) -> List[Dict[str, Any]]:
+    """Get all events a character participates in.
+    
+    Args:
+        conn: Database connection
+        character_id: ID of the character
+        
+    Returns:
+        List of event dictionaries with role information
+    """
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT e.*, ec.role, ec.notes
+        FROM events e
+        JOIN event_characters ec ON e.id = ec.event_id
+        WHERE ec.character_id = ?
+        ORDER BY e.sequence_number, e.start_date, e.title
+    """, (character_id,))
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def create_timeline_view(conn: sqlite3.Connection, name: str, story_id: int,
+                        description: Optional[str] = None, view_type: str = "CHRONOLOGICAL",
+                        layout_data: Optional[str] = None) -> int:
+    """Create a new timeline view.
+    
+    Args:
+        conn: Database connection
+        name: View name
+        story_id: ID of the story
+        description: View description
+        view_type: Type of view (CHRONOLOGICAL, CHARACTER_FOCUSED, etc.)
+        layout_data: JSON string with layout data
+        
+    Returns:
+        ID of the created timeline view
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO timeline_views (name, description, view_type, layout_data, story_id)
+            VALUES (?, ?, ?, ?, ?)
+        """, (name, description, view_type, layout_data, story_id))
+        
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        print(f"Error creating timeline view: {e}")
+        conn.rollback()
+        return None
+
+
+def get_timeline_view(conn: sqlite3.Connection, view_id: int) -> Dict[str, Any]:
+    """Get a timeline view by ID.
+    
+    Args:
+        conn: Database connection
+        view_id: ID of the timeline view
+        
+    Returns:
+        Timeline view data as a dictionary
+    """
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM timeline_views WHERE id = ?", (view_id,))
+    return dict(cursor.fetchone())
+
+
+def get_story_timeline_views(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
+    """Get all timeline views for a story.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        
+    Returns:
+        List of timeline view dictionaries
+    """
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM timeline_views WHERE story_id = ? ORDER BY name", (story_id,))
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def update_timeline_view(conn: sqlite3.Connection, view_id: int, name: Optional[str] = None,
+                        description: Optional[str] = None, view_type: Optional[str] = None,
+                        layout_data: Optional[str] = None) -> bool:
+    """Update a timeline view.
+    
+    Args:
+        conn: Database connection
+        view_id: ID of the timeline view
+        name: View name
+        description: View description
+        view_type: Type of view
+        layout_data: JSON string with layout data
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Get current view data
+        cursor.execute("SELECT * FROM timeline_views WHERE id = ?", (view_id,))
+        current_data = cursor.fetchone()
+        
+        if not current_data:
+            return False
+            
+        # Update only provided fields
+        updates = {}
+        if name is not None:
+            updates['name'] = name
+        if description is not None:
+            updates['description'] = description
+        if view_type is not None:
+            updates['view_type'] = view_type
+        if layout_data is not None:
+            updates['layout_data'] = layout_data
+        
+        # Add updated_at timestamp
+        updates['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Build the SQL query
+        if not updates:
+            return True  # Nothing to update
+            
+        set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
+        values = list(updates.values())
+        values.append(view_id)
+        
+        cursor.execute(f"UPDATE timeline_views SET {set_clause} WHERE id = ?", values)
+        conn.commit()
+        
+        return True
+    except Exception as e:
+        print(f"Error updating timeline view: {e}")
+        conn.rollback()
+        return False
+
+
+def delete_timeline_view(conn: sqlite3.Connection, view_id: int) -> bool:
+    """Delete a timeline view.
+    
+    Args:
+        conn: Database connection
+        view_id: ID of the timeline view to delete
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Delete the timeline view
+        cursor.execute("DELETE FROM timeline_views WHERE id = ?", (view_id,))
+        conn.commit()
+        
+        # Check if the deletion was successful
+        if cursor.rowcount > 0:
+            return True
+        else:
+            return False
+    except sqlite3.Error as e:
+        print(f"Error deleting timeline view: {e}")
+        return False
+
+
+# Quick Event Functions
+
+def create_quick_event(conn: sqlite3.Connection, text: str, character_id: int, 
+                      sequence_number: int = 0) -> int:
+    """Create a new quick event.
+    
+    Args:
+        conn: Database connection
+        text: Text description of the quick event
+        character_id: ID of the character the quick event belongs to
+        sequence_number: Order in the timeline (default 0)
+        
+    Returns:
+        ID of the newly created quick event
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Get current timestamp
+        now = datetime.now().isoformat()
+        
+        # Insert the quick event
+        cursor.execute('''
+        INSERT INTO quick_events (
+            created_at, updated_at, text, sequence_number, character_id
+        ) VALUES (?, ?, ?, ?, ?)
+        ''', (now, now, text, sequence_number, character_id))
+        
+        conn.commit()
+        
+        # Parse character tags from text and create associations
+        quick_event_id = cursor.lastrowid
+        
+        # Process character mentions/tags
+        process_quick_event_character_tags(conn, quick_event_id, text)
+        
+        return quick_event_id
+    except sqlite3.Error as e:
+        print(f"Error creating quick event: {e}")
+        raise
+
+
+def process_quick_event_character_tags(conn: sqlite3.Connection, quick_event_id: int, text: str) -> None:
+    """Process character tags in quick event text and create associations.
+    
+    Args:
+        conn: Database connection
+        quick_event_id: ID of the quick event
+        text: Text to parse for character tags
+    """
+    try:
+        # Find all @mentions in the text
+        import re
+        mentions = re.findall(r'@(\w+)', text)
+        
+        if not mentions:
+            return
+            
+        cursor = conn.cursor()
+        
+        # Get all characters in the story
+        # First get the character_id of the quick event to find the story_id
+        cursor.execute('''
+        SELECT c.story_id 
+        FROM quick_events qe
+        JOIN characters c ON qe.character_id = c.id
+        WHERE qe.id = ?
+        ''', (quick_event_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            return
+            
+        # Convert sqlite3.Row to a dictionary to use get() method
+        row_dict = dict(result)
+        story_id = row_dict.get('story_id')
+        if story_id is None:
+            return
+            
+        # Get all characters in the story
+        cursor.execute('''
+        SELECT id, name, aliases 
+        FROM characters 
+        WHERE story_id = ?
+        ''', (story_id,))
+        
+        characters = cursor.fetchall()
+        
+        # Match mentions to character names
+        for mention in mentions:
+            mention_lower = mention.lower()
+            
+            # Check for exact character name matches
+            for character in characters:
+                char_dict = dict(character)
+                char_name = char_dict['name'].lower()
+                
+                # Check if the mention matches the character name
+                if mention_lower == char_name or mention_lower in char_name.split():
+                    cursor.execute('''
+                    INSERT INTO quick_event_characters (quick_event_id, character_id)
+                    VALUES (?, ?)
+                    ''', (quick_event_id, char_dict['id']))
+                    break
+                    
+                # Check aliases if available
+                if char_dict.get('aliases'):
+                    aliases = char_dict['aliases'].lower().split(',')
+                    aliases = [alias.strip() for alias in aliases]
+                    if mention_lower in aliases:
+                        cursor.execute('''
+                        INSERT INTO quick_event_characters (quick_event_id, character_id)
+                        VALUES (?, ?)
+                        ''', (quick_event_id, char_dict['id']))
+                        break
+        
+        conn.commit()
+    except sqlite3.Error as e:
+        print(f"Error processing quick event character tags: {e}")
+
+
+def get_quick_event(conn: sqlite3.Connection, quick_event_id: int) -> Dict[str, Any]:
+    """Get a quick event by ID.
+    
+    Args:
+        conn: Database connection
+        quick_event_id: ID of the quick event to retrieve
+        
+    Returns:
+        Dictionary with quick event data
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    SELECT * FROM quick_events WHERE id = ?
+    ''', (quick_event_id,))
+    
+    row = cursor.fetchone()
+    
+    if row:
+        return dict(row)
+    else:
+        return {}
+
+
+def get_character_quick_events(conn: sqlite3.Connection, character_id: int) -> List[Dict[str, Any]]:
+    """Get all quick events for a character.
+    
+    Args:
+        conn: Database connection
+        character_id: ID of the character
+        
+    Returns:
+        List of dictionaries with quick event data
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    SELECT * FROM quick_events 
+    WHERE character_id = ?
+    ORDER BY sequence_number, created_at
+    ''', (character_id,))
+    
+    rows = cursor.fetchall()
+    
+    # Convert rows to dictionaries and return
+    return [dict(row) for row in rows]
+
+
+def get_quick_event_characters(conn: sqlite3.Connection, quick_event_id: int) -> List[Dict[str, Any]]:
+    """Get all characters tagged in a quick event.
+    
+    Args:
+        conn: Database connection
+        quick_event_id: ID of the quick event
+        
+    Returns:
+        List of dictionaries with character data
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    SELECT c.* FROM characters c
+    JOIN quick_event_characters qec ON c.id = qec.character_id
+    WHERE qec.quick_event_id = ?
+    ORDER BY c.name
+    ''', (quick_event_id,))
+    
+    rows = cursor.fetchall()
+    
+    # Convert rows to dictionaries and return
+    return [dict(row) for row in rows]
+
+
+def update_quick_event(conn: sqlite3.Connection, quick_event_id: int, 
+                      text: Optional[str] = None, 
+                      sequence_number: Optional[int] = None) -> bool:
+    """Update a quick event.
+    
+    Args:
+        conn: Database connection
+        quick_event_id: ID of the quick event to update
+        text: New text for the quick event
+        sequence_number: New sequence number
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Get current timestamp
+        now = datetime.now().isoformat()
+        
+        # Build the query dynamically based on provided parameters
+        update_fields = ['updated_at = ?']
+        params = [now]
+        
+        if text is not None:
+            update_fields.append('text = ?')
+            params.append(text)
+            
+        if sequence_number is not None:
+            update_fields.append('sequence_number = ?')
+            params.append(sequence_number)
+            
+        # If no fields to update, return False
+        if len(update_fields) <= 1:  # Only updated_at
+            return False
+            
+        # Build the final query
+        query = f'''
+        UPDATE quick_events 
+        SET {', '.join(update_fields)} 
+        WHERE id = ?
+        '''
+        
+        # Add the quick_event_id to params
+        params.append(quick_event_id)
+        
+        # Execute the update
+        cursor.execute(query, tuple(params))
+        conn.commit()
+        
+        # If text was updated, update character tags
+        if text is not None:
+            # Delete existing tags
+            cursor.execute('''
+            DELETE FROM quick_event_characters
+            WHERE quick_event_id = ?
+            ''', (quick_event_id,))
+            
+            # Process new tags
+            process_quick_event_character_tags(conn, quick_event_id, text)
+        
+        # Check if the update was successful
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error updating quick event: {e}")
+        return False
+
+
+def delete_quick_event(conn: sqlite3.Connection, quick_event_id: int) -> bool:
+    """Delete a quick event.
+    
+    Args:
+        conn: Database connection
+        quick_event_id: ID of the quick event to delete
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Delete the quick event
+        cursor.execute("DELETE FROM quick_events WHERE id = ?", (quick_event_id,))
+        conn.commit()
+        
+        # Check if the deletion was successful
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error deleting quick event: {e}")
+        return False
+
+
+def get_next_quick_event_sequence_number(conn: sqlite3.Connection, character_id: int) -> int:
+    """Get the next sequence number for a new quick event.
+    
+    Args:
+        conn: Database connection
+        character_id: ID of the character
+        
+    Returns:
+        The next sequence number (max sequence number + 1)
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Get the maximum sequence number for the character's quick events
+        cursor.execute('''
+        SELECT MAX(sequence_number) as max_seq
+        FROM quick_events
+        WHERE character_id = ?
+        ''', (character_id,))
+        
+        result = cursor.fetchone()
+        
+        if result and result['max_seq'] is not None:
+            return result['max_seq'] + 1
+        else:
+            return 0
+    except sqlite3.Error as e:
+        print(f"Error getting next sequence number: {e}")
+        return 0 

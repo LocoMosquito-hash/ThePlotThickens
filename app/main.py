@@ -25,7 +25,7 @@ def main() -> None:
     db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "the_plot_thickens.db")
     print(f"Database path: {db_path}")
     try:
-        db_conn = initialize_database(f"sqlite:///{db_path}")
+        db_conn = initialize_database(db_path)
         print("Database initialized successfully")
     except Exception as e:
         print(f"Error initializing database: {e}")
