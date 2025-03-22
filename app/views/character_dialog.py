@@ -16,17 +16,20 @@ from PyQt6.QtWidgets import (
     QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QComboBox, QSpinBox, QCheckBox, QPushButton,
     QFileDialog, QMessageBox, QApplication, QGroupBox, QListWidget, 
-    QListWidgetItem, QMenu, QInputDialog, QTextEdit, QFrame, QSplitter
+    QListWidgetItem, QMenu, QInputDialog, QTextEdit, QFrame, QSplitter,
+    QToolButton
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QBuffer, QByteArray, QSettings, QPoint
-from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QKeyEvent, QTextCursor
+from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QKeyEvent, QTextCursor, QIcon
 
 from app.db_sqlite import (
     get_character, update_character, get_story, get_character_quick_events,
     create_quick_event, update_quick_event, delete_quick_event, 
     get_next_quick_event_sequence_number, get_quick_event_characters,
     get_story_characters, get_quick_event_images, associate_quick_event_with_image,
-    remove_quick_event_image_association, get_story_images
+    remove_quick_event_image_association, get_story_images,
+    add_character_detail, update_character_detail, delete_character_detail, 
+    get_character_details, update_character_detail_sequence
 )
 
 
@@ -811,6 +814,319 @@ class QuickEventsTab(QWidget):
         menu.exec(QCursor.pos())
 
 
+class CharacterDetailItem(QListWidgetItem):
+    """List item representing a character detail."""
+    
+    def __init__(self, detail_data: Dict[str, Any]):
+        """Initialize the character detail item.
+        
+        Args:
+            detail_data: Dictionary with the detail data
+        """
+        super().__init__()
+        
+        self.detail_id = detail_data['id']
+        self.detail_text = detail_data['detail_text']
+        self.detail_type = detail_data['detail_type']
+        self.sequence_number = detail_data['sequence_number']
+        
+        self.setText(self.detail_text)
+        
+        # Set tooltip with additional info
+        self.setToolTip(f"Type: {self.detail_type}")
+
+
+class CharacterDetailsTab(QWidget):
+    """Tab for managing character details."""
+    
+    def __init__(self, db_conn, character_id: int, parent=None):
+        """Initialize the character details tab.
+        
+        Args:
+            db_conn: Database connection
+            character_id: ID of the character
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.db_conn = db_conn
+        self.character_id = character_id
+        self.init_ui()
+        self.load_details()
+        
+    def init_ui(self):
+        """Initialize the user interface."""
+        layout = QVBoxLayout(self)
+        
+        # Details type selector
+        type_layout = QHBoxLayout()
+        type_layout.addWidget(QLabel("Filter by type:"))
+        
+        self.type_combo = QComboBox()
+        self.type_combo.addItem("All", None)
+        self.type_combo.addItem("General", "GENERAL")
+        self.type_combo.addItem("Background", "BACKGROUND")
+        self.type_combo.addItem("Personality", "PERSONALITY")
+        self.type_combo.addItem("Physical", "PHYSICAL")
+        self.type_combo.addItem("Relationships", "RELATIONSHIPS")
+        self.type_combo.currentIndexChanged.connect(self.filter_details)
+        type_layout.addWidget(self.type_combo)
+        
+        type_layout.addStretch()
+        
+        # Add button
+        self.add_button = QPushButton("Add Detail")
+        self.add_button.clicked.connect(self.add_detail)
+        type_layout.addWidget(self.add_button)
+        
+        layout.addLayout(type_layout)
+        
+        # Details list
+        self.details_list = QListWidget()
+        self.details_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.details_list.customContextMenuRequested.connect(self.show_context_menu)
+        self.details_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        
+        # Enable drag and drop for reordering
+        self.details_list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
+        self.details_list.model().rowsMoved.connect(self.on_items_reordered)
+        
+        layout.addWidget(self.details_list)
+    
+    def load_details(self):
+        """Load details for this character."""
+        try:
+            self.details = get_character_details(self.db_conn, self.character_id)
+            self.update_details_list()
+        except Exception as e:
+            print(f"Error loading character details: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to load character details: {str(e)}")
+            
+    def update_details_list(self):
+        """Update the details list with current details."""
+        self.details_list.clear()
+        
+        if not self.details:
+            empty_item = QListWidgetItem("No details added yet.")
+            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
+            self.details_list.addItem(empty_item)
+            return
+        
+        # Filter by type if needed
+        selected_type = self.type_combo.currentData()
+        
+        for detail in self.details:
+            if selected_type is None or detail['detail_type'] == selected_type:
+                item = CharacterDetailItem(detail)
+                self.details_list.addItem(item)
+                
+    def filter_details(self):
+        """Filter details by type."""
+        self.update_details_list()
+        
+    def add_detail(self):
+        """Add a new character detail."""
+        # Show dialog to get detail text
+        detail_text, ok = QInputDialog.getText(
+            self,
+            "Add Character Detail",
+            "Enter detail (e.g., 'Afraid of heights' or 'Has a scar on left cheek'):"
+        )
+        
+        if not ok or not detail_text.strip():
+            return
+            
+        # Get the detail type
+        detail_types = [
+            ("General", "GENERAL"),
+            ("Background", "BACKGROUND"),
+            ("Personality", "PERSONALITY"),
+            ("Physical", "PHYSICAL"),
+            ("Relationships", "RELATIONSHIPS")
+        ]
+        
+        type_names = [t[0] for t in detail_types]
+        type_codes = [t[1] for t in detail_types]
+        
+        selected_type, ok = QInputDialog.getItem(
+            self,
+            "Detail Type",
+            "Select the type of detail:",
+            type_names,
+            0,  # Default to first item
+            False  # Non-editable
+        )
+        
+        if not ok:
+            return
+            
+        # Get the type code
+        type_index = type_names.index(selected_type)
+        detail_type = type_codes[type_index]
+        
+        try:
+            # Add the detail to the database
+            detail_id = add_character_detail(
+                self.db_conn,
+                self.character_id,
+                detail_text,
+                detail_type
+            )
+            
+            if detail_id:
+                # Reload details to update the list
+                self.load_details()
+            else:
+                QMessageBox.warning(self, "Error", "Failed to add character detail.")
+        except Exception as e:
+            print(f"Error adding character detail: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to add character detail: {str(e)}")
+            
+    def edit_detail(self, item: CharacterDetailItem):
+        """Edit a character detail.
+        
+        Args:
+            item: The detail item to edit
+        """
+        # Show dialog to edit detail text
+        detail_text, ok = QInputDialog.getText(
+            self,
+            "Edit Character Detail",
+            "Detail:",
+            text=item.detail_text
+        )
+        
+        if not ok or not detail_text.strip():
+            return
+            
+        # Get the detail type
+        detail_types = [
+            ("General", "GENERAL"),
+            ("Background", "BACKGROUND"),
+            ("Personality", "PERSONALITY"),
+            ("Physical", "PHYSICAL"),
+            ("Relationships", "RELATIONSHIPS")
+        ]
+        
+        type_names = [t[0] for t in detail_types]
+        type_codes = [t[1] for t in detail_types]
+        
+        # Find the current type index
+        try:
+            current_type_index = type_codes.index(item.detail_type)
+        except ValueError:
+            current_type_index = 0  # Default to General if type not found
+        
+        selected_type, ok = QInputDialog.getItem(
+            self,
+            "Detail Type",
+            "Select the type of detail:",
+            type_names,
+            current_type_index,
+            False  # Non-editable
+        )
+        
+        if not ok:
+            return
+            
+        # Get the type code
+        type_index = type_names.index(selected_type)
+        detail_type = type_codes[type_index]
+        
+        try:
+            # Update the detail in the database
+            success = update_character_detail(
+                self.db_conn,
+                item.detail_id,
+                detail_text,
+                detail_type
+            )
+            
+            if success:
+                # Reload details to update the list
+                self.load_details()
+            else:
+                QMessageBox.warning(self, "Error", "Failed to update character detail.")
+        except Exception as e:
+            print(f"Error updating character detail: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to update character detail: {str(e)}")
+            
+    def delete_detail(self, item: CharacterDetailItem):
+        """Delete a character detail.
+        
+        Args:
+            item: The detail item to delete
+        """
+        # Confirm deletion
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            f"Are you sure you want to delete this detail?\n\n{item.detail_text}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+            
+        try:
+            # Delete the detail from the database
+            success = delete_character_detail(self.db_conn, item.detail_id)
+            
+            if success:
+                # Reload details to update the list
+                self.load_details()
+            else:
+                QMessageBox.warning(self, "Error", "Failed to delete character detail.")
+        except Exception as e:
+            print(f"Error deleting character detail: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to delete character detail: {str(e)}")
+            
+    def on_items_reordered(self):
+        """Handle reordering of items through drag and drop."""
+        try:
+            # Update sequence numbers for all items
+            for i in range(self.details_list.count()):
+                item = self.details_list.item(i)
+                
+                # Skip non-detail items
+                if not isinstance(item, CharacterDetailItem):
+                    continue
+                    
+                # Update sequence number
+                if item.sequence_number != i:
+                    update_character_detail_sequence(self.db_conn, item.detail_id, i)
+                    item.sequence_number = i
+                    
+            # Reload the data to ensure everything is in sync
+            self.load_details()
+        except Exception as e:
+            print(f"Error updating sequence numbers: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to update sequence numbers: {str(e)}")
+            
+    def show_context_menu(self, position: QPoint):
+        """Show context menu for a detail.
+        
+        Args:
+            position: Position where the menu should be displayed
+        """
+        item = self.details_list.itemAt(position)
+        
+        if not item or not isinstance(item, CharacterDetailItem):
+            return
+            
+        menu = QMenu(self)
+        
+        edit_action = QAction("Edit", self)
+        edit_action.triggered.connect(lambda: self.edit_detail(item))
+        menu.addAction(edit_action)
+        
+        delete_action = QAction("Delete", self)
+        delete_action.triggered.connect(lambda: self.delete_detail(item))
+        menu.addAction(delete_action)
+        
+        # Show the menu
+        menu.exec(self.details_list.mapToGlobal(position))
+
+
 class CharacterDialog(QDialog):
     """Dialog for creating and editing characters."""
     
@@ -867,51 +1183,53 @@ class CharacterDialog(QDialog):
     
     def init_ui(self) -> None:
         """Initialize the user interface."""
-        # Create main layout
-        main_layout = QVBoxLayout(self)
+        self.setWindowTitle("Character Details")
+        self.resize(800, 600)
         
-        # Create tab widget
+        # Main layout
+        layout = QVBoxLayout(self)
+        
+        # Tab widget
         self.tab_widget = QTabWidget()
-        main_layout.addWidget(self.tab_widget)
         
-        # Create summary tab
+        # Create tabs
         self.summary_tab = QWidget()
-        self.tab_widget.addTab(self.summary_tab, "Summary")
         
-        # Create relationships tab (placeholder)
-        self.relationships_tab = QWidget()
-        relationships_layout = QVBoxLayout(self.relationships_tab)
-        relationships_layout.addWidget(QLabel("Relationships will be implemented later."))
-        self.tab_widget.addTab(self.relationships_tab, "Relationships")
+        # Create the quick events tab if editing an existing character
+        if self.character_id:
+            self.quick_events_tab = QWidget()
+            self.details_tab = QWidget()  # Add this line
         
-        # Create quick events tab
-        if self.character_id is not None:  # Only show for existing characters
-            self.quick_events_tab = QuickEventsTab(self.db_conn, self.character_id)
-            self.tab_widget.addTab(self.quick_events_tab, "Quick Events")
-        
-        # Create gallery tab (placeholder)
-        self.gallery_tab = QWidget()
-        gallery_layout = QVBoxLayout(self.gallery_tab)
-        gallery_layout.addWidget(QLabel("Gallery will be implemented later."))
-        self.tab_widget.addTab(self.gallery_tab, "Gallery")
-        
-        # Create summary tab layout
+        # Create tab contents
         self.create_summary_tab()
         
-        # Create buttons
+        # Add tabs to widget
+        self.tab_widget.addTab(self.summary_tab, "Summary")
+        
+        if self.character_id:
+            self.quick_events_tab = QuickEventsTab(self.db_conn, self.character_id)
+            self.tab_widget.addTab(self.quick_events_tab, "Quick Events")
+            
+            # Add details tab
+            self.details_tab = CharacterDetailsTab(self.db_conn, self.character_id)
+            self.tab_widget.addTab(self.details_tab, "Details")
+        
+        layout.addWidget(self.tab_widget)
+        
+        # Buttons
         button_layout = QHBoxLayout()
+        
+        self.close_button = QPushButton("Close")
+        self.close_button.clicked.connect(self.close)
         
         self.save_button = QPushButton("Save")
         self.save_button.clicked.connect(self.save_character)
         
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.clicked.connect(self.reject)
-        
+        button_layout.addWidget(self.close_button)
         button_layout.addStretch()
         button_layout.addWidget(self.save_button)
-        button_layout.addWidget(self.cancel_button)
         
-        main_layout.addLayout(button_layout)
+        layout.addLayout(button_layout)
     
     def create_summary_tab(self) -> None:
         """Create the summary tab."""
