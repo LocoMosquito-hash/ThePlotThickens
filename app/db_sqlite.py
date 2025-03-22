@@ -224,14 +224,29 @@ def create_tables(conn: sqlite3.Connection) -> None:
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        image_id INTEGER NOT NULL,
+        character_id INTEGER NOT NULL,
         x REAL,
         y REAL,
         width REAL,
         height REAL,
-        image_id INTEGER NOT NULL,
-        character_id INTEGER NOT NULL,
         FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE,
         FOREIGN KEY (character_id) REFERENCES characters (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    # Create quick_event_images table (for linking quick events to images)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS quick_event_images (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        quick_event_id INTEGER NOT NULL,
+        image_id INTEGER NOT NULL,
+        note TEXT,
+        FOREIGN KEY (quick_event_id) REFERENCES quick_events (id) ON DELETE CASCADE,
+        FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE,
+        UNIQUE(quick_event_id, image_id)
     )
     ''')
     
@@ -1607,4 +1622,144 @@ def get_next_quick_event_sequence_number(conn: sqlite3.Connection, character_id:
             return 0
     except sqlite3.Error as e:
         print(f"Error getting next sequence number: {e}")
-        return 0 
+        return 0
+
+
+# Quick Event Image Functions
+
+def associate_quick_event_with_image(conn: sqlite3.Connection, 
+                                   quick_event_id: int, 
+                                   image_id: int,
+                                   note: Optional[str] = None) -> bool:
+    """Associate a quick event with an image.
+    
+    Args:
+        conn: Database connection
+        quick_event_id: ID of the quick event
+        image_id: ID of the image
+        note: Optional note about the association
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Get current timestamp
+        now = datetime.now().isoformat()
+        
+        # Check if the association already exists
+        cursor.execute('''
+        SELECT id FROM quick_event_images
+        WHERE quick_event_id = ? AND image_id = ?
+        ''', (quick_event_id, image_id))
+        
+        existing = cursor.fetchone()
+        
+        if existing:
+            # Update the existing association
+            cursor.execute('''
+            UPDATE quick_event_images
+            SET updated_at = ?, note = ?
+            WHERE quick_event_id = ? AND image_id = ?
+            ''', (now, note, quick_event_id, image_id))
+        else:
+            # Create a new association
+            cursor.execute('''
+            INSERT INTO quick_event_images (
+                created_at, updated_at, quick_event_id, image_id, note
+            ) VALUES (?, ?, ?, ?, ?)
+            ''', (now, now, quick_event_id, image_id, note))
+            
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Error associating quick event with image: {e}")
+        return False
+
+
+def remove_quick_event_image_association(conn: sqlite3.Connection, 
+                                       quick_event_id: int, 
+                                       image_id: int) -> bool:
+    """Remove an association between a quick event and an image.
+    
+    Args:
+        conn: Database connection
+        quick_event_id: ID of the quick event
+        image_id: ID of the image
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        DELETE FROM quick_event_images
+        WHERE quick_event_id = ? AND image_id = ?
+        ''', (quick_event_id, image_id))
+        
+        conn.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error removing quick event-image association: {e}")
+        return False
+
+
+def get_quick_event_images(conn: sqlite3.Connection, quick_event_id: int) -> List[Dict[str, Any]]:
+    """Get all images associated with a quick event.
+    
+    Args:
+        conn: Database connection
+        quick_event_id: ID of the quick event
+        
+    Returns:
+        List of image dictionaries
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        SELECT i.*, qei.note, qei.created_at as association_date
+        FROM images i
+        JOIN quick_event_images qei ON i.id = qei.image_id
+        WHERE qei.quick_event_id = ?
+        ORDER BY i.created_at DESC
+        ''', (quick_event_id,))
+        
+        rows = cursor.fetchall()
+        
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error getting quick event images: {e}")
+        return []
+
+
+def get_image_quick_events(conn: sqlite3.Connection, image_id: int) -> List[Dict[str, Any]]:
+    """Get all quick events associated with an image.
+    
+    Args:
+        conn: Database connection
+        image_id: ID of the image
+        
+    Returns:
+        List of quick event dictionaries
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        SELECT qe.*, c.name as character_name, qei.note, qei.created_at as association_date
+        FROM quick_events qe
+        JOIN characters c ON qe.character_id = c.id
+        JOIN quick_event_images qei ON qe.id = qei.quick_event_id
+        WHERE qei.image_id = ?
+        ORDER BY qe.sequence_number, qe.created_at
+        ''', (image_id,))
+        
+        rows = cursor.fetchall()
+        
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error getting image quick events: {e}")
+        return [] 

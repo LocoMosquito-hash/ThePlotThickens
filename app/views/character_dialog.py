@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QComboBox, QSpinBox, QCheckBox, QPushButton,
     QFileDialog, QMessageBox, QApplication, QGroupBox, QListWidget, 
-    QListWidgetItem, QMenu, QInputDialog, QTextEdit, QFrame
+    QListWidgetItem, QMenu, QInputDialog, QTextEdit, QFrame, QSplitter
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QBuffer, QByteArray, QSettings, QPoint
 from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QKeyEvent, QTextCursor
@@ -25,7 +25,8 @@ from app.db_sqlite import (
     get_character, update_character, get_story, get_character_quick_events,
     create_quick_event, update_quick_event, delete_quick_event, 
     get_next_quick_event_sequence_number, get_quick_event_characters,
-    get_story_characters
+    get_story_characters, get_quick_event_images, associate_quick_event_with_image,
+    remove_quick_event_image_association, get_story_images
 )
 
 
@@ -309,28 +310,125 @@ class CharacterTagCompleter(QWidget):
 class QuickEventItem(QListWidgetItem):
     """List widget item representing a quick event."""
     
-    def __init__(self, event_data: Dict[str, Any], tagged_characters: List[Dict[str, Any]] = None):
+    def __init__(self, event_data: Dict[str, Any], tagged_characters: List[Dict[str, Any]] = None, 
+                associated_images: List[Dict[str, Any]] = None):
         """Initialize a quick event item.
         
         Args:
             event_data: Quick event data dictionary
             tagged_characters: List of tagged character dictionaries
+            associated_images: List of associated image dictionaries
         """
         super().__init__()
         self.event_data = event_data
         self.event_id = event_data['id']
         self.text = event_data['text']
         self.tagged_characters = tagged_characters or []
+        self.associated_images = associated_images or []
         
         # Set display text
         self.setText(self.text)
         
-        # Add character tags to tooltip
+        # Add character tags and associated images to tooltip
         tooltip = self.text
+        
         if self.tagged_characters:
             char_names = [char['name'] for char in self.tagged_characters]
             tooltip += f"\n\nTagged characters: {', '.join(char_names)}"
+            
+        if self.associated_images:
+            image_titles = [img.get('title', f"Image {img['id']}") for img in self.associated_images]
+            tooltip += f"\n\nAssociated images: {len(self.associated_images)} ({', '.join(image_titles[:3])})"
+            if len(image_titles) > 3:
+                tooltip += f"... and {len(image_titles) - 3} more"
+                
         self.setToolTip(tooltip)
+
+
+class ImageSelectionDialog(QDialog):
+    """Dialog for selecting images to associate with a quick event."""
+    
+    def __init__(self, db_conn, story_id: int, current_image_ids: List[int] = None, parent=None):
+        """Initialize the image selection dialog.
+        
+        Args:
+            db_conn: Database connection
+            story_id: ID of the story
+            current_image_ids: List of already associated image IDs
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.db_conn = db_conn
+        self.story_id = story_id
+        self.current_image_ids = current_image_ids or []
+        self.selected_image_ids = []
+        
+        self.init_ui()
+        self.load_images()
+        
+    def init_ui(self):
+        """Initialize the user interface."""
+        self.setWindowTitle("Select Images")
+        self.resize(600, 400)
+        
+        layout = QVBoxLayout(self)
+        
+        # Image list
+        self.image_list = QListWidget()
+        self.image_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        layout.addWidget(self.image_list)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        self.select_button = QPushButton("Select")
+        self.select_button.clicked.connect(self.accept)
+        
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        
+        button_layout.addStretch()
+        button_layout.addWidget(self.select_button)
+        button_layout.addWidget(self.cancel_button)
+        
+        layout.addLayout(button_layout)
+        
+    def load_images(self):
+        """Load images for the story."""
+        try:
+            # Get all images for the story
+            images = get_story_images(self.db_conn, self.story_id)
+            
+            for image in images:
+                # Create a list item with the image title or filename
+                title = image.get('title') or image.get('filename') or f"Image {image['id']}"
+                item = QListWidgetItem(title)
+                item.setData(Qt.ItemDataRole.UserRole, image['id'])
+                
+                # Set the item to be pre-selected if it's already associated
+                if image['id'] in self.current_image_ids:
+                    item.setSelected(True)
+                
+                self.image_list.addItem(item)
+        except Exception as e:
+            print(f"Error loading images: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to load images: {str(e)}")
+    
+    def get_selected_image_ids(self) -> List[int]:
+        """Get the IDs of the selected images.
+        
+        Returns:
+            List of selected image IDs
+        """
+        self.selected_image_ids = []
+        
+        for i in range(self.image_list.count()):
+            item = self.image_list.item(i)
+            if item.isSelected():
+                image_id = item.data(Qt.ItemDataRole.UserRole)
+                self.selected_image_ids.append(image_id)
+                
+        return self.selected_image_ids
 
 
 class QuickEventsTab(QWidget):
@@ -348,6 +446,10 @@ class QuickEventsTab(QWidget):
         self.db_conn = db_conn
         self.character_id = character_id
         self.quick_events = []
+        
+        # Get the story ID for this character
+        character = get_character(db_conn, character_id)
+        self.story_id = character.get('story_id') if character else None
         
         self.init_ui()
         self.load_quick_events()
@@ -374,12 +476,36 @@ class QuickEventsTab(QWidget):
         toolbar_layout.addStretch()
         layout.addLayout(toolbar_layout)
         
+        # Splitter for events list and associated images
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        
         # Quick events list
         self.events_list = QListWidget()
         self.events_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.events_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.events_list.customContextMenuRequested.connect(self.show_context_menu)
-        layout.addWidget(self.events_list)
+        self.events_list.currentItemChanged.connect(self.on_event_selected)
+        splitter.addWidget(self.events_list)
+        
+        # Associated images panel
+        images_widget = QWidget()
+        images_layout = QVBoxLayout(images_widget)
+        images_layout.setContentsMargins(0, 0, 0, 0)
+        
+        images_header = QLabel("Associated Images:")
+        images_layout.addWidget(images_header)
+        
+        self.images_list = QListWidget()
+        self.images_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.images_list.customContextMenuRequested.connect(self.show_images_context_menu)
+        images_layout.addWidget(self.images_list)
+        
+        splitter.addWidget(images_widget)
+        
+        # Set initial sizes
+        splitter.setSizes([400, 200])
+        
+        layout.addWidget(splitter)
         
     def load_quick_events(self):
         """Load quick events for the character."""
@@ -408,8 +534,44 @@ class QuickEventsTab(QWidget):
                 print(f"Error getting tagged characters: {e}")
                 tagged_characters = []
                 
-            item = QuickEventItem(event, tagged_characters)
+            # Get associated images
+            try:
+                associated_images = get_quick_event_images(self.db_conn, event['id'])
+            except Exception as e:
+                print(f"Error getting associated images: {e}")
+                associated_images = []
+                
+            item = QuickEventItem(event, tagged_characters, associated_images)
             self.events_list.addItem(item)
+    
+    def on_event_selected(self, current, previous):
+        """Handle event selection change.
+        
+        Args:
+            current: Currently selected item
+            previous: Previously selected item
+        """
+        self.images_list.clear()
+        
+        if not current or not isinstance(current, QuickEventItem):
+            return
+            
+        # Display associated images
+        if current.associated_images:
+            for image in current.associated_images:
+                title = image.get('title') or image.get('filename') or f"Image {image['id']}"
+                item = QListWidgetItem(title)
+                item.setData(Qt.ItemDataRole.UserRole, image['id'])
+                
+                # Add note as tooltip if available
+                if image.get('note'):
+                    item.setToolTip(image['note'])
+                    
+                self.images_list.addItem(item)
+        else:
+            empty_item = QListWidgetItem("No images associated with this event.")
+            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
+            self.images_list.addItem(empty_item)
     
     def add_quick_event(self):
         """Add a new quick event."""
@@ -506,6 +668,94 @@ class QuickEventsTab(QWidget):
                 print(f"Error deleting quick event: {e}")
                 QMessageBox.warning(self, "Error", f"Failed to delete quick event: {str(e)}")
     
+    def manage_event_images(self, event_id: int):
+        """Manage images associated with a quick event.
+        
+        Args:
+            event_id: ID of the quick event
+        """
+        # Check if we have a story ID
+        if not self.story_id:
+            QMessageBox.warning(self, "Error", "Cannot get story ID for this character.")
+            return
+            
+        # Get current associated images
+        try:
+            current_images = get_quick_event_images(self.db_conn, event_id)
+            current_image_ids = [img['id'] for img in current_images]
+        except Exception as e:
+            print(f"Error getting current images: {e}")
+            current_image_ids = []
+            
+        # Show image selection dialog
+        dialog = ImageSelectionDialog(
+            self.db_conn, 
+            self.story_id,
+            current_image_ids,
+            parent=self
+        )
+        
+        if dialog.exec():
+            selected_image_ids = dialog.get_selected_image_ids()
+            
+            try:
+                # Remove associations for images that were deselected
+                for image_id in current_image_ids:
+                    if image_id not in selected_image_ids:
+                        remove_quick_event_image_association(self.db_conn, event_id, image_id)
+                
+                # Add associations for newly selected images
+                for image_id in selected_image_ids:
+                    if image_id not in current_image_ids:
+                        associate_quick_event_with_image(self.db_conn, event_id, image_id)
+                        
+                # Reload events to update the UI
+                self.load_quick_events()
+                
+                # Update the selected event to refresh the images list
+                current_item = self.events_list.currentItem()
+                if current_item and isinstance(current_item, QuickEventItem) and current_item.event_id == event_id:
+                    self.on_event_selected(current_item, None)
+                    
+            except Exception as e:
+                print(f"Error managing event images: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to update image associations: {str(e)}")
+    
+    def remove_image_association(self, image_id: int):
+        """Remove an image association from the current quick event.
+        
+        Args:
+            image_id: ID of the image to disassociate
+        """
+        current_item = self.events_list.currentItem()
+        if not current_item or not isinstance(current_item, QuickEventItem):
+            return
+            
+        event_id = current_item.event_id
+        
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Removal",
+            "Are you sure you want to remove this image association?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if confirm == QMessageBox.StandardButton.Yes:
+            try:
+                success = remove_quick_event_image_association(self.db_conn, event_id, image_id)
+                
+                if success:
+                    # Reload events to update the UI
+                    self.load_quick_events()
+                    
+                    # Update the selected event to refresh the images list
+                    self.on_event_selected(current_item, None)
+                else:
+                    QMessageBox.warning(self, "Error", "Failed to remove image association.")
+            except Exception as e:
+                print(f"Error removing image association: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to remove image association: {str(e)}")
+    
     def show_context_menu(self, position: QPoint):
         """Show context menu for a quick event.
         
@@ -525,9 +775,37 @@ class QuickEventsTab(QWidget):
         edit_action.triggered.connect(lambda: self.edit_quick_event(event_id))
         menu.addAction(edit_action)
         
+        manage_images_action = QAction("Manage Associated Images", self)
+        manage_images_action.triggered.connect(lambda: self.manage_event_images(event_id))
+        menu.addAction(manage_images_action)
+        
+        menu.addSeparator()
+        
         delete_action = QAction("Delete", self)
         delete_action.triggered.connect(lambda: self.delete_quick_event(event_id))
         menu.addAction(delete_action)
+        
+        # Show the menu
+        menu.exec(QCursor.pos())
+    
+    def show_images_context_menu(self, position: QPoint):
+        """Show context menu for an associated image.
+        
+        Args:
+            position: Position where the menu should be displayed
+        """
+        item = self.images_list.itemAt(position)
+        
+        if not item or item.flags() & Qt.ItemFlag.ItemIsSelectable == 0:
+            return
+            
+        image_id = item.data(Qt.ItemDataRole.UserRole)
+        
+        menu = QMenu(self)
+        
+        remove_action = QAction("Remove Association", self)
+        remove_action.triggered.connect(lambda: self.remove_image_association(image_id))
+        menu.addAction(remove_action)
         
         # Show the menu
         menu.exec(QCursor.pos())
