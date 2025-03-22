@@ -16,16 +16,20 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QGridLayout, QFileDialog, QMessageBox,
     QSizePolicy, QFrame, QApplication, QDialog, QListWidget,
-    QListWidgetItem, QMenu, QTabWidget, QSplitter, QComboBox
+    QListWidgetItem, QMenu, QTabWidget, QSplitter, QComboBox,
+    QToolButton, QInputDialog, QTextEdit
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QByteArray, QUrl, QBuffer, QIODevice, QPoint
-from PyQt6.QtGui import QPixmap, QImage, QClipboard, QImageReader, QAction, QCursor, QBrush, QColor
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QByteArray, QUrl, QBuffer, QIODevice, QPoint, QRect, QRectF
+from PyQt6.QtGui import QPixmap, QImage, QClipboard, QImageReader, QAction, QCursor, QBrush, QColor, QPainter, QPen, QFont, QTextCursor
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
 from app.db_sqlite import (
     get_image_quick_events, get_character_quick_events,
     associate_quick_event_with_image, remove_quick_event_image_association,
-    get_story_characters, get_character
+    get_story_characters, get_character,
+    add_character_tag_to_image, update_character_tag, remove_character_tag,
+    get_image_character_tags, create_quick_event, get_next_quick_event_sequence_number,
+    get_quick_event_characters
 )
 
 class ThumbnailWidget(QFrame):
@@ -294,6 +298,593 @@ class QuickEventSelectionDialog(QDialog):
         return self.selected_quick_event_ids
 
 
+class TaggableImageLabel(QLabel):
+    """A custom image label that allows for character tagging."""
+    
+    tag_added = pyqtSignal(float, float)  # x, y position in relative coordinates (0.0-1.0)
+    tag_selected = pyqtSignal(int)  # tag_id
+    
+    def __init__(self, parent=None):
+        """Initialize the taggable image label.
+        
+        Args:
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.setMouseTracking(True)
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        
+        self.tags = []  # List of tag objects
+        self.selected_tag_id = None
+        self.hover_tag_id = None
+        self.tag_mode = False  # True when in tag adding mode
+        
+        # Store the actual image size (needed for scaling)
+        self.image_width = 0
+        self.image_height = 0
+        self.offset_x = 0
+        self.offset_y = 0
+        
+    def set_image(self, pixmap):
+        """Set the image for the label.
+        
+        Args:
+            pixmap: QPixmap to display
+        """
+        self.setPixmap(pixmap)
+        self.image_width = pixmap.width()
+        self.image_height = pixmap.height()
+        
+        # Calculate offsets for centered image
+        label_width = self.width()
+        label_height = self.height()
+        
+        self.offset_x = max(0, (label_width - self.image_width) // 2)
+        self.offset_y = max(0, (label_height - self.image_height) // 2)
+        
+    def set_tags(self, tags):
+        """Set the character tags to display.
+        
+        Args:
+            tags: List of tag dictionaries
+        """
+        self.tags = tags
+        self.update()
+        
+    def enable_tag_mode(self, enabled=True):
+        """Enable or disable tag adding mode.
+        
+        Args:
+            enabled: Whether to enable tag mode
+        """
+        self.tag_mode = enabled
+        if enabled:
+            self.setCursor(Qt.CursorShape.CrossCursor)
+        else:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        
+    def mousePressEvent(self, event):
+        """Handle mouse press events.
+        
+        Args:
+            event: Mouse event
+        """
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self.tag_mode:
+                # Add a new tag
+                # Convert to relative coordinates (0.0-1.0)
+                rel_x, rel_y = self._to_relative_coords(event.position().x(), event.position().y())
+                if 0 <= rel_x <= 1 and 0 <= rel_y <= 1:
+                    self.tag_added.emit(rel_x, rel_y)
+            else:
+                # Check if a tag was clicked
+                clicked_tag_id = self._get_tag_at_position(event.position().x(), event.position().y())
+                if clicked_tag_id is not None:
+                    self.selected_tag_id = clicked_tag_id
+                    self.tag_selected.emit(clicked_tag_id)
+                    self.update()
+                else:
+                    # Deselect if clicking outside any tag
+                    if self.selected_tag_id is not None:
+                        self.selected_tag_id = None
+                        self.update()
+        
+        super().mousePressEvent(event)
+        
+    def mouseMoveEvent(self, event):
+        """Handle mouse move events.
+        
+        Args:
+            event: Mouse event
+        """
+        if not self.tag_mode:
+            # Check if hovering over a tag
+            hover_tag_id = self._get_tag_at_position(event.position().x(), event.position().y())
+            if hover_tag_id != self.hover_tag_id:
+                self.hover_tag_id = hover_tag_id
+                self.update()
+        
+        super().mouseMoveEvent(event)
+        
+    def _to_relative_coords(self, x, y):
+        """Convert absolute coordinates to relative coordinates.
+        
+        Args:
+            x: Absolute x coordinate
+            y: Absolute y coordinate
+            
+        Returns:
+            Tuple of (relative_x, relative_y)
+        """
+        # Adjust for image offset within label
+        x = x - self.offset_x
+        y = y - self.offset_y
+        
+        # Convert to relative coordinates
+        rel_x = max(0, min(1, x / self.image_width if self.image_width > 0 else 0))
+        rel_y = max(0, min(1, y / self.image_height if self.image_height > 0 else 0))
+        
+        return rel_x, rel_y
+        
+    def _to_absolute_coords(self, rel_x, rel_y):
+        """Convert relative coordinates to absolute coordinates.
+        
+        Args:
+            rel_x: Relative x coordinate (0.0-1.0)
+            rel_y: Relative y coordinate (0.0-1.0)
+            
+        Returns:
+            Tuple of (absolute_x, absolute_y)
+        """
+        # Convert to absolute coordinates
+        abs_x = int(rel_x * self.image_width) + self.offset_x
+        abs_y = int(rel_y * self.image_height) + self.offset_y
+        
+        return abs_x, abs_y
+        
+    def _get_tag_at_position(self, x, y):
+        """Get the tag ID at the given position.
+        
+        Args:
+            x: Absolute x coordinate
+            y: Absolute y coordinate
+            
+        Returns:
+            Tag ID or None if no tag at position
+        """
+        rel_x, rel_y = self._to_relative_coords(x, y)
+        
+        for tag in self.tags:
+            tag_x = tag['x_position']
+            tag_y = tag['y_position']
+            tag_width = tag['width']
+            tag_height = tag['height']
+            
+            if (tag_x <= rel_x <= tag_x + tag_width and
+                tag_y <= rel_y <= tag_y + tag_height):
+                return tag['id']
+                
+        return None
+        
+    def paintEvent(self, event):
+        """Override paint event to draw tags.
+        
+        Args:
+            event: Paint event
+        """
+        # Draw the image first
+        super().paintEvent(event)
+        
+        if not self.tags:
+            return
+            
+        painter = QPainter(self)
+        
+        for tag in self.tags:
+            tag_id = tag['id']
+            tag_x = tag['x_position']
+            tag_y = tag['y_position']
+            tag_width = tag['width']
+            tag_height = tag['height']
+            character_name = tag.get('character_name', 'Unknown')
+            
+            # Convert to absolute coordinates
+            abs_x, abs_y = self._to_absolute_coords(tag_x, tag_y)
+            abs_width = int(tag_width * self.image_width)
+            abs_height = int(tag_height * self.image_height)
+            
+            # Set pen color based on selection/hover state
+            if tag_id == self.selected_tag_id:
+                pen = QPen(QColor(255, 165, 0))  # Orange for selected
+                pen.setWidth(3)
+            elif tag_id == self.hover_tag_id:
+                pen = QPen(QColor(255, 255, 0))  # Yellow for hover
+                pen.setWidth(2)
+            else:
+                pen = QPen(QColor(0, 255, 0))  # Green for normal
+                pen.setWidth(2)
+                
+            painter.setPen(pen)
+            
+            # Draw tag rectangle
+            painter.drawRect(abs_x, abs_y, abs_width, abs_height)
+            
+            # Draw character name
+            painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            painter.setPen(QColor(255, 255, 255))  # White text
+            
+            # Draw background for text
+            text_rect = QRect(abs_x, abs_y - 20, abs_width, 20)
+            painter.fillRect(text_rect, QColor(0, 0, 0, 180))  # Semi-transparent black background
+            
+            # Draw text
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, character_name)
+
+
+class CharacterSelectionDialog(QDialog):
+    """Dialog for selecting a character to tag."""
+    
+    def __init__(self, db_conn, story_id: int, parent=None):
+        """Initialize the character selection dialog.
+        
+        Args:
+            db_conn: Database connection
+            story_id: ID of the story
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.db_conn = db_conn
+        self.story_id = story_id
+        self.selected_character_id = None
+        
+        self.init_ui()
+        self.load_characters()
+        
+    def init_ui(self):
+        """Initialize the user interface."""
+        self.setWindowTitle("Select Character to Tag")
+        self.resize(400, 300)
+        
+        layout = QVBoxLayout(self)
+        
+        # Character list
+        self.character_list = QListWidget()
+        self.character_list.itemDoubleClicked.connect(self.accept)
+        layout.addWidget(self.character_list)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        self.select_button = QPushButton("Select")
+        self.select_button.clicked.connect(self.accept)
+        
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        
+        button_layout.addStretch()
+        button_layout.addWidget(self.select_button)
+        button_layout.addWidget(self.cancel_button)
+        
+        layout.addLayout(button_layout)
+    
+    def load_characters(self):
+        """Load characters for the story."""
+        try:
+            # Get all characters for the story
+            characters = get_story_characters(self.db_conn, self.story_id)
+            
+            # Add to list widget
+            for character in characters:
+                item = QListWidgetItem(character['name'])
+                item.setData(Qt.ItemDataRole.UserRole, character['id'])
+                self.character_list.addItem(item)
+                
+            # Select first character if available
+            if self.character_list.count() > 0:
+                self.character_list.setCurrentRow(0)
+                
+        except Exception as e:
+            print(f"Error loading characters: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to load characters: {str(e)}")
+    
+    def get_selected_character_id(self) -> int:
+        """Get the ID of the selected character.
+        
+        Returns:
+            Character ID or None if no selection
+        """
+        current_item = self.character_list.currentItem()
+        if current_item:
+            return current_item.data(Qt.ItemDataRole.UserRole)
+        return None
+
+
+class CharacterTagCompleter(QWidget):
+    """Popup widget for character tag autocompletion."""
+    
+    character_selected = pyqtSignal(str)  # Signal emitted when a character is selected
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        self.characters = []
+        self.filtered_characters = []
+        self.current_filter = ""
+        
+        self.init_ui()
+        
+    def init_ui(self):
+        """Initialize the UI."""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Create a list widget for character suggestions
+        self.list_widget = QListWidget()
+        self.list_widget.setFrameShape(QFrame.Shape.NoFrame)
+        self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list_widget.setMaximumHeight(200)
+        self.list_widget.itemClicked.connect(self.on_item_clicked)
+        
+        # Style the list widget
+        self.list_widget.setStyleSheet("""
+            QListWidget {
+                background-color: #2D2D30;
+                color: #FFFFFF;
+                border: 1px solid #3E3E42;
+                border-radius: 3px;
+            }
+            QListWidget::item {
+                padding: 4px;
+            }
+            QListWidget::item:selected {
+                background-color: #3399FF;
+            }
+            QListWidget::item:hover {
+                background-color: #3E3E40;
+            }
+        """)
+        
+        layout.addWidget(self.list_widget)
+        
+    def set_characters(self, characters):
+        """Set the available characters.
+        
+        Args:
+            characters: List of character dictionaries
+        """
+        self.characters = characters
+        
+    def set_filter(self, filter_text):
+        """Set the filter for character suggestions.
+        
+        Args:
+            filter_text: Text to filter characters by
+        """
+        self.current_filter = filter_text.lower()
+        self.update_suggestions()
+        
+    def update_suggestions(self):
+        """Update the character suggestions based on the current filter."""
+        self.list_widget.clear()
+        
+        self.filtered_characters = []
+        
+        for character in self.characters:
+            name = character['name']
+            
+            # Filter characters based on the current text
+            if self.current_filter in name.lower():
+                self.filtered_characters.append(character)
+                self.list_widget.addItem(name)
+        
+        # Show or hide the popup based on whether there are suggestions
+        if self.filtered_characters:
+            self.list_widget.setCurrentRow(0)  # Select the first item
+            self.resize(self.list_widget.sizeHint())
+            self.show()
+        else:
+            self.hide()
+            
+    def on_item_clicked(self, item):
+        """Handle item clicks.
+        
+        Args:
+            item: The clicked list item
+        """
+        character_name = item.text()
+        self.character_selected.emit(character_name)
+        self.hide()
+        
+    def keyPressEvent(self, event):
+        """Handle key press events.
+        
+        Args:
+            event: Key event
+        """
+        key = event.key()
+        
+        if key == Qt.Key.Key_Escape:
+            self.hide()
+            event.accept()
+        elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
+            current_item = self.list_widget.currentItem()
+            if current_item:
+                self.on_item_clicked(current_item)
+            event.accept()
+        elif key == Qt.Key.Key_Up:
+            current_row = self.list_widget.currentRow()
+            if current_row > 0:
+                self.list_widget.setCurrentRow(current_row - 1)
+            event.accept()
+        elif key == Qt.Key.Key_Down:
+            current_row = self.list_widget.currentRow()
+            if current_row < self.list_widget.count() - 1:
+                self.list_widget.setCurrentRow(current_row + 1)
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+
+class QuickEventEditor(QDialog):
+    """Dialog for creating a quick event with character tag support."""
+    
+    def __init__(self, db_conn, story_id: int, image_id: int, parent=None):
+        """Initialize the quick event editor.
+        
+        Args:
+            db_conn: Database connection
+            story_id: ID of the story
+            image_id: ID of the image to associate with the quick event
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.db_conn = db_conn
+        self.story_id = story_id
+        self.image_id = image_id
+        
+        # Get all characters for the story for tagging
+        self.characters = get_story_characters(db_conn, self.story_id)
+        
+        self.init_ui()
+        
+        # Create character tag completer
+        self.tag_completer = CharacterTagCompleter(self)
+        self.tag_completer.set_characters(self.characters)
+        self.tag_completer.character_selected.connect(self.insert_character_tag)
+        self.tag_completer.hide()
+        
+    def init_ui(self):
+        """Initialize the user interface."""
+        self.setWindowTitle("Create Quick Event")
+        self.resize(450, 200)
+        
+        layout = QVBoxLayout(self)
+        
+        # Character selection
+        character_layout = QHBoxLayout()
+        character_layout.addWidget(QLabel("Character:"))
+        
+        self.character_combo = QComboBox()
+        
+        # Add characters to combo box
+        for character in self.characters:
+            self.character_combo.addItem(character['name'], character['id'])
+            
+        character_layout.addWidget(self.character_combo)
+        layout.addLayout(character_layout)
+        
+        # Text edit
+        self.text_edit = QTextEdit()
+        self.text_edit.setPlaceholderText("Enter quick event text. Use @name to tag characters (e.g., @John kissed @Mary)")
+        self.text_edit.textChanged.connect(self.check_for_character_tag)
+        layout.addWidget(self.text_edit)
+        
+        # Available characters
+        if self.characters:
+            char_names = [f"@{char['name']}" for char in self.characters]
+            characters_label = QLabel("Available character tags: " + ", ".join(char_names))
+            characters_label.setWordWrap(True)
+            characters_label.setStyleSheet("color: #666; font-style: italic;")
+            layout.addWidget(characters_label)
+        
+        # Note explaining automatic association
+        note_label = QLabel("Note: This quick event will be automatically associated with the current image.")
+        note_label.setStyleSheet("color: #666; font-style: italic;")
+        layout.addWidget(note_label)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        save_button = QPushButton("Save")
+        save_button.clicked.connect(self.accept)
+        
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+        
+        button_layout.addStretch()
+        button_layout.addWidget(save_button)
+        button_layout.addWidget(cancel_button)
+        
+        layout.addLayout(button_layout)
+        
+    def get_text(self) -> str:
+        """Get the edited text.
+        
+        Returns:
+            The text from the editor
+        """
+        return self.text_edit.toPlainText()
+        
+    def get_character_id(self) -> int:
+        """Get the selected character ID.
+        
+        Returns:
+            ID of the selected character
+        """
+        return self.character_combo.currentData()
+        
+    def check_for_character_tag(self):
+        """Check if the user is typing a character tag and provide suggestions."""
+        cursor = self.text_edit.textCursor()
+        text = self.text_edit.toPlainText()
+        
+        # Find the current word being typed
+        pos = cursor.position()
+        start = max(0, pos - 1)
+        
+        # Check if we're in the middle of typing a tag
+        if start >= 0 and pos <= len(text):
+            # Look backward to find the start of the current tag
+            tag_start = text.rfind('@', 0, pos)
+            
+            if tag_start >= 0 and tag_start < pos:
+                # We found a @ character before the cursor
+                # Extract the partial tag text
+                partial_tag = text[tag_start + 1:pos]
+                
+                # Only show suggestions if we're actively typing a tag
+                if tag_start == pos - 1 or partial_tag.strip():
+                    # Position the completer popup below the cursor
+                    cursor_rect = self.text_edit.cursorRect()
+                    global_pos = self.text_edit.mapToGlobal(cursor_rect.bottomLeft())
+                    
+                    self.tag_completer.set_filter(partial_tag)
+                    self.tag_completer.move(global_pos)
+                    return
+                    
+        # Hide the completer if we're not typing a tag
+        self.tag_completer.hide()
+        
+    def insert_character_tag(self, character_name: str):
+        """Insert a character tag at the current cursor position.
+        
+        Args:
+            character_name: Name of the character to tag
+        """
+        cursor = self.text_edit.textCursor()
+        text = self.text_edit.toPlainText()
+        pos = cursor.position()
+        
+        # Find the start of the current tag
+        tag_start = text.rfind('@', 0, pos)
+        
+        if tag_start >= 0:
+            # Replace the partial tag with the full tag
+            cursor.setPosition(tag_start, QTextCursor.MoveMode.MoveAnchor)
+            cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
+            cursor.insertText(f"@{character_name}")
+            
+            # Add a space after the tag
+            cursor.insertText(" ")
+            
+            # Set focus back to the text edit
+            self.text_edit.setFocus()
+
+
 class ImageDetailDialog(QDialog):
     """Dialog for viewing image details and managing associated quick events."""
     
@@ -313,12 +904,19 @@ class ImageDetailDialog(QDialog):
         self.image_data = image_data
         self.pixmap = pixmap
         self.quick_events = []
+        self.character_tags = []
         
         # Get the story ID for this image
         self.story_id = image_data.get('story_id')
         
+        # Load characters for the story (needed for character tagging)
+        self.characters = []
+        if self.story_id:
+            self.characters = get_story_characters(self.db_conn, self.story_id)
+        
         self.init_ui()
         self.load_quick_events()
+        self.load_character_tags()
     
     def init_ui(self):
         """Initialize the user interface."""
@@ -334,9 +932,24 @@ class ImageDetailDialog(QDialog):
         image_tab = QWidget()
         image_layout = QVBoxLayout(image_tab)
         
-        # Image view
-        image_label = QLabel()
-        image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Image view with tagging toolbar
+        image_view_layout = QVBoxLayout()
+        
+        # Tagging toolbar
+        tagging_toolbar = QHBoxLayout()
+        
+        self.tag_mode_button = QPushButton("Tag Character")
+        self.tag_mode_button.setCheckable(True)
+        self.tag_mode_button.toggled.connect(self.toggle_tag_mode)
+        tagging_toolbar.addWidget(self.tag_mode_button)
+        
+        tagging_toolbar.addStretch()
+        
+        image_view_layout.addLayout(tagging_toolbar)
+        
+        # Taggable image label
+        self.image_label = TaggableImageLabel()
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Scale image to fit dialog
         max_size = QSize(750, 500)
@@ -346,8 +959,13 @@ class ImageDetailDialog(QDialog):
             Qt.TransformationMode.SmoothTransformation
         )
         
-        image_label.setPixmap(scaled_pixmap)
-        image_layout.addWidget(image_label)
+        self.image_label.set_image(scaled_pixmap)
+        self.image_label.tag_added.connect(self.add_character_tag)
+        self.image_label.tag_selected.connect(self.on_tag_selected)
+        
+        image_view_layout.addWidget(self.image_label)
+        
+        image_layout.addLayout(image_view_layout)
         
         # Image metadata
         metadata_layout = QHBoxLayout()
@@ -382,6 +1000,10 @@ class ImageDetailDialog(QDialog):
         self.associate_button.clicked.connect(self.associate_quick_events)
         toolbar_layout.addWidget(self.associate_button)
         
+        self.create_quick_event_button = QPushButton("Create Quick Event")
+        self.create_quick_event_button.clicked.connect(self.create_quick_event)
+        toolbar_layout.addWidget(self.create_quick_event_button)
+        
         toolbar_layout.addStretch()
         quick_events_layout.addLayout(toolbar_layout)
         
@@ -391,9 +1013,30 @@ class ImageDetailDialog(QDialog):
         self.quick_events_list.customContextMenuRequested.connect(self.show_quick_event_context_menu)
         quick_events_layout.addWidget(self.quick_events_list)
         
+        # Character Tags tab
+        tags_tab = QWidget()
+        tags_layout = QVBoxLayout(tags_tab)
+        
+        # Toolbar for character tags
+        tags_toolbar_layout = QHBoxLayout()
+        
+        self.remove_tag_button = QPushButton("Remove Selected Tag")
+        self.remove_tag_button.setEnabled(False)
+        self.remove_tag_button.clicked.connect(self.remove_selected_tag)
+        tags_toolbar_layout.addWidget(self.remove_tag_button)
+        
+        tags_toolbar_layout.addStretch()
+        tags_layout.addLayout(tags_toolbar_layout)
+        
+        # Character tags list
+        self.character_tags_list = QListWidget()
+        self.character_tags_list.itemClicked.connect(self.on_tag_list_item_clicked)
+        tags_layout.addWidget(self.character_tags_list)
+        
         # Add tabs
         self.tab_widget.addTab(image_tab, "Image")
         self.tab_widget.addTab(quick_events_tab, "Quick Events")
+        self.tab_widget.addTab(tags_tab, "Character Tags")
         
         main_layout.addWidget(self.tab_widget)
         
@@ -406,6 +1049,170 @@ class ImageDetailDialog(QDialog):
         button_layout.addWidget(self.close_button)
         
         main_layout.addLayout(button_layout)
+    
+    def toggle_tag_mode(self, enabled):
+        """Toggle character tagging mode.
+        
+        Args:
+            enabled: Whether tagging mode is enabled
+        """
+        self.image_label.enable_tag_mode(enabled)
+    
+    def load_character_tags(self):
+        """Load character tags for this image."""
+        try:
+            self.character_tags = get_image_character_tags(self.db_conn, self.image_id)
+            self.update_character_tags_list()
+            self.image_label.set_tags(self.character_tags)
+        except Exception as e:
+            print(f"Error loading character tags: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to load character tags: {str(e)}")
+    
+    def update_character_tags_list(self):
+        """Update the character tags list with current tags."""
+        self.character_tags_list.clear()
+        
+        if not self.character_tags:
+            empty_item = QListWidgetItem("No character tags on this image.")
+            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
+            self.character_tags_list.addItem(empty_item)
+            return
+        
+        # Add items for each tag
+        for tag in self.character_tags:
+            character_name = tag.get('character_name', 'Unknown')
+            position_text = f"({int(tag['x_position'] * 100)}%, {int(tag['y_position'] * 100)}%)"
+            
+            item = QListWidgetItem(f"{character_name} {position_text}")
+            item.setData(Qt.ItemDataRole.UserRole, tag['id'])
+            
+            if tag.get('note'):
+                item.setToolTip(tag['note'])
+                
+            self.character_tags_list.addItem(item)
+    
+    def add_character_tag(self, x_position, y_position):
+        """Add a character tag at the given position.
+        
+        Args:
+            x_position: X position (0.0-1.0)
+            y_position: Y position (0.0-1.0)
+        """
+        if not self.story_id:
+            QMessageBox.warning(self, "Error", "Cannot determine story ID for this image.")
+            return
+        
+        # Show character selection dialog
+        dialog = CharacterSelectionDialog(
+            self.db_conn,
+            self.story_id,
+            parent=self
+        )
+        
+        if dialog.exec():
+            character_id = dialog.get_selected_character_id()
+            
+            if not character_id:
+                return
+                
+            # Ask for an optional note
+            note, ok = QInputDialog.getText(
+                self,
+                "Tag Note",
+                "Enter an optional note for this tag:"
+            )
+            
+            if not ok:
+                note = None
+                
+            try:
+                # Add the tag to the database
+                tag_id = add_character_tag_to_image(
+                    self.db_conn,
+                    self.image_id,
+                    character_id,
+                    x_position,
+                    y_position,
+                    0.1,  # Default tag width (10% of image)
+                    0.1,  # Default tag height (10% of image)
+                    note
+                )
+                
+                if tag_id:
+                    # Reload character tags to update the UI
+                    self.load_character_tags()
+                    
+                    # Turn off tag mode
+                    self.tag_mode_button.setChecked(False)
+                else:
+                    QMessageBox.warning(self, "Error", "Failed to add character tag.")
+            except Exception as e:
+                print(f"Error adding character tag: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to add character tag: {str(e)}")
+    
+    def on_tag_selected(self, tag_id):
+        """Handle tag selection on the image.
+        
+        Args:
+            tag_id: ID of the selected tag
+        """
+        # Select the corresponding item in the list
+        for i in range(self.character_tags_list.count()):
+            item = self.character_tags_list.item(i)
+            if item.data(Qt.ItemDataRole.UserRole) == tag_id:
+                self.character_tags_list.setCurrentItem(item)
+                break
+                
+        # Enable the remove button
+        self.remove_tag_button.setEnabled(True)
+    
+    def on_tag_list_item_clicked(self, item):
+        """Handle tag selection in the list.
+        
+        Args:
+            item: Selected list item
+        """
+        tag_id = item.data(Qt.ItemDataRole.UserRole)
+        
+        # Select the tag on the image
+        self.image_label.selected_tag_id = tag_id
+        self.image_label.update()
+        
+        # Enable the remove button
+        self.remove_tag_button.setEnabled(True)
+    
+    def remove_selected_tag(self):
+        """Remove the selected character tag."""
+        # Get the selected tag ID
+        current_item = self.character_tags_list.currentItem()
+        if not current_item:
+            return
+            
+        tag_id = current_item.data(Qt.ItemDataRole.UserRole)
+        
+        # Confirm deletion
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Removal",
+            "Are you sure you want to remove this character tag?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if confirm == QMessageBox.StandardButton.Yes:
+            try:
+                success = remove_character_tag(self.db_conn, tag_id)
+                
+                if success:
+                    # Reload character tags to update the UI
+                    self.load_character_tags()
+                    
+                    # Disable the remove button
+                    self.remove_tag_button.setEnabled(False)
+                else:
+                    QMessageBox.warning(self, "Error", "Failed to remove character tag.")
+            except Exception as e:
+                print(f"Error removing character tag: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to remove character tag: {str(e)}")
     
     def load_quick_events(self):
         """Load quick events associated with this image."""
@@ -492,6 +1299,28 @@ class ImageDetailDialog(QDialog):
                 print(f"Error managing quick event associations: {e}")
                 QMessageBox.warning(self, "Error", f"Failed to update quick event associations: {str(e)}")
     
+    def show_quick_event_context_menu(self, position: QPoint):
+        """Show context menu for a quick event.
+        
+        Args:
+            position: Position where the menu should be displayed
+        """
+        item = self.quick_events_list.itemAt(position)
+        
+        if not item or item.flags() & Qt.ItemFlag.ItemIsSelectable == 0:
+            return
+            
+        quick_event_id = item.data(Qt.ItemDataRole.UserRole)
+        
+        menu = QMenu(self)
+        
+        remove_action = QAction("Remove Association", self)
+        remove_action.triggered.connect(lambda: self.remove_quick_event_association(quick_event_id))
+        menu.addAction(remove_action)
+        
+        # Show the menu
+        menu.exec(QCursor.pos())
+
     def remove_quick_event_association(self, quick_event_id: int):
         """Remove a quick event association from this image.
         
@@ -517,28 +1346,81 @@ class ImageDetailDialog(QDialog):
             except Exception as e:
                 print(f"Error removing quick event association: {e}")
                 QMessageBox.warning(self, "Error", f"Failed to remove quick event association: {str(e)}")
-    
-    def show_quick_event_context_menu(self, position: QPoint):
-        """Show context menu for a quick event.
-        
-        Args:
-            position: Position where the menu should be displayed
-        """
-        item = self.quick_events_list.itemAt(position)
-        
-        if not item or item.flags() & Qt.ItemFlag.ItemIsSelectable == 0:
+
+    def create_quick_event(self):
+        """Create a new quick event and associate it with this image."""
+        if not self.story_id:
+            QMessageBox.warning(self, "Error", "Cannot determine story ID for this image.")
             return
             
-        quick_event_id = item.data(Qt.ItemDataRole.UserRole)
+        # Show character selection and quick event editor dialog
+        dialog = QuickEventEditor(
+            self.db_conn,
+            self.story_id,
+            self.image_id,
+            parent=self
+        )
         
-        menu = QMenu(self)
-        
-        remove_action = QAction("Remove Association", self)
-        remove_action.triggered.connect(lambda: self.remove_quick_event_association(quick_event_id))
-        menu.addAction(remove_action)
-        
-        # Show the menu
-        menu.exec(QCursor.pos())
+        if dialog.exec():
+            try:
+                # Get the character ID and text
+                character_id = dialog.get_character_id()
+                text = dialog.get_text()
+                
+                if not text.strip():
+                    QMessageBox.warning(self, "Error", "Quick event text cannot be empty.")
+                    return
+                
+                # Get the next sequence number for this character
+                sequence_number = get_next_quick_event_sequence_number(self.db_conn, character_id)
+                
+                # Create the quick event
+                quick_event_id = create_quick_event(
+                    self.db_conn,
+                    text,
+                    character_id,
+                    sequence_number
+                )
+                
+                if quick_event_id:
+                    # Associate the quick event with this image
+                    associate_quick_event_with_image(
+                        self.db_conn,
+                        quick_event_id,
+                        self.image_id
+                    )
+                    
+                    # Process character tags in the text
+                    chars_text = text
+                    tagged_characters = []
+                    
+                    for character in self.characters:
+                        tag = f"@{character['name']}"
+                        if tag in chars_text:
+                            # Tag character
+                            tagged_character_id = character['id']
+                            if tagged_character_id != character_id:  # Don't tag the main character
+                                tagged_characters.append(tagged_character_id)
+                    
+                    # Associate the tagged characters with the quick event
+                    # This would typically call a function like associate_character_with_quick_event
+                    # For now, we'll just show a message with the tagged characters
+                    if tagged_characters:
+                        print(f"Tagged characters for quick event {quick_event_id}: {tagged_characters}")
+                    
+                    # Reload quick events to update the UI
+                    self.load_quick_events()
+                    
+                    # Switch to the Quick Events tab
+                    for i in range(self.tab_widget.count()):
+                        if self.tab_widget.tabText(i) == "Quick Events":
+                            self.tab_widget.setCurrentIndex(i)
+                            break
+                else:
+                    QMessageBox.warning(self, "Error", "Failed to create quick event.")
+            except Exception as e:
+                print(f"Error creating quick event: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to create quick event: {str(e)}")
 
 
 class GalleryWidget(QWidget):

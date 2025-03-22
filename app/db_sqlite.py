@@ -250,6 +250,38 @@ def create_tables(conn: sqlite3.Connection) -> None:
     )
     ''')
     
+    # Create image_character_tags table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS image_character_tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        image_id INTEGER NOT NULL,
+        character_id INTEGER NOT NULL,
+        x_position REAL NOT NULL,
+        y_position REAL NOT NULL,
+        width REAL NOT NULL,
+        height REAL NOT NULL,
+        note TEXT,
+        FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE,
+        FOREIGN KEY (character_id) REFERENCES characters (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    # Create character_details table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS character_details (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        character_id INTEGER NOT NULL,
+        detail_text TEXT NOT NULL,
+        detail_type TEXT DEFAULT 'GENERAL',
+        sequence_number INTEGER DEFAULT 0,
+        FOREIGN KEY (character_id) REFERENCES characters (id) ON DELETE CASCADE
+    )
+    ''')
+    
     conn.commit()
 
 
@@ -604,6 +636,9 @@ def initialize_database(db_path: str) -> sqlite3.Connection:
     # Create tables
     create_tables(conn)
     
+    # Make sure the image_character_tags table is created
+    create_image_character_tags_table(conn)
+    
     return conn
 
 
@@ -729,7 +764,7 @@ def update_image(conn: sqlite3.Connection, image_id: int, title: Optional[str] =
     params.append(image_id)
     
     cursor = conn.cursor()
-    cursor.execute(query, params)
+    cursor.execute(query, tuple(params))
     conn.commit()
 
 
@@ -1762,4 +1797,421 @@ def get_image_quick_events(conn: sqlite3.Connection, image_id: int) -> List[Dict
         return [dict(row) for row in rows]
     except sqlite3.Error as e:
         print(f"Error getting image quick events: {e}")
-        return [] 
+        return []
+
+
+def create_image_character_tags_table(conn: sqlite3.Connection) -> None:
+    """Create the image_character_tags table if it doesn't exist.
+    
+    This table stores character tags on images (Facebook-like tagging).
+    
+    Args:
+        conn: Database connection
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS image_character_tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        image_id INTEGER NOT NULL,
+        character_id INTEGER NOT NULL,
+        x_position REAL NOT NULL,
+        y_position REAL NOT NULL,
+        width REAL NOT NULL,
+        height REAL NOT NULL,
+        note TEXT,
+        FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE,
+        FOREIGN KEY (character_id) REFERENCES characters (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    conn.commit()
+
+
+def add_character_tag_to_image(conn: sqlite3.Connection, 
+                             image_id: int, 
+                             character_id: int,
+                             x_position: float,
+                             y_position: float,
+                             width: float = 0.1,
+                             height: float = 0.1,
+                             note: str = None) -> int:
+    """Add a character tag to an image.
+    
+    Args:
+        conn: Database connection
+        image_id: ID of the image
+        character_id: ID of the character
+        x_position: X position of the tag (0.0-1.0, relative to image width)
+        y_position: Y position of the tag (0.0-1.0, relative to image height)
+        width: Width of the tag box (0.0-1.0, relative to image width)
+        height: Height of the tag box (0.0-1.0, relative to image height)
+        note: Optional note for the tag
+        
+    Returns:
+        ID of the new tag or None if failed
+    """
+    try:
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        
+        cursor.execute('''
+        INSERT INTO image_character_tags (
+            created_at, updated_at, image_id, character_id, 
+            x_position, y_position, width, height, note
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (now, now, image_id, character_id, x_position, y_position, width, height, note))
+        
+        conn.commit()
+        return cursor.lastrowid
+    except sqlite3.Error as e:
+        print(f"Error adding character tag to image: {e}")
+        return None
+
+
+def update_character_tag(conn: sqlite3.Connection,
+                        tag_id: int,
+                        x_position: float = None,
+                        y_position: float = None,
+                        width: float = None,
+                        height: float = None,
+                        note: str = None) -> bool:
+    """Update a character tag on an image.
+    
+    Args:
+        conn: Database connection
+        tag_id: ID of the tag to update
+        x_position: New X position of the tag (optional)
+        y_position: New Y position of the tag (optional)
+        width: New width of the tag box (optional)
+        height: New height of the tag box (optional)
+        note: New note for the tag (optional)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        
+        # Get current values
+        cursor.execute('''
+        SELECT x_position, y_position, width, height, note
+        FROM image_character_tags
+        WHERE id = ?
+        ''', (tag_id,))
+        
+        row = cursor.fetchone()
+        if not row:
+            return False
+            
+        # Use provided values or keep existing ones
+        x_pos = x_position if x_position is not None else row['x_position']
+        y_pos = y_position if y_position is not None else row['y_position']
+        w = width if width is not None else row['width']
+        h = height if height is not None else row['height']
+        n = note if note is not None else row['note']
+        
+        cursor.execute('''
+        UPDATE image_character_tags
+        SET updated_at = ?, x_position = ?, y_position = ?, width = ?, height = ?, note = ?
+        WHERE id = ?
+        ''', (now, x_pos, y_pos, w, h, n, tag_id))
+        
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Error updating character tag: {e}")
+        return False
+
+
+def remove_character_tag(conn: sqlite3.Connection, tag_id: int) -> bool:
+    """Remove a character tag from an image.
+    
+    Args:
+        conn: Database connection
+        tag_id: ID of the tag to remove
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        DELETE FROM image_character_tags
+        WHERE id = ?
+        ''', (tag_id,))
+        
+        conn.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error removing character tag: {e}")
+        return False
+
+
+def get_image_character_tags(conn: sqlite3.Connection, image_id: int) -> List[Dict[str, Any]]:
+    """Get all character tags for an image.
+    
+    Args:
+        conn: Database connection
+        image_id: ID of the image
+        
+    Returns:
+        List of tag dictionaries
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        SELECT t.*, c.name as character_name
+        FROM image_character_tags t
+        JOIN characters c ON t.character_id = c.id
+        WHERE t.image_id = ?
+        ORDER BY t.created_at
+        ''', (image_id,))
+        
+        rows = cursor.fetchall()
+        
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error getting image character tags: {e}")
+        return []
+
+
+def get_character_image_tags(conn: sqlite3.Connection, character_id: int) -> List[Dict[str, Any]]:
+    """Get all image tags for a character.
+    
+    Args:
+        conn: Database connection
+        character_id: ID of the character
+        
+    Returns:
+        List of tag dictionaries
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        SELECT t.*, i.title as image_title, i.filename as image_filename, i.path as image_path
+        FROM image_character_tags t
+        JOIN images i ON t.image_id = i.id
+        WHERE t.character_id = ?
+        ORDER BY t.created_at DESC
+        ''', (character_id,))
+        
+        rows = cursor.fetchall()
+        
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error getting character image tags: {e}")
+        return []
+
+
+def create_character_details_table(conn: sqlite3.Connection) -> None:
+    """Create the character_details table if it doesn't exist.
+    
+    This table stores miscellaneous details about characters like traits, 
+    background info, personality characteristics, etc.
+    
+    Args:
+        conn: Database connection
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS character_details (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        character_id INTEGER NOT NULL,
+        detail_text TEXT NOT NULL,
+        detail_type TEXT DEFAULT 'GENERAL',
+        sequence_number INTEGER DEFAULT 0,
+        FOREIGN KEY (character_id) REFERENCES characters (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    conn.commit()
+
+
+def add_character_detail(conn: sqlite3.Connection, 
+                       character_id: int, 
+                       detail_text: str,
+                       detail_type: str = "GENERAL") -> int:
+    """Add a new detail to a character.
+    
+    Args:
+        conn: Database connection
+        character_id: ID of the character
+        detail_text: Text describing the detail (e.g., "Afraid of heights")
+        detail_type: Category of detail (e.g., "TRAIT", "BACKGROUND", "PERSONALITY")
+        
+    Returns:
+        ID of the new detail or None if failed
+    """
+    try:
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        
+        # Get the next sequence number
+        cursor.execute('''
+        SELECT MAX(sequence_number) as max_seq
+        FROM character_details
+        WHERE character_id = ?
+        ''', (character_id,))
+        
+        result = cursor.fetchone()
+        next_seq = 0
+        if result and result['max_seq'] is not None:
+            next_seq = result['max_seq'] + 1
+        
+        cursor.execute('''
+        INSERT INTO character_details (
+            created_at, updated_at, character_id, detail_text, 
+            detail_type, sequence_number
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ''', (now, now, character_id, detail_text, detail_type, next_seq))
+        
+        conn.commit()
+        return cursor.lastrowid
+    except sqlite3.Error as e:
+        print(f"Error adding character detail: {e}")
+        return None
+
+
+def update_character_detail(conn: sqlite3.Connection,
+                          detail_id: int,
+                          detail_text: str = None,
+                          detail_type: str = None) -> bool:
+    """Update a character detail.
+    
+    Args:
+        conn: Database connection
+        detail_id: ID of the detail to update
+        detail_text: New text for the detail
+        detail_type: New type for the detail
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        
+        # Build the query based on provided parameters
+        update_parts = ['updated_at = ?']
+        params = [now]
+        
+        if detail_text is not None:
+            update_parts.append('detail_text = ?')
+            params.append(detail_text)
+            
+        if detail_type is not None:
+            update_parts.append('detail_type = ?')
+            params.append(detail_type)
+        
+        # If nothing to update, return early
+        if len(params) == 1:  # Only updated_at
+            return True
+            
+        # Complete the query
+        query = f'''
+        UPDATE character_details
+        SET {', '.join(update_parts)}
+        WHERE id = ?
+        '''
+        
+        params.append(detail_id)
+        cursor.execute(query, tuple(params))
+        
+        conn.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error updating character detail: {e}")
+        return False
+
+
+def delete_character_detail(conn: sqlite3.Connection, detail_id: int) -> bool:
+    """Delete a character detail.
+    
+    Args:
+        conn: Database connection
+        detail_id: ID of the detail to delete
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        DELETE FROM character_details
+        WHERE id = ?
+        ''', (detail_id,))
+        
+        conn.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error deleting character detail: {e}")
+        return False
+
+
+def get_character_details(conn: sqlite3.Connection, character_id: int) -> List[Dict[str, Any]]:
+    """Get all details for a character.
+    
+    Args:
+        conn: Database connection
+        character_id: ID of the character
+        
+    Returns:
+        List of detail dictionaries
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        SELECT *
+        FROM character_details
+        WHERE character_id = ?
+        ORDER BY sequence_number, created_at
+        ''', (character_id,))
+        
+        rows = cursor.fetchall()
+        
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error getting character details: {e}")
+        return []
+
+
+def update_character_detail_sequence(conn: sqlite3.Connection, 
+                                  detail_id: int, 
+                                  new_sequence: int) -> bool:
+    """Update the sequence number of a character detail.
+    
+    Args:
+        conn: Database connection
+        detail_id: ID of the detail
+        new_sequence: New sequence number
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        
+        cursor.execute('''
+        UPDATE character_details
+        SET sequence_number = ?, updated_at = ?
+        WHERE id = ?
+        ''', (new_sequence, now, detail_id))
+        
+        conn.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error updating character detail sequence: {e}")
+        return False 
