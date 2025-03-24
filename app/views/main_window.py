@@ -24,6 +24,7 @@ from app.views.story_board import StoryBoardWidget
 from app.views.settings_dialog import SettingsDialog
 from app.views.gallery_widget import GalleryWidget
 from app.views.timeline_widget import TimelineWidget
+from app.views.recognition_viewer import RecognitionDatabaseViewer
 
 
 class MainWindow(QMainWindow):
@@ -115,6 +116,15 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
+        # Create Tools menu
+        tools_menu = menu_bar.addMenu("&Tools")
+        
+        # Add Recognition Database Viewer action
+        recog_db_action = QAction("&Recognition Database Viewer", self)
+        recog_db_action.setStatusTip("View and test the image recognition database")
+        recog_db_action.triggered.connect(self.on_open_recognition_viewer)
+        tools_menu.addAction(recog_db_action)
+        
         # Create Settings menu
         settings_menu = menu_bar.addMenu("&Settings")
         
@@ -124,6 +134,12 @@ class MainWindow(QMainWindow):
         preferences_action.setStatusTip("Open the settings dialog")
         preferences_action.triggered.connect(self.on_open_settings)
         settings_menu.addAction(preferences_action)
+    
+    def on_open_recognition_viewer(self) -> None:
+        """Open the recognition database viewer dialog."""
+        recognition_viewer = RecognitionDatabaseViewer(self.db_conn, self)
+        recognition_viewer.exec()
+        self.status_bar.showMessage("Recognition database viewer closed", 3000)
     
     def on_open_settings(self) -> None:
         """Open the settings dialog."""

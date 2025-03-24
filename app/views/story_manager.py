@@ -215,79 +215,41 @@ class StoryManagerWidget(QWidget):
         chars = string.ascii_uppercase + string.digits
         return ''.join(random.choice(chars) for _ in range(length))
     
+    def clear_form(self) -> None:
+        """Clear the story details form to create a new story."""
+        self.title_edit.clear()
+        self.description_edit.clear()
+        self.type_combo.setCurrentIndex(0)
+        self.folder_edit.clear()
+        self.universe_edit.clear()
+        self.series_check.setCurrentIndex(0)
+        self.series_name_edit.clear()
+        self.series_name_edit.setEnabled(False)
+        self.series_order_edit.clear()
+        self.series_order_edit.setEnabled(False)
+        self.author_edit.clear()
+        self.year_edit.clear()
+        
+        # Deselect any story in the list
+        self.story_list.clearSelection()
+        
+        # Disable the load button
+        self.load_story_button.setEnabled(False)
+        
+        # Set focus to title field
+        self.title_edit.setFocus()
+    
     def on_new_story(self) -> None:
-        """Handle new story button click."""
-        # Get the story data from the form
-        title = self.title_edit.text().strip()
-        if not title:
-            QMessageBox.warning(self, "Validation Error", "Title is required.")
-            return
+        """Handle new story button click - clear form to create a new story."""
+        # Clear the form to start fresh
+        self.clear_form()
         
-        description = self.description_edit.toPlainText().strip()
-        
-        # Get the story type
-        type_name = self.type_combo.currentData()
-        
-        # Get the universe
-        universe = self.universe_edit.text().strip()
-        
-        # Get the series info
-        is_part_of_series = self.series_check.currentData()
-        series_name = self.series_name_edit.text().strip() if is_part_of_series else None
-        series_order = self.series_order_edit.text().strip() if is_part_of_series else None
-        
-        # Get the author
-        author = self.author_edit.text().strip()
-        
-        # Get the year
-        year = self.year_edit.text().strip()
-        
-        # Get the stories folder from settings
-        settings = QSettings("ThePlotThickens", "ThePlotThickens")
-        user_folder = settings.value("user_folder", "")
-        
-        if not user_folder:
-            QMessageBox.warning(self, "Settings Error", "User folder is not set. Please set it in the settings dialog.")
-            return
-        
-        # Create the stories folder if it doesn't exist
-        stories_folder = os.path.join(user_folder, "Stories")
-        os.makedirs(stories_folder, exist_ok=True)
-        
-        try:
-            # Create a new story in the database with an empty folder path initially
-            story_id, story_data = create_story(
-                self.db_conn,
-                title=title,
-                description=description,
-                type_name=type_name,
-                folder_path=""  # Temporary, will be updated after we get the ID
-            )
-            
-            # Create the story folder with a random ID to avoid conflicts with saga titles
-            random_id = self.generate_random_id()
-            story_folder_name = f"{title.replace(' ', '_')}_{random_id}"
-            story_folder = os.path.join(stories_folder, story_folder_name)
-            
-            # Update the story with the folder path
-            story_data = update_story_folder_path(self.db_conn, story_id, story_folder)
-            
-            # Add the story to the list
-            self.stories.append(story_data)
-            
-            # Add the story to the list widget
-            self.add_story_to_list(story_data)
-            
-            # Clear the form
-            self.clear_form()
-            
-            # Show success message
-            QMessageBox.information(self, "Success", f"Story '{title}' created successfully.")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to create story: {str(e)}")
-            print(f"Error creating story: {e}")
-            import traceback
-            traceback.print_exc()
+        # Show a message to the user
+        QMessageBox.information(
+            self,
+            "New Story",
+            "Enter details for your new story and click 'Save Story' when ready."
+        )
     
     def on_save_story(self) -> None:
         """Handle save story button click."""
@@ -444,4 +406,15 @@ class StoryManagerWidget(QWidget):
             index: Index of the selected item
         """
         # TODO: Implement series selection
-        pass 
+        pass
+
+    def add_story_to_list(self, story_data: Dict[str, Any]) -> None:
+        """Add a story to the list widget.
+        
+        Args:
+            story_data: Story data dictionary
+        """
+        item = QListWidgetItem(story_data["title"])
+        item.setData(Qt.ItemDataRole.UserRole, story_data["id"])
+        self.story_list.addItem(item)
+        self.story_list.setCurrentItem(item) 
