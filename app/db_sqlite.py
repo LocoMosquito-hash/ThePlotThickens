@@ -2345,3 +2345,104 @@ def get_quick_event_tagged_characters(conn: sqlite3.Connection, quick_event_id: 
         List of dictionaries with character data
     """
     return get_quick_event_characters(conn, quick_event_id)
+
+
+def search_quick_events(conn: sqlite3.Connection, story_id: int, 
+                     text_query: Optional[str] = None,
+                     character_id: Optional[int] = None,
+                     from_date: Optional[str] = None,
+                     to_date: Optional[str] = None,
+                     limit: int = 100) -> List[Dict[str, Any]]:
+    """Search quick events with various filters.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story to search in
+        text_query: Optional text to search for in the event content
+        character_id: Optional character ID to filter by (either owner or tagged)
+        from_date: Optional start date in ISO format (YYYY-MM-DD)
+        to_date: Optional end date in ISO format (YYYY-MM-DD)
+        limit: Maximum number of results to return
+        
+    Returns:
+        List of dictionaries with quick event data
+    """
+    try:
+        cursor = conn.cursor()
+        
+        print(f"DEBUG DB - search_quick_events called with: story_id={story_id}, character_id={character_id}, text_query={text_query}")
+        
+        # Build the base query
+        query = """
+        SELECT DISTINCT qe.* FROM quick_events qe
+        JOIN characters c ON qe.character_id = c.id
+        LEFT JOIN quick_event_characters qec ON qe.id = qec.quick_event_id
+        WHERE c.story_id = ?
+        """
+        params = [story_id]
+        
+        # Add filters
+        if text_query:
+            query += " AND qe.text LIKE ?"
+            params.append(f"%{text_query}%")
+            
+        if character_id:
+            query += " AND (qe.character_id = ? OR qec.character_id = ?)"
+            params.extend([character_id, character_id])
+            
+        if from_date:
+            query += " AND qe.created_at >= ?"
+            params.append(f"{from_date}T00:00:00")
+            
+        if to_date:
+            query += " AND qe.created_at <= ?"
+            params.append(f"{to_date}T23:59:59")
+            
+        # Add ordering and limit
+        query += " ORDER BY qe.created_at DESC LIMIT ?"
+        params.append(limit)
+        
+        print(f"DEBUG DB - SQL Query: {query}")
+        print(f"DEBUG DB - Parameters: {params}")
+        
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+        
+        print(f"DEBUG DB - Found {len(rows)} results")
+        
+        # Convert rows to dictionaries and return
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error searching quick events: {e}")
+        print(f"DEBUG DB - Error: {e}")
+        return []
+
+
+def get_story_characters_with_events(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
+    """Get characters in a story that have quick events (either as owner or tagged).
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        
+    Returns:
+        List of dictionaries with character data
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+        SELECT DISTINCT c.* FROM characters c
+        LEFT JOIN quick_events qe ON c.id = qe.character_id
+        LEFT JOIN quick_event_characters qec ON c.id = qec.character_id
+        WHERE c.story_id = ? AND (qe.id IS NOT NULL OR qec.quick_event_id IS NOT NULL)
+        ORDER BY c.name
+        """, (story_id,))
+        
+        rows = cursor.fetchall()
+        
+        # Convert rows to dictionaries and return
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error getting characters with events: {e}")
+        return []

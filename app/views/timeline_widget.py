@@ -5,34 +5,54 @@ Timeline Widget for The Plot Thickens application.
 This widget displays events on a timeline and allows for event management.
 """
 
+import os
+import sys
+import re
 import json
 import logging
-import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple, Set, Union, cast
 
-from PyQt6.QtCore import Qt, QRectF, QPointF, QSize, pyqtSignal, QEvent, QTimer
+from PyQt6.QtCore import Qt, QRectF, QPointF, QSize, pyqtSignal, QEvent, QTimer, QPoint, QDate, QRect
 from PyQt6.QtGui import (
     QPainter, QBrush, QPen, QColor, QFont, QFontMetrics, 
-    QMouseEvent, QPainterPath, QTransform, QPixmap, QKeyEvent, QTextCursor
+    QMouseEvent, QPainterPath, QTransform, QPixmap, QKeyEvent, QTextCursor,
+    QAction, QIcon, QPolygon, QTextOption, QCursor
 )
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QScrollArea, QFrame, QSizePolicy, QMenu, QDialog,
     QComboBox, QLineEdit, QTextEdit, QDateEdit, QSpinBox, 
     QCheckBox, QColorDialog, QMessageBox, QToolBar, QToolButton,
-    QInputDialog, QListWidget, QListWidgetItem
+    QInputDialog, QListWidget, QListWidgetItem, QTabWidget, QCalendarWidget,
+    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QGridLayout, QSplitter,
+    QApplication, QGroupBox
 )
+
+# Set up logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # Ensure debug messages are processed
 
 from app.db_sqlite import (
     create_event, get_event, update_event, delete_event, 
     get_story_events, add_character_to_event, remove_character_from_event,
     get_event_characters, get_character_events, create_timeline_view,
     get_timeline_view, get_story_timeline_views, update_timeline_view,
-    delete_timeline_view, get_story_characters
+    delete_timeline_view, get_story_characters, search_quick_events,
+    get_story_characters_with_events, get_character_quick_events,
+    get_quick_event_characters, get_quick_event_tagged_characters,
+    get_quick_event_images, create_timeline_view, get_story_characters,
+    get_character
 )
 
-logger = logging.getLogger(__name__)
+# Event type colors and icons (default values)
+EVENT_TYPE_COLORS = {
+    "SCENE": (0, 120, 215),     # Blue
+    "CHAPTER": (0, 158, 115),   # Green
+    "ARC": (213, 94, 0),        # Orange
+    "MILESTONE": (204, 0, 0),   # Red
+    "NOTE": (153, 51, 255)      # Purple
+}
 
 
 class EventItem(QWidget):
@@ -822,6 +842,490 @@ class EventDialog(QDialog):
             return 0
 
 
+class QuickEventItem(QListWidgetItem):
+    """List widget item representing a quick event in the search results."""
+    
+    def __init__(self, event_data: Dict[str, Any], characters: List[Dict[str, Any]] = None,
+                 images: List[Dict[str, Any]] = None):
+        """Initialize a quick event item.
+        
+        Args:
+            event_data: Quick event data dictionary
+            characters: List of tagged character dictionaries
+            images: List of associated image dictionaries
+        """
+        super().__init__()
+        self.event_data = event_data
+        self.event_id = event_data['id']
+        self.raw_text = event_data['text']
+        self.characters = characters or []
+        self.images = images or []
+        
+        # Convert any [char:ID] references to @CharacterName format for display
+        self.display_text = self.format_display_text(self.raw_text, self.characters)
+        
+        # Set the display text
+        self.setText(self.display_text)
+        
+        # Set text color to white for better readability on dark background
+        self.setForeground(QColor(255, 255, 255))
+        
+        # Add character tags and associated images to tooltip
+        tooltip = f"<b>{self.display_text}</b>"
+        
+        # Add creation date to tooltip
+        created_date = datetime.fromisoformat(event_data['created_at'].replace('Z', '+00:00'))
+        formatted_date = created_date.strftime("%Y-%m-%d %H:%M")
+        tooltip += f"<br><br>Created: {formatted_date}"
+        
+        if self.characters:
+            char_names = [char['name'] for char in self.characters]
+            tooltip += f"<br><br>Tagged characters: {', '.join(char_names)}"
+            
+        if self.images:
+            image_count = len(self.images)
+            tooltip += f"<br><br>Associated with {image_count} image{'s' if image_count != 1 else ''}"
+            
+        self.setToolTip(tooltip)
+        
+        # Store the event ID as user data
+        self.setData(Qt.ItemDataRole.UserRole, self.event_id)
+        
+    def format_display_text(self, text: str, characters: List[Dict[str, Any]]) -> str:
+        """Format text for display, converting [char:ID] references to @CharacterName.
+        
+        Args:
+            text: Raw text with [char:ID] references
+            characters: List of character dictionaries
+            
+        Returns:
+            Formatted text for display
+        """
+        import re
+        
+        # Create a mapping of character IDs to names
+        char_id_to_name = {str(char['id']): char['name'] for char in characters}
+        
+        # Replace [char:ID] references with @CharacterName
+        def replace_char_ref(match):
+            char_id = match.group(1)
+            if char_id in char_id_to_name:
+                return f"@{char_id_to_name[char_id]}"
+            # If character not in our list but ID is valid, try to use numeric ID 
+            try:
+                return f"@Character[{char_id}]"
+            except:
+                return match.group(0)  # Keep original if no match
+            
+        # Process the text with regex substitution
+        processed_text = re.sub(r'\[char:(\d+)\]', replace_char_ref, text)
+        
+        return processed_text
+
+
+class QuickEventSearchTab(QWidget):
+    """Tab for searching and viewing quick events."""
+    
+    def __init__(self, conn, story_id: int, parent=None):
+        """Initialize the quick event search tab.
+        
+        Args:
+            conn: Database connection
+            story_id: ID of the story
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.conn = conn
+        self.story_id = story_id
+        self.search_results = []
+        
+        self.init_ui()
+        
+    def init_ui(self):
+        """Initialize the user interface."""
+        main_layout = QVBoxLayout(self)
+        
+        # Search panel
+        search_group = QGroupBox("Search Quick Events")
+        search_layout = QVBoxLayout(search_group)
+        
+        # Text search
+        text_layout = QHBoxLayout()
+        text_layout.addWidget(QLabel("Text:"))
+        self.search_text = QLineEdit()
+        self.search_text.setPlaceholderText("Search for text in quick events...")
+        self.search_text.returnPressed.connect(self.search_events)
+        text_layout.addWidget(self.search_text)
+        search_layout.addLayout(text_layout)
+        
+        # Character filter
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Character:"))
+        self.character_combo = QComboBox()
+        # Make the dropdown more visually apparent with styling
+        self.character_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #333;
+                border: 1px solid #555;
+                border-radius: 3px;
+                padding: 3px;
+                min-width: 150px;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 20px;
+                border-left: 1px solid #555;
+            }
+            QComboBox::down-arrow {
+                width: 8px;
+                height: 8px;
+                background: #AAA;
+            }
+            QComboBox:hover {
+                background-color: #444;
+                border: 1px solid #666;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #333;
+                border: 1px solid #555;
+                selection-background-color: #444;
+            }
+        """)
+        self.character_combo.addItem("All Characters", None)
+        self.character_combo.currentIndexChanged.connect(self.on_character_changed)
+        filter_layout.addWidget(self.character_combo)
+        
+        # Date range
+        filter_layout.addWidget(QLabel("From:"))
+        self.date_from = QDateEdit()
+        self.date_from.setCalendarPopup(True)
+        self.date_from.setDate(QDate.currentDate().addMonths(-1))  # Default to 1 month ago
+        filter_layout.addWidget(self.date_from)
+        
+        filter_layout.addWidget(QLabel("To:"))
+        self.date_to = QDateEdit()
+        self.date_to.setCalendarPopup(True)
+        self.date_to.setDate(QDate.currentDate())  # Default to today
+        filter_layout.addWidget(self.date_to)
+        
+        # Search button
+        self.search_button = QPushButton("Search")
+        self.search_button.clicked.connect(self.search_events)
+        filter_layout.addWidget(self.search_button)
+        
+        search_layout.addLayout(filter_layout)
+        main_layout.addWidget(search_group)
+        
+        # Results area
+        results_layout = QVBoxLayout()
+        results_layout.addWidget(QLabel("Results:"))
+        
+        # Split view for results and details
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # Results list
+        self.results_list = QListWidget()
+        self.results_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.results_list.currentItemChanged.connect(self.on_event_selected)
+        self.results_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.results_list.customContextMenuRequested.connect(self.show_context_menu)
+        splitter.addWidget(self.results_list)
+        
+        # Detail panel
+        detail_widget = QWidget()
+        detail_layout = QVBoxLayout(detail_widget)
+        
+        self.detail_label = QLabel("Select a quick event to view details")
+        self.detail_label.setWordWrap(True)
+        self.detail_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.detail_label.setStyleSheet("background-color: #2D2D30; padding: 10px; border-radius: 4px;")
+        detail_layout.addWidget(self.detail_label)
+        
+        # Characters and images lists
+        chars_widget = QWidget()
+        chars_layout = QVBoxLayout(chars_widget)
+        chars_layout.addWidget(QLabel("Tagged Characters:"))
+        self.characters_list = QListWidget()
+        chars_layout.addWidget(self.characters_list)
+        
+        images_widget = QWidget()
+        images_layout = QVBoxLayout(images_widget)
+        images_layout.addWidget(QLabel("Associated Images:"))
+        self.images_list = QListWidget()
+        images_layout.addWidget(self.images_list)
+        
+        # Add the character and images widgets to a horizontal layout
+        lists_layout = QHBoxLayout()
+        lists_layout.addWidget(chars_widget)
+        lists_layout.addWidget(images_widget)
+        detail_layout.addLayout(lists_layout)
+        
+        splitter.addWidget(detail_widget)
+        
+        # Set initial sizes for the splitter
+        splitter.setSizes([300, 400])
+        
+        results_layout.addWidget(splitter)
+        main_layout.addLayout(results_layout)
+        
+        # Load characters for the filter
+        self.load_characters()
+        
+    def on_character_changed(self, index):
+        """Handler for character combo box changes."""
+        print(f"DEBUG - Character selection changed to index {index}")
+        
+        # Get the character ID and name from the combo box
+        character_id = self.character_combo.currentData()
+        character_name = self.character_combo.currentText()
+        print(f"DEBUG - Selected character: {character_name} (ID: {character_id})")
+        
+        # Automatically trigger a search
+        self.search_events()
+        
+    def load_characters(self):
+        """Load characters for the filter dropdown."""
+        try:
+            # Get all characters for the story that have quick events
+            characters = get_story_characters_with_events(self.conn, self.story_id)
+            
+            # If no characters have events, get all characters for the story
+            if not characters:
+                characters = get_story_characters(self.conn, self.story_id)
+                
+            # Clear any existing items (except "All Characters")
+            while self.character_combo.count() > 1:
+                self.character_combo.removeItem(1)
+                
+            # Add characters to combo box
+            for character in characters:
+                self.character_combo.addItem(character['name'], character['id'])
+                
+        except Exception as e:
+            logger.error(f"Error loading characters: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to load characters: {str(e)}")
+    
+    def search_events(self):
+        """Execute the quick event search and display results."""
+        try:
+            # Get search parameters
+            text_query = self.search_text.text().strip() if self.search_text.text().strip() else None
+            
+            # Get character_id, ensuring we pass None when "All Characters" is selected
+            character_id = self.character_combo.currentData()
+            print(f"DEBUG - Selected character ID: {character_id}, type: {type(character_id)}")
+            
+            if character_id == 0 or character_id is None:  # Handle case when "All Characters" is selected
+                character_id = None
+                print("DEBUG - Using None for character_id (All Characters)")
+            else:
+                # Explicitly convert to integer
+                try:
+                    character_id = int(character_id)
+                    print(f"DEBUG - Using character_id: {character_id} (converted to int)")
+                except (TypeError, ValueError) as e:
+                    print(f"DEBUG - Failed to convert character_id to int: {e}")
+                    character_id = None
+            
+            from_date = self.date_from.date().toString("yyyy-MM-dd") if self.date_from.date() != QDate.currentDate().addMonths(-1) else None
+            to_date = self.date_to.date().toString("yyyy-MM-dd") if self.date_to.date() != QDate.currentDate() else None
+            
+            print(f"DEBUG - Search parameters: story_id={self.story_id}, text_query={text_query}, character_id={character_id}, from_date={from_date}, to_date={to_date}")
+            
+            # Search for quick events
+            self.search_results = search_quick_events(
+                self.conn,
+                self.story_id,
+                text_query=text_query,
+                character_id=character_id,
+                from_date=from_date,
+                to_date=to_date
+            )
+            
+            print(f"DEBUG - Search returned {len(self.search_results)} results")
+            if len(self.search_results) > 0:
+                print(f"DEBUG - First result: id={self.search_results[0]['id']}, text={self.search_results[0]['text'][:30]}...")
+            else:
+                print(f"DEBUG - No results found")
+            
+            # Update the results list
+            self.update_results_list()
+            
+        except Exception as e:
+            logger.error(f"Error searching events: {e}")
+            print(f"DEBUG - Search error: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to search events: {str(e)}")
+    
+    def update_results_list(self):
+        """Update the results list with the search results."""
+        # Clear existing items
+        self.results_list.clear()
+        self.characters_list.clear()
+        self.images_list.clear()
+        self.detail_label.setText("Select a quick event to view details")
+        
+        if not self.search_results:
+            # No results found
+            empty_item = QListWidgetItem("No quick events found with the specified criteria.")
+            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
+            self.results_list.addItem(empty_item)
+            return
+        
+        # Add quick events to the list
+        for event in self.search_results:
+            # Get the tagged characters and associated images for this event
+            tagged_characters = get_quick_event_tagged_characters(self.conn, event['id'])
+            associated_images = get_quick_event_images(self.conn, event['id'])
+            
+            item = QuickEventItem(event, tagged_characters, associated_images)
+            self.results_list.addItem(item)
+            
+        # Show the count of results
+        count_msg = f"Found {len(self.search_results)} quick event(s)"
+        self.detail_label.setText(count_msg)
+    
+    def on_event_selected(self, current, previous):
+        """Handle event selection change.
+        
+        Args:
+            current: Currently selected item
+            previous: Previously selected item
+        """
+        self.characters_list.clear()
+        self.images_list.clear()
+        
+        if not current or not isinstance(current, QuickEventItem):
+            self.detail_label.setText("Select a quick event to view details")
+            return
+            
+        # Display event details
+        event = current.event_data
+        characters = current.characters
+        images = current.images
+        
+        # Create a formatted detail text
+        detail_text = f"<h3>{current.display_text}</h3>"
+        
+        # Add creation/update date
+        created_date = datetime.fromisoformat(event['created_at'].replace('Z', '+00:00'))
+        formatted_created = created_date.strftime("%Y-%m-%d %H:%M")
+        
+        updated_date = datetime.fromisoformat(event['updated_at'].replace('Z', '+00:00'))
+        formatted_updated = updated_date.strftime("%Y-%m-%d %H:%M")
+        
+        detail_text += f"<p><b>Created:</b> {formatted_created}<br>"
+        detail_text += f"<b>Updated:</b> {formatted_updated}</p>"
+        
+        # Get the owner character
+        try:
+            owner_character = get_character(self.conn, event['character_id'])
+            if owner_character:
+                detail_text += f"<p><b>Owner:</b> {owner_character['name']}</p>"
+        except Exception as e:
+            logger.error(f"Error getting character: {e}")
+        
+        self.detail_label.setText(detail_text)
+        
+        # Display tagged characters
+        if characters:
+            for character in characters:
+                item = QListWidgetItem(character['name'])
+                item.setData(Qt.ItemDataRole.UserRole, character['id'])
+                self.characters_list.addItem(item)
+        else:
+            empty_item = QListWidgetItem("No characters tagged in this event.")
+            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
+            self.characters_list.addItem(empty_item)
+            
+        # Display associated images
+        if images:
+            for image in images:
+                title = image.get('title') or image.get('filename') or f"Image {image['id']}"
+                item = QListWidgetItem(title)
+                item.setData(Qt.ItemDataRole.UserRole, image['id'])
+                self.images_list.addItem(item)
+        else:
+            empty_item = QListWidgetItem("No images associated with this event.")
+            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
+            self.images_list.addItem(empty_item)
+    
+    def show_context_menu(self, position):
+        """Show context menu for a selected quick event.
+        
+        Args:
+            position: Position where the menu should be displayed
+        """
+        item = self.results_list.itemAt(position)
+        
+        if not item or not isinstance(item, QuickEventItem):
+            return
+            
+        event_id = item.event_id
+        
+        menu = QMenu(self)
+        
+        # Add "Create Timeline Event" action
+        create_event_action = QAction("Create Timeline Event From This", self)
+        create_event_action.triggered.connect(lambda: self.create_timeline_event(event_id))
+        menu.addAction(create_event_action)
+        
+        # Show the menu
+        menu.exec(self.results_list.mapToGlobal(position))
+    
+    def create_timeline_event(self, quick_event_id):
+        """Create a timeline event from a quick event.
+        
+        Args:
+            quick_event_id: ID of the quick event
+        """
+        try:
+            # Find the quick event in the search results
+            event = next((e for e in self.search_results if e['id'] == quick_event_id), None)
+            if not event:
+                return
+                
+            # Get tagged characters
+            tagged_characters = get_quick_event_tagged_characters(self.conn, quick_event_id)
+            
+            # Create a new timeline event with this quick event's data
+            title = f"Quick Event: {event['text'][:30]}..." if len(event['text']) > 30 else f"Quick Event: {event['text']}"
+            
+            # Get event character IDs
+            character_ids = [char['id'] for char in tagged_characters]
+            if event['character_id'] not in character_ids:
+                character_ids.append(event['character_id'])
+                
+            # Create the event
+            event_id = create_event(
+                self.conn,
+                title=title,
+                event_type="SCENE",
+                description=event['text'],
+                story_id=self.story_id,
+                character_ids=character_ids
+            )
+            
+            if event_id:
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Created timeline event '{title}' from quick event."
+                )
+                
+                # Signal that the timeline should be refreshed, using a signal if one exists
+                parent_widget = self.parent()
+                if parent_widget and hasattr(parent_widget, "load_events"):
+                    # Call load_events on the parent if it exists
+                    parent_widget.load_events()
+            else:
+                QMessageBox.warning(self, "Error", "Failed to create timeline event.")
+                
+        except Exception as e:
+            logger.error(f"Error creating timeline event: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to create timeline event: {str(e)}")
+
+
 class TimelineWidget(QWidget):
     """Widget for displaying and managing a timeline of events."""
     
@@ -841,7 +1345,40 @@ class TimelineWidget(QWidget):
         
     def init_ui(self):
         """Initialize the UI components."""
-        main_layout = QVBoxLayout()
+        main_layout = QVBoxLayout(self)
+        
+        # Create a tab widget to hold timeline and quick events
+        self.tab_widget = QTabWidget()
+        
+        # Create the timeline tab
+        self.timeline_tab = QWidget()
+        self.setup_timeline_tab()
+        self.tab_widget.addTab(self.timeline_tab, "Timeline")
+        
+        # Create the quick events search tab
+        self.quick_events_tab = QuickEventSearchTab(self.conn, self.story_id, parent=self)
+        self.tab_widget.addTab(self.quick_events_tab, "Quick Events")
+        
+        main_layout.addWidget(self.tab_widget)
+        
+        # Connect tab changed signal
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
+        
+    def on_tab_changed(self, index):
+        """Handle tab change events."""
+        # If switching to Quick Events tab, make sure it has the latest story_id and reload characters
+        if index == 1 and self.tab_widget.tabText(index) == "Quick Events":
+            tab = self.tab_widget.widget(index)
+            if isinstance(tab, QuickEventSearchTab):
+                if tab.story_id != self.story_id:
+                    tab.story_id = self.story_id
+                
+                # Always reload characters when switching to this tab
+                tab.load_characters()
+        
+    def setup_timeline_tab(self):
+        """Set up the timeline tab UI."""
+        timeline_layout = QVBoxLayout(self.timeline_tab)
         
         # Toolbar
         toolbar = QToolBar()
@@ -900,7 +1437,7 @@ class TimelineWidget(QWidget):
         self.filter_type.currentIndexChanged.connect(self.apply_filters)
         toolbar.addWidget(self.filter_type)
         
-        main_layout.addWidget(toolbar)
+        timeline_layout.addWidget(toolbar)
         
         # Timeline content area
         self.scroll_area = QScrollArea()
@@ -924,7 +1461,7 @@ class TimelineWidget(QWidget):
         self.timeline_content.hide()  # Hide by default, show horizontal timeline
         
         self.scroll_area.setWidget(self.timeline_container)
-        main_layout.addWidget(self.scroll_area)
+        timeline_layout.addWidget(self.scroll_area)
         
         # Event details area
         self.details_frame = QFrame()
@@ -971,9 +1508,7 @@ class TimelineWidget(QWidget):
         details_layout.addWidget(self.event_details_label)
         details_layout.addLayout(details_button_layout)
         
-        main_layout.addWidget(self.details_frame)
-        
-        self.setLayout(main_layout)
+        timeline_layout.addWidget(self.details_frame)
         
     def load_events(self):
         """Load events from the database."""
@@ -984,6 +1519,12 @@ class TimelineWidget(QWidget):
             self.events = get_story_events(self.conn, self.story_id)
             self.display_events()
             self.horizontal_timeline.set_events(self.filter_events())
+            
+            # Refresh the quick events tab with current story_id
+            if hasattr(self, 'quick_events_tab'):
+                self.quick_events_tab.story_id = self.story_id
+                self.quick_events_tab.load_characters()
+            
         except Exception as e:
             logger.error(f"Error loading events: {e}")
             QMessageBox.critical(self, "Error", f"Failed to load events: {str(e)}")
@@ -1562,10 +2103,6 @@ class HorizontalTimelineWidget(QWidget):
             # Fill with semi-transparent background
             bg_color = QColor(40, 40, 40, 200)  # Semi-transparent dark background
             painter.fillPath(bg_path, QBrush(bg_color))
-            
-            # Add border
-            painter.setPen(QPen(QColor(100, 100, 100), 1))
-            painter.drawPath(bg_path)
             
             # Draw text
             painter.drawText(text_rect, alignment, elided_title)
