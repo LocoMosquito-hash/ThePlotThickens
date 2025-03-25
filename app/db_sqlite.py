@@ -1468,6 +1468,9 @@ def get_quick_event(conn: sqlite3.Connection, quick_event_id: int) -> Dict[str, 
 def get_character_quick_events(conn: sqlite3.Connection, character_id: int) -> List[Dict[str, Any]]:
     """Get all quick events for a character.
     
+    Returns both events where this character is the primary character (owner)
+    and events where this character is tagged/mentioned.
+    
     Args:
         conn: Database connection
         character_id: ID of the character
@@ -1477,11 +1480,17 @@ def get_character_quick_events(conn: sqlite3.Connection, character_id: int) -> L
     """
     cursor = conn.cursor()
     
+    # Get events where this character is the primary owner
     cursor.execute('''
-    SELECT * FROM quick_events 
-    WHERE character_id = ?
+    SELECT qe.* FROM quick_events qe
+    WHERE qe.character_id = ?
+    UNION 
+    -- Get events where this character is tagged/mentioned
+    SELECT qe.* FROM quick_events qe
+    JOIN quick_event_characters qec ON qe.id = qec.quick_event_id
+    WHERE qec.character_id = ? AND qe.character_id != ?
     ORDER BY sequence_number, created_at
-    ''', (character_id,))
+    ''', (character_id, character_id, character_id))
     
     rows = cursor.fetchall()
     

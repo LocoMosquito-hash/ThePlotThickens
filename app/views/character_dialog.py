@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QToolButton
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QBuffer, QByteArray, QSettings, QPoint
-from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QKeyEvent, QTextCursor, QIcon
+from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QKeyEvent, QTextCursor, QIcon, QColor
 
 from app.db_sqlite import (
     get_character, update_character, get_story, get_character_quick_events,
@@ -371,13 +371,14 @@ class QuickEventItem(QListWidgetItem):
     """List widget item representing a quick event."""
     
     def __init__(self, event_data: Dict[str, Any], tagged_characters: List[Dict[str, Any]] = None, 
-                associated_images: List[Dict[str, Any]] = None):
+                associated_images: List[Dict[str, Any]] = None, viewing_character_id: int = None):
         """Initialize a quick event item.
         
         Args:
             event_data: Quick event data dictionary
             tagged_characters: List of tagged character dictionaries
             associated_images: List of associated image dictionaries
+            viewing_character_id: ID of the character viewing this event (to determine ownership)
         """
         super().__init__()
         self.event_data = event_data
@@ -385,15 +386,28 @@ class QuickEventItem(QListWidgetItem):
         self.raw_text = event_data['text']
         self.tagged_characters = tagged_characters or []
         self.associated_images = associated_images or []
+        self.viewing_character_id = viewing_character_id
+        self.is_owner = viewing_character_id == event_data.get('character_id')
         
         # Convert any [char:ID] references to @CharacterName format for display
         self.display_text = self.format_display_text(self.raw_text, self.tagged_characters)
         
-        # Set display text
-        self.setText(self.display_text)
+        # Add a prefix to show if this character owns the event or was just tagged
+        prefix = "" if self.is_owner else "↪ " 
+        self.setText(f"{prefix}{self.display_text}")
         
         # Add character tags and associated images to tooltip
         tooltip = self.display_text
+        
+        # Add owner info to tooltip if this character is not the owner
+        if not self.is_owner and event_data.get('character_id'):
+            # Try to find the owner character in the tagged characters list
+            owner_name = "Unknown"
+            for char in self.tagged_characters:
+                if char['id'] == event_data['character_id']:
+                    owner_name = char['name']
+                    break
+            tooltip = f"From {owner_name}'s timeline:\n{tooltip}"
         
         if self.tagged_characters:
             char_names = [char['name'] for char in self.tagged_characters]
@@ -407,6 +421,11 @@ class QuickEventItem(QListWidgetItem):
         
         # Store the event ID as user data
         self.setData(Qt.ItemDataRole.UserRole, self.event_id)
+        
+        # Set a different background color for events where this character is tagged but not the owner
+        if not self.is_owner:
+            self.setBackground(QColor(240, 240, 250))  # Light blue-ish background
+            self.setForeground(QColor(0, 0, 0))  # Black text for better contrast
     
     def format_display_text(self, text: str, characters: List[Dict[str, Any]]) -> str:
         """Format text for display, converting [char:ID] references to @CharacterName.
@@ -621,7 +640,7 @@ class QuickEventsTab(QWidget):
                 tagged_characters = get_quick_event_tagged_characters(self.db_conn, event['id'])
                 associated_images = get_quick_event_images(self.db_conn, event['id'])
                 
-                item = QuickEventItem(event, tagged_characters, associated_images)
+                item = QuickEventItem(event, tagged_characters, associated_images, self.character_id)
                 self.events_list.addItem(item)
         except Exception as e:
             print(f"Error loading quick events: {e}")
