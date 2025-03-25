@@ -42,7 +42,7 @@ from app.db_sqlite import (
     get_story_characters, get_character,
     add_character_tag_to_image, update_character_tag, remove_character_tag,
     get_image_character_tags, create_quick_event, get_next_quick_event_sequence_number,
-    get_quick_event_characters
+    get_quick_event_characters, get_quick_event_tagged_characters
 )
 
 # Import our image recognition utility
@@ -87,12 +87,7 @@ class ThumbnailWidget(QFrame):
         self.image_label.setScaledContents(False)
         
         # Scale the pixmap to fit the label while maintaining aspect ratio
-        scaled_pixmap = self.pixmap.scaled(
-            QSize(180, 150),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        )
-        self.image_label.setPixmap(scaled_pixmap)
+        self.update_displayed_pixmap()
         
         # Create title label
         self.title_label = QLabel(title if title else f"Image {image_id}")
@@ -112,6 +107,24 @@ class ThumbnailWidget(QFrame):
         
         # Set up mouse events
         self.setMouseTracking(True)
+    
+    def update_displayed_pixmap(self):
+        """Update the displayed pixmap in the image label."""
+        scaled_pixmap = self.pixmap.scaled(
+            QSize(180, 150),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        self.image_label.setPixmap(scaled_pixmap)
+    
+    def update_pixmap(self, new_pixmap: QPixmap):
+        """Update the thumbnail's pixmap.
+        
+        Args:
+            new_pixmap: New pixmap to display
+        """
+        self.pixmap = new_pixmap
+        self.update_displayed_pixmap()
     
     def mousePressEvent(self, event) -> None:
         """Handle mouse press events."""
@@ -246,12 +259,24 @@ class QuickEventSelectionDialog(QDialog):
             quick_events: List of quick event dictionaries
         """
         for event in quick_events:
-            # Create a list item with the event text
+            # Get the event text and tagged characters
             text = event['text']
-            if len(text) > 80:
-                text = text[:77] + "..."
+            
+            # Get tagged characters for this event
+            tagged_characters = []
+            try:
+                tagged_characters = get_quick_event_tagged_characters(self.db_conn, event['id'])
+            except Exception as e:
+                print(f"Error loading tagged characters: {e}")
+            
+            # Convert character references to @mentions for display
+            display_text = self.format_display_text(text, tagged_characters)
+            
+            # Truncate if too long
+            if len(display_text) > 80:
+                display_text = display_text[:77] + "..."
                 
-            item = QListWidgetItem(text)
+            item = QListWidgetItem(display_text)
             item.setData(Qt.ItemDataRole.UserRole, event['id'])
             
             # Set the item to be pre-selected if it's already associated
@@ -259,7 +284,34 @@ class QuickEventSelectionDialog(QDialog):
                 item.setSelected(True)
             
             self.event_list.addItem(item)
+    
+    def format_display_text(self, text: str, characters: List[Dict[str, Any]]) -> str:
+        """Format text for display, converting [char:ID] references to @CharacterName.
+        
+        Args:
+            text: Raw text with [char:ID] references
+            characters: List of character dictionaries
             
+        Returns:
+            Formatted text for display
+        """
+        import re
+        
+        # Create a mapping of character IDs to names
+        char_id_to_name = {str(char['id']): char['name'] for char in characters}
+        
+        # Replace [char:ID] references with @CharacterName
+        def replace_char_ref(match):
+            char_id = match.group(1)
+            if char_id in char_id_to_name:
+                return f"@{char_id_to_name[char_id]}"
+            return match.group(0)  # Keep original if no match
+            
+        # Process the text with regex substitution
+        processed_text = re.sub(r'\[char:(\d+)\]', replace_char_ref, text)
+        
+        return processed_text
+    
     def on_character_changed(self, index: int):
         """Handle character selection change.
         
@@ -920,12 +972,41 @@ class QuickEventEditor(QDialog):
         layout.addLayout(button_layout)
         
     def get_text(self) -> str:
-        """Get the edited text.
+        """Get the edited text, converting @mentions to [char:ID] format for storage.
         
         Returns:
-            The text from the editor
+            The text from the editor with character references in [char:ID] format
         """
-        return self.text_edit.toPlainText()
+        display_text = self.text_edit.toPlainText()
+        # Convert @mentions to [char:ID] for storage
+        return self.convert_mentions_to_char_refs(display_text)
+        
+    def convert_mentions_to_char_refs(self, text: str) -> str:
+        """Convert @mentions to [char:ID] format for storage.
+        
+        Args:
+            text: Text with @CharacterName mentions
+            
+        Returns:
+            Text with [char:ID] references
+        """
+        import re
+        
+        # Create a mapping of character names to IDs (case insensitive)
+        char_name_to_id = {char['name'].lower(): str(char['id']) for char in self.characters}
+        
+        # Replace @CharacterName with [char:ID]
+        def replace_mention(match):
+            char_name = match.group(1)
+            if char_name.lower() in char_name_to_id:
+                char_id = char_name_to_id[char_name.lower()]
+                return f"[char:{char_id}]"
+            return match.group(0)  # Keep original if no match
+        
+        # Process the text with regex substitution to handle mentions
+        processed_text = re.sub(r'@(\w+)', replace_mention, text)
+        
+        return processed_text
         
     def get_character_id(self) -> int:
         """Get the selected character ID.
@@ -1995,6 +2076,12 @@ class GalleryWidget(QWidget):
         # Add spacer to push buttons to the left
         button_layout.addStretch()
         
+        # Add NSFW toggle checkbox
+        self.nsfw_checkbox = QCheckBox("NSFW Mode")
+        self.nsfw_checkbox.setToolTip("Hide thumbnails with placeholders")
+        self.nsfw_checkbox.stateChanged.connect(self.on_nsfw_toggle)
+        button_layout.addWidget(self.nsfw_checkbox)
+        
         # Add button layout to main layout
         main_layout.addLayout(button_layout)
         
@@ -2020,6 +2107,127 @@ class GalleryWidget(QWidget):
         self.status_label = QLabel("No story selected")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         main_layout.addWidget(self.status_label)
+        
+        # Create placeholder pixmap for NSFW mode
+        self.placeholder_pixmap = self._create_nsfw_placeholder()
+        
+        # Flag to track NSFW mode
+        self.nsfw_mode = False
+    
+    def _create_nsfw_placeholder(self) -> QPixmap:
+        """Create a placeholder pixmap for NSFW mode.
+        
+        Returns:
+            A plain pixmap with "NSFW" text
+        """
+        # Create a plain gray pixmap
+        pixmap = QPixmap(180, 150)
+        pixmap.fill(QColor(80, 80, 80))
+        
+        # Add "NSFW" text
+        painter = QPainter(pixmap)
+        painter.setPen(QPen(QColor(200, 200, 200)))
+        painter.setFont(QFont("Arial", 20, QFont.Weight.Bold))
+        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "Null")
+        painter.end()
+        
+        return pixmap
+    
+    def on_nsfw_toggle(self, state: int) -> None:
+        """Handle NSFW toggle state change.
+        
+        Args:
+            state: Qt.CheckState value
+        """
+        print(f"NSFW toggle state changed to value: {state}")
+        self.nsfw_mode = (state == 2)  # Qt.CheckState.Checked is 2
+        print(f"NSFW mode is now: {'ON' if self.nsfw_mode else 'OFF'}")
+        
+        # Update thumbnails if we have any loaded
+        if len(self.thumbnails) > 0:
+            print(f"Updating {len(self.thumbnails)} thumbnails")
+            for image_id, thumbnail in self.thumbnails.items():
+                try:
+                    if self.nsfw_mode:
+                        # Replace with NSFW placeholder
+                        thumbnail.update_pixmap(self.placeholder_pixmap)
+                        print(f"Set thumbnail {image_id} to NSFW mode")
+                    else:
+                        # Restore original thumbnail
+                        # Get the original pixmap path
+                        cursor = self.db_conn.cursor()
+                        cursor.execute(
+                            "SELECT filename, path FROM images WHERE id = ?",
+                            (image_id,)
+                        )
+                        image = cursor.fetchone()
+                        
+                        if image:
+                            thumbnails_folder = os.path.join(os.path.dirname(image['path']), "thumbnails")
+                            thumbnail_path = os.path.join(thumbnails_folder, image['filename'])
+                            
+                            if os.path.exists(thumbnail_path):
+                                # Load the original thumbnail
+                                pixmap = QPixmap(thumbnail_path)
+                                if not pixmap.isNull():
+                                    thumbnail.update_pixmap(pixmap)
+                                    print(f"Restored thumbnail {image_id} to normal mode")
+                except Exception as e:
+                    print(f"Error updating thumbnail {image_id}: {str(e)}")
+    
+    def update_thumbnail_visibility(self) -> None:
+        """Update all thumbnails based on NSFW mode."""
+        print(f"Updating thumbnail visibility for {len(self.thumbnails)} thumbnails")
+        for image_id, thumbnail in self.thumbnails.items():
+            if self.nsfw_mode:
+                # Switch to placeholder
+                self.set_thumbnail_nsfw(thumbnail)
+            else:
+                # Restore original image
+                self.set_thumbnail_normal(thumbnail, image_id)
+    
+    def set_thumbnail_nsfw(self, thumbnail: ThumbnailWidget) -> None:
+        """Set a thumbnail to NSFW mode.
+        
+        Args:
+            thumbnail: The thumbnail widget to update
+        """
+        # Scale the placeholder pixmap
+        scaled_pixmap = self.placeholder_pixmap.scaled(
+            QSize(180, 150),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        # Use the new update_pixmap method to properly update the thumbnail
+        thumbnail.update_pixmap(self.placeholder_pixmap)
+        print(f"Set thumbnail {thumbnail.image_id} to NSFW mode")
+    
+    def set_thumbnail_normal(self, thumbnail: ThumbnailWidget, image_id: int) -> None:
+        """Restore the normal thumbnail image.
+        
+        Args:
+            thumbnail: The thumbnail widget to update
+            image_id: ID of the image
+        """
+        # Get the original pixmap path
+        cursor = self.db_conn.cursor()
+        cursor.execute(
+            "SELECT filename, path FROM images WHERE id = ?",
+            (image_id,)
+        )
+        image = cursor.fetchone()
+        
+        if image:
+            thumbnails_folder = os.path.join(os.path.dirname(image['path']), "thumbnails")
+            thumbnail_path = os.path.join(thumbnails_folder, image['filename'])
+            
+            if os.path.exists(thumbnail_path):
+                # Load the original thumbnail
+                pixmap = QPixmap(thumbnail_path)
+                if not pixmap.isNull():
+                    # Use the new update_pixmap method
+                    thumbnail.update_pixmap(pixmap)
+                    print(f"Restored thumbnail {image_id} to normal mode")
     
     def set_story(self, story_id: int, story_data: Dict[str, Any]) -> None:
         """Set the current story.
@@ -2091,8 +2299,12 @@ class GalleryWidget(QWidget):
                     print(f"Warning: Original image not found: {original_path}")
                     continue
             
-            # Load thumbnail
-            pixmap = QPixmap(thumbnail_path)
+            # Choose pixmap based on NSFW mode
+            if self.nsfw_mode:
+                pixmap = self.placeholder_pixmap
+            else:
+                pixmap = QPixmap(thumbnail_path)
+                
             if not pixmap.isNull():
                 # Create thumbnail widget
                 row = i // 4  # 4 thumbnails per row
@@ -2417,17 +2629,18 @@ class GalleryWidget(QWidget):
                                     region
                                 )
                             
+                            # Comment out automatic quick event creation when tagging characters
                             # Optionally create a quick event
-                            sequence_number = get_next_quick_event_sequence_number(self.db_conn, character_id)
-                            quick_event_id = create_quick_event(
-                                self.db_conn,
-                                f"Appears in image: {filename}",
-                                character_id,
-                                sequence_number
-                            )
+                            # sequence_number = get_next_quick_event_sequence_number(self.db_conn, character_id)
+                            # quick_event_id = create_quick_event(
+                            #     self.db_conn,
+                            #     f"Appears in image: {filename}",
+                            #     character_id,
+                            #     sequence_number
+                            # )
                             
                             # Associate quick event with image
-                            associate_quick_event_with_image(self.db_conn, quick_event_id, image_id)
+                            # associate_quick_event_with_image(self.db_conn, quick_event_id, image_id)
                     except Exception as e:
                         print(f"Error tagging characters: {e}")
                         traceback.print_exc()  # Print the full traceback for debugging
