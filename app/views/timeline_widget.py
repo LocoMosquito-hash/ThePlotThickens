@@ -1024,9 +1024,9 @@ class QuickEventSearchTab(QWidget):
         # Split view for results and details
         splitter = QSplitter(Qt.Orientation.Horizontal)
         
-        # Results list
+        # Results list with multiple selection
         self.results_list = QListWidget()
-        self.results_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.results_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.results_list.currentItemChanged.connect(self.on_event_selected)
         self.results_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.results_list.customContextMenuRequested.connect(self.show_context_menu)
@@ -1041,6 +1041,27 @@ class QuickEventSearchTab(QWidget):
         self.detail_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.detail_label.setStyleSheet("background-color: #2D2D30; padding: 10px; border-radius: 4px;")
         detail_layout.addWidget(self.detail_label)
+        
+        # Add delete button for batch operations
+        self.delete_button = QPushButton("Delete Selected Events")
+        self.delete_button.setEnabled(False)
+        self.delete_button.clicked.connect(self.delete_selected_events)
+        self.delete_button.setStyleSheet("""
+            QPushButton {
+                background-color: #d9534f;
+                color: white;
+                border: none;
+                padding: 5px 10px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #c9302c;
+            }
+            QPushButton:disabled {
+                background-color: #666;
+            }
+        """)
+        detail_layout.addWidget(self.delete_button)
         
         # Characters and images lists
         chars_widget = QWidget()
@@ -1184,7 +1205,7 @@ class QuickEventSearchTab(QWidget):
         # Show the count of results
         count_msg = f"Found {len(self.search_results)} quick event(s)"
         self.detail_label.setText(count_msg)
-    
+        
     def on_event_selected(self, current, previous):
         """Handle event selection change.
         
@@ -1194,6 +1215,9 @@ class QuickEventSearchTab(QWidget):
         """
         self.characters_list.clear()
         self.images_list.clear()
+        
+        # Enable/disable delete button based on selection
+        self.delete_button.setEnabled(bool(self.results_list.selectedItems()))
         
         if not current or not isinstance(current, QuickEventItem):
             self.detail_label.setText("Select a quick event to view details")
@@ -1324,6 +1348,59 @@ class QuickEventSearchTab(QWidget):
         except Exception as e:
             logger.error(f"Error creating timeline event: {e}")
             QMessageBox.warning(self, "Error", f"Failed to create timeline event: {str(e)}")
+            
+    def delete_selected_events(self):
+        """Delete all selected quick events."""
+        selected_items = self.results_list.selectedItems()
+        if not selected_items:
+            return
+            
+        # Get the count of selected items
+        count = len(selected_items)
+        
+        # Show confirmation dialog
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            f"Are you sure you want to delete {count} quick event{'s' if count > 1 else ''}? This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if confirm == QMessageBox.StandardButton.Yes:
+            try:
+                # Get all selected event IDs
+                event_ids = [item.event_id for item in selected_items if isinstance(item, QuickEventItem)]
+                
+                # Delete each event
+                for event_id in event_ids:
+                    # Delete from quick_event_characters first
+                    cursor = self.conn.cursor()
+                    cursor.execute("DELETE FROM quick_event_characters WHERE quick_event_id = ?", (event_id,))
+                    
+                    # Delete from quick_event_images
+                    cursor.execute("DELETE FROM quick_event_images WHERE quick_event_id = ?", (event_id,))
+                    
+                    # Finally delete the quick event
+                    cursor.execute("DELETE FROM quick_events WHERE id = ?", (event_id,))
+                    
+                self.conn.commit()
+                
+                # Refresh the search results
+                self.search_events()
+                
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Successfully deleted {count} quick event{'s' if count > 1 else ''}."
+                )
+                
+            except Exception as e:
+                logger.error(f"Error deleting quick events: {e}")
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    f"Failed to delete quick events: {str(e)}"
+                )
 
 
 class TimelineWidget(QWidget):
