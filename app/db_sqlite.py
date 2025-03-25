@@ -1345,46 +1345,6 @@ def delete_timeline_view(conn: sqlite3.Connection, view_id: int) -> bool:
 
 # Quick Event Functions
 
-def create_quick_event(conn: sqlite3.Connection, text: str, character_id: int, 
-                      sequence_number: int = 0) -> int:
-    """Create a new quick event.
-    
-    Args:
-        conn: Database connection
-        text: Text description of the quick event
-        character_id: ID of the character the quick event belongs to
-        sequence_number: Order in the timeline (default 0)
-        
-    Returns:
-        ID of the newly created quick event
-    """
-    try:
-        cursor = conn.cursor()
-        
-        # Get current timestamp
-        now = datetime.now().isoformat()
-        
-        # Insert the quick event
-        cursor.execute('''
-        INSERT INTO quick_events (
-            created_at, updated_at, text, sequence_number, character_id
-        ) VALUES (?, ?, ?, ?, ?)
-        ''', (now, now, text, sequence_number, character_id))
-        
-        conn.commit()
-        
-        # Parse character tags from text and create associations
-        quick_event_id = cursor.lastrowid
-        
-        # Process character mentions/tags
-        process_quick_event_character_tags(conn, quick_event_id, text)
-        
-        return quick_event_id
-    except sqlite3.Error as e:
-        print(f"Error creating quick event: {e}")
-        raise
-
-
 def process_quick_event_character_tags(conn: sqlite3.Connection, quick_event_id: int, text: str) -> None:
     """Process character tags in quick event text and create associations.
     
@@ -1394,17 +1354,14 @@ def process_quick_event_character_tags(conn: sqlite3.Connection, quick_event_id:
         text: Text to parse for character tags
     """
     try:
-        # Find all @mentions in the text
+        # Find all @mentions and [char:ID] references in the text
         import re
         mentions = re.findall(r'@(\w+)', text)
+        char_refs = re.findall(r'\[char:(\d+)\]', text)
         
-        if not mentions:
-            return
-            
         cursor = conn.cursor()
         
-        # Get all characters in the story
-        # First get the character_id of the quick event to find the story_id
+        # Get the character_id of the quick event to find the story_id
         cursor.execute('''
         SELECT c.story_id 
         FROM quick_events qe
@@ -1422,42 +1379,62 @@ def process_quick_event_character_tags(conn: sqlite3.Connection, quick_event_id:
         if story_id is None:
             return
             
-        # Get all characters in the story
-        cursor.execute('''
-        SELECT id, name, aliases 
-        FROM characters 
-        WHERE story_id = ?
-        ''', (story_id,))
-        
-        characters = cursor.fetchall()
-        
-        # Match mentions to character names
-        for mention in mentions:
-            mention_lower = mention.lower()
-            
-            # Check for exact character name matches
-            for character in characters:
-                char_dict = dict(character)
-                char_name = char_dict['name'].lower()
+        # For explicit character ID references, add them directly
+        for char_id in char_refs:
+            try:
+                char_id_int = int(char_id)
+                # Verify this character belongs to the same story
+                cursor.execute('''
+                SELECT id FROM characters WHERE id = ? AND story_id = ?
+                ''', (char_id_int, story_id))
                 
-                # Check if the mention matches the character name
-                if mention_lower == char_name or mention_lower in char_name.split():
+                if cursor.fetchone():
+                    # Add the character reference
                     cursor.execute('''
                     INSERT INTO quick_event_characters (quick_event_id, character_id)
                     VALUES (?, ?)
-                    ''', (quick_event_id, char_dict['id']))
-                    break
+                    ''', (quick_event_id, char_id_int))
+            except (ValueError, sqlite3.Error) as e:
+                print(f"Error processing character ID reference: {e}")
+        
+        # For @mentions, try to match them to character names
+        if mentions:
+            # Get all characters in the story
+            cursor.execute('''
+            SELECT id, name, aliases 
+            FROM characters 
+            WHERE story_id = ?
+            ''', (story_id,))
+            
+            characters = cursor.fetchall()
+            
+            # Match mentions to character names
+            for mention in mentions:
+                mention_lower = mention.lower()
+                
+                # Check for exact character name matches
+                for character in characters:
+                    char_dict = dict(character)
+                    char_name = char_dict['name'].lower()
                     
-                # Check aliases if available
-                if char_dict.get('aliases'):
-                    aliases = char_dict['aliases'].lower().split(',')
-                    aliases = [alias.strip() for alias in aliases]
-                    if mention_lower in aliases:
+                    # Check if the mention matches the character name
+                    if mention_lower == char_name or mention_lower in char_name.split():
                         cursor.execute('''
                         INSERT INTO quick_event_characters (quick_event_id, character_id)
                         VALUES (?, ?)
                         ''', (quick_event_id, char_dict['id']))
                         break
+                        
+                    # Check aliases if available
+                    if char_dict.get('aliases'):
+                        aliases = char_dict['aliases'].lower().split(',')
+                        aliases = [alias.strip() for alias in aliases]
+                        if mention_lower in aliases:
+                            cursor.execute('''
+                            INSERT INTO quick_event_characters (quick_event_id, character_id)
+                            VALUES (?, ?)
+                            ''', (quick_event_id, char_dict['id']))
+                            break
         
         conn.commit()
     except sqlite3.Error as e:
@@ -1562,8 +1539,10 @@ def update_quick_event(conn: sqlite3.Connection, quick_event_id: int,
         params = [now]
         
         if text is not None:
+            # Convert @mentions to [char:ID] format if possible
+            processed_text = process_character_references(conn, text, quick_event_id)
             update_fields.append('text = ?')
-            params.append(text)
+            params.append(processed_text)
             
         if sequence_number is not None:
             update_fields.append('sequence_number = ?')
@@ -1596,13 +1575,142 @@ def update_quick_event(conn: sqlite3.Connection, quick_event_id: int,
             ''', (quick_event_id,))
             
             # Process new tags
-            process_quick_event_character_tags(conn, quick_event_id, text)
+            process_quick_event_character_tags(conn, quick_event_id, processed_text)
         
         # Check if the update was successful
         return cursor.rowcount > 0
     except sqlite3.Error as e:
         print(f"Error updating quick event: {e}")
         return False
+
+
+def process_character_references(conn: sqlite3.Connection, text: str, quick_event_id: int) -> str:
+    """Process character references in text, converting @mentions to [char:ID] format where possible.
+    
+    Args:
+        conn: Database connection
+        text: Text to process
+        quick_event_id: ID of the quick event (to determine story)
+        
+    Returns:
+        Processed text with character references in [char:ID] format
+    """
+    try:
+        # Find all @mentions in the text
+        import re
+        mentions = re.findall(r'@(\w+)', text)
+        
+        if not mentions:
+            return text
+            
+        # Get the story ID for this quick event
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT c.story_id 
+        FROM quick_events qe
+        JOIN characters c ON qe.character_id = c.id
+        WHERE qe.id = ?
+        ''', (quick_event_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            return text
+            
+        story_id = dict(result).get('story_id')
+        if not story_id:
+            return text
+            
+        # Get all characters in the story
+        cursor.execute('''
+        SELECT id, name, aliases 
+        FROM characters 
+        WHERE story_id = ?
+        ''', (story_id,))
+        
+        characters = cursor.fetchall()
+        
+        # Process each mention
+        processed_text = text
+        for mention in mentions:
+            mention_lower = mention.lower()
+            
+            # Try to find a matching character
+            for character in characters:
+                char_dict = dict(character)
+                char_name = char_dict['name'].lower()
+                char_id = char_dict['id']
+                
+                # Check if mention matches character name
+                if mention_lower == char_name or mention_lower in char_name.split():
+                    # Replace @mention with [char:ID] format
+                    processed_text = processed_text.replace(f"@{mention}", f"[char:{char_id}]")
+                    break
+                    
+                # Check aliases if available
+                if char_dict.get('aliases'):
+                    aliases = char_dict['aliases'].lower().split(',')
+                    aliases = [alias.strip() for alias in aliases]
+                    if mention_lower in aliases:
+                        processed_text = processed_text.replace(f"@{mention}", f"[char:{char_id}]")
+                        break
+                        
+        return processed_text
+        
+    except Exception as e:
+        print(f"Error processing character references: {e}")
+        return text
+
+
+def create_quick_event(conn: sqlite3.Connection, text: str, character_id: int, 
+                      sequence_number: int = 0) -> int:
+    """Create a new quick event.
+    
+    Args:
+        conn: Database connection
+        text: Text description of the quick event
+        character_id: ID of the character the quick event belongs to
+        sequence_number: Order in the timeline (default 0)
+        
+    Returns:
+        ID of the newly created quick event
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Get current timestamp
+        now = datetime.now().isoformat()
+        
+        # Insert the quick event (we'll process references after we have an ID)
+        cursor.execute('''
+        INSERT INTO quick_events (
+            created_at, updated_at, text, sequence_number, character_id
+        ) VALUES (?, ?, ?, ?, ?)
+        ''', (now, now, text, sequence_number, character_id))
+        
+        conn.commit()
+        
+        # Get the new quick event ID
+        quick_event_id = cursor.lastrowid
+        
+        # Now that we have an ID, process the text to convert @mentions to [char:ID] format
+        processed_text = process_character_references(conn, text, quick_event_id)
+        
+        # If we converted any mentions, update the text
+        if processed_text != text:
+            cursor.execute('''
+            UPDATE quick_events
+            SET text = ?
+            WHERE id = ?
+            ''', (processed_text, quick_event_id))
+            conn.commit()
+        
+        # Process character mentions/tags
+        process_quick_event_character_tags(conn, quick_event_id, processed_text)
+        
+        return quick_event_id
+    except sqlite3.Error as e:
+        print(f"Error creating quick event: {e}")
+        raise
 
 
 def delete_quick_event(conn: sqlite3.Connection, quick_event_id: int) -> bool:
@@ -2215,3 +2323,16 @@ def update_character_detail_sequence(conn: sqlite3.Connection,
     except sqlite3.Error as e:
         print(f"Error updating character detail sequence: {e}")
         return False 
+
+
+def get_quick_event_tagged_characters(conn: sqlite3.Connection, quick_event_id: int) -> List[Dict[str, Any]]:
+    """Get all characters tagged in a quick event (alias for get_quick_event_characters).
+    
+    Args:
+        conn: Database connection
+        quick_event_id: ID of the quick event
+        
+    Returns:
+        List of dictionaries with character data
+    """
+    return get_quick_event_characters(conn, quick_event_id)

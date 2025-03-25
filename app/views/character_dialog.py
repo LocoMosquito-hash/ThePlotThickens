@@ -25,7 +25,7 @@ from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QKeyEven
 from app.db_sqlite import (
     get_character, update_character, get_story, get_character_quick_events,
     create_quick_event, update_quick_event, delete_quick_event, 
-    get_next_quick_event_sequence_number, get_quick_event_characters,
+    get_next_quick_event_sequence_number, get_quick_event_characters, get_quick_event_tagged_characters,
     get_story_characters, get_quick_event_images, associate_quick_event_with_image,
     remove_quick_event_image_association, get_story_images,
     add_character_detail, update_character_detail, delete_character_detail, 
@@ -48,7 +48,6 @@ class CharacterTagEditor(QDialog):
         super().__init__(parent)
         self.db_conn = db_conn
         self.character_id = character_id
-        self.initial_text = text
         
         # Get the story ID for this character
         character = get_character(db_conn, character_id)
@@ -58,6 +57,9 @@ class CharacterTagEditor(QDialog):
         self.characters = []
         if self.story_id:
             self.characters = get_story_characters(db_conn, self.story_id)
+        
+        # Convert any [char:ID] references to @CharacterName format for display
+        self.initial_text = self.convert_char_refs_to_mentions(text)
         
         self.init_ui()
         
@@ -105,12 +107,67 @@ class CharacterTagEditor(QDialog):
         layout.addLayout(button_layout)
         
     def get_text(self) -> str:
-        """Get the edited text.
+        """Get the edited text, converting @mentions to [char:ID] format for storage.
         
         Returns:
-            The text from the editor
+            The processed text from the editor with character references
         """
-        return self.text_edit.toPlainText()
+        display_text = self.text_edit.toPlainText()
+        # Convert @mentions to [char:ID] for storage
+        return self.convert_mentions_to_char_refs(display_text)
+    
+    def convert_char_refs_to_mentions(self, text: str) -> str:
+        """Convert [char:ID] references to @CharacterName format for display.
+        
+        Args:
+            text: Text with [char:ID] references
+            
+        Returns:
+            Text with @CharacterName mentions
+        """
+        import re
+        
+        # Create a mapping of character IDs to names
+        char_id_to_name = {str(char['id']): char['name'] for char in self.characters}
+        
+        # Replace [char:ID] references with @CharacterName
+        def replace_char_ref(match):
+            char_id = match.group(1)
+            if char_id in char_id_to_name:
+                return f"@{char_id_to_name[char_id]}"
+            return match.group(0)  # Keep original if no match
+            
+        # Process the text with regex substitution
+        processed_text = re.sub(r'\[char:(\d+)\]', replace_char_ref, text)
+        
+        return processed_text
+    
+    def convert_mentions_to_char_refs(self, text: str) -> str:
+        """Convert @mentions to [char:ID] format for storage.
+        
+        Args:
+            text: Text with @CharacterName mentions
+            
+        Returns:
+            Text with [char:ID] references
+        """
+        import re
+        
+        # Create a mapping of character names to IDs (case insensitive)
+        char_name_to_id = {char['name'].lower(): str(char['id']) for char in self.characters}
+        
+        # Replace @CharacterName with [char:ID]
+        def replace_mention(match):
+            char_name = match.group(1)
+            if char_name.lower() in char_name_to_id:
+                char_id = char_name_to_id[char_name.lower()]
+                return f"[char:{char_id}]"
+            return match.group(0)  # Keep original if no match
+        
+        # Process the text with regex substitution to handle mentions
+        processed_text = re.sub(r'@(\w+)', replace_mention, text)
+        
+        return processed_text
         
     def check_for_character_tag(self):
         """Check if the user is typing a character tag and provide suggestions."""
@@ -325,27 +382,58 @@ class QuickEventItem(QListWidgetItem):
         super().__init__()
         self.event_data = event_data
         self.event_id = event_data['id']
-        self.text = event_data['text']
+        self.raw_text = event_data['text']
         self.tagged_characters = tagged_characters or []
         self.associated_images = associated_images or []
         
+        # Convert any [char:ID] references to @CharacterName format for display
+        self.display_text = self.format_display_text(self.raw_text, self.tagged_characters)
+        
         # Set display text
-        self.setText(self.text)
+        self.setText(self.display_text)
         
         # Add character tags and associated images to tooltip
-        tooltip = self.text
+        tooltip = self.display_text
         
         if self.tagged_characters:
             char_names = [char['name'] for char in self.tagged_characters]
             tooltip += f"\n\nTagged characters: {', '.join(char_names)}"
             
         if self.associated_images:
-            image_titles = [img.get('title', f"Image {img['id']}") for img in self.associated_images]
-            tooltip += f"\n\nAssociated images: {len(self.associated_images)} ({', '.join(image_titles[:3])})"
-            if len(image_titles) > 3:
-                tooltip += f"... and {len(image_titles) - 3} more"
-                
+            image_count = len(self.associated_images)
+            tooltip += f"\n\nAssociated with {image_count} image{'s' if image_count != 1 else ''}"
+            
         self.setToolTip(tooltip)
+        
+        # Store the event ID as user data
+        self.setData(Qt.ItemDataRole.UserRole, self.event_id)
+    
+    def format_display_text(self, text: str, characters: List[Dict[str, Any]]) -> str:
+        """Format text for display, converting [char:ID] references to @CharacterName.
+        
+        Args:
+            text: Raw text with [char:ID] references
+            characters: List of character dictionaries
+            
+        Returns:
+            Formatted text for display
+        """
+        import re
+        
+        # Create a mapping of character IDs to names
+        char_id_to_name = {str(char['id']): char['name'] for char in characters}
+        
+        # Replace [char:ID] references with @CharacterName
+        def replace_char_ref(match):
+            char_id = match.group(1)
+            if char_id in char_id_to_name:
+                return f"@{char_id_to_name[char_id]}"
+            return match.group(0)  # Keep original if no match
+            
+        # Process the text with regex substitution
+        processed_text = re.sub(r'\[char:(\d+)\]', replace_char_ref, text)
+        
+        return processed_text
 
 
 class ImageSelectionDialog(QDialog):
@@ -513,39 +601,31 @@ class QuickEventsTab(QWidget):
     def load_quick_events(self):
         """Load quick events for the character."""
         try:
+            # Clear existing items
+            self.events_list.clear()
+            self.images_list.clear()
+            
+            # Get all quick events for the character
             self.quick_events = get_character_quick_events(self.db_conn, self.character_id)
-            self.update_events_list()
+            
+            if not self.quick_events:
+                # No events found
+                empty_item = QListWidgetItem("No quick events found for this character.")
+                empty_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
+                self.events_list.addItem(empty_item)
+                return
+            
+            # Add quick events to the list
+            for event in self.quick_events:
+                # Get the tagged characters and associated images for this event
+                tagged_characters = get_quick_event_tagged_characters(self.db_conn, event['id'])
+                associated_images = get_quick_event_images(self.db_conn, event['id'])
+                
+                item = QuickEventItem(event, tagged_characters, associated_images)
+                self.events_list.addItem(item)
         except Exception as e:
             print(f"Error loading quick events: {e}")
             QMessageBox.warning(self, "Error", f"Failed to load quick events: {str(e)}")
-    
-    def update_events_list(self):
-        """Update the events list widget with current quick events."""
-        self.events_list.clear()
-        
-        if not self.quick_events:
-            empty_item = QListWidgetItem("No quick events yet. Click 'Add Quick Event' to create one.")
-            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
-            self.events_list.addItem(empty_item)
-            return
-        
-        for event in self.quick_events:
-            # Get tagged characters
-            try:
-                tagged_characters = get_quick_event_characters(self.db_conn, event['id'])
-            except Exception as e:
-                print(f"Error getting tagged characters: {e}")
-                tagged_characters = []
-                
-            # Get associated images
-            try:
-                associated_images = get_quick_event_images(self.db_conn, event['id'])
-            except Exception as e:
-                print(f"Error getting associated images: {e}")
-                associated_images = []
-                
-            item = QuickEventItem(event, tagged_characters, associated_images)
-            self.events_list.addItem(item)
     
     def on_event_selected(self, current, previous):
         """Handle event selection change.

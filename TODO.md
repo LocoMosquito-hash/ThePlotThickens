@@ -27,6 +27,16 @@
   - [ ] Background/history
   - [ ] Notes section
 - [ ] Character timeline tracking
+- [ ] Character details expansion and improvement
+- [ ] MC default tagging / participating out of picture options
+
+### Quick Events System
+
+- [ ] Quickevents polishing and refinement
+- [ ] Incorporating quick events into the timeline
+- [ ] Batch management of quick events
+- [ ] Quick event filtering and searching
+- [ ] Quick event categorization
 
 ### Relationship System
 
@@ -60,6 +70,8 @@
 - [ ] Support multiple image formats
 - [ ] Add image tagging
 - [ ] Basic image editing tools
+- [ ] Gallery filtering by tags, characters, and dates
+- [ ] Image tag editing and bulk operations
 
 ## Medium-term Goals
 
@@ -71,6 +83,7 @@
 - [ ] Plot point management
 - [ ] Story templates
 - [ ] Genre-specific features
+- [ ] Timeline changing decisions, only for VNs and games
 
 ### UI/UX Enhancements
 
