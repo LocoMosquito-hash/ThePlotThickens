@@ -179,6 +179,21 @@ def create_tables(conn: sqlite3.Connection) -> None:
     )
     ''')
     
+    # Create scene_quick_events table (for associating quick events with scenes)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS scene_quick_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        scene_event_id INTEGER NOT NULL,
+        quick_event_id INTEGER NOT NULL,
+        sequence_number INTEGER DEFAULT 0,
+        FOREIGN KEY (scene_event_id) REFERENCES events (id) ON DELETE CASCADE,
+        FOREIGN KEY (quick_event_id) REFERENCES quick_events (id) ON DELETE CASCADE,
+        UNIQUE(scene_event_id, quick_event_id)
+    )
+    ''')
+    
     # Create timeline_views table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS timeline_views (
@@ -2445,4 +2460,166 @@ def get_story_characters_with_events(conn: sqlite3.Connection, story_id: int) ->
         return [dict(row) for row in rows]
     except sqlite3.Error as e:
         print(f"Error getting characters with events: {e}")
+        return []
+
+
+# Scene-QuickEvent association functions
+def add_quick_event_to_scene(conn: sqlite3.Connection, 
+                           scene_event_id: int, 
+                           quick_event_id: int) -> int:
+    """Associate a quick event with a scene.
+    
+    Args:
+        conn: Database connection
+        scene_event_id: ID of the scene event
+        quick_event_id: ID of the quick event
+        
+    Returns:
+        ID of the created association, or None if failed
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Get the next sequence number for this scene
+        cursor.execute('''
+        SELECT MAX(sequence_number) as max_seq
+        FROM scene_quick_events
+        WHERE scene_event_id = ?
+        ''', (scene_event_id,))
+        
+        result = cursor.fetchone()
+        sequence_number = result['max_seq'] + 1 if result and result['max_seq'] is not None else 0
+        
+        # Insert the association
+        cursor.execute('''
+        INSERT INTO scene_quick_events (
+            scene_event_id, quick_event_id, sequence_number
+        ) VALUES (?, ?, ?)
+        ''', (scene_event_id, quick_event_id, sequence_number))
+        
+        conn.commit()
+        return cursor.lastrowid
+    except sqlite3.Error as e:
+        print(f"Error adding quick event to scene: {e}")
+        conn.rollback()
+        return None
+
+
+def remove_quick_event_from_scene(conn: sqlite3.Connection, 
+                                scene_event_id: int, 
+                                quick_event_id: int) -> bool:
+    """Remove a quick event from a scene.
+    
+    Args:
+        conn: Database connection
+        scene_event_id: ID of the scene event
+        quick_event_id: ID of the quick event
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        DELETE FROM scene_quick_events
+        WHERE scene_event_id = ? AND quick_event_id = ?
+        ''', (scene_event_id, quick_event_id))
+        
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Error removing quick event from scene: {e}")
+        conn.rollback()
+        return False
+
+
+def get_scene_quick_events(conn: sqlite3.Connection, scene_event_id: int) -> List[Dict[str, Any]]:
+    """Get all quick events associated with a scene.
+    
+    Args:
+        conn: Database connection
+        scene_event_id: ID of the scene event
+        
+    Returns:
+        List of quick event dictionaries with association data
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        SELECT qe.*, c.name as character_name, sqe.sequence_number, sqe.id as association_id
+        FROM quick_events qe
+        JOIN characters c ON qe.character_id = c.id
+        JOIN scene_quick_events sqe ON qe.id = sqe.quick_event_id
+        WHERE sqe.scene_event_id = ?
+        ORDER BY sqe.sequence_number, qe.created_at
+        ''', (scene_event_id,))
+        
+        rows = cursor.fetchall()
+        
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error getting scene quick events: {e}")
+        return []
+
+
+def get_quick_event_scenes(conn: sqlite3.Connection, quick_event_id: int) -> List[Dict[str, Any]]:
+    """Get all scenes that contain a specific quick event.
+    
+    Args:
+        conn: Database connection
+        quick_event_id: ID of the quick event
+        
+    Returns:
+        List of event dictionaries
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        SELECT e.*, sqe.sequence_number
+        FROM events e
+        JOIN scene_quick_events sqe ON e.id = sqe.scene_event_id
+        WHERE sqe.quick_event_id = ? AND e.event_type = 'SCENE'
+        ORDER BY e.sequence_number
+        ''', (quick_event_id,))
+        
+        rows = cursor.fetchall()
+        
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error getting quick event scenes: {e}")
+        return []
+
+
+def get_unassigned_quick_events(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
+    """Get all quick events that aren't assigned to any scene in the story.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        
+    Returns:
+        List of quick event dictionaries
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Get quick events from characters in this story that aren't assigned to any scene
+        cursor.execute('''
+        SELECT qe.*, c.name as character_name
+        FROM quick_events qe
+        JOIN characters c ON qe.character_id = c.id
+        WHERE c.story_id = ? AND qe.id NOT IN (
+            SELECT quick_event_id FROM scene_quick_events
+        )
+        ORDER BY qe.created_at DESC
+        ''', (story_id,))
+        
+        rows = cursor.fetchall()
+        
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error getting unassigned quick events: {e}")
         return []

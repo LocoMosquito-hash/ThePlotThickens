@@ -73,6 +73,16 @@
 - [ ] Gallery filtering by tags, characters, and dates
 - [ ] Image tag editing and bulk operations
 
+### Object Persistence
+
+- [ ] Add persistent settings for UI preferences
+  - [ ] NSFW toggle/checkbox for content filtering
+  - [ ] Storyboard grid options (size, visibility, snap-to-grid)
+  - [ ] Default view settings (zoom level, pan position)
+- [ ] Implement per-story configuration persistence
+- [ ] Add user preference migration between versions
+- [ ] Create configuration backup/restore functionality
+
 ## Medium-term Goals
 
 ### Story Management
