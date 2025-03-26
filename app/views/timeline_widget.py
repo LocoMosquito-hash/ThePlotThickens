@@ -42,8 +42,82 @@ from app.db_sqlite import (
     get_story_characters_with_events, get_character_quick_events,
     get_quick_event_characters, get_quick_event_tagged_characters,
     get_quick_event_images, create_timeline_view, get_story_characters,
-    get_character
+    get_character, add_quick_event_to_scene, remove_quick_event_from_scene,
+    get_scene_quick_events, get_quick_event_scenes, get_unassigned_quick_events
 )
+
+# Character reference resolution utilities
+
+def format_character_references(text: str, characters: List[Dict[str, Any]]) -> str:
+    """Format character references in text, converting [char:ID] to readable names.
+    
+    Args:
+        text: Text containing character references like [char:123]
+        characters: List of character data dictionaries
+        
+    Returns:
+        Text with character references replaced by character names
+    """
+    if not text or not characters:
+        return text
+    
+    # Create mapping of character IDs to names
+    char_lookup = {str(char.get('id')): char.get('name', 'Unknown') for char in characters}
+    
+    # Replace [char:ID] with character names
+    pattern = r'\[char:(\d+)\]'
+    
+    def replace_ref(match):
+        char_id = match.group(1)
+        if char_id in char_lookup:
+            return f"@{char_lookup[char_id]}"
+        return f"[char:{char_id}]"  # Keep the original if not found
+    
+    # Perform the replacement
+    formatted_text = re.sub(pattern, replace_ref, text)
+    return formatted_text
+
+def convert_mentions_to_references(text: str, characters: List[Dict[str, Any]]) -> str:
+    """Convert @mentions in text to [char:ID] references.
+    
+    Args:
+        text: Text containing mentions like @CharacterName
+        characters: List of character data dictionaries
+        
+    Returns:
+        Text with mentions converted to [char:ID] format
+    """
+    if not text or not characters:
+        return text
+    
+    # Create mapping of lowercase character names to IDs
+    name_lookup = {}
+    
+    for char in characters:
+        name = char.get('name', '').lower()
+        if name:
+            name_lookup[name] = char.get('id')
+            
+        # Add aliases if available
+        aliases = char.get('aliases', '')
+        if aliases:
+            for alias in aliases.lower().split(','):
+                alias = alias.strip()
+                if alias:
+                    name_lookup[alias] = char.get('id')
+    
+    # Find all @mentions
+    pattern = r'@(\w+)'
+    
+    def replace_mention(match):
+        mention = match.group(1).lower()
+        if mention in name_lookup:
+            return f"[char:{name_lookup[mention]}]"
+        return f"@{match.group(1)}"  # Keep the original if not found
+    
+    # Perform the replacement
+    converted_text = re.sub(pattern, replace_mention, text)
+    return converted_text
 
 # Event type colors and icons (default values)
 EVENT_TYPE_COLORS = {
@@ -560,38 +634,77 @@ class EventDialog(QDialog):
             self.update_color_button()
             
     def load_event_data(self):
-        """Load event data into the form."""
-        if not self.event_data:
-            return
+        """Load data from an existing event."""
+        try:
+            if not self.event_id:
+                return
             
-        self.title_edit.setText(self.event_data.get('title', ''))
-        self.desc_edit.setText(self.event_data.get('description', ''))
-        
-        event_type = self.event_data.get('event_type', 'SCENE')
-        index = self.type_combo.findText(event_type)
-        if index >= 0:
-            self.type_combo.setCurrentIndex(index)
+            # Get the event data
+            self.event_data = get_event(self.conn, self.event_id)
             
-        self.start_date.setText(self.event_data.get('start_date', ''))
-        self.end_date.setText(self.event_data.get('end_date', ''))
-        self.location_edit.setText(self.event_data.get('location', ''))
-        self.importance_spin.setValue(self.event_data.get('importance', 3))
+            # Format character references in title and description
+            title = format_character_references(self.event_data.get('title', ''), self.characters)
+            description = format_character_references(self.event_data.get('description', ''), self.characters)
+            
+            # Set form fields
+            self.title_edit.setText(title)
+            self.desc_edit.setText(description)
+            
+            # Set event type
+            event_type = self.event_data.get('event_type', 'SCENE')
+            index = self.type_combo.findText(event_type)
+            if index >= 0:
+                self.type_combo.setCurrentIndex(index)
+            
+            # Set dates
+            self.start_date.setText(self.event_data.get('start_date', ''))
+            self.end_date.setText(self.event_data.get('end_date', ''))
+            
+            # Set location
+            self.location_edit.setText(self.event_data.get('location', ''))
+            
+            # Set importance
+            self.importance_spin.setValue(self.event_data.get('importance', 3))
         
-        self.color = self.event_data.get('color', '#3498db')
-        self.update_color_button()
+            # Set color
+            self.color = self.event_data.get('color', '#3498db')
+            self.update_color_button()
         
-        self.milestone_check.setChecked(bool(self.event_data.get('is_milestone', False)))
-        self.sequence_spin.setValue(self.event_data.get('sequence_number', 0))
+            # Set milestone
+            self.milestone_check.setChecked(bool(self.event_data.get('is_milestone', False)))
+            
+            # Set parent event
+            parent_id = self.event_data.get('parent_event_id')
+            if parent_id:
+                index = self.parent_event_combo.findData(parent_id)
+                if index >= 0:
+                    self.parent_event_combo.setCurrentIndex(index)
+                    
+        except Exception as e:
+            logger.error(f"Error loading event data: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to load event data: {str(e)}")
         
     def get_event_data(self) -> Dict[str, Any]:
-        """Get event data from the form."""
+        """Get the event data from the form.
+        
+        Returns:
+            Dictionary with event data
+        """
+        # Convert any @CharacterName to [char:ID] format in title and description
+        title = self.title_edit.text().strip()
+        description = self.desc_edit.toPlainText().strip()
+        
+        # Convert mentions to references
+        title = convert_mentions_to_references(title, self.characters)
+        description = convert_mentions_to_references(description, self.characters)
+        
         return {
-            'title': self.title_edit.text(),
-            'description': self.desc_edit.toPlainText(),
+            'title': title,
+            'description': description,
             'event_type': self.type_combo.currentText(),
             'start_date': self.start_date.text(),
             'end_date': self.end_date.text(),
-            'location': self.location_edit.text(),
+            'location': self.location_edit.text().strip(),
             'importance': self.importance_spin.value(),
             'color': self.color,
             'is_milestone': self.milestone_check.isChecked(),
@@ -604,7 +717,7 @@ class EventDialog(QDialog):
         event_data = self.get_event_data()
         
         if not event_data['title']:
-            QMessageBox.warning(self, "Validation Error", "Event title is required.")
+            QMessageBox.warning(self, "Missing Information", "Please enter a title for the event.")
             return
             
         try:
@@ -612,53 +725,40 @@ class EventDialog(QDialog):
                 # Update existing event
                 success = update_event(
                     self.conn,
-                    self.event_id,
-                    title=event_data['title'],
-                    description=event_data['description'],
-                    event_type=event_data['event_type'],
-                    start_date=event_data['start_date'],
-                    end_date=event_data['end_date'],
-                    location=event_data['location'],
-                    importance=event_data['importance'],
-                    color=event_data['color'],
-                    is_milestone=event_data['is_milestone'],
-                    sequence_number=event_data['sequence_number']
+                    event_id=self.event_id,
+                    **event_data
                 )
-                
                 if success:
-                    # Process character tags
-                    self.process_character_tags(self.event_id, event_data)
+                    # Process character tags if there are any
+                    if self.characters:
+                        self.process_character_tags(self.event_id, event_data)
+                    QMessageBox.information(self, "Success", "Event updated successfully.")
                     self.accept()
                 else:
                     QMessageBox.critical(self, "Error", "Failed to update event.")
             else:
                 # Create new event
-                event_id = create_event(
+                new_event_id = create_event(
                     self.conn,
-                    title=event_data['title'],
                     story_id=self.story_id,
-                    description=event_data['description'],
-                    event_type=event_data['event_type'],
-                    start_date=event_data['start_date'],
-                    end_date=event_data['end_date'],
-                    location=event_data['location'],
-                    importance=event_data['importance'],
-                    color=event_data['color'],
-                    is_milestone=event_data['is_milestone'],
-                    sequence_number=event_data['sequence_number']
+                    sequence_number=self.get_next_sequence_number(),
+                    **event_data
                 )
                 
-                if event_id:
-                    # Process character tags
-                    self.process_character_tags(event_id, event_data)
-                    self.event_id = event_id
+                if new_event_id:
+                    self.event_id = new_event_id
+                    
+                    # Process character tags if there are any
+                    if self.characters:
+                        self.process_character_tags(new_event_id, event_data)
+                        
+                    QMessageBox.information(self, "Success", "Event created successfully.")
                     self.accept()
                 else:
                     QMessageBox.critical(self, "Error", "Failed to create event.")
-                    
         except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save event: {str(e)}")
             logger.error(f"Error saving event: {e}")
-            QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")
             
     def process_character_tags(self, event_id: int, event_data: Dict[str, Any]):
         """Process character tags from title and description.
@@ -819,108 +919,392 @@ class EventDialog(QDialog):
                 self.title_edit.setFocus()
 
     def get_next_sequence_number(self) -> int:
-        """Get the next sequence number for a new event.
-        
-        Returns:
-            The sequence number that will place the new event after the last event
-        """
+        """Get the next sequence number for a new event."""
         try:
-            # Get all events for this story
-            events = get_story_events(self.conn, self.story_id)
-            
-            if not events:
+            if not self.events:
+                # If there are no existing events, get them from the database
+                self.events = get_story_events(self.conn, self.story_id)
+                
+            # If still no events, start with 0
+            if not self.events:
                 return 0
                 
             # Find the maximum sequence number
-            max_sequence = max(event.get('sequence_number', 0) for event in events)
-            
-            # Return the next sequence number (max + 1)
-            return max_sequence + 1
-            
+            max_seq = max([e.get('sequence_number', 0) for e in self.events])
+            return max_seq + 1
         except Exception as e:
             logger.error(f"Error getting next sequence number: {e}")
             return 0
 
 
+class SceneDialog(QDialog):
+    """Dialog for creating and editing scenes."""
+    
+    def __init__(self, conn, story_id: int, parent=None, scene_id: Optional[int] = None):
+        super().__init__(parent)
+        self.conn = conn
+        self.story_id = story_id
+        self.scene_id = scene_id
+        self.scene_data = {}
+        self.quick_events = []
+        self.all_unassigned_quick_events = []
+        self.characters = []  # List of all characters in the story
+        
+        self.setWindowTitle("Create Scene" if scene_id is None else "Edit Scene")
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(500)
+        
+        self.init_ui()
+        
+        # Load all characters for the story (for resolving references)
+        self.load_characters()
+        
+        # If editing an existing scene, load its data
+        if self.scene_id:
+            self.load_scene_data()
+            
+        # Load quick events that can be added to this scene
+        self.load_unassigned_quick_events()
+        
+    def load_characters(self):
+        """Load all characters for the story."""
+        try:
+            self.characters = get_story_characters(self.conn, self.story_id)
+        except Exception as e:
+            logger.error(f"Error loading characters: {e}")
+            self.characters = []
+            
+    def init_ui(self):
+        """Initialize the UI components."""
+        layout = QVBoxLayout(self)
+        
+        # Scene title field
+        title_layout = QHBoxLayout()
+        title_label = QLabel("Title:")
+        self.title_edit = QLineEdit()
+        self.title_edit.setPlaceholderText("Enter scene title...")
+        title_layout.addWidget(title_label)
+        title_layout.addWidget(self.title_edit)
+        layout.addLayout(title_layout)
+        
+        # Splitter to divide quick events list and unassigned quick events
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.setChildrenCollapsible(False)
+        
+        # Section for quick events already in the scene
+        scene_events_group = QGroupBox("Quick Events in Scene")
+        scene_events_layout = QVBoxLayout(scene_events_group)
+        
+        self.scene_events_list = QListWidget()
+        self.scene_events_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self.scene_events_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.scene_events_list.customContextMenuRequested.connect(self.show_scene_events_context_menu)
+        scene_events_layout.addWidget(self.scene_events_list)
+        
+        # Buttons for managing scene events
+        scene_buttons_layout = QHBoxLayout()
+        self.remove_from_scene_btn = QPushButton("Remove Selected")
+        self.remove_from_scene_btn.clicked.connect(self.remove_selected_events)
+        scene_buttons_layout.addWidget(self.remove_from_scene_btn)
+        scene_events_layout.addLayout(scene_buttons_layout)
+        
+        splitter.addWidget(scene_events_group)
+        
+        # Section for unassigned quick events
+        unassigned_group = QGroupBox("Available Quick Events")
+        unassigned_layout = QVBoxLayout(unassigned_group)
+        
+        # Filter controls
+        filter_layout = QHBoxLayout()
+        filter_label = QLabel("Filter:")
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText("Filter quick events...")
+        self.filter_edit.textChanged.connect(self.filter_unassigned_events)
+        filter_layout.addWidget(filter_label)
+        filter_layout.addWidget(self.filter_edit)
+        unassigned_layout.addLayout(filter_layout)
+        
+        # List of unassigned quick events
+        self.unassigned_events_list = QListWidget()
+        self.unassigned_events_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self.unassigned_events_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.unassigned_events_list.customContextMenuRequested.connect(self.show_unassigned_events_context_menu)
+        self.unassigned_events_list.itemDoubleClicked.connect(self.add_event_to_scene)
+        unassigned_layout.addWidget(self.unassigned_events_list)
+        
+        # Buttons for managing unassigned events
+        unassigned_buttons_layout = QHBoxLayout()
+        self.add_to_scene_btn = QPushButton("Add Selected to Scene")
+        self.add_to_scene_btn.clicked.connect(self.add_selected_events)
+        unassigned_buttons_layout.addWidget(self.add_to_scene_btn)
+        unassigned_layout.addLayout(unassigned_buttons_layout)
+        
+        splitter.addWidget(unassigned_group)
+        
+        layout.addWidget(splitter, 1)  # 1 = stretch factor
+        
+        # Dialog buttons
+        buttons_layout = QHBoxLayout()
+        self.save_btn = QPushButton("Save")
+        self.save_btn.clicked.connect(self.save_scene)
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.reject)
+        
+        buttons_layout.addStretch()
+        buttons_layout.addWidget(self.cancel_btn)
+        buttons_layout.addWidget(self.save_btn)
+        
+        layout.addLayout(buttons_layout)
+    
+    def load_scene_data(self):
+        """Load the data for an existing scene."""
+        try:
+            self.scene_data = get_event(self.conn, self.scene_id)
+            
+            # Format character references in title
+            title = format_character_references(self.scene_data.get('title', ''), self.characters)
+            
+            # Set title
+            self.title_edit.setText(title)
+            
+            # Load quick events for this scene
+            self.quick_events = get_scene_quick_events(self.conn, self.scene_id)
+            self.update_scene_events_list()
+            
+        except Exception as e:
+            logger.error(f"Error loading scene data: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to load scene data: {str(e)}")
+    
+    def load_unassigned_quick_events(self):
+        """Load quick events that are not assigned to any scene."""
+        try:
+            self.all_unassigned_quick_events = get_unassigned_quick_events(self.conn, self.story_id)
+            self.update_unassigned_events_list()
+        except Exception as e:
+            logger.error(f"Error loading unassigned quick events: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to load quick events: {str(e)}")
+    
+    def update_scene_events_list(self):
+        """Update the list of quick events in the scene."""
+        self.scene_events_list.clear()
+        
+        # Sort by sequence number (already done in get_scene_quick_events)
+        for event in self.quick_events:
+            # Create an item with formatted character references
+            item = QuickEventItem(event, self.characters)
+            self.scene_events_list.addItem(item)
+    
+    def update_unassigned_events_list(self):
+        """Update the list of unassigned quick events."""
+        self.unassigned_events_list.clear()
+        
+        # Filter text
+        filter_text = self.filter_edit.text().lower()
+        
+        # Filter events based on text and sort by most recent first
+        filtered_events = [
+            event for event in self.all_unassigned_quick_events
+            if not filter_text or filter_text in format_character_references(event.get('text', ''), self.characters).lower()
+        ]
+        
+        # Add items to the list
+        for event in filtered_events:
+            # Create an item with formatted character references
+            item = QuickEventItem(event, self.characters)
+            self.unassigned_events_list.addItem(item)
+    
+    def filter_unassigned_events(self):
+        """Filter the unassigned events list based on the filter text."""
+        self.update_unassigned_events_list()
+    
+    def show_scene_events_context_menu(self, position):
+        """Show context menu for scene events list."""
+        menu = QMenu()
+        remove_action = QAction("Remove from Scene", self)
+        remove_action.triggered.connect(self.remove_selected_events)
+        menu.addAction(remove_action)
+        
+        if self.scene_events_list.selectedItems():
+            menu.exec(self.scene_events_list.mapToGlobal(position))
+    
+    def show_unassigned_events_context_menu(self, position):
+        """Show context menu for unassigned events list."""
+        menu = QMenu()
+        add_action = QAction("Add to Scene", self)
+        add_action.triggered.connect(self.add_selected_events)
+        menu.addAction(add_action)
+        
+        if self.unassigned_events_list.selectedItems():
+            menu.exec(self.unassigned_events_list.mapToGlobal(position))
+    
+    def add_event_to_scene(self, item):
+        """Add a single quick event to the scene."""
+        if isinstance(item, QuickEventItem):
+            event_id = item.event_data['id']
+            # Add to the local list of quick events for this scene
+            # The actual database update will happen on save
+            existing_ids = [e['id'] for e in self.quick_events]
+            if event_id not in existing_ids:
+                event_data = next((e for e in self.all_unassigned_quick_events if e['id'] == event_id), None)
+                if event_data:
+                    self.quick_events.append(event_data)
+                    # Remove from unassigned list
+                    self.all_unassigned_quick_events = [e for e in self.all_unassigned_quick_events if e['id'] != event_id]
+                    # Update both lists
+                    self.update_scene_events_list()
+                    self.update_unassigned_events_list()
+    
+    def add_selected_events(self):
+        """Add selected quick events to the scene."""
+        selected_items = self.unassigned_events_list.selectedItems()
+        if not selected_items:
+            return
+            
+        for item in selected_items:
+            self.add_event_to_scene(item)
+    
+    def remove_selected_events(self):
+        """Remove selected quick events from the scene."""
+        selected_items = self.scene_events_list.selectedItems()
+        if not selected_items:
+            return
+            
+        # Get IDs of selected events
+        selected_ids = [item.event_data['id'] for item in selected_items]
+        
+        # Remove from scene events list
+        for event_id in selected_ids:
+            event_data = next((e for e in self.quick_events if e['id'] == event_id), None)
+            if event_data:
+                # Add back to unassigned list
+                self.all_unassigned_quick_events.append(event_data)
+                
+        # Update quick events list
+        self.quick_events = [e for e in self.quick_events if e['id'] not in selected_ids]
+        
+        # Update both lists
+        self.update_scene_events_list()
+        self.update_unassigned_events_list()
+    
+    def get_next_sequence_number(self) -> int:
+        """Get the next sequence number for a new event."""
+        try:
+            # Get all events for this story
+            events = get_story_events(self.conn, self.story_id)
+            
+            # If no events, start with 0
+            if not events:
+                return 0
+                
+            # Find the maximum sequence number
+            max_seq = max([e.get('sequence_number', 0) for e in events])
+            return max_seq + 1
+        except Exception as e:
+            logger.error(f"Error getting next sequence number: {e}")
+            return 0
+    
+    def save_scene(self):
+        """Save the scene and its associated quick events."""
+        title = self.title_edit.text().strip()
+        if not title:
+            QMessageBox.warning(self, "Missing Information", "Please enter a title for the scene.")
+            return
+            
+        # Convert any character mentions to references
+        title = convert_mentions_to_references(title, self.characters)
+            
+        try:
+            # If we're creating a new scene
+            if not self.scene_id:
+                # Create the scene event
+                self.scene_id = create_event(
+                    self.conn,
+                    title=title,
+                    story_id=self.story_id,
+                    event_type="SCENE",
+                    sequence_number=self.get_next_sequence_number()
+                )
+                
+                if not self.scene_id:
+                    QMessageBox.critical(self, "Error", "Failed to create scene.")
+                    return
+            else:
+                # Update the existing scene
+                success = update_event(
+                    self.conn,
+                    event_id=self.scene_id,
+                    title=title
+                )
+                
+                if not success:
+                    QMessageBox.critical(self, "Error", "Failed to update scene.")
+                    return
+                
+                # Remove all existing quick event associations (we'll re-add them)
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    "DELETE FROM scene_quick_events WHERE scene_event_id = ?", 
+                    (self.scene_id,)
+                )
+                self.conn.commit()
+            
+            # Add all quick events to the scene with appropriate sequence numbers
+            for i, event in enumerate(self.quick_events):
+                add_quick_event_to_scene(
+                    self.conn,
+                    scene_event_id=self.scene_id,
+                    quick_event_id=event['id']
+                )
+            
+            self.accept()
+        except Exception as e:
+            logger.error(f"Error saving scene: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to save scene: {str(e)}")
+
+
 class QuickEventItem(QListWidgetItem):
-    """List widget item representing a quick event in the search results."""
+    """List item for displaying a quick event."""
     
     def __init__(self, event_data: Dict[str, Any], characters: List[Dict[str, Any]] = None,
                  images: List[Dict[str, Any]] = None):
-        """Initialize a quick event item.
-        
-        Args:
-            event_data: Quick event data dictionary
-            characters: List of tagged character dictionaries
-            images: List of associated image dictionaries
-        """
         super().__init__()
         self.event_data = event_data
-        self.event_id = event_data['id']
-        self.raw_text = event_data['text']
         self.characters = characters or []
         self.images = images or []
         
-        # Convert any [char:ID] references to @CharacterName format for display
-        self.display_text = self.format_display_text(self.raw_text, self.characters)
+        # Store the character ID for the primary character
+        self.character_id = event_data.get('character_id')
         
-        # Set the display text
-        self.setText(self.display_text)
+        # Primary character name (if available in the event data)
+        self.character_name = event_data.get('character_name', 'Unknown')
         
-        # Set text color to white for better readability on dark background
-        self.setForeground(QColor(255, 255, 255))
+        # Format the text for display
+        text = event_data.get('text', '')
         
-        # Add character tags and associated images to tooltip
-        tooltip = f"<b>{self.display_text}</b>"
+        # Create display text with resolved character references
+        display_text = format_character_references(text, self.characters)
         
-        # Add creation date to tooltip
-        created_date = datetime.fromisoformat(event_data['created_at'].replace('Z', '+00:00'))
-        formatted_date = created_date.strftime("%Y-%m-%d %H:%M")
-        tooltip += f"<br><br>Created: {formatted_date}"
-        
-        if self.characters:
-            char_names = [char['name'] for char in self.characters]
-            tooltip += f"<br><br>Tagged characters: {', '.join(char_names)}"
-            
+        # Add preview indicators for images if present
         if self.images:
             image_count = len(self.images)
-            tooltip += f"<br><br>Associated with {image_count} image{'s' if image_count != 1 else ''}"
-            
+            display_text += f" [+{image_count} image{'s' if image_count > 1 else ''}]"
+        
+        # Set the text of the item
+        self.setText(display_text)
+        
+        # Create tooltip with full text and metadata
+        tooltip = f"<b>{self.character_name}:</b> {display_text}"
+        
+        # Add image info to tooltip if present
+        if self.images:
+            tooltip += "\n\nAttached Images:"
+            for img in self.images[:3]:  # Limit to first 3
+                img_name = img.get('filename', 'unknown.jpg')
+                tooltip += f"\n• {img_name}"
+            if len(self.images) > 3:
+                tooltip += f"\n• ...and {len(self.images) - 3} more"
+                
         self.setToolTip(tooltip)
-        
-        # Store the event ID as user data
-        self.setData(Qt.ItemDataRole.UserRole, self.event_id)
-        
-    def format_display_text(self, text: str, characters: List[Dict[str, Any]]) -> str:
-        """Format text for display, converting [char:ID] references to @CharacterName.
-        
-        Args:
-            text: Raw text with [char:ID] references
-            characters: List of character dictionaries
-            
-        Returns:
-            Formatted text for display
-        """
-        import re
-        
-        # Create a mapping of character IDs to names
-        char_id_to_name = {str(char['id']): char['name'] for char in characters}
-        
-        # Replace [char:ID] references with @CharacterName
-        def replace_char_ref(match):
-            char_id = match.group(1)
-            if char_id in char_id_to_name:
-                return f"@{char_id_to_name[char_id]}"
-            # If character not in our list but ID is valid, try to use numeric ID 
-            try:
-                return f"@Character[{char_id}]"
-            except:
-                return match.group(0)  # Keep original if no match
-            
-        # Process the text with regex substitution
-        processed_text = re.sub(r'\[char:(\d+)\]', replace_char_ref, text)
-        
-        return processed_text
 
 
 class QuickEventSearchTab(QWidget):
@@ -1179,32 +1563,21 @@ class QuickEventSearchTab(QWidget):
             QMessageBox.warning(self, "Error", f"Failed to search events: {str(e)}")
     
     def update_results_list(self):
-        """Update the results list with the search results."""
-        # Clear existing items
+        """Update the search results list with the current search results."""
         self.results_list.clear()
-        self.characters_list.clear()
-        self.images_list.clear()
-        self.detail_label.setText("Select a quick event to view details")
         
         if not self.search_results:
-            # No results found
-            empty_item = QListWidgetItem("No quick events found with the specified criteria.")
+            # Add a placeholder item
+            empty_item = QListWidgetItem("No results found. Try different search criteria.")
             empty_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
             self.results_list.addItem(empty_item)
             return
         
-        # Add quick events to the list
+        # Add results to list
         for event in self.search_results:
-            # Get the tagged characters and associated images for this event
-            tagged_characters = get_quick_event_tagged_characters(self.conn, event['id'])
-            associated_images = get_quick_event_images(self.conn, event['id'])
-            
-            item = QuickEventItem(event, tagged_characters, associated_images)
+            # Create an item with formatted character references
+            item = QuickEventItem(event, self.characters)
             self.results_list.addItem(item)
-            
-        # Show the count of results
-        count_msg = f"Found {len(self.search_results)} quick event(s)"
-        self.detail_label.setText(count_msg)
         
     def on_event_selected(self, current, previous):
         """Handle event selection change.
@@ -1467,6 +1840,13 @@ class TimelineWidget(QWidget):
         self.add_event_btn.clicked.connect(self.add_event)
         toolbar.addWidget(self.add_event_btn)
         
+        # Add scene button
+        self.add_scene_btn = QToolButton()
+        self.add_scene_btn.setText("Add Scene")
+        self.add_scene_btn.setToolTip("Add a new scene with quick events")
+        self.add_scene_btn.clicked.connect(self.add_scene)
+        toolbar.addWidget(self.add_scene_btn)
+        
         toolbar.addSeparator()
         
         # View selector
@@ -1608,7 +1988,7 @@ class TimelineWidget(QWidget):
             
     def display_events(self):
         """Display events in the timeline."""
-        # Clear existing events
+        # Clear existing events in the list view
         while self.timeline_layout.count():
             item = self.timeline_layout.takeAt(0)
             if item.widget():
@@ -1617,24 +1997,75 @@ class TimelineWidget(QWidget):
         # Apply filters
         filtered_events = self.filter_events()
         
+        # Update the horizontal timeline
+        self.horizontal_timeline.set_events(filtered_events)
+        
         if not filtered_events:
             empty_label = QLabel("No events to display. Create your first event using the 'Add Event' button.")
             empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.timeline_layout.addWidget(empty_label)
             return
             
-        # Create a chronological layout
-        for event in filtered_events:
-            event_widget = EventItem(event, conn=self.conn)
-            event_widget.clicked.connect(self.select_event)
-            
-            if self.selected_event_id and event['id'] == self.selected_event_id:
-                event_widget.set_selected(True)
+        # Display based on current view type
+        if self.current_view_type == "CHRONOLOGICAL":
+            # Create a chronological layout
+            for event in filtered_events:
+                event_widget = EventItem(event, conn=self.conn)
+                event_widget.clicked.connect(self.select_event)
                 
-            self.timeline_layout.addWidget(event_widget)
+                if self.selected_event_id and event['id'] == self.selected_event_id:
+                    event_widget.set_selected(True)
+                    
+                self.timeline_layout.addWidget(event_widget)
+        else:
+            # Create a hierarchical view of events
+            events_by_parent = {}
+            for event in filtered_events:
+                parent_id = event.get('parent_event_id')
+                if parent_id not in events_by_parent:
+                    events_by_parent[parent_id] = []
+                events_by_parent[parent_id].append(event)
+                
+            # Add top-level events (those without a parent)
+            self.add_hierarchical_events(events_by_parent, None, 0)
             
         # Add stretch to push events to the top
         self.timeline_layout.addStretch()
+    
+    def add_hierarchical_events(self, events_by_parent, parent_id, level):
+        """Add events to the hierarchical view.
+        
+        Args:
+            events_by_parent: Dictionary mapping parent IDs to lists of events
+            parent_id: Current parent ID to add children for
+            level: Current nesting level (for indentation)
+        """
+        if parent_id not in events_by_parent:
+            return
+            
+        for event in sorted(events_by_parent[parent_id], key=lambda e: e.get('sequence_number', 0)):
+            # Create an event item
+            event_item = EventItem(event, self, self.conn)
+            event_item.clicked.connect(self.select_event)
+            
+            # Set selected state
+            if self.selected_event_id == event['id']:
+                event_item.set_selected(True)
+            
+            # Add to layout with indentation
+            event_row = QHBoxLayout()
+            
+            # Add indentation spacer
+            if level > 0:
+                spacer = QWidget()
+                spacer.setFixedWidth(20 * level)
+                event_row.addWidget(spacer)
+                
+            event_row.addWidget(event_item)
+            self.timeline_layout.addLayout(event_row)
+            
+            # Recursively add children
+            self.add_hierarchical_events(events_by_parent, event['id'], level + 1)
         
     def filter_events(self) -> List[Dict[str, Any]]:
         """Apply filters to the events list."""
@@ -1662,143 +2093,100 @@ class TimelineWidget(QWidget):
         self.horizontal_timeline.set_events(self.filter_events())
         
     def select_event(self, event_id: int):
-        """Handle event selection."""
+        """Select an event and display its details."""
         self.selected_event_id = event_id
+        self.horizontal_timeline.set_selected_event(event_id)
         
-        # Update UI
+        # Find the event in our list
+        event = next((e for e in self.events if e['id'] == event_id), None)
+        if not event:
+            # Clear details
+            self.event_title_label.setText("No event selected")
+            self.event_details_label.setText("")
+            self.edit_event_btn.setEnabled(False)
+            self.delete_event_btn.setEnabled(False)
+            self.move_left_btn.setEnabled(False)
+            self.move_right_btn.setEnabled(False)
+            return
+            
+        # Enable buttons for selected event
         self.edit_event_btn.setEnabled(True)
         self.delete_event_btn.setEnabled(True)
-        self.move_left_btn.setEnabled(True)
-        self.move_right_btn.setEnabled(True)
         
-        # Get event details
-        event = next((e for e in self.events if e['id'] == event_id), None)
-        if event:
-            self.event_title_label.setText(event['title'])
+        # Enable/disable move buttons based on event position
+        sorted_events = sorted(self.filter_events(), key=lambda e: e.get('sequence_number', 0))
+        event_indices = [i for i, e in enumerate(sorted_events) if e['id'] == event_id]
+        
+        if not event_indices:
+            self.move_left_btn.setEnabled(False)
+            self.move_right_btn.setEnabled(False)
+        else:
+            index = event_indices[0]
+            self.move_left_btn.setEnabled(index > 0)
+            self.move_right_btn.setEnabled(index < len(sorted_events) - 1)
             
-            details = ""
-            if event.get('description'):
-                details += f"<b>Description:</b> {event['description']}<br>"
-            if event.get('event_type'):
-                details += f"<b>Type:</b> {event['event_type']}<br>"
-            if event.get('start_date'):
-                details += f"<b>Start:</b> {event['start_date']}"
-                if event.get('end_date'):
-                    details += f" <b>End:</b> {event['end_date']}"
-                details += "<br>"
-            if event.get('location'):
-                details += f"<b>Location:</b> {event['location']}<br>"
+        # Set event details
+        self.event_title_label.setText(event.get('title', 'Untitled Event'))
+        
+        # Format details text
+        details = []
+        
+        # Event type
+        event_type = event.get('event_type', 'UNKNOWN')
+        details.append(f"<b>Type:</b> {event_type}")
+        
+        # Description
+        if event.get('description'):
+            details.append(f"<b>Description:</b> {event.get('description')}")
             
-            # Add sequence number to details
-            details += f"<b>Sequence:</b> {event.get('sequence_number', 0)}<br>"
+        # Date range
+        if event.get('start_date') and event.get('end_date'):
+            details.append(f"<b>Date Range:</b> {event.get('start_date')} to {event.get('end_date')}")
+        elif event.get('start_date'):
+            details.append(f"<b>Date:</b> {event.get('start_date')}")
             
-            # Add tagged characters
+        # Location
+        if event.get('location'):
+            details.append(f"<b>Location:</b> {event.get('location')}")
+            
+        # Get characters involved
+        try:
+            characters = get_event_characters(self.conn, event_id)
+            if characters:
+                char_names = ", ".join([char.get('name', 'Unknown') for char in characters])
+                details.append(f"<b>Characters:</b> {char_names}")
+        except Exception as e:
+            logger.error(f"Error getting event characters: {e}")
+            
+        # If it's a scene, show quick events
+        if event_type == 'SCENE':
             try:
-                event_characters = get_event_characters(self.conn, event_id)
-                if event_characters:
-                    char_names = [char['name'] for char in event_characters]
-                    details += f"<b>Characters:</b> {', '.join(char_names)}<br>"
-            except Exception as e:
-                logger.error(f"Error getting event characters: {e}")
+                # Get story characters for reference resolution
+                story_characters = get_story_characters(self.conn, self.story_id)
                 
-            self.event_details_label.setText(details)
+                # Get quick events for this scene
+                quick_events = get_scene_quick_events(self.conn, event_id)
+                if quick_events:
+                    details.append("<b>Quick Events:</b>")
+                    for qe in quick_events:
+                        # Format the text with resolved character references
+                        text = qe.get('text', '')
+                        formatted_text = format_character_references(text, story_characters)
+                        
+                        # Truncate long texts
+                        if len(formatted_text) > 50:
+                            formatted_text = formatted_text[:47] + "..."
+                        details.append(f"• {formatted_text}")
+            except Exception as e:
+                logger.error(f"Error getting scene quick events: {e}")
             
-            # Update selection in horizontal timeline
-            self.horizontal_timeline.set_selected_event(event_id)
+        self.event_details_label.setText("<br>".join(details))
         
-        # Refresh display to update selection
+        # Update timeline display to show selection
         self.display_events()
         
-    def add_event(self):
-        """Open dialog to add a new event."""
-        dialog = EventDialog(self.conn, self.story_id, self)
-        if dialog.exec():
-            self.load_events()
-            
-            # Select the newly created event
-            if dialog.event_id:
-                self.selected_event_id = dialog.event_id
-                self.select_event(dialog.event_id)
-                
-                # Ensure the horizontal timeline is scrolled to show the new event
-                if self.current_view_type == "CHRONOLOGICAL":
-                    # Use QTimer to ensure the UI has updated before scrolling
-                    QTimer.singleShot(100, self.scroll_to_selected_event)
-            
-    def edit_event(self):
-        """Open dialog to edit the selected event."""
-        if not self.selected_event_id:
-            return
-            
-        dialog = EventDialog(self.conn, self.story_id, self, self.selected_event_id)
-        if dialog.exec():
-            self.load_events()
-            
-    def delete_event(self):
-        """Delete the selected event."""
-        if not self.selected_event_id:
-            return
-            
-        confirm = QMessageBox.question(
-            self,
-            "Confirm Deletion",
-            "Are you sure you want to delete this event? This action cannot be undone.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        
-        if confirm == QMessageBox.StandardButton.Yes:
-            success = delete_event(self.conn, self.selected_event_id)
-            if success:
-                self.selected_event_id = None
-                self.edit_event_btn.setEnabled(False)
-                self.delete_event_btn.setEnabled(False)
-                self.event_title_label.setText("Select an event to view details")
-                self.event_details_label.setText("")
-                self.load_events()
-            else:
-                QMessageBox.critical(self, "Error", "Failed to delete event.")
-                
-    def load_timeline_views(self):
-        """Load timeline views from the database."""
-        try:
-            if self.story_id <= 0:
-                return
-                
-            self.timeline_views = get_story_timeline_views(self.conn, self.story_id)
-            
-            # Clear and repopulate the view selector
-            self.view_selector.clear()
-            
-            if not self.timeline_views:
-                # Create a default view if none exists
-                default_view_id = create_timeline_view(
-                    self.conn,
-                    "Default View",
-                    self.story_id,
-                    "Default chronological view",
-                    "CHRONOLOGICAL"
-                )
-                
-                if default_view_id:
-                    self.timeline_views = get_story_timeline_views(self.conn, self.story_id)
-                    
-            for view in self.timeline_views:
-                self.view_selector.addItem(view['name'], view['id'])
-                
-            # Select the first view or the current view if it exists
-            if self.current_view_id:
-                index = self.view_selector.findData(self.current_view_id)
-                if index >= 0:
-                    self.view_selector.setCurrentIndex(index)
-                else:
-                    self.current_view_id = None
-                    
-            if not self.current_view_id and self.timeline_views:
-                self.current_view_id = self.timeline_views[0]['id']
-                
-        except Exception as e:
-            logger.error(f"Error loading timeline views: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to load timeline views: {str(e)}")
+        # Scroll to make the selected event visible
+        QTimer.singleShot(100, self.scroll_to_selected_event)
             
     def change_view(self, index: int):
         """Change the current timeline view."""
@@ -1969,6 +2357,106 @@ class TimelineWidget(QWidget):
         # Set the horizontal scroll position
         self.scroll_area.horizontalScrollBar().setValue(scroll_pos)
 
+    def add_event(self):
+        """Open the dialog to add a new event."""
+        dialog = EventDialog(self.conn, self.story_id, self)
+        if dialog.exec():
+            self.load_events()
+            self.horizontal_timeline.set_events(self.filter_events())
+            
+    def add_scene(self):
+        """Open the dialog to add a new scene."""
+        dialog = SceneDialog(self.conn, self.story_id, self)
+        if dialog.exec():
+            self.load_events()
+            self.horizontal_timeline.set_events(self.filter_events())
+            
+    def edit_event(self):
+        """Open the dialog to edit the selected event."""
+        if not self.selected_event_id:
+            return
+        
+        # Get the event type
+        event = next((e for e in self.events if e['id'] == self.selected_event_id), None)
+        if not event:
+            return
+            
+        # Check if this is a scene, in which case use the SceneDialog
+        if event.get('event_type') == 'SCENE':
+            dialog = SceneDialog(self.conn, self.story_id, self, scene_id=self.selected_event_id)
+        else:
+            dialog = EventDialog(self.conn, self.story_id, self, event_id=self.selected_event_id)
+            
+        if dialog.exec():
+            self.load_events()
+            self.horizontal_timeline.set_events(self.filter_events())
+            
+    def delete_event(self):
+        """Delete the selected event."""
+        if not self.selected_event_id:
+            return
+            
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            "Are you sure you want to delete this event? This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if confirm == QMessageBox.StandardButton.Yes:
+            success = delete_event(self.conn, self.selected_event_id)
+            if success:
+                self.selected_event_id = None
+                self.edit_event_btn.setEnabled(False)
+                self.delete_event_btn.setEnabled(False)
+                self.event_title_label.setText("Select an event to view details")
+                self.event_details_label.setText("")
+                self.load_events()
+            else:
+                QMessageBox.critical(self, "Error", "Failed to delete event.")
+                
+    def load_timeline_views(self):
+        """Load timeline views from the database."""
+        try:
+            if self.story_id <= 0:
+                return
+                
+            self.timeline_views = get_story_timeline_views(self.conn, self.story_id)
+            
+            # Clear and repopulate the view selector
+            self.view_selector.clear()
+            
+            if not self.timeline_views:
+                # Create a default view if none exists
+                default_view_id = create_timeline_view(
+                    self.conn,
+                    "Default View",
+                    self.story_id,
+                    "Default chronological view",
+                    "CHRONOLOGICAL"
+                )
+                
+                if default_view_id:
+                    self.timeline_views = get_story_timeline_views(self.conn, self.story_id)
+                    
+            for view in self.timeline_views:
+                self.view_selector.addItem(view['name'], view['id'])
+            
+            # Select the first view or the current view if it exists
+            if self.current_view_id:
+                index = self.view_selector.findData(self.current_view_id)
+                if index >= 0:
+                    self.view_selector.setCurrentIndex(index)
+                else:
+                    self.current_view_id = None
+                    
+            if not self.current_view_id and self.timeline_views:
+                self.current_view_id = self.timeline_views[0]['id']
+                
+        except Exception as e:
+            logger.error(f"Error loading timeline views: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to load timeline views: {str(e)}")
+
 
 class HorizontalTimelineWidget(QWidget):
     """Widget for displaying a horizontal timeline visualization."""
@@ -2065,7 +2553,7 @@ class HorizontalTimelineWidget(QWidget):
         return int(50 + position * width)
             
     def paintEvent(self, event):
-        """Paint the horizontal timeline."""
+        """Paint the timeline widget."""
         if not self.events:
             return
             
@@ -2170,6 +2658,17 @@ class HorizontalTimelineWidget(QWidget):
             # Truncate title if too long
             fm = QFontMetrics(font)
             title = event['title']
+            
+            # Format character references if we have access to character data
+            if hasattr(self, 'parent') and self.parent() and hasattr(self.parent(), 'conn'):
+                try:
+                    conn = self.parent().conn
+                    story_id = self.parent().story_id
+                    characters = get_story_characters(conn, story_id)
+                    title = format_character_references(title, characters)
+                except Exception as e:
+                    logger.error(f"Error formatting character references: {e}")
+            
             elided_title = fm.elidedText(title, Qt.TextElideMode.ElideRight, 150)
             
             # Draw text background
