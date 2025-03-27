@@ -3472,8 +3472,7 @@ class RegionSelectionDialog(QDialog):
         
         # Add to database checkbox
         self.add_to_db_checkbox = QCheckBox("Add face to recognition database")
-        self.add_to_db_checkbox.setChecked(True)
-        self.add_to_db_checkbox.setEnabled(False)
+        self.add_to_db_checkbox.setChecked(False)
         result_group_layout.addWidget(self.add_to_db_checkbox)
         
         # Rebuild database button
@@ -3939,9 +3938,7 @@ class RegionSelectionDialog(QDialog):
             item.setData(Qt.ItemDataRole.UserRole, tag)
             self.tagged_list.addItem(item)
             
-        # Enable/disable add to database checkbox based on whether any characters are tagged
-        self.add_to_db_checkbox.setEnabled(len(self.tagged_characters) > 0)
-
+        
     def resizeEvent(self, event):
         """Handle resize events to maintain view fit.
         
