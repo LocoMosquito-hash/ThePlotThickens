@@ -15,10 +15,10 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QPushButton, QLabel, QStatusBar, QMessageBox, QFileDialog,
     QMenuBar, QMenu, QDialog, QComboBox, QTextEdit, QListWidget, 
-    QListWidgetItem
+    QListWidgetItem, QFrame
 )
-from PyQt6.QtCore import Qt, QSize, QSettings, pyqtSignal
-from PyQt6.QtGui import QAction, QIcon, QTextCursor
+from PyQt6.QtCore import Qt, QSize, QSettings, pyqtSignal, QEvent
+from PyQt6.QtGui import QAction, QIcon, QTextCursor, QKeyEvent
 
 from app.views.story_manager import StoryManagerWidget
 from app.views.story_board import StoryBoardWidget
@@ -28,7 +28,7 @@ from app.views.timeline_widget import TimelineWidget
 from app.views.recognition_viewer import RecognitionDatabaseViewer
 from app.db_sqlite import (
     get_story_characters, create_quick_event, get_next_quick_event_sequence_number,
-    get_character
+    get_character, search_quick_events
 )
 
 
@@ -38,102 +38,147 @@ class CharacterTagCompleter(QWidget):
     character_selected = pyqtSignal(str)  # Signal emitted when a character is selected
     
     def __init__(self, parent=None):
-        """Initialize the character tag completer.
-        
-        Args:
-            parent: Parent widget
-        """
         super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint | 
+                           Qt.WindowType.Tool)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoMousePropagation)
+        
         self.characters = []
         self.filtered_characters = []
+        self.current_filter = ""
         
-        self.setWindowFlags(Qt.WindowType.Popup)
         self.init_ui()
         
     def init_ui(self):
-        """Initialize the user interface."""
+        """Initialize the UI."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         
-        # List widget for displaying character suggestions
+        # Create a list widget for character suggestions
         self.list_widget = QListWidget()
+        self.list_widget.setFrameShape(QFrame.Shape.NoFrame)
         self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.list_widget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.list_widget.setMaximumHeight(200)
         self.list_widget.itemClicked.connect(self.on_item_clicked)
+        self.list_widget.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Prevent focus stealing
+        
+        # Style the list widget for a more modern look
+        self.list_widget.setStyleSheet("""
+            QListWidget {
+                background-color: #2D2D30;
+                color: #FFFFFF;
+                border: 1px solid #3E3E42;
+                border-radius: 4px;
+                font-size: 13px;
+            }
+            QListWidget::item {
+                padding: 6px 10px;
+                border-bottom: 1px solid #3E3E42;
+            }
+            QListWidget::item:selected {
+                background-color: #007ACC;
+                color: #FFFFFF;
+            }
+            QListWidget::item:hover {
+                background-color: #3E3E42;
+            }
+        """)
         
         layout.addWidget(self.list_widget)
         
-        # Set a fixed size
-        self.setFixedSize(200, 150)
-        
-    def set_characters(self, characters):
+    def set_characters(self, characters: List[Dict[str, Any]]):
         """Set the available characters for autocompletion.
         
         Args:
             characters: List of character dictionaries
         """
         self.characters = characters
-        self.filtered_characters = characters
         self.update_suggestions()
         
-    def set_filter(self, filter_text):
-        """Filter the character suggestions based on the input text.
+    def set_filter(self, filter_text: str):
+        """Set the filter text for character suggestions.
         
         Args:
-            filter_text: Text to filter by
+            filter_text: Text to filter characters by
         """
-        if not filter_text:
-            self.filtered_characters = self.characters
-        else:
-            filter_text = filter_text.lower()
-            self.filtered_characters = [
-                char for char in self.characters
-                if filter_text in char['name'].lower()
-            ]
-            
+        self.current_filter = filter_text.lower() if filter_text else ""
         self.update_suggestions()
         
+    def update_suggestions(self):
+        """Update the list of character suggestions based on the current filter."""
+        self.list_widget.clear()
+        
+        if not self.characters:
+            self.hide()
+            return
+            
+        # Filter characters based on the current filter
+        self.filtered_characters = []
+        for char in self.characters:
+            name = char['name']
+            if self.current_filter in name.lower():
+                self.filtered_characters.append(char)
+                
+        # Sort filtered characters alphabetically by name
+        self.filtered_characters.sort(key=lambda c: c['name'].lower())
+        
+        # Add characters to the list widget
+        for char in self.filtered_characters:
+            # Create a list item with the character name
+            item = QListWidgetItem(char['name'])
+            item.setData(Qt.ItemDataRole.UserRole, char['id'])
+            
+            # Bold for main characters
+            if char.get('is_main_character'):
+                font = item.font()
+                font.setBold(True)
+                item.setFont(font)
+                
+            self.list_widget.addItem(item)
+                
         # Show or hide the widget based on whether there are suggestions
         if self.filtered_characters:
+            self.list_widget.setCurrentRow(0)  # Select the first item
+            
+            # Adjust the width to fit the content but not be too narrow
+            self.list_widget.setMinimumWidth(200)
+            
+            # Adjust the height based on number of items (up to 10 items)
+            items_count = min(10, len(self.filtered_characters))
+            item_height = 32  # Approximated from the padding in CSS
+            self.list_widget.setFixedHeight(items_count * item_height)
+            
             self.show()
         else:
             self.hide()
             
-    def update_suggestions(self):
-        """Update the list widget with filtered character suggestions."""
-        self.list_widget.clear()
-        
-        for char in self.filtered_characters:
-            item = QListWidgetItem(char['name'])
-            item.setData(Qt.ItemDataRole.UserRole, char['id'])
-            self.list_widget.addItem(item)
-            
-        # Select the first item if there are any
-        if self.list_widget.count() > 0:
-            self.list_widget.setCurrentRow(0)
-            
-    def on_item_clicked(self, item):
+    def on_item_clicked(self, item: QListWidgetItem):
         """Handle item click events.
         
         Args:
-            item: The clicked item
+            item: The clicked list item
         """
-        character_name = item.text()
-        self.character_selected.emit(character_name)
+        name = item.text()
+        self.character_selected.emit(name)
         self.hide()
         
-    def keyPressEvent(self, event):
+    def keyPressEvent(self, event: QKeyEvent):
         """Handle key press events.
         
         Args:
-            event: Key press event
+            event: Key event
         """
         key = event.key()
         
+        # Only handle navigation and selection keys in the completer
         if key == Qt.Key.Key_Escape:
             self.hide()
             event.accept()
-        elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
+        elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter or key == Qt.Key.Key_Tab:
+            # Select character with Enter or Tab
             current_item = self.list_widget.currentItem()
             if current_item:
                 self.on_item_clicked(current_item)
@@ -149,7 +194,8 @@ class CharacterTagCompleter(QWidget):
                 self.list_widget.setCurrentRow(current_row + 1)
             event.accept()
         else:
-            # Let the parent handle other key presses
+            # Ignore all other keys so they get processed by the parent text editor
+            # This allows typing to continue while the suggestion list is visible
             event.ignore()
 
 
@@ -171,6 +217,9 @@ class QuickEventDialog(QDialog):
         # Get all characters for the story for tagging
         self.characters = get_story_characters(db_conn, self.story_id)
         
+        # Load recent quick events
+        self.recent_events = self.load_recent_events()
+        
         self.init_ui()
         
         # Create character tag completer
@@ -178,6 +227,77 @@ class QuickEventDialog(QDialog):
         self.tag_completer.set_characters(self.characters)
         self.tag_completer.character_selected.connect(self.insert_character_tag)
         self.tag_completer.hide()
+        
+        # Install event filter to intercept Tab key when completer is visible
+        self.text_edit.installEventFilter(self)
+        
+    def load_recent_events(self, limit: int = 3):
+        """Load the most recent quick events for this story.
+        
+        Args:
+            limit: Maximum number of events to return
+            
+        Returns:
+            List of recent quick events
+        """
+        try:
+            # Using search_quick_events with no filters to get all events, sorted by date
+            events = search_quick_events(
+                self.db_conn,
+                self.story_id,
+                text_query=None,
+                character_id=None,
+                from_date=None,
+                to_date=None
+            )
+            
+            # Format the events with character names
+            formatted_events = []
+            for event in events[:limit]:
+                # Get character name
+                character_id = event.get('character_id')
+                character = get_character(self.db_conn, character_id) if character_id else None
+                character_name = character.get('name', 'Unknown') if character else 'Unknown'
+                
+                # Format the text (replace [char:ID] with @Name)
+                text = event.get('text', '')
+                formatted_text = self.format_character_references(text)
+                
+                formatted_events.append({
+                    'character_name': character_name,
+                    'text': formatted_text
+                })
+                
+            return formatted_events
+            
+        except Exception as e:
+            print(f"Error loading recent events: {e}")
+            return []
+            
+    def format_character_references(self, text: str) -> str:
+        """Format character references in text, converting [char:ID] to @Name.
+        
+        Args:
+            text: Text containing character references
+            
+        Returns:
+            Text with formatted character references
+        """
+        import re
+        
+        # Create mapping of character IDs to names
+        char_lookup = {str(char.get('id')): char.get('name', 'Unknown') for char in self.characters}
+        
+        # Replace [char:ID] with @Name
+        pattern = r'\[char:(\d+)\]'
+        
+        def replace_ref(match):
+            char_id = match.group(1)
+            if char_id in char_lookup:
+                return f"@{char_lookup[char_id]}"
+            return f"[char:{char_id}]"  # Keep original if not found
+        
+        return re.sub(pattern, replace_ref, text)
         
     def init_ui(self):
         """Initialize the user interface."""
@@ -199,6 +319,20 @@ class QuickEventDialog(QDialog):
             characters_label.setWordWrap(True)
             characters_label.setStyleSheet("color: #666; font-style: italic;")
             layout.addWidget(characters_label)
+            
+        # Recent events section
+        if self.recent_events:
+            recent_label = QLabel("Recent events:")
+            recent_label.setStyleSheet("color: #666; font-style: italic; margin-top: 5px;")
+            layout.addWidget(recent_label)
+            
+            # Display each recent event
+            for event in self.recent_events:
+                text = f"{event['character_name']}: {event['text']}"
+                event_label = QLabel(text)
+                event_label.setWordWrap(True)
+                event_label.setStyleSheet("color: #888; font-size: 11px; margin-left: 10px;")
+                layout.addWidget(event_label)
         
         # Buttons
         button_layout = QHBoxLayout()
@@ -236,21 +370,23 @@ class QuickEventDialog(QDialog):
         """
         import re
         
+        # Sort characters by name length (longest first) to match longest names first
+        sorted_characters = sorted(self.characters, key=lambda x: len(x.get('name', '')), reverse=True)
+        
         # Create a mapping of character names to IDs (case insensitive)
-        char_name_to_id = {char['name'].lower(): str(char['id']) for char in self.characters}
+        char_name_to_id = {char['name'].lower(): str(char['id']) for char in sorted_characters}
         
-        # Replace @CharacterName with [char:ID]
-        def replace_mention(match):
-            char_name = match.group(1)
-            if char_name.lower() in char_name_to_id:
-                char_id = char_name_to_id[char_name.lower()]
-                return f"[char:{char_id}]"
-            return match.group(0)  # Keep original if no match
+        # Process each possible character name
+        result = text
+        for name, char_id in char_name_to_id.items():
+            # Create a pattern that matches '@' followed by the exact name
+            # Including word boundary or whitespace after to avoid partial matches
+            pattern = r'@(' + re.escape(name) + r')(\b|\s|$)'
+            
+            # Replace with [char:ID] format
+            result = re.sub(pattern, lambda m: f"[char:{char_id}]", result, flags=re.IGNORECASE)
         
-        # Process the text with regex substitution to handle mentions
-        processed_text = re.sub(r'@(\w+)', replace_mention, text)
-        
-        return processed_text
+        return result
         
     def get_character_id(self) -> Optional[int]:
         """Get the character ID from the first mentioned character.
@@ -260,24 +396,26 @@ class QuickEventDialog(QDialog):
         Returns:
             ID of the character or None if no character is mentioned
         """
+        import re
+        
         # Get the text
         text = self.text_edit.toPlainText()
         
-        # Find all character mentions
-        import re
-        mentions = re.findall(r'@(\w+)', text)
+        # Sort characters by name length (longest first)
+        sorted_characters = sorted(self.characters, key=lambda x: len(x.get('name', '')), reverse=True)
         
-        if mentions:
-            # Get the first mentioned character
-            first_mention = mentions[0].lower()
+        # Check for character mentions by looking for each possible character name
+        for char in sorted_characters:
+            name = char['name'].lower()
+            # Create pattern that matches '@' followed by the exact name
+            pattern = r'@(' + re.escape(name) + r')(\b|\s|$)'
             
-            # Find the character ID
-            for char in self.characters:
-                if char['name'].lower() == first_mention:
-                    return char['id']
+            # If this character is mentioned, return their ID
+            if re.search(pattern, text, re.IGNORECASE):
+                return char['id']
         
         # If no characters are mentioned, return None
-        return None if not mentions else self.get_default_character_id()
+        return None
     
     def get_default_character_id(self) -> int:
         """Get the ID of the default character to use when no specific character is mentioned.
@@ -294,32 +432,30 @@ class QuickEventDialog(QDialog):
         """Check if the user is typing a character tag and provide suggestions."""
         cursor = self.text_edit.textCursor()
         text = self.text_edit.toPlainText()
-        
-        # Find the current word being typed
         pos = cursor.position()
-        start = max(0, pos - 1)
         
-        # Check if we're in the middle of typing a tag
-        if start >= 0 and pos <= len(text):
-            # Look backward to find the start of the current tag
-            tag_start = text.rfind('@', 0, pos)
+        # Look for @ character before cursor
+        before_cursor = text[:pos]
+        tag_start = before_cursor.rfind('@')
+        
+        # Only show suggestions if we found a @ before cursor and we're in the middle of typing a tag
+        if tag_start >= 0:
+            # Extract the text after the @ symbol
+            partial_tag = before_cursor[tag_start + 1:].lower()
             
-            if tag_start >= 0 and tag_start < pos:
-                # We found a @ character before the cursor
-                # Extract the partial tag text
-                partial_tag = text[tag_start + 1:pos]
+            # Only show if there's no space in the partial tag (still typing the tag)
+            if ' ' not in partial_tag:
+                # Position the popup at the cursor
+                rect = self.text_edit.cursorRect()
+                global_pos = self.text_edit.mapToGlobal(rect.bottomLeft())
                 
-                # Only show suggestions if we're actively typing a tag
-                if tag_start == pos - 1 or partial_tag.strip():
-                    # Position the completer popup below the cursor
-                    cursor_rect = self.text_edit.cursorRect()
-                    global_pos = self.text_edit.mapToGlobal(cursor_rect.bottomLeft())
-                    
-                    self.tag_completer.set_filter(partial_tag)
-                    self.tag_completer.move(global_pos)
-                    return
-                    
-        # Hide the completer if we're not typing a tag
+                # Show character suggestions
+                self.tag_completer.set_filter(partial_tag)
+                self.tag_completer.move(global_pos)
+                self.tag_completer.show()
+                return
+                
+        # Hide if not typing a tag
         self.tag_completer.hide()
         
     def insert_character_tag(self, character_name: str):
@@ -333,19 +469,57 @@ class QuickEventDialog(QDialog):
         pos = cursor.position()
         
         # Find the start of the current tag
-        tag_start = text.rfind('@', 0, pos)
+        before_cursor = text[:pos]
+        tag_start = before_cursor.rfind('@')
         
         if tag_start >= 0:
-            # Replace the partial tag with the full tag
-            cursor.setPosition(tag_start, QTextCursor.MoveMode.MoveAnchor)
-            cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
-            cursor.insertText(f"@{character_name}")
+            # Check if we have a valid tag (@ followed by part of a name)
+            partial_tag = before_cursor[tag_start+1:]
+            if ' ' not in partial_tag:  # Ensure we're not in the middle of another word
+                # Replace the partial tag with the full tag, preserving spaces in the name
+                cursor.setPosition(tag_start, QTextCursor.MoveMode.MoveAnchor)
+                cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
+                cursor.insertText(f"@{character_name} ")
+                
+                # Hide the completer
+                self.tag_completer.hide()
+                
+                # Set focus back to the text edit
+                self.text_edit.setFocus()
+
+    def eventFilter(self, obj, event):
+        """Filter events for Tab key to select character tags.
+        
+        Args:
+            obj: The object that triggered the event
+            event: The event
             
-            # Add a space after the tag
-            cursor.insertText(" ")
+        Returns:
+            True if event was handled, False otherwise
+        """
+        # Only handle key press events when completer is visible
+        if (obj == self.text_edit and 
+            event.type() == QEvent.Type.KeyPress and 
+            self.tag_completer.isVisible()):
             
-            # Set focus back to the text edit
-            self.text_edit.setFocus()
+            key = event.key()
+            
+            # Tab or Enter pressed - select the current character
+            if key == Qt.Key.Key_Tab or key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
+                current_item = self.tag_completer.list_widget.currentItem()
+                if current_item:
+                    character_name = current_item.text()
+                    self.insert_character_tag(character_name)
+                    return True
+                    
+            # Up/Down arrow keys for navigating the completer
+            elif key == Qt.Key.Key_Up or key == Qt.Key.Key_Down:
+                # Forward the event to the completer
+                self.tag_completer.keyPressEvent(event)
+                return True
+                
+        # Let other events pass through
+        return super().eventFilter(obj, event)
 
 
 class MainWindow(QMainWindow):
@@ -672,7 +846,7 @@ class MainWindow(QMainWindow):
                     # Refresh the timeline tab if it's currently visible
                     if current_tab is self.timeline:
                         # Reload quick events in the quick events tab
-                        if hasattr(self.timeline, 'quick_events_tab'):
+                        if hasattr(self.timeline, 'quick_events_tab') and hasattr(self.timeline.quick_events_tab, 'load_quick_events'):
                             self.timeline.quick_events_tab.load_quick_events()
                             
                     # Refresh the gallery tab if it's currently visible
