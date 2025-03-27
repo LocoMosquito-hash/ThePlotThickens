@@ -59,59 +59,76 @@ class ThumbnailWidget(QFrame):
         
         Args:
             image_id: ID of the image
-            pixmap: QPixmap of the image
-            title: Title of the image
+            pixmap: Image pixmap
+            title: Optional title to display
             parent: Parent widget
         """
         super().__init__(parent)
         self.image_id = image_id
-        self.pixmap = pixmap
         self.title = title
+        self.original_pixmap = pixmap
+        self.displayed_pixmap = pixmap
+        self.is_nsfw = False
         
-        # Set up the widget
+        # Visual styling
         self.setFrameShape(QFrame.Shape.Box)
-        self.setFrameShadow(QFrame.Shadow.Raised)
+        self.setFrameShadow(QFrame.Shadow.Plain)
         self.setLineWidth(1)
-        self.setStyleSheet("background-color: #333337; border: 1px solid #555555;")
-        self.setFixedSize(200, 220)  # Fixed size for the thumbnail widget
+        self.setStyleSheet("ThumbnailWidget { border: 1px solid #666; background-color: #333; }")
         
-        # Create layout
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
+        # Layout
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(5, 5, 5, 5)
         
-        # Create image label
+        # Delete button
+        self.delete_btn = QPushButton("×")
+        self.delete_btn.setFlat(True)
+        self.delete_btn.setFixedSize(20, 20)
+        self.delete_btn.setStyleSheet("""
+            QPushButton { 
+                background-color: rgba(200, 0, 0, 0.7); 
+                color: white; 
+                border-radius: 10px; 
+                font-weight: bold; 
+                font-size: 14px;
+            }
+            QPushButton:hover { 
+                background-color: rgba(255, 0, 0, 0.9);
+            }
+        """)
+        delete_layout = QHBoxLayout()
+        delete_layout.addStretch(1)
+        delete_layout.addWidget(self.delete_btn)
+        self.layout.addLayout(delete_layout)
+        
+        # Image label
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setMinimumSize(QSize(180, 150))
-        self.image_label.setMaximumSize(QSize(180, 150))
-        self.image_label.setScaledContents(False)
-        
-        # Scale the pixmap to fit the label while maintaining aspect ratio
         self.update_displayed_pixmap()
+        self.layout.addWidget(self.image_label)
         
-        # Create title label
-        self.title_label = QLabel(title if title else f"Image {image_id}")
+        # Title label
+        self.title_label = QLabel(title)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_label.setWordWrap(True)
-        self.title_label.setMaximumHeight(40)
+        self.title_label.setStyleSheet("color: white; font-size: 10px;")
+        self.layout.addWidget(self.title_label)
         
-        # Create delete button
-        self.delete_button = QPushButton("Delete")
-        self.delete_button.setFixedHeight(25)
-        self.delete_button.clicked.connect(self._on_delete_clicked)
+        # Connect signals
+        self.delete_btn.clicked.connect(self._on_delete_clicked)
         
-        # Add widgets to layout
-        layout.addWidget(self.image_label)
-        layout.addWidget(self.title_label)
-        layout.addWidget(self.delete_button)
+        # Set size policy
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.setFixedSize(150, 170)
         
-        # Set up mouse events
-        self.setMouseTracking(True)
+        # Enable context menu
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
     
     def update_displayed_pixmap(self):
         """Update the displayed pixmap in the image label."""
-        scaled_pixmap = self.pixmap.scaled(
-            QSize(180, 150),
+        scaled_pixmap = self.original_pixmap.scaled(
+            QSize(150, 170),
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation
         )
@@ -123,7 +140,7 @@ class ThumbnailWidget(QFrame):
         Args:
             new_pixmap: New pixmap to display
         """
-        self.pixmap = new_pixmap
+        self.original_pixmap = new_pixmap
         self.update_displayed_pixmap()
     
     def mousePressEvent(self, event) -> None:
@@ -134,6 +151,34 @@ class ThumbnailWidget(QFrame):
     def _on_delete_clicked(self) -> None:
         """Handle delete button click."""
         self.delete_requested.emit(self.image_id)
+    
+    def show_context_menu(self, position):
+        """Show context menu when right-clicking on the thumbnail.
+        
+        Args:
+            position: Position where the context menu should appear
+        """
+        # Get the parent GalleryWidget
+        parent = self.parent()
+        while parent and not isinstance(parent, GalleryWidget):
+            parent = parent.parent()
+            
+        # If we found the GalleryWidget parent, delegate to its context menu handler
+        if parent and isinstance(parent, GalleryWidget):
+            parent.on_thumbnail_context_menu(position, self)
+        else:
+            # Fallback if parent can't be found
+            menu = QMenu()
+            
+            view_action = QAction("View Image", self)
+            view_action.triggered.connect(lambda: self.clicked.emit(self.image_id))
+            menu.addAction(view_action)
+            
+            delete_action = QAction("Delete Image", self)
+            delete_action.triggered.connect(self._on_delete_clicked)
+            menu.addAction(delete_action)
+            
+            menu.exec(self.mapToGlobal(position))
 
 
 class QuickEventSelectionDialog(QDialog):
@@ -1272,7 +1317,15 @@ class ImageDetailDialog(QDialog):
         self.image_view.enable_tag_mode(enabled)
         
         if enabled:
-            self.statusBar().showMessage("Click on a character's face to tag them")
+            # Show help message with detailed instructions
+            help_message = "Click on a character's face to tag them. "
+            help_message += "You can add multiple tags by clicking different faces. "
+            help_message += "Tags will appear in the Character Tags tab."
+            self.statusBar().showMessage(help_message)
+            
+            # Switch to the Image tab to make tagging easier
+            if self.tab_widget.currentIndex() != 0:  # If not already on Image tab
+                self.tab_widget.setCurrentIndex(0)  # Switch to Image tab
         else:
             self.statusBar().showMessage("")
             
@@ -2744,13 +2797,93 @@ class GalleryWidget(QWidget):
                           f"Position: ({tag['x_position']}, {tag['y_position']})")
             except Exception as e:
                 print(f"Error checking image tags: {e}")
-                
+            
             dialog.exec()
+            
         except Exception as e:
-            self.show_error("Error", f"Error displaying image: {str(e)}")
-            print(f"Error in on_thumbnail_clicked: {e}")
-            traceback.print_exc()
-    
+            self.show_error("Error", f"An error occurred: {str(e)}")
+            
+    def on_thumbnail_context_menu(self, position: QPoint, thumbnail: ThumbnailWidget) -> None:
+        """Show context menu for a thumbnail.
+        
+        Args:
+            position: Position where to show the menu
+            thumbnail: The thumbnail widget that was right-clicked
+        """
+        image_id = thumbnail.image_id
+        
+        menu = QMenu()
+        
+        # Add options to the context menu
+        view_action = QAction("View Image", self)
+        view_action.triggered.connect(lambda: self.on_thumbnail_clicked(image_id))
+        menu.addAction(view_action)
+        
+        tag_characters_action = QAction("Tag Characters", self)
+        tag_characters_action.triggered.connect(lambda: self.open_image_for_tagging(image_id))
+        menu.addAction(tag_characters_action)
+        
+        delete_action = QAction("Delete Image", self)
+        delete_action.triggered.connect(lambda: self.on_delete_image(image_id))
+        menu.addAction(delete_action)
+        
+        menu.exec(thumbnail.mapToGlobal(position))
+        
+    def open_image_for_tagging(self, image_id: int) -> None:
+        """Open the image detail dialog with the Character Tags tab active.
+        
+        Args:
+            image_id: ID of the image to tag
+        """
+        try:
+            # Get image data
+            cursor = self.db_conn.cursor()
+            cursor.execute('''
+            SELECT * FROM images WHERE id = ?
+            ''', (image_id,))
+            
+            image_data = cursor.fetchone()
+            
+            if not image_data:
+                self.show_error("Image Not Found", f"Image with ID {image_id} not found.")
+                return
+            
+            image_data = dict(image_data)
+            
+            # Get the image path
+            image_path = os.path.join(image_data['path'], image_data['filename'])
+            
+            if not os.path.exists(image_path):
+                self.show_error("Image Not Found", f"Image file not found at {image_path}")
+                return
+            
+            # Load image
+            pixmap = QPixmap(image_path)
+            
+            if pixmap.isNull():
+                self.show_error("Image Load Failed", f"Failed to load image from {image_path}")
+                return
+            
+            # Show image detail dialog
+            dialog = ImageDetailDialog(
+                self.db_conn,
+                image_id,
+                image_data,
+                pixmap,
+                parent=self
+            )
+            
+            # Switch to the Character Tags tab (index 2)
+            dialog.tab_widget.setCurrentIndex(2)
+            
+            # Enable tag mode automatically
+            dialog.tag_mode_button.setChecked(True)
+            
+            dialog.exec()
+            
+        except Exception as e:
+            self.show_error("Error", f"An error occurred: {str(e)}")
+            
     def on_delete_image(self, image_id: int) -> None:
         """Handle image deletion.
         
