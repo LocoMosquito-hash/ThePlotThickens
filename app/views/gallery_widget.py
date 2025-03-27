@@ -9,6 +9,8 @@ This module provides a widget for managing and displaying a story's image galler
 
 import os
 import uuid
+import random
+import string
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 import traceback
@@ -22,7 +24,7 @@ from PyQt6.QtWidgets import (
     QGroupBox, QGraphicsView, QGraphicsScene, QGraphicsRectItem, 
     QGraphicsPixmapItem, QGraphicsItem, QGraphicsTextItem, QProgressDialog,
     QStyleFactory, QMainWindow, QStatusBar, QToolTip, QRadioButton,
-    QSpinBox, QLineEdit
+    QSpinBox, QLineEdit, QAbstractItemView, QDialogButtonBox
 )
 from PyQt6.QtCore import (
     Qt, QSize, pyqtSignal, QByteArray, QUrl, QBuffer, QIODevice, 
@@ -42,11 +44,13 @@ from app.db_sqlite import (
     get_story_characters, get_character,
     add_character_tag_to_image, update_character_tag, remove_character_tag,
     get_image_character_tags, create_quick_event, get_next_quick_event_sequence_number,
-    get_quick_event_characters, get_quick_event_tagged_characters
+    get_quick_event_characters, get_quick_event_tagged_characters,
+    search_quick_events, get_story_folder_paths, create_image
 )
 
 # Import our image recognition utility
 from app.utils.image_recognition_util import ImageRecognitionUtil
+from app.views.timeline_widget import format_character_references
 
 class ThumbnailWidget(QFrame):
     """Widget for displaying a thumbnail image with basic controls."""
@@ -2579,73 +2583,95 @@ class GalleryWidget(QWidget):
         """Save image to story folder and database.
         
         Args:
-            image: QImage to save
+            image: The image to save
         """
         if not self.current_story_id or not self.current_story_data:
+            self.show_error("No Story Selected", "Please select a story before adding images.")
             return
-        
-        # Generate unique filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_id = str(uuid.uuid4())[:8]
-        filename = f"image_{timestamp}_{unique_id}.png"
-        
-        # Get story folders
-        images_folder = os.path.join(self.current_story_data['folder_path'], "images")
-        thumbnails_folder = os.path.join(self.current_story_data['folder_path'], "thumbnails")
-        
-        # Ensure folders exist
-        os.makedirs(images_folder, exist_ok=True)
-        os.makedirs(thumbnails_folder, exist_ok=True)
-        
-        # Save original image to file
-        image_path = os.path.join(images_folder, filename)
-        success = image.save(image_path, "PNG")
-        
-        if success:
+            
+        try:
+            # Generate a unique filename
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
+            filename = f"image_{timestamp}_{rand_suffix}.png"
+            
+            # Get story folder paths
+            from app.db_sqlite import get_story_folder_paths, create_image, add_character_tag_to_image
+            
+            # Get story folder paths using the correct function signature
+            path_lookup = get_story_folder_paths(self.current_story_data)
+            
+            # Check if required paths exist
+            if not path_lookup or not path_lookup.get('images_folder') or not path_lookup.get('thumbnails_folder'):
+                self.show_error("Error", "Could not determine story image folders.")
+                return
+                
+            # Create paths
+            images_path = path_lookup['images_folder']
+            thumbnails_path = path_lookup['thumbnails_folder']
+            
+            # Ensure directories exist
+            os.makedirs(images_path, exist_ok=True)
+            os.makedirs(thumbnails_path, exist_ok=True)
+            
+            # Save original image
+            full_path = os.path.join(images_path, filename)
+            if not image.save(full_path, "PNG"):
+                self.show_error("Save Failed", "Failed to save image file.")
+                return
+                
             # Generate and save thumbnail
-            thumbnail = self._generate_thumbnail(image, max_dimension=320)
-            thumbnail_path = os.path.join(thumbnails_folder, filename)
-            thumbnail_success = thumbnail.save(thumbnail_path, "PNG")
-            
-            if not thumbnail_success:
-                print(f"Warning: Failed to save thumbnail to {thumbnail_path}")
-            
+            thumbnail = self._generate_thumbnail(image)
+            thumbnail_path = os.path.join(thumbnails_path, filename)
+            if not thumbnail.save(thumbnail_path, "PNG"):
+                self.show_error("Save Failed", "Failed to save thumbnail.")
+                os.remove(full_path)  # Clean up the original file
+                return
+                
             # Save to database
-            cursor = self.db_conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO images (
-                    filename, path, title, width, height, 
-                    file_size, mime_type, story_id, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-                """,
-                (
-                    filename,
-                    images_folder,
-                    f"Image {timestamp}",
-                    image.width(),
-                    image.height(),
-                    os.path.getsize(image_path),
-                    "image/png",
-                    self.current_story_id
-                )
-            )
-            self.db_conn.commit()
-            
-            # Get the new image ID
-            image_id = cursor.lastrowid
-            
-            # Show region selection dialog for character recognition
-            region_dialog = RegionSelectionDialog(
+            image_id = create_image(
                 self.db_conn,
-                image,
-                self.current_story_id,
-                self
+                filename=filename,
+                path=images_path,
+                story_id=self.current_story_id,
+                title="",  # Default empty title
+                description="",  # Default empty description
+                width=image.width(),
+                height=image.height()
             )
+            
+            if not image_id:
+                self.show_error("Database Error", "Failed to add image to database.")
+                # Clean up files
+                os.remove(full_path)
+                os.remove(thumbnail_path)
+                return
+                
+            # Run face detection to find possible character regions
+            # Use a progress dialog for longer operations
+            progress_dialog = QProgressDialog(
+                "Analyzing image for character recognition...",
+                "Cancel", 0, 100, self
+            )
+            progress_dialog.setWindowTitle("Character Recognition")
+            progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+            progress_dialog.setMinimumDuration(500)  # Show after 500ms delay
+            progress_dialog.setValue(0)
+            
+            # Allow some processing before showing the dialog
+            QApplication.processEvents()
+            
+            # Do character recognition 
+            region_dialog = RegionSelectionDialog(self.db_conn, image, self.current_story_id, self)
+            
+            progress_dialog.setValue(100)
+            progress_dialog.close()
             
             if region_dialog.exec():
-                # Get selected character data
-                character_data = region_dialog.get_selected_character_data()
+                # Get selected character data and quick event information
+                result_data = region_dialog.get_selected_character_data()
+                character_data = result_data.get('characters', [])
+                quick_event_id = result_data.get('quick_event_id')
                 
                 if character_data:
                     try:
@@ -2673,36 +2699,45 @@ class GalleryWidget(QWidget):
                             
                             print(f"Successfully added tag with ID: {tag_id}")
                             
-                            # Check if we should add this region to the recognition database
-                            if getattr(region_dialog, 'add_to_db_checkbox', None) and region_dialog.add_to_db_checkbox.isChecked():
-                                self.add_region_to_recognition_database(
-                                    image, 
-                                    character_id, 
-                                    character['character_name'], 
-                                    region
-                                )
-                            
-                            # Comment out automatic quick event creation when tagging characters
-                            # Optionally create a quick event
-                            # sequence_number = get_next_quick_event_sequence_number(self.db_conn, character_id)
-                            # quick_event_id = create_quick_event(
-                            #     self.db_conn,
-                            #     f"Appears in image: {filename}",
-                            #     character_id,
-                            #     sequence_number
-                            # )
-                            
-                            # Associate quick event with image
-                            # associate_quick_event_with_image(self.db_conn, quick_event_id, image_id)
+                        # If a quick event was selected, associate it with the image
+                        if quick_event_id:
+                            self.associate_quick_event_with_image(image_id, quick_event_id)
                     except Exception as e:
-                        print(f"Error tagging characters: {e}")
-                        traceback.print_exc()  # Print the full traceback for debugging
-                        QMessageBox.warning(self, "Error", f"Failed to tag characters: {str(e)}")
+                        print(f"Error saving character tags: {e}")
+                        self.show_error("Error", f"Error saving character tags: {str(e)}")
             
-            # Reload images
+            # Reload images to show the new one
             self.load_images()
-        else:
-            self.show_error("Save Failed", f"Failed to save image to {image_path}")
+            
+        except Exception as e:
+            self.show_error("Error", f"Failed to save image: {str(e)}")
+            print(f"Error saving image: {e}")
+    
+    def associate_quick_event_with_image(self, image_id: int, quick_event_id: int) -> None:
+        """Associate a quick event with an image.
+        
+        Args:
+            image_id: ID of the image
+            quick_event_id: ID of the quick event
+        """
+        try:
+            from app.db_sqlite import associate_quick_event_with_image
+            
+            # Associate the quick event with the image
+            success = associate_quick_event_with_image(
+                self.db_conn,
+                quick_event_id,
+                image_id
+            )
+            
+            if success:
+                print(f"Successfully associated quick event {quick_event_id} with image {image_id}")
+            else:
+                print(f"Failed to associate quick event {quick_event_id} with image {image_id}")
+                
+        except Exception as e:
+            print(f"Error associating quick event with image: {e}")
+            self.show_error("Error", f"Error associating quick event with image: {str(e)}")
     
     def _generate_thumbnail(self, image: QImage, max_dimension: int = 320) -> QImage:
         """Generate a thumbnail from an image.
@@ -3258,148 +3293,487 @@ class RegionSelectionDialog(QDialog):
         self.dragging = False
         self.tagged_characters = []  # Store characters that have been tagged
         
+        # Quick events data
+        self.characters = []
+        self.quick_events = []
+        self.associated_quick_event_id = None  # ID of the selected quick event
+        self.new_quick_event_id = None  # ID of a newly created quick event
+        
         # Image recognition utility
         self.image_recognition = ImageRecognitionUtil(db_conn)
         
+        # Initialize UI first, then load characters and quick events
         self.init_ui()
         
+        # Load characters and quick events AFTER UI is initialized
+        self.load_characters_data()  # This is the correct method name
+        self.load_quick_events_data()
+        
+    def load_characters_data(self):
+        """Load characters for the story."""
+        try:
+            # Use existing functions to get characters
+            from app.db_sqlite import get_story_characters
+            self.characters = get_story_characters(self.db_conn, self.story_id)
+            
+            # Update the character combo box if it exists
+            if hasattr(self, 'qe_character_combo'):
+                self.qe_character_combo.clear()
+                for char in self.characters:
+                    self.qe_character_combo.addItem(char.get('name', "Unknown"), char.get('id'))
+            
+            # Update character tags label
+            if hasattr(self, 'character_tags_label') and self.characters:
+                char_names = [f"@{char['name']}" for char in self.characters]
+                self.character_tags_label.setText("Available character tags: " + ", ".join(char_names))
+            
+            # Set characters for tag completer
+            if hasattr(self, 'tag_completer'):
+                self.tag_completer.set_characters(self.characters)
+                
+        except Exception as e:
+            print(f"Error loading characters: {e}")
+            self.characters = []
+    
+    def load_quick_events_data(self):
+        """Load quick events for the story."""
+        try:
+            # Get quick events for the story
+            from app.db_sqlite import search_quick_events
+            
+            self.quick_events = search_quick_events(
+                self.db_conn,
+                self.story_id,
+                text_query=None,
+                character_id=None,
+                from_date=None,
+                to_date=None
+            )
+            
+            # Sort by most recent first
+            self.quick_events.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+            
+            # Update the quick events combo box if it exists
+            if hasattr(self, 'quick_events_combo'):
+                self.quick_events_combo.clear()
+                self.quick_events_combo.addItem("Select a quick event...", -1)
+                
+                for event in self.quick_events:
+                    # Format the text to display
+                    text = event.get('text', '')
+                    if len(text) > 50:
+                        text = text[:47] + "..."
+                    character_id = event.get('character_id')
+                    character_name = "Unknown"
+                    for char in self.characters:
+                        if char.get('id') == character_id:
+                            character_name = char.get('name', "Unknown")
+                            break
+                    display_text = f"{character_name}: {text}"
+                    self.quick_events_combo.addItem(display_text, event.get('id'))
+            
+        except Exception as e:
+            print(f"Error loading quick events: {e}")
+            self.quick_events = []
+            
     def init_ui(self):
         """Initialize the user interface."""
-        self.setWindowTitle("Select Regions for Character Recognition")
-        # Make the window much larger by default
-        self.resize(1024, 768)
+        # Set window properties
+        self.setWindowTitle("Character Recognition")
+        self.setMinimumSize(1000, 600)
         
-        layout = QVBoxLayout(self)
+        # Main layout
+        main_layout = QVBoxLayout()
+        self.setLayout(main_layout)
         
-        # Instructions
-        instructions = QLabel(
-            "Right-click and drag to select a region. "
-            "After selecting a region, we'll try to recognize characters within it. "
-            "Select one character at a time and click 'Save Tag'."
-        )
-        instructions.setWordWrap(True)
-        layout.addWidget(instructions)
+        # Splitter for image view and controls
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_layout.addWidget(splitter)
         
-        # Add rebuild button at the top
-        rebuild_layout = QHBoxLayout()
-        rebuild_button = QPushButton("Rebuild Recognition Database")
-        rebuild_button.setToolTip("Rebuild database if a character isn't showing in suggestions")
-        rebuild_button.clicked.connect(self.rebuild_recognition_database)
-        rebuild_layout.addWidget(rebuild_button)
-        rebuild_layout.addStretch()
-        layout.addLayout(rebuild_layout)
+        # Left side - Image view
+        view_widget = QWidget()
+        view_layout = QVBoxLayout(view_widget)
         
-        # Image display area
-        self.scene = QGraphicsScene(self)
+        # Create scene and view for displaying the image
+        self.scene = QGraphicsScene()
         self.view = QGraphicsView(self.scene)
-        self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.view.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        self.view.setMouseTracking(True)
+        self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         
-        # Add image to scene
-        self.pixmap_item = QGraphicsPixmapItem(QPixmap.fromImage(self.image))
-        self.scene.addItem(self.pixmap_item)
-        
-        # Set up view with improved fitting and properties
-        self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.view.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
-        self.view.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-        self.view.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
-        self.view.setMinimumHeight(400)  # Ensure there's enough space for the image
-        
-        # Fit view to scene
-        self.view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
-        layout.addWidget(self.view, 1)  # Give the view a stretch factor so it takes more space
-        
-        # Horizontal layout for regions and results
-        horizontal_layout = QHBoxLayout()
-        
-        # Region list
-        region_group = QGroupBox("Selected Regions")
-        region_layout = QVBoxLayout(region_group)
-        
-        self.region_list = QListWidget()
-        self.region_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-        region_layout.addWidget(self.region_list)
-        
-        # Region buttons
-        region_button_layout = QHBoxLayout()
-        
-        self.remove_region_button = QPushButton("Remove Selected Region")
-        self.remove_region_button.clicked.connect(self.remove_selected_region)
-        self.remove_region_button.setEnabled(False)
-        region_button_layout.addWidget(self.remove_region_button)
-        
-        region_button_layout.addStretch()
-        region_layout.addLayout(region_button_layout)
-        
-        horizontal_layout.addWidget(region_group, 1)
-        
-        # Recognition result area
-        recognition_group = QGroupBox("Character Recognition")
-        recognition_layout = QVBoxLayout(recognition_group)
-        
-        self.result_list = QListWidget()
-        self.result_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-        recognition_layout.addWidget(self.result_list)
-        
-        # Add a save tag button below the results
-        self.save_tag_button = QPushButton("Save Tag")
-        self.save_tag_button.clicked.connect(self.save_current_tag)
-        self.save_tag_button.setEnabled(False)
-        recognition_layout.addWidget(self.save_tag_button)
-        
-        # Add a label to show tagged characters
-        self.tagged_label = QLabel("Tagged Characters:")
-        recognition_layout.addWidget(self.tagged_label)
-        
-        self.tagged_list = QListWidget()
-        recognition_layout.addWidget(self.tagged_list)
-        
-        # Add checkbox for adding region to recognition database
-        self.add_to_db_checkbox = QCheckBox("Add regions to character recognition database")
-        self.add_to_db_checkbox.setToolTip("Include selected regions as visual references to improve future character recognition")
-        self.add_to_db_checkbox.setChecked(False)
-        recognition_layout.addWidget(self.add_to_db_checkbox)
-        
-        horizontal_layout.addWidget(recognition_group, 1)
-        
-        layout.addLayout(horizontal_layout)
-        
-        # Buttons
-        button_layout = QHBoxLayout()
-        
-        self.clear_button = QPushButton("Clear All")
-        self.clear_button.clicked.connect(self.clear_all_regions)
-        
-        self.done_button = QPushButton("Done")
-        self.done_button.clicked.connect(self.accept)
-        
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.clicked.connect(self.reject)
-        
-        button_layout.addWidget(self.clear_button)
-        button_layout.addStretch()
-        button_layout.addWidget(self.done_button)
-        button_layout.addWidget(self.cancel_button)
-        
-        layout.addLayout(button_layout)
-        
-        # Connect events
-        self.region_list.currentRowChanged.connect(self.on_region_selected)
-        self.result_list.itemSelectionChanged.connect(self.on_character_selection_changed)
-        
-        # Connect mouse events to the view
+        # Handle mouse events for region selection
         self.view.mousePressEvent = self.view_mouse_press
         self.view.mouseMoveEvent = self.view_mouse_move
         self.view.mouseReleaseEvent = self.view_mouse_release
         
-        # Set window modality to ApplicationModal to prevent interaction with other windows
-        self.setWindowModality(Qt.WindowModality.ApplicationModal)
+        # Add image to scene
+        pixmap_item = QGraphicsPixmapItem(QPixmap.fromImage(self.image))
+        self.scene.addItem(pixmap_item)
+        self.view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         
-        # Initial fit of image
-        QTimer.singleShot(0, lambda: self.view.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio))
+        # Add view to layout
+        view_layout.addWidget(self.view)
+        
+        # Add instruction label
+        instruction_label = QLabel("Right-click and drag to select face regions")
+        instruction_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        view_layout.addWidget(instruction_label)
+        
+        # Right side - Controls
+        controls_widget = QWidget()
+        controls_layout = QVBoxLayout(controls_widget)
+        
+        # Add tabs for region selection and character tagging
+        tabs = QTabWidget()
+        controls_layout.addWidget(tabs)
+        
+        # Tab 1: Region selection
+        region_tab = QWidget()
+        region_layout = QVBoxLayout(region_tab)
+        
+        # Region list
+        region_group = QGroupBox("Selected Regions")
+        region_group_layout = QVBoxLayout(region_group)
+        
+        self.region_list = QListWidget()
+        self.region_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.region_list.currentRowChanged.connect(self.on_region_selected)
+        region_group_layout.addWidget(self.region_list)
+        
+        # Region buttons
+        region_buttons = QHBoxLayout()
+        
+        self.remove_region_button = QPushButton("Remove Region")
+        self.remove_region_button.clicked.connect(self.remove_selected_region)
+        self.remove_region_button.setEnabled(False)
+        region_buttons.addWidget(self.remove_region_button)
+        
+        clear_all_button = QPushButton("Clear All")
+        clear_all_button.clicked.connect(self.clear_all_regions)
+        region_buttons.addWidget(clear_all_button)
+        
+        region_group_layout.addLayout(region_buttons)
+        region_layout.addWidget(region_group)
+        
+        # Result list
+        result_group = QGroupBox("Character Recognition Results")
+        result_group_layout = QVBoxLayout(result_group)
+        
+        self.result_list = QListWidget()
+        self.result_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.result_list.itemSelectionChanged.connect(self.on_character_selection_changed)
+        result_group_layout.addWidget(self.result_list)
+        
+        # Save tag button
+        self.save_tag_button = QPushButton("Save Character Tag")
+        self.save_tag_button.clicked.connect(self.save_current_tag)
+        self.save_tag_button.setEnabled(False)
+        result_group_layout.addWidget(self.save_tag_button)
+        
+        # Add to database checkbox
+        self.add_to_db_checkbox = QCheckBox("Add face to recognition database")
+        self.add_to_db_checkbox.setChecked(True)
+        self.add_to_db_checkbox.setEnabled(False)
+        result_group_layout.addWidget(self.add_to_db_checkbox)
+        
+        # Rebuild database button
+        rebuild_button = QPushButton("Rebuild Recognition Database")
+        rebuild_button.clicked.connect(self.rebuild_recognition_database)
+        result_group_layout.addWidget(rebuild_button)
+        
+        region_layout.addWidget(result_group)
+        
+        # Tab 2: Tagged characters
+        tagged_tab = QWidget()
+        tagged_layout = QVBoxLayout(tagged_tab)
+        
+        # Tagged list
+        tagged_group = QGroupBox("Tagged Characters")
+        tagged_group_layout = QVBoxLayout(tagged_group)
+        
+        self.tagged_list = QListWidget()
+        tagged_group_layout.addWidget(self.tagged_list)
+        
+        tagged_layout.addWidget(tagged_group)
+        
+        # Tab 3: Quick events
+        qe_tab = QWidget()
+        qe_layout = QVBoxLayout(qe_tab)
+        
+        # Quick events selection
+        qe_select_group = QGroupBox("Associate with Existing Quick Event")
+        qe_select_layout = QVBoxLayout(qe_select_group)
+        
+        self.quick_events_combo = QComboBox()
+        self.quick_events_combo.addItem("Select a quick event...", -1)
+        self.quick_events_combo.currentIndexChanged.connect(self.on_quick_event_selected)
+        qe_select_layout.addWidget(self.quick_events_combo)
+        
+        qe_layout.addWidget(qe_select_group)
+        
+        # Create new quick event
+        qe_create_group = QGroupBox("Create New Quick Event")
+        qe_create_layout = QVBoxLayout(qe_create_group)
+        
+        # Character selection for quick event
+        qe_char_layout = QHBoxLayout()
+        qe_char_label = QLabel("Character:")
+        qe_char_layout.addWidget(qe_char_label)
+        
+        self.qe_character_combo = QComboBox()
+        qe_char_layout.addWidget(self.qe_character_combo)
+        
+        qe_create_layout.addLayout(qe_char_layout)
+        
+        # Quick event text
+        qe_text_label = QLabel("Text:")
+        qe_create_layout.addWidget(qe_text_label)
+        
+        self.qe_text_edit = QTextEdit()
+        self.qe_text_edit.setPlaceholderText("Enter quick event text here...")
+        self.qe_text_edit.textChanged.connect(self.check_for_character_tag)
+        qe_create_layout.addWidget(self.qe_text_edit)
+        
+        # Character tags help
+        self.character_tags_label = QLabel("Available character tags: ")
+        self.character_tags_label.setWordWrap(True)
+        qe_create_layout.addWidget(self.character_tags_label)
+        
+        # Create quick event button
+        create_qe_button = QPushButton("Create Quick Event")
+        create_qe_button.clicked.connect(self.create_quick_event)
+        qe_create_layout.addWidget(create_qe_button)
+        
+        qe_layout.addWidget(qe_create_group)
+        
+        # Create a character tag completer that will show up when typing @
+        self.tag_completer = CharacterTagCompleter(self)
+        self.tag_completer.set_characters(self.characters)
+        self.tag_completer.character_selected.connect(self.insert_character_tag)
+        self.tag_completer.hide()  # Hide initially
+        
+        # Add tabs
+        tabs.addTab(region_tab, "Region Selection")
+        tabs.addTab(tagged_tab, "Tagged Characters")
+        tabs.addTab(qe_tab, "Quick Events")
+        
+        # Add dialog buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        controls_layout.addWidget(button_box)
+        
+        # Add widgets to splitter
+        splitter.addWidget(view_widget)
+        splitter.addWidget(controls_widget)
+        splitter.setSizes([600, 400])  # Set initial sizes
+            
+    def check_for_character_tag(self):
+        """Check if the user is typing a character tag and provide suggestions."""
+        if not hasattr(self, 'tag_completer') or not hasattr(self, 'qe_text_edit'):
+            return
+            
+        cursor = self.qe_text_edit.textCursor()
+        text = self.qe_text_edit.toPlainText()
+        
+        # Find the current word being typed
+        pos = cursor.position()
+        start = max(0, pos - 1)
+        
+        # Check if we're in the middle of typing a tag
+        if start >= 0 and pos <= len(text):
+            # Look backward to find the start of the current tag
+            tag_start = text.rfind('@', 0, pos)
+            
+            if tag_start >= 0 and tag_start < pos:
+                # We found a @ character before the cursor
+                # Extract the partial tag text
+                partial_tag = text[tag_start + 1:pos]
+                
+                # Only show suggestions if we're actively typing a tag
+                if tag_start == pos - 1 or partial_tag.strip():
+                    # Position the completer popup below the cursor
+                    cursor_rect = self.qe_text_edit.cursorRect()
+                    global_pos = self.qe_text_edit.mapToGlobal(cursor_rect.bottomLeft())
+                    
+                    self.tag_completer.set_filter(partial_tag)
+                    self.tag_completer.move(global_pos)
+                    self.tag_completer.show()
+                    return
+                    
+        # Hide the completer if we're not typing a tag
+        self.tag_completer.hide()
+        
+    def insert_character_tag(self, character_name: str):
+        """Insert a character tag at the current cursor position.
+        
+        Args:
+            character_name: Name of the character to insert
+        """
+        if not hasattr(self, 'qe_text_edit'):
+            return
+            
+        cursor = self.qe_text_edit.textCursor()
+        text = self.qe_text_edit.toPlainText()
+        pos = cursor.position()
+        
+        # Find the @ that started this tag
+        tag_start = text.rfind('@', 0, pos)
+        
+        if tag_start >= 0:
+            # Delete everything from the @ to the cursor
+            cursor.setPosition(tag_start)
+            cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
+            cursor.removeSelectedText()
+            
+            # Insert the character name with the @ prefix
+            cursor.insertText(f"@{character_name}")
+            
+            # Add a space after the insertion if appropriate
+            if cursor.position() < len(self.qe_text_edit.toPlainText()) and self.qe_text_edit.toPlainText()[cursor.position()] != ' ':
+                cursor.insertText(" ")
+            
+            # Hide the completer
+            self.tag_completer.hide()
+            
+            # Set focus back to the text edit
+            self.qe_text_edit.setFocus()
+    
+    def create_quick_event(self):
+        """Create a new quick event and associate it with the image."""
+        try:
+            # Get the character ID
+            character_id = self.qe_character_combo.currentData()
+            if not character_id:
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    "Please select a character for the quick event.",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
+                
+            # Get the text
+            text = self.qe_text_edit.toPlainText().strip()
+            if not text:
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    "Please enter text for the quick event.",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
+                
+            # Convert any @mentions to [char:ID] format
+            from app.db_sqlite import process_character_references, create_quick_event, get_next_quick_event_sequence_number
+            
+            # Create a mapping of character names to IDs (case insensitive)
+            char_name_to_id = {char['name'].lower(): str(char['id']) for char in self.characters}
+            
+            # Replace @CharacterName with [char:ID]
+            def replace_mention(match):
+                char_name = match.group(1)
+                if char_name.lower() in char_name_to_id:
+                    char_id = char_name_to_id[char_name.lower()]
+                    return f"[char:{char_id}]"
+                return match.group(0)  # Keep original if no match
+            
+            # Process the text with regex substitution to handle mentions
+            import re
+            processed_text = re.sub(r'@(\w+)', replace_mention, text)
+            
+            # Get sequence number
+            sequence_number = get_next_quick_event_sequence_number(self.db_conn, character_id)
+            
+            # Create the quick event
+            quick_event_id = create_quick_event(
+                self.db_conn,
+                text=processed_text,
+                character_id=character_id,
+                sequence_number=sequence_number
+            )
+            
+            if quick_event_id:
+                # Store the new quick event ID
+                self.new_quick_event_id = quick_event_id
+                self.associated_quick_event_id = quick_event_id
+                
+                # Reload quick events
+                self.load_quick_events_data()
+                
+                # Find and select the new event in the combo box
+                for i in range(self.quick_events_combo.count()):
+                    if self.quick_events_combo.itemData(i) == quick_event_id:
+                        self.quick_events_combo.setCurrentIndex(i)
+                        break
+                
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    "Quick event created successfully and associated with this image.",
+                    QMessageBox.StandardButton.Ok
+                )
+                
+                # Clear the text edit
+                self.qe_text_edit.clear()
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    "Failed to create quick event.",
+                    QMessageBox.StandardButton.Ok
+                )
+        except Exception as e:
+            print(f"Error creating quick event: {e}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Error creating quick event: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+            
+    def on_quick_event_selected(self, index: int):
+        """Handle selection of a quick event from the combo box.
+        
+        Args:
+            index: Index of the selected item
+        """
+        # Get the selected quick event ID
+        self.associated_quick_event_id = self.quick_events_combo.itemData(index)
+        
+        # Log the selection
+        if self.associated_quick_event_id and self.associated_quick_event_id != -1:
+            print(f"Selected quick event ID: {self.associated_quick_event_id}")
+            
+            # Find the quick event in the list
+            for event in self.quick_events:
+                if event.get('id') == self.associated_quick_event_id:
+                    # If the quick event text has mentions, format them for display
+                    text = event.get('text', '')
+                    if "[char:" in text:
+                        formatted_text = format_character_references(text, self.characters)
+                        print(f"Quick event text: {formatted_text}")
+                    break
+    
+    def get_selected_character_data(self) -> Dict[str, Any]:
+        """Get data for all selected characters and quick event.
+        
+        Returns:
+            Dictionary with character data and quick event ID
+        """
+        return {
+            'characters': self.tagged_characters,
+            'quick_event_id': self.associated_quick_event_id if self.associated_quick_event_id and self.associated_quick_event_id != -1 else None
+        }
+    
+    def accept(self):
+        """Override accept to save the selected quick event association."""
+        # Get the selected quick event ID
+        if hasattr(self, 'quick_events_combo'):
+            self.associated_quick_event_id = self.quick_events_combo.currentData()
+        
+        # Call the parent accept
+        super().accept()
     
     def rebuild_recognition_database(self):
         """Rebuild the character recognition database."""
@@ -3449,7 +3823,7 @@ class RegionSelectionDialog(QDialog):
             
             # Show success message
             QMessageBox.information(
-                self, 
+                self,
                 "Database Rebuilt", 
                 "Character recognition database has been rebuilt successfully."
             )
@@ -3537,7 +3911,7 @@ class RegionSelectionDialog(QDialog):
         
         # Add the tag
         self.tagged_characters.append(tag)
-        
+            
         # Update the tagged list
         self.update_tagged_list()
         
@@ -3555,7 +3929,7 @@ class RegionSelectionDialog(QDialog):
             f"Character tag for {tag['character_name']} has been saved.",
             QMessageBox.StandardButton.Ok
         )
-    
+            
     def update_tagged_list(self):
         """Update the list of tagged characters."""
         self.tagged_list.clear()
@@ -3567,7 +3941,7 @@ class RegionSelectionDialog(QDialog):
             
         # Enable/disable add to database checkbox based on whether any characters are tagged
         self.add_to_db_checkbox.setEnabled(len(self.tagged_characters) > 0)
-    
+
     def resizeEvent(self, event):
         """Handle resize events to maintain view fit.
         
@@ -3728,7 +4102,7 @@ class RegionSelectionDialog(QDialog):
         
         Args:
             scene_pos: Position in scene coordinates
-            
+        
         Returns:
             Position in original image coordinates
         """
@@ -3960,16 +4334,6 @@ class RegionSelectionDialog(QDialog):
                 # Disable remove button
                 self.remove_region_button.setEnabled(False)
     
-    def get_selected_character_data(self) -> List[Dict[str, Any]]:
-        """Get data for all selected characters.
-        
-        Returns:
-            List of dictionaries with character data
-        """
-        # Return the tagged_characters list directly - it already contains all the needed data
-        # with proper structure
-        return self.tagged_characters
-
     def add_region_to_recognition_database(self, region, character_id, character_name):
         """Add the selected region to the character's recognition database.
         
@@ -4504,3 +4868,254 @@ class GraphicsTagView(QGraphicsView):
         print(f"  - Scene pos: ({scene_x:.1f}, {scene_y:.1f})")
         
         return QPointF(scene_x, scene_y)
+
+    def load_characters(self):
+        """Load characters for the story."""
+        try:
+            # Use existing functions to get characters
+            from app.db_sqlite import get_story_characters
+            self.characters = get_story_characters(self.db_conn, self.story_id)
+        except Exception as e:
+            print(f"Error loading characters: {e}")
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Failed to load characters: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+            self.characters = []
+    
+    def load_quick_events(self):
+        """Load quick events for the story."""
+        try:
+            # Get quick events for the story
+            from app.db_sqlite import search_quick_events
+            
+            # Get all quick events for this story
+            self.quick_events = search_quick_events(
+                self.db_conn,
+                self.story_id,
+                text_query=None,
+                character_id=None,
+                from_date=None,
+                to_date=None
+            )
+            
+            # Sort by most recent first
+            self.quick_events.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+            
+        except Exception as e:
+            print(f"Error loading quick events: {e}")
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Failed to load quick events: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+            self.quick_events = []
+    
+    def create_quick_event(self):
+        """Create a new quick event and associate it with the image."""
+        try:
+            # Get the character ID
+            character_id = self.qe_character_combo.currentData()
+            if not character_id:
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    "Please select a character for the quick event.",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
+                
+            # Get the text
+            text = self.qe_text_edit.toPlainText().strip()
+            if not text:
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    "Please enter text for the quick event.",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
+                
+            # Convert any @mentions to [char:ID] format
+            from app.db_sqlite import process_character_references, create_quick_event, get_next_quick_event_sequence_number
+            
+            # Create a mapping of character names to IDs (case insensitive)
+            char_name_to_id = {char['name'].lower(): str(char['id']) for char in self.characters}
+            
+            # Replace @CharacterName with [char:ID]
+            def replace_mention(match):
+                char_name = match.group(1)
+                if char_name.lower() in char_name_to_id:
+                    char_id = char_name_to_id[char_name.lower()]
+                    return f"[char:{char_id}]"
+                return match.group(0)  # Keep original if no match
+            
+            # Process the text with regex substitution to handle mentions
+            import re
+            processed_text = re.sub(r'@(\w+)', replace_mention, text)
+            
+            # Get sequence number
+            sequence_number = get_next_quick_event_sequence_number(self.db_conn, character_id)
+            
+            # Create the quick event
+            quick_event_id = create_quick_event(
+                self.db_conn,
+                text=processed_text,
+                character_id=character_id,
+                sequence_number=sequence_number
+            )
+            
+            if quick_event_id:
+                # Store the new quick event ID
+                self.new_quick_event_id = quick_event_id
+                self.associated_quick_event_id = quick_event_id
+                
+                # Reload quick events
+                self.load_quick_events_data()
+                
+                # Find and select the new event in the combo box
+                for i in range(self.quick_events_combo.count()):
+                    if self.quick_events_combo.itemData(i) == quick_event_id:
+                        self.quick_events_combo.setCurrentIndex(i)
+                        break
+                
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    "Quick event created successfully and associated with this image.",
+                    QMessageBox.StandardButton.Ok
+                )
+                
+                # Clear the text edit
+                self.qe_text_edit.clear()
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    "Failed to create quick event.",
+                    QMessageBox.StandardButton.Ok
+                )
+        except Exception as e:
+            print(f"Error creating quick event: {e}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Error creating quick event: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+    
+    def on_quick_event_selected(self, index: int):
+        """Handle selection of a quick event from the combo box.
+        
+        Args:
+            index: Index of the selected item
+        """
+        # Get the selected quick event ID
+        self.associated_quick_event_id = self.quick_events_combo.itemData(index)
+        
+        # Log the selection
+        if self.associated_quick_event_id and self.associated_quick_event_id != -1:
+            print(f"Selected quick event ID: {self.associated_quick_event_id}")
+            
+            # Find the quick event in the list
+            for event in self.quick_events:
+                if event.get('id') == self.associated_quick_event_id:
+                    # If the quick event text has mentions, format them for display
+                    text = event.get('text', '')
+                    if "[char:" in text:
+                        formatted_text = format_character_references(text, self.characters)
+                        print(f"Quick event text: {formatted_text}")
+                    break
+                    
+    def get_selected_character_data(self) -> Dict[str, Any]:
+        """Get data for all selected characters and quick event.
+        
+        Returns:
+            Dictionary with character data and quick event ID
+        """
+        return {
+            'characters': self.tagged_characters,
+            'quick_event_id': self.associated_quick_event_id if self.associated_quick_event_id and self.associated_quick_event_id != -1 else None
+        }
+
+    def check_for_character_tag(self):
+        """Check if the user is typing a character tag and provide suggestions."""
+        if not hasattr(self, 'tag_completer') or not hasattr(self, 'qe_text_edit'):
+            return
+            
+        cursor = self.qe_text_edit.textCursor()
+        text = self.qe_text_edit.toPlainText()
+        
+        # Find the current word being typed
+        pos = cursor.position()
+        start = max(0, pos - 1)
+        
+        # Check if we're in the middle of typing a tag
+        if start >= 0 and pos <= len(text):
+            # Look backward to find the start of the current tag
+            tag_start = text.rfind('@', 0, pos)
+            
+            if tag_start >= 0 and tag_start < pos:
+                # We found a @ character before the cursor
+                # Extract the partial tag text
+                partial_tag = text[tag_start + 1:pos]
+                
+                # Only show suggestions if we're actively typing a tag
+                if tag_start == pos - 1 or partial_tag.strip():
+                    # Position the completer popup below the cursor
+                    cursor_rect = self.qe_text_edit.cursorRect()
+                    global_pos = self.qe_text_edit.mapToGlobal(cursor_rect.bottomLeft())
+                    
+                    self.tag_completer.set_filter(partial_tag)
+                    self.tag_completer.move(global_pos)
+                    self.tag_completer.show()
+                    return
+                    
+        # Hide the completer if we're not typing a tag
+        self.tag_completer.hide()
+        
+    def insert_character_tag(self, character_name: str):
+        """Insert a character tag at the current cursor position.
+        
+        Args:
+            character_name: Name of the character to insert
+        """
+        if not hasattr(self, 'qe_text_edit'):
+            return
+            
+        cursor = self.qe_text_edit.textCursor()
+        text = self.qe_text_edit.toPlainText()
+        pos = cursor.position()
+        
+        # Find the @ that started this tag
+        tag_start = text.rfind('@', 0, pos)
+        
+        if tag_start >= 0:
+            # Delete everything from the @ to the cursor
+            cursor.setPosition(tag_start)
+            cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
+            cursor.removeSelectedText()
+            
+            # Insert the character name with the @ prefix
+            cursor.insertText(f"@{character_name}")
+            
+            # Add a space after the insertion if appropriate
+            if cursor.position() < len(self.qe_text_edit.toPlainText()) and self.qe_text_edit.toPlainText()[cursor.position()] != ' ':
+                cursor.insertText(" ")
+            
+            # Hide the completer
+            self.tag_completer.hide()
+            
+            # Set focus back to the text edit
+            self.qe_text_edit.setFocus()
+
+    def accept(self):
+        """Override accept to save the selected quick event association."""
+        # Get the selected quick event ID
+        self.associated_quick_event_id = self.quick_events_combo.currentData()
+        
+        # Call the parent accept
+        super().accept()
