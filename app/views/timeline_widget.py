@@ -1252,6 +1252,9 @@ class QuickEventItem(QListWidgetItem):
         self.characters = characters or []
         self.images = images or []
         
+        # Store the event ID for reference in context menus and other actions
+        self.event_id = event_data.get('id')
+        
         # Store the character ID for the primary character
         self.character_id = event_data.get('character_id')
         
@@ -1262,18 +1265,19 @@ class QuickEventItem(QListWidgetItem):
         text = event_data.get('text', '')
         
         # Create display text with resolved character references
-        display_text = format_character_references(text, self.characters)
+        self.display_text = format_character_references(text, self.characters)
         
         # Add preview indicators for images if present
+        display_text_with_indicators = self.display_text
         if self.images:
             image_count = len(self.images)
-            display_text += f" [+{image_count} image{'s' if image_count > 1 else ''}]"
+            display_text_with_indicators += f" [+{image_count} image{'s' if image_count > 1 else ''}]"
         
         # Set the text of the item
-        self.setText(display_text)
+        self.setText(display_text_with_indicators)
         
         # Create tooltip with full text and metadata
-        tooltip = f"<b>{self.character_name}:</b> {display_text}"
+        tooltip = f"<b>{self.character_name}:</b> {self.display_text}"
         
         # Add image info to tooltip if present
         if self.images:
@@ -1538,6 +1542,10 @@ class QuickEventSearchTab(QWidget):
             else:
                 print(f"DEBUG - No results found")
             
+            # Load all characters for the story to properly format character references
+            self.characters = get_story_characters(self.conn, self.story_id)
+            print(f"DEBUG - Loaded {len(self.characters)} characters for formatting references")
+            
             # Update the results list
             self.update_results_list()
             
@@ -1559,10 +1567,20 @@ class QuickEventSearchTab(QWidget):
         
         # Add results to list
         for event in self.search_results:
-            # Create an item with formatted character references
-            item = QuickEventItem(event, self.characters)
-            self.results_list.addItem(item)
-        
+            # Get tagged characters and images for this event
+            try:
+                tagged_characters = get_quick_event_tagged_characters(self.conn, event['id'])
+                event_images = get_quick_event_images(self.conn, event['id'])
+                
+                # Create an item with formatted character references
+                item = QuickEventItem(event, self.characters + tagged_characters, event_images)
+                self.results_list.addItem(item)
+            except Exception as e:
+                logger.error(f"Error loading data for quick event {event['id']}: {e}")
+                # Still add the item even if there was an error loading tagged data
+                item = QuickEventItem(event, self.characters)
+                self.results_list.addItem(item)
+    
     def on_event_selected(self, current, previous):
         """Handle event selection change.
         
