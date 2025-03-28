@@ -59,6 +59,7 @@ class CharacterCompleter(QWidget):
         self.current_filter: str = ""
         self.text_widget: Optional[Union[QTextEdit, QLineEdit]] = None
         self.shortcut: Optional[QShortcut] = None
+        self._show_was_requested: bool = False
         
         self.init_ui()
         
@@ -152,7 +153,7 @@ class CharacterCompleter(QWidget):
             characters: List of character dictionaries
         """
         self.characters = characters
-        self.update_suggestions()
+        # Don't call update_suggestions here to avoid showing on startup
         
     def set_filter(self, filter_text: str):
         """Set the filter text for character suggestions.
@@ -177,7 +178,7 @@ class CharacterCompleter(QWidget):
             name = char['name']
             if self.current_filter in name.lower():
                 self.filtered_characters.append(char)
-                
+        
         # Sort filtered characters alphabetically by name
         self.filtered_characters.sort(key=lambda c: c['name'].lower())
         
@@ -207,11 +208,14 @@ class CharacterCompleter(QWidget):
             item_height = 32  # Approximated from the padding in CSS
             self.list_widget.setFixedHeight(items_count * item_height)
             
-            # For an empty filter, position will be set by show_all_suggestions
-            if self.current_filter and self.text_widget:
+            # Show if we have a filter text OR if show was explicitly requested (via @ or shortcut)
+            if self._show_was_requested:
                 self.position_at_cursor()
-                
-            self.show()
+                self.show()
+            # For backwards compatibility, also show if there's a filter and text widget
+            elif self.current_filter and self.text_widget:
+                self.position_at_cursor()
+                self.show()
         else:
             self.hide()
             
@@ -229,6 +233,7 @@ class CharacterCompleter(QWidget):
         """Show all character suggestions at the cursor position."""
         if self.text_widget:
             # Show all characters without filtering
+            self._show_was_requested = True
             self.set_filter("")
             
             # Position at cursor
@@ -312,9 +317,13 @@ class CharacterCompleter(QWidget):
         if tag_start >= 0 and (tag_start == 0 or text[tag_start - 1].isspace()):
             # Check if there's whitespace between @ and cursor
             whitespace_after = text.find(' ', tag_start, cursor_pos)
+            
             if whitespace_after == -1:  # No whitespace, user is still typing the tag
                 # Extract the partial tag (excluding @)
                 partial_tag = text[tag_start + 1:cursor_pos]
+                
+                # Set the show requested flag - we want to show the popup even if there's no text after @
+                self._show_was_requested = True
                 
                 # Filter character suggestions
                 self.set_filter(partial_tag)
@@ -477,6 +486,11 @@ class CharacterCompleter(QWidget):
             # Ignore all other keys so they get processed by the parent text editor
             # This allows typing to continue while the suggestion list is visible
             event.ignore()
+
+    def hide(self):
+        """Hide the completer and reset the show request flag."""
+        self._show_was_requested = False
+        super().hide()
 
 
 def convert_mentions_to_char_refs(text: str, characters: List[Dict[str, Any]]) -> str:
