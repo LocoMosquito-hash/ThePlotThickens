@@ -155,10 +155,14 @@ class CharacterCompleterExample(QMainWindow):
     def on_text_character_selected(self, character_name):
         """Handle character selection in the QTextEdit."""
         print(f"Character '{character_name}' selected in QTextEdit")
+        # Call the completer's insert method to actually insert the tag
+        self.text_completer.insert_character_tag(character_name)
     
     def on_line_character_selected(self, character_name):
         """Handle character selection in the QLineEdit."""
         print(f"Character '{character_name}' selected in QLineEdit")
+        # Call the completer's insert method to actually insert the tag
+        self.line_completer.insert_character_tag(character_name)
     
     def convert_text_mentions(self):
         """Convert @mentions to [char:ID] in the QTextEdit."""
