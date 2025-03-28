@@ -22,6 +22,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QBuffer, QByteArray, QSettings, QPoint
 from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QKeyEvent, QTextCursor, QIcon, QColor
 
+from app.utils.character_completer import (
+    CharacterCompleter,
+    convert_mentions_to_char_refs,
+    convert_char_refs_to_mentions
+)
+
 from app.db_sqlite import (
     get_character, update_character, get_story, get_character_quick_events,
     create_quick_event, update_quick_event, delete_quick_event, 
@@ -59,15 +65,20 @@ class CharacterTagEditor(QDialog):
             self.characters = get_story_characters(db_conn, self.story_id)
         
         # Convert any [char:ID] references to @CharacterName format for display
-        self.initial_text = self.convert_char_refs_to_mentions(text)
+        self.initial_text = convert_char_refs_to_mentions(text, self.characters)
         
         self.init_ui()
         
         # Create character tag completer
-        self.tag_completer = CharacterTagCompleter(self)
+        self.tag_completer = CharacterCompleter(self)
         self.tag_completer.set_characters(self.characters)
-        self.tag_completer.character_selected.connect(self.insert_character_tag)
-        self.tag_completer.hide()
+        self.tag_completer.character_selected.connect(self.on_character_selected)
+        self.tag_completer.attach_to_widget(
+            self.text_edit,
+            add_shortcut=True,
+            shortcut_key="Ctrl+Space",
+            at_trigger=True
+        )
         
     def init_ui(self):
         """Initialize the user interface."""
@@ -80,7 +91,6 @@ class CharacterTagEditor(QDialog):
         self.text_edit = QTextEdit()
         self.text_edit.setPlaceholderText("Enter quick event text. Use @name to tag characters (e.g., @John kissed @Mary)")
         self.text_edit.setText(self.initial_text)
-        self.text_edit.textChanged.connect(self.check_for_character_tag)
         layout.addWidget(self.text_edit)
         
         # Available characters
@@ -114,257 +124,16 @@ class CharacterTagEditor(QDialog):
         """
         display_text = self.text_edit.toPlainText()
         # Convert @mentions to [char:ID] for storage
-        return self.convert_mentions_to_char_refs(display_text)
+        return convert_mentions_to_char_refs(display_text, self.characters)
     
-    def convert_char_refs_to_mentions(self, text: str) -> str:
-        """Convert [char:ID] references to @CharacterName format for display.
+    def on_character_selected(self, character_name: str):
+        """Handle character selection from completer.
         
         Args:
-            text: Text with [char:ID] references
-            
-        Returns:
-            Text with @CharacterName mentions
+            character_name: Name of the selected character
         """
-        import re
-        
-        # Create a mapping of character IDs to names
-        char_id_to_name = {str(char['id']): char['name'] for char in self.characters}
-        
-        # Replace [char:ID] references with @CharacterName
-        def replace_char_ref(match):
-            char_id = match.group(1)
-            if char_id in char_id_to_name:
-                return f"@{char_id_to_name[char_id]}"
-            return match.group(0)  # Keep original if no match
-            
-        # Process the text with regex substitution
-        processed_text = re.sub(r'\[char:(\d+)\]', replace_char_ref, text)
-        
-        return processed_text
-    
-    def convert_mentions_to_char_refs(self, text: str) -> str:
-        """Convert @mentions to [char:ID] format for storage.
-        
-        Args:
-            text: Text with @CharacterName mentions
-            
-        Returns:
-            Text with [char:ID] references
-        """
-        import re
-        
-        # Create a mapping of character names to IDs (case insensitive)
-        char_name_to_id = {char['name'].lower(): str(char['id']) for char in self.characters}
-        
-        # Replace @CharacterName with [char:ID]
-        def replace_mention(match):
-            char_name = match.group(1)
-            if char_name.lower() in char_name_to_id:
-                char_id = char_name_to_id[char_name.lower()]
-                return f"[char:{char_id}]"
-            return match.group(0)  # Keep original if no match
-        
-        # Process the text with regex substitution to handle mentions
-        processed_text = re.sub(r'@(\w+)', replace_mention, text)
-        
-        return processed_text
-        
-    def check_for_character_tag(self):
-        """Check if the user is typing a character tag and provide suggestions."""
-        cursor = self.text_edit.textCursor()
-        text = self.text_edit.toPlainText()
-        
-        # Find the current word being typed
-        pos = cursor.position()
-        start = max(0, pos - 1)
-        
-        # Check if we're in the middle of typing a tag
-        if start >= 0 and pos <= len(text):
-            # Look backward to find the start of the current tag
-            tag_start = text.rfind('@', 0, pos)
-            
-            if tag_start >= 0 and tag_start < pos:
-                # We found a @ character before the cursor
-                # Extract the partial tag text
-                partial_tag = text[tag_start + 1:pos]
-                
-                # Only show suggestions if we're actively typing a tag
-                if tag_start == pos - 1 or partial_tag.strip():
-                    # Position the completer popup below the cursor
-                    cursor_rect = self.text_edit.cursorRect()
-                    global_pos = self.text_edit.mapToGlobal(cursor_rect.bottomLeft())
-                    
-                    self.tag_completer.set_filter(partial_tag)
-                    self.tag_completer.move(global_pos)
-                    return
-                    
-        # Hide the completer if we're not typing a tag
-        self.tag_completer.hide()
-        
-    def insert_character_tag(self, character_name: str):
-        """Insert a character tag at the current cursor position.
-        
-        Args:
-            character_name: Name of the character to tag
-        """
-        cursor = self.text_edit.textCursor()
-        text = self.text_edit.toPlainText()
-        pos = cursor.position()
-        
-        # Find the start of the current tag
-        tag_start = text.rfind('@', 0, pos)
-        
-        if tag_start >= 0:
-            # Replace the partial tag with the full tag
-            cursor.setPosition(tag_start, QTextCursor.MoveMode.MoveAnchor)
-            cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
-            cursor.insertText(f"@{character_name}")
-            
-            # Add a space after the tag
-            cursor.insertText(" ")
-            
-            # Set focus back to the text edit
-            self.text_edit.setFocus()
-
-
-class CharacterTagCompleter(QWidget):
-    """Popup widget for character tag autocompletion."""
-    
-    character_selected = pyqtSignal(str)  # Signal emitted when a character is selected
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        
-        self.characters = []
-        self.filtered_characters = []
-        self.current_filter = ""
-        
-        self.init_ui()
-        
-    def init_ui(self):
-        """Initialize the UI."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        
-        # Create a list widget for character suggestions
-        self.list_widget = QListWidget()
-        self.list_widget.setFrameShape(QFrame.Shape.NoFrame)
-        self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.list_widget.setMaximumHeight(200)
-        self.list_widget.itemClicked.connect(self.on_item_clicked)
-        
-        # Style the list widget
-        self.list_widget.setStyleSheet("""
-            QListWidget {
-                background-color: #2D2D30;
-                color: #FFFFFF;
-                border: 1px solid #3E3E42;
-                border-radius: 3px;
-            }
-            QListWidget::item {
-                padding: 5px;
-            }
-            QListWidget::item:selected {
-                background-color: #007ACC;
-            }
-        """)
-        
-        layout.addWidget(self.list_widget)
-        
-    def set_characters(self, characters: List[Dict[str, Any]]):
-        """Set the available characters for autocompletion.
-        
-        Args:
-            characters: List of character dictionaries
-        """
-        self.characters = characters
-        self.update_suggestions()
-        
-    def set_filter(self, filter_text: str):
-        """Set the filter text for character suggestions.
-        
-        Args:
-            filter_text: Text to filter characters by
-        """
-        self.current_filter = filter_text.lower()
-        self.update_suggestions()
-        
-    def update_suggestions(self):
-        """Update the list of character suggestions based on the current filter."""
-        self.list_widget.clear()
-        
-        if not self.characters:
-            self.hide()
-            return
-            
-        # Filter characters based on the current filter
-        self.filtered_characters = []
-        for char in self.characters:
-            name = char['name']
-            if self.current_filter in name.lower():
-                self.filtered_characters.append(char)
-                
-                # Create a list item with the character name
-                item = QListWidgetItem(name)
-                item.setData(Qt.ItemDataRole.UserRole, char['id'])
-                
-                # Bold for main characters
-                if char.get('is_main_character'):
-                    font = item.font()
-                    font.setBold(True)
-                    item.setFont(font)
-                    
-                self.list_widget.addItem(item)
-                
-        # Show or hide the widget based on whether there are suggestions
-        if self.filtered_characters:
-            self.list_widget.setCurrentRow(0)  # Select the first item
-            self.show()
-        else:
-            self.hide()
-            
-    def on_item_clicked(self, item: QListWidgetItem):
-        """Handle item click events.
-        
-        Args:
-            item: The clicked list item
-        """
-        name = item.text()
-        self.character_selected.emit(name)
-        self.hide()
-        
-    def keyPressEvent(self, event: QKeyEvent):
-        """Handle key press events.
-        
-        Args:
-            event: Key event
-        """
-        key = event.key()
-        
-        if key == Qt.Key.Key_Escape:
-            self.hide()
-            event.accept()
-        elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
-            current_item = self.list_widget.currentItem()
-            if current_item:
-                self.on_item_clicked(current_item)
-            event.accept()
-        elif key == Qt.Key.Key_Up:
-            current_row = self.list_widget.currentRow()
-            if current_row > 0:
-                self.list_widget.setCurrentRow(current_row - 1)
-            event.accept()
-        elif key == Qt.Key.Key_Down:
-            current_row = self.list_widget.currentRow()
-            if current_row < self.list_widget.count() - 1:
-                self.list_widget.setCurrentRow(current_row + 1)
-            event.accept()
-        else:
-            super().keyPressEvent(event)
+        # Let the completer handle the insertion
+        self.tag_completer.insert_character_tag(character_name)
 
 
 class QuickEventItem(QListWidgetItem):
