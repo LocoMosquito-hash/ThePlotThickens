@@ -64,7 +64,7 @@ With:
 ```python
 self.tag_completer = CharacterCompleter(self)
 self.tag_completer.set_characters(self.characters)
-self.tag_completer.character_selected.connect(self.insert_character_tag)
+self.tag_completer.character_selected.connect(self.on_character_selected)
 self.tag_completer.attach_to_widget(
     self.text_edit,  # or self.line_edit
     add_shortcut=True,  # Use False to not add Ctrl+Space shortcut
@@ -73,7 +73,21 @@ self.tag_completer.attach_to_widget(
 )
 ```
 
-### 3. Remove redundant methods
+### 3. Update character selection handler
+
+**IMPORTANT**: The new `CharacterCompleter` class emits a signal when a character is selected, but does not automatically insert the tag. You must explicitly call `insert_character_tag` in your signal handler:
+
+```python
+def on_character_selected(self, character_name):
+    """Handle character selection."""
+    # Call the insert_character_tag method to actually insert the tag
+    self.tag_completer.insert_character_tag(character_name)
+
+    # Any additional custom logic
+    print(f"Character '{character_name}' selected")
+```
+
+### 4. Remove redundant methods
 
 The following methods are now handled by the `CharacterCompleter` class and can be removed:
 
@@ -83,11 +97,11 @@ The following methods are now handled by the `CharacterCompleter` class and can 
 
 Replace any calls to these methods with the corresponding methods in `CharacterCompleter`.
 
-### 4. Update event filter overrides (if present)
+### 5. Update event filter overrides (if present)
 
 If you have custom `eventFilter` overrides that handle Tab key navigation for the completer, you can remove them as the new `CharacterCompleter` handles this internally.
 
-### 5. Replace character reference utilities
+### 6. Replace character reference utilities
 
 Replace any custom code for converting between `@mentions` and `[char:ID]` references with the utility functions from the `character_completer` module:
 
@@ -95,7 +109,7 @@ Replace any custom code for converting between `@mentions` and `[char:ID]` refer
 - `convert_char_refs_to_mentions`
 - `extract_character_ids_from_text`
 
-### 6. Custom styling (optional)
+### 7. Custom styling (optional)
 
 If you have custom styling for the completer, you can either:
 
@@ -186,7 +200,10 @@ class ExampleDialog(QDialog):
 
     def on_character_selected(self, character_name):
         """Handle character selection."""
-        # Any custom logic beyond inserting the tag
+        # This call is required to insert the tag in the text widget
+        self.tag_completer.insert_character_tag(character_name)
+
+        # Any additional custom logic
         print(f"Character '{character_name}' selected")
 ```
 
@@ -210,7 +227,8 @@ If you encounter any issues during migration:
 
 1. Check that the `attach_to_widget` method is being called with the correct widget
 2. Verify that `set_characters` is being called with the correct character data
-3. Ensure any custom event handling doesn't conflict with the completer's internal handling
-4. Check that the signal connections are properly set up
+3. Make sure your character selection handler calls `insert_character_tag`
+4. Ensure any custom event handling doesn't conflict with the completer's internal handling
+5. Check that the signal connections are properly set up
 
 For complex use cases, refer to the `character_completer_example.py` for a complete working example.
