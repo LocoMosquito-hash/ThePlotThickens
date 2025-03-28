@@ -1464,7 +1464,24 @@ class ImageDetailDialog(QDialog):
     def load_quick_events(self):
         """Load quick events associated with this image."""
         try:
+            # Load quick events for this image
             self.quick_events = get_image_quick_events(self.db_conn, self.image_id)
+            
+            # Load all characters for this story if not already loaded
+            if not self.characters and self.story_id:
+                self.characters = get_story_characters(self.db_conn, self.story_id)
+                
+            # Load tagged characters for each quick event
+            for event in self.quick_events:
+                try:
+                    tagged_chars = get_quick_event_tagged_characters(self.db_conn, event['id'])
+                    # Add any characters not already in self.characters
+                    for char in tagged_chars:
+                        if not any(c['id'] == char['id'] for c in self.characters):
+                            self.characters.append(char)
+                except Exception as e:
+                    print(f"Error loading tagged characters for event {event['id']}: {e}")
+            
             self.update_quick_events_list()
         except Exception as e:
             print(f"Error loading quick events: {e}")
@@ -1500,8 +1517,11 @@ class ImageDetailDialog(QDialog):
             
             # Add events for this character
             for event in data['events']:
+                # Format character references in the text
+                formatted_text = format_character_references(event['text'], self.characters)
+                
                 item = QListWidgetItem()
-                item.setText(f"{event['text']}")
+                item.setText(formatted_text)
                 item.setData(Qt.ItemDataRole.UserRole, event['id'])
                 self.quick_events_list.addItem(item)
     
