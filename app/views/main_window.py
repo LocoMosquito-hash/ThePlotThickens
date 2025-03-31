@@ -495,30 +495,49 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def add_quick_event(self) -> None:
-        """Show dialog to add a quick event."""
+        """Add a quick event to the database."""
         if not hasattr(self, 'current_story_id') or not self.current_story_id:
             QMessageBox.warning(self, "No Story Selected", "Please select a story first.")
             return
         
         try:
-            # Create context information
+            # Get the current tab name for context
+            current_tab_index = self.tab_widget.currentIndex()
+            tab_name = self.tab_widget.tabText(current_tab_index)
+            
+            # Create context dictionary for the quick event dialog
             context = {
                 "source": "main_window",
-                "current_tab": self.tab_widget.currentIndex(),
-                "tab_name": self.tab_widget.tabText(self.tab_widget.currentIndex()) if self.tab_widget.count() > 0 else None
+                "current_tab": current_tab_index,
+                "tab_name": tab_name,
+                "shortcut": "CTRL+Q"
             }
             
-            # Show the dialog
+            # Debug output to confirm we're using the new module
+            print(f"\n[DEBUG] QuickEventDialog called from new module - context: {context}\n")
+            
+            # Show the dialog with the callback to handle the result
+            from app.utils.quick_event_utils import show_quick_event_dialog
+            
             show_quick_event_dialog(
                 db_conn=self.db_conn,
                 story_id=self.current_story_id,
                 parent=self,
                 callback=self.on_quick_event_created,
-                context=context
+                context=context,
+                options={
+                    "show_recent_events": True,
+                    "show_character_tags": True,
+                    "title": f"Quick Event - {tab_name} Tab"
+                }
             )
-            
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to create quick event: {str(e)}")
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Error creating quick event: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
 
     def on_quick_event_created(self, event_id: int, text: str, context: Dict[str, Any]) -> None:
         """Handle the quick event created signal.

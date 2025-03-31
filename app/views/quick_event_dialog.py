@@ -193,7 +193,14 @@ class QuickEventDialog(QDialog):
         """
         # If a specific character is preferred, use it
         if self.preferred_character_id is not None:
-            return self.preferred_character_id
+            # Ensure we return an integer even if a dictionary was passed
+            if isinstance(self.preferred_character_id, dict) and 'id' in self.preferred_character_id:
+                return int(self.preferred_character_id['id'])
+            elif isinstance(self.preferred_character_id, (int, str)):
+                return int(self.preferred_character_id)
+            else:
+                print(f"WARNING: Unexpected character_id type: {type(self.preferred_character_id)}")
+                return None
             
         # Try to auto-detect from mentioned characters
         text = self.get_event_text()
@@ -223,6 +230,7 @@ class QuickEventDialog(QDialog):
         
         # Create the quick event
         try:
+            # Make sure we're passing the correct story_id (as an integer)
             quick_event_id = self.qe_manager.create_quick_event(
                 text=text, 
                 story_id=self.story_id,
@@ -244,6 +252,9 @@ class QuickEventDialog(QDialog):
             else:
                 QMessageBox.warning(self, "Error", "Failed to create quick event.")
         except Exception as e:
+            import traceback
+            print(f"Error creating quick event: {e}")
+            print(traceback.format_exc())
             QMessageBox.critical(self, "Error", f"Error creating quick event: {str(e)}")
     
     def get_result(self) -> Tuple[bool, Optional[int], Optional[str]]:

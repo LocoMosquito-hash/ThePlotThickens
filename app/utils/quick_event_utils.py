@@ -37,6 +37,11 @@ def show_quick_event_dialog(
         options: Optional UI customization options
     """
     try:
+        # Debug output for parameter types
+        print(f"[DEBUG] show_quick_event_dialog - story_id: {story_id} ({type(story_id)})")
+        print(f"[DEBUG] show_quick_event_dialog - character_id: {character_id} ({type(character_id)})")
+        print(f"[DEBUG] show_quick_event_dialog - context: {context}")
+        
         # Import here to avoid circular imports
         from app.views.quick_event_dialog import QuickEventDialog
         
@@ -56,10 +61,22 @@ def show_quick_event_dialog(
                 "allow_characterless_events": True
             }
         
+        # Ensure story_id is an integer
+        try:
+            story_id_int = int(story_id)
+        except (TypeError, ValueError):
+            print(f"[ERROR] Invalid story_id type: {type(story_id)}")
+            return
+            
+        # Check if character_id is a dictionary and extract the ID if needed
+        if isinstance(character_id, dict) and 'id' in character_id:
+            print(f"[DEBUG] Converting character_id from dictionary: {character_id}")
+            character_id = character_id['id']
+            
         # Create the dialog
         dialog = QuickEventDialog(
             db_conn=db_conn,
-            story_id=story_id,
+            story_id=story_id_int,
             parent=parent,
             context=context,
             initial_text=initial_text,
@@ -76,7 +93,7 @@ def show_quick_event_dialog(
         
     except Exception as e:
         import traceback
-        print(f"Error showing quick event dialog: {e}")
+        print(f"[ERROR] Error showing quick event dialog: {e}")
         print(traceback.format_exc())
 
 def format_quick_event_text(
