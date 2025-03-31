@@ -2,18 +2,27 @@
 # -*- coding: utf-8 -*-
 
 """
-Gallery widget for The Plot Thickens application.
+Gallery Widget for The Plot Thickens application.
 
-This module provides a widget for managing and displaying a story's image gallery.
+This widget displays a gallery of images for a story.
 """
 
 import os
-import uuid
-import random
+import sys
+import time
+import io
+import re
+import pickle
 import string
-from typing import Optional, List, Dict, Any, Tuple
+import random
+import base64
+import urllib.parse
+import tempfile
+from pathlib import Path
+from typing import List, Dict, Any, Optional, Tuple, Set, Union
 from datetime import datetime
-import traceback
+
+import numpy as np
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -38,7 +47,9 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
-from app.utils.character_completer import CharacterCompleter, convert_mentions_to_char_refs
+from app.utils.character_completer import CharacterCompleter
+# Import the centralized character reference functions
+from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
 
 from app.db_sqlite import (
     get_image_quick_events, get_character_quick_events,
@@ -53,7 +64,6 @@ from app.db_sqlite import (
 
 # Import our image recognition utility
 from app.utils.image_recognition_util import ImageRecognitionUtil
-from app.views.timeline_widget import format_character_references
 
 class ThumbnailWidget(QFrame):
     """Widget for displaying a thumbnail image with basic controls."""
@@ -337,32 +347,18 @@ class QuickEventSelectionDialog(QDialog):
             
             self.event_list.addItem(item)
     
-    def format_display_text(self, text: str, characters: List[Dict[str, Any]]) -> str:
-        """Format text for display, converting [char:ID] references to @CharacterName.
+    def format_display_text(self, text: str, tagged_characters: Dict[str, Dict]) -> str:
+        """Format the text for display, converting character references to mentions.
         
         Args:
-            text: Raw text with [char:ID] references
-            characters: List of character dictionaries
+            text: The text to format
+            tagged_characters: Dictionary of characters by ID
             
         Returns:
-            Formatted text for display
+            Formatted text with character references converted to mentions
         """
-        import re
-        
-        # Create a mapping of character IDs to names
-        char_id_to_name = {str(char['id']): char['name'] for char in characters}
-        
-        # Replace [char:ID] references with @CharacterName
-        def replace_char_ref(match):
-            char_id = match.group(1)
-            if char_id in char_id_to_name:
-                return f"@{char_id_to_name[char_id]}"
-            return match.group(0)  # Keep original if no match
-            
-        # Process the text with regex substitution
-        processed_text = re.sub(r'\[char:(\d+)\]', replace_char_ref, text)
-        
-        return processed_text
+        # Use the centralized function to convert [char:ID] to @mentions
+        return convert_char_refs_to_mentions(text, tagged_characters)
     
     def on_character_changed(self, index: int):
         """Handle character selection change.
@@ -1042,11 +1038,12 @@ class QuickEventEditor(QDialog):
         """Convert @mentions to [char:ID] format for storage.
         
         Args:
-            text: Text with @CharacterName mentions
+            text: The text with @mentions
             
         Returns:
-            Text with [char:ID] references
+            Text with @mentions converted to [char:ID] format
         """
+        # Use the centralized function, passing the characters from the parent dialog
         return convert_mentions_to_char_refs(text, self.characters)
         
     def get_character_id(self) -> int:
@@ -1519,7 +1516,7 @@ class ImageDetailDialog(QDialog):
             # Add events for this character
             for event in data['events']:
                 # Format character references in the text
-                formatted_text = format_character_references(event['text'], self.characters)
+                formatted_text = convert_char_refs_to_mentions(event['text'], self.characters)
                 
                 item = QListWidgetItem()
                 item.setText(formatted_text)
@@ -3618,23 +3615,11 @@ class RegionSelectionDialog(QDialog):
                 )
                 return
                 
-            # Convert any @mentions to [char:ID] format
-            from app.db_sqlite import process_character_references, create_quick_event, get_next_quick_event_sequence_number
+            # Convert any @mentions to [char:ID] format using the centralized function
+            from app.db_sqlite import create_quick_event, get_next_quick_event_sequence_number
             
-            # Create a mapping of character names to IDs (case insensitive)
-            char_name_to_id = {char['name'].lower(): str(char['id']) for char in self.characters}
-            
-            # Replace @CharacterName with [char:ID]
-            def replace_mention(match):
-                char_name = match.group(1)
-                if char_name.lower() in char_name_to_id:
-                    char_id = char_name_to_id[char_name.lower()]
-                    return f"[char:{char_id}]"
-                return match.group(0)  # Keep original if no match
-            
-            # Process the text with regex substitution to handle mentions
-            import re
-            processed_text = re.sub(r'@(\w+)', replace_mention, text)
+            # Process the text with the centralized function
+            processed_text = convert_mentions_to_char_refs(text, self.characters)
             
             # Get sequence number
             sequence_number = get_next_quick_event_sequence_number(self.db_conn, character_id)
@@ -3705,7 +3690,10 @@ class RegionSelectionDialog(QDialog):
                     # If the quick event text has mentions, format them for display
                     text = event.get('text', '')
                     if "[char:" in text:
-                        formatted_text = format_character_references(text, self.characters)
+                        # Get tagged characters for the quick event
+                        from app.db_sqlite import get_quick_event_tagged_characters
+                        tagged_characters = get_quick_event_tagged_characters(self.db_conn, self.associated_quick_event_id)
+                        formatted_text = convert_char_refs_to_mentions(text, tagged_characters)
                         print(f"Quick event text: {formatted_text}")
                     break
     
@@ -4897,23 +4885,11 @@ class GraphicsTagView(QGraphicsView):
                 )
                 return
                 
-            # Convert any @mentions to [char:ID] format
-            from app.db_sqlite import process_character_references, create_quick_event, get_next_quick_event_sequence_number
+            # Convert any @mentions to [char:ID] format using the centralized function
+            from app.db_sqlite import create_quick_event, get_next_quick_event_sequence_number
             
-            # Create a mapping of character names to IDs (case insensitive)
-            char_name_to_id = {char['name'].lower(): str(char['id']) for char in self.characters}
-            
-            # Replace @CharacterName with [char:ID]
-            def replace_mention(match):
-                char_name = match.group(1)
-                if char_name.lower() in char_name_to_id:
-                    char_id = char_name_to_id[char_name.lower()]
-                    return f"[char:{char_id}]"
-                return match.group(0)  # Keep original if no match
-            
-            # Process the text with regex substitution to handle mentions
-            import re
-            processed_text = re.sub(r'@(\w+)', replace_mention, text)
+            # Process the text with the centralized function
+            processed_text = convert_mentions_to_char_refs(text, self.characters)
             
             # Get sequence number
             sequence_number = get_next_quick_event_sequence_number(self.db_conn, character_id)
@@ -4984,7 +4960,10 @@ class GraphicsTagView(QGraphicsView):
                     # If the quick event text has mentions, format them for display
                     text = event.get('text', '')
                     if "[char:" in text:
-                        formatted_text = format_character_references(text, self.characters)
+                        # Get tagged characters for the quick event
+                        from app.db_sqlite import get_quick_event_tagged_characters
+                        tagged_characters = get_quick_event_tagged_characters(self.db_conn, self.associated_quick_event_id)
+                        formatted_text = convert_char_refs_to_mentions(text, tagged_characters)
                         print(f"Quick event text: {formatted_text}")
                     break
                     
