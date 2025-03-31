@@ -30,11 +30,8 @@ from app.db_sqlite import (
     get_story_characters, create_quick_event, get_next_quick_event_sequence_number,
     get_character, search_quick_events
 )
-from app.utils.character_completer import (
-    CharacterCompleter, 
-    convert_mentions_to_char_refs,
-    convert_char_refs_to_mentions
-)
+from app.utils.character_completer import CharacterCompleter
+from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
 
 
 class QuickEventDialog(QDialog):
