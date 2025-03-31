@@ -59,6 +59,12 @@ class QuickEventManager:
         Returns:
             ID of the created quick event
         """
+        # Debug logging for parameter types
+        print(f"[DEBUG] create_quick_event - text: {text} ({type(text)})")
+        print(f"[DEBUG] create_quick_event - story_id: {story_id} ({type(story_id)})")
+        print(f"[DEBUG] create_quick_event - character_id: {character_id} ({type(character_id)})")
+        print(f"[DEBUG] create_quick_event - sequence_number: {sequence_number} ({type(sequence_number)})")
+        
         # Process character mentions to [char:ID] format
         characters = get_story_characters(self.db_conn, story_id)
         processed_text = convert_mentions_to_char_refs(text, characters)
@@ -66,19 +72,48 @@ class QuickEventManager:
         # If sequence_number is not provided, generate one
         if sequence_number is None:
             if character_id:
-                sequence_number = get_next_quick_event_sequence_number(self.db_conn, character_id)
+                try:
+                    # Ensure character_id is an integer
+                    char_id = int(character_id) if character_id is not None else None
+                    sequence_number = get_next_quick_event_sequence_number(self.db_conn, char_id)
+                except (TypeError, ValueError) as e:
+                    print(f"[ERROR] Failed to convert character_id to int: {character_id}")
+                    print(f"[ERROR] Type: {type(character_id)}")
+                    if isinstance(character_id, dict) and 'id' in character_id:
+                        char_id = int(character_id['id'])
+                        sequence_number = get_next_quick_event_sequence_number(self.db_conn, char_id)
+                    else:
+                        # Default to no character
+                        character_id = None
+                        sequence_number = 0
             else:
                 sequence_number = 0
                 
-        # Create the quick event
-        quick_event_id = create_quick_event(
-            self.db_conn,
-            processed_text,
-            character_id,
-            sequence_number
-        )
-        
-        return quick_event_id
+        # Create the quick event - ensure all parameters have the correct types
+        try:
+            # Try to convert character_id to int if not None
+            if character_id is not None:
+                if isinstance(character_id, dict) and 'id' in character_id:
+                    character_id_int = int(character_id['id'])
+                else:
+                    character_id_int = int(character_id)
+            else:
+                character_id_int = None
+                
+            # Create the quick event
+            quick_event_id = create_quick_event(
+                self.db_conn,
+                processed_text,  # text as string
+                character_id_int,  # character_id as int or None
+                int(sequence_number)  # sequence_number as int
+            )
+            
+            return quick_event_id
+        except Exception as e:
+            import traceback
+            print(f"[ERROR] Exception in create_quick_event: {e}")
+            print(traceback.format_exc())
+            raise
     
     def get_formatted_event_text(self, event_id: int) -> str:
         """
