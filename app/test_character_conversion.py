@@ -8,7 +8,7 @@ def write_log(message):
 
 try:
     write_log("Importing modules...")
-    from app.utils.character_completer import convert_mentions_to_char_refs, convert_char_refs_to_mentions
+    from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
     write_log("Imports successful!")
 
     def test_conversion():
