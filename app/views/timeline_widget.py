@@ -12,6 +12,7 @@ import json
 import logging
 from typing import Optional, Dict, Any, List, Tuple, Set, Union
 from datetime import datetime
+import math
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QToolBar, QMenu,
@@ -19,23 +20,23 @@ from PyQt6.QtWidgets import (
     QSplitter, QCheckBox, QFormLayout, QGroupBox, QDialog, QSizePolicy,
     QTextEdit, QSpacerItem, QFrame, QListWidget, QListWidgetItem, 
     QTabWidget, QAbstractItemView, QAbstractScrollArea, QColorDialog,
-    QMessageBox, QToolButton, QApplication, QInputDialog, QDateEdit
+    QMessageBox, QToolButton, QApplication, QInputDialog, QDateEdit,
+    QCalendarWidget, QGridLayout, QDialogButtonBox, QStyledItemDelegate,
+    QStackedWidget
 )
 from PyQt6.QtCore import (
     Qt, QSize, QPoint, QRect, QRectF, QEvent, QObject, pyqtSignal, 
-    QStandardPaths, QTimer, QDate
+    QStandardPaths, QTimer, QDate, QPointF
 )
 from PyQt6.QtGui import (
     QPainter, QBrush, QPen, QColor, QFont, QPixmap, QIcon, QKeyEvent,
     QTextCursor, QFontMetrics, QMouseEvent, QTextCharFormat, QPalette,
-    QTransform, QAction, QPainterPath
+    QTransform, QAction, QPainterPath, QBrush
 )
 
-from app.utils.character_completer import (
-    CharacterCompleter,
-    convert_mentions_to_char_refs,
-    convert_char_refs_to_mentions
-)
+from app.utils.character_completer import CharacterCompleter
+# Import the centralized character reference functions
+from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
 
 from app.db_sqlite import (
     create_event, get_event, update_event, delete_event, 
@@ -47,7 +48,8 @@ from app.db_sqlite import (
     get_quick_event_characters, get_quick_event_tagged_characters,
     get_quick_event_images, get_character, add_quick_event_to_scene, 
     remove_quick_event_from_scene, get_scene_quick_events, 
-    get_quick_event_scenes, get_unassigned_quick_events
+    get_quick_event_scenes, get_unassigned_quick_events,
+    get_next_quick_event_sequence_number, get_story_board_views
 )
 
 # Configure logging
@@ -68,24 +70,8 @@ def format_character_references(text: str, characters: List[Dict[str, Any]]) -> 
     Returns:
         Text with character references replaced by character names
     """
-    if not text or not characters:
-        return text
-    
-    # Create mapping of character IDs to names
-    char_lookup = {str(char.get('id')): char.get('name', 'Unknown') for char in characters}
-    
-    # Replace [char:ID] with character names
-    pattern = r'\[char:(\d+)\]'
-    
-    def replace_ref(match):
-        char_id = match.group(1)
-        if char_id in char_lookup:
-            return f"@{char_lookup[char_id]}"
-        return f"[char:{char_id}]"  # Keep the original if not found
-    
-    # Perform the replacement
-    formatted_text = re.sub(pattern, replace_ref, text)
-    return formatted_text
+    # Use the centralized implementation while maintaining the same interface
+    return convert_char_refs_to_mentions(text, characters)
 
 def convert_mentions_to_references(text: str, characters: List[Dict[str, Any]]) -> str:
     """Convert @mentions in text to [char:ID] references.
@@ -97,39 +83,8 @@ def convert_mentions_to_references(text: str, characters: List[Dict[str, Any]]) 
     Returns:
         Text with mentions converted to [char:ID] format
     """
-    if not text or not characters:
-        return text
-    
-    # Create mapping of lowercase character names to IDs
-    name_lookup = {}
-    
-    # Sort characters by name length (longest first) to ensure we match the longest name first
-    sorted_characters = sorted(characters, key=lambda x: len(x.get('name', '')), reverse=True)
-    
-    for char in sorted_characters:
-        name = char.get('name', '').lower()
-        if name:
-            name_lookup[name] = char.get('id')
-            
-        # Add aliases if available
-        aliases = char.get('aliases', '')
-        if aliases:
-            for alias in aliases.lower().split(','):
-                alias = alias.strip()
-                if alias:
-                    name_lookup[alias] = char.get('id')
-    
-    # Process each @ mention separately to handle names with spaces and special characters
-    result = text
-    for name, char_id in name_lookup.items():
-        # Look for exact matches of "@Name" including spaces and special characters
-        # The pattern matches '@' followed by the exact name, with word boundary or whitespace after
-        pattern = r'@(' + re.escape(name) + r')(\b|\s|$)'
-        
-        # Replace with [char:ID] format, only replacing the exact match to avoid partial matches
-        result = re.sub(pattern, lambda m: f"[char:{char_id}]", result, flags=re.IGNORECASE)
-    
-    return result
+    # Use the centralized implementation while maintaining the same interface
+    return convert_mentions_to_char_refs(text, characters)
 
 # Event type colors and icons (default values)
 EVENT_TYPE_COLORS = {
