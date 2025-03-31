@@ -47,7 +47,8 @@ from app.db_sqlite import (
     add_character_tag_to_image, update_character_tag, remove_character_tag,
     get_image_character_tags, create_quick_event, get_next_quick_event_sequence_number,
     get_quick_event_characters, get_quick_event_tagged_characters,
-    search_quick_events, get_story_folder_paths, create_image
+    search_quick_events, get_story_folder_paths, create_image,
+    process_quick_event_character_tags
 )
 
 # Import our image recognition utility
@@ -1671,6 +1672,13 @@ class ImageDetailDialog(QDialog):
                     # For now, we'll just show a message with the tagged characters
                     if tagged_characters:
                         print(f"Tagged characters for quick event {quick_event_id}: {tagged_characters}")
+                        
+                        # Process character tags in the text
+                        process_quick_event_character_tags(self.db_conn, quick_event_id, text)
+                    
+                    # Reload all characters to ensure we have all characters needed for formatting
+                    if self.story_id:
+                        self.characters = get_story_characters(self.db_conn, self.story_id)
                     
                     # Reload quick events to update the UI
                     self.load_quick_events()

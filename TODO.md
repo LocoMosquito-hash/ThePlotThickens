@@ -26,6 +26,11 @@
   - [ ] Personality traits
   - [ ] Background/history
   - [ ] Notes section
+  - [ ] Detailed character biography
+  - [ ] Character associations and affiliations
+    - [ ] Cliques/groups/clans management
+    - [ ] Group roles and hierarchies
+    - [ ] Group relationships and conflicts
 - [ ] Character timeline tracking
 - [ ] Character details expansion and improvement
 - [ ] MC default tagging / participating out of picture options
