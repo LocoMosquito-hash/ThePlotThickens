@@ -1,0 +1,17 @@
+=== Testing Character Reference Conversion Functions ===
+
+Testing convert_mentions_to_char_refs...
+Original: @John Doe went to the store
+Converted: [char:1] went to the store
+
+Testing convert_char_refs_to_mentions...
+Back to mentions: @John Doe went to the store
+
+Testing with multiple characters...
+Original: Meeting between @John Doe and @Mary Smith
+Converted: Meeting between [char:1] and [char:2]
+Back to mentions: Meeting between @John Doe and @Mary Smith
+
+All tests completed successfully!
+Importing modules...
+Imports successful!
