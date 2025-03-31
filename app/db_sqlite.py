@@ -14,6 +14,13 @@ from datetime import datetime
 from enum import Enum, auto
 from typing import List, Dict, Any, Optional, Tuple
 
+# Import the centralized character reference functions
+from app.utils.character_references import (
+    process_quick_event_references as centralized_process_quick_event_references,
+    extract_character_ids,
+    get_quick_event_story_id
+)
+
 
 # Enumerations
 class StoryType(Enum):
@@ -1369,87 +1376,31 @@ def process_quick_event_character_tags(conn: sqlite3.Connection, quick_event_id:
         text: Text to parse for character tags
     """
     try:
-        # Find all @mentions and [char:ID] references in the text
-        import re
-        mentions = re.findall(r'@(\w+)', text)
-        char_refs = re.findall(r'\[char:(\d+)\]', text)
+        # Extract character IDs from the text 
+        char_ids = extract_character_ids(text)
+        
+        if not char_ids:
+            return
+        
+        # Get the story ID for this quick event to validate characters
+        story_id = get_quick_event_story_id(conn, quick_event_id)
+        if story_id is None:
+            return
         
         cursor = conn.cursor()
         
-        # Get the character_id of the quick event to find the story_id
-        cursor.execute('''
-        SELECT c.story_id 
-        FROM quick_events qe
-        JOIN characters c ON qe.character_id = c.id
-        WHERE qe.id = ?
-        ''', (quick_event_id,))
-        
-        result = cursor.fetchone()
-        if not result:
-            return
-            
-        # Convert sqlite3.Row to a dictionary to use get() method
-        row_dict = dict(result)
-        story_id = row_dict.get('story_id')
-        if story_id is None:
-            return
-            
-        # For explicit character ID references, add them directly
-        for char_id in char_refs:
-            try:
-                char_id_int = int(char_id)
-                # Verify this character belongs to the same story
-                cursor.execute('''
-                SELECT id FROM characters WHERE id = ? AND story_id = ?
-                ''', (char_id_int, story_id))
-                
-                if cursor.fetchone():
-                    # Add the character reference
-                    cursor.execute('''
-                    INSERT INTO quick_event_characters (quick_event_id, character_id)
-                    VALUES (?, ?)
-                    ''', (quick_event_id, char_id_int))
-            except (ValueError, sqlite3.Error) as e:
-                print(f"Error processing character ID reference: {e}")
-        
-        # For @mentions, try to match them to character names
-        if mentions:
-            # Get all characters in the story
+        for char_id in char_ids:
+            # Verify this character belongs to the same story
             cursor.execute('''
-            SELECT id, name, aliases 
-            FROM characters 
-            WHERE story_id = ?
-            ''', (story_id,))
+            SELECT id FROM characters WHERE id = ? AND story_id = ?
+            ''', (char_id, story_id))
             
-            characters = cursor.fetchall()
-            
-            # Match mentions to character names
-            for mention in mentions:
-                mention_lower = mention.lower()
-                
-                # Check for exact character name matches
-                for character in characters:
-                    char_dict = dict(character)
-                    char_name = char_dict['name'].lower()
-                    
-                    # Check if the mention matches the character name
-                    if mention_lower == char_name or mention_lower in char_name.split():
-                        cursor.execute('''
-                        INSERT INTO quick_event_characters (quick_event_id, character_id)
-                        VALUES (?, ?)
-                        ''', (quick_event_id, char_dict['id']))
-                        break
-                        
-                    # Check aliases if available
-                    if char_dict.get('aliases'):
-                        aliases = char_dict['aliases'].lower().split(',')
-                        aliases = [alias.strip() for alias in aliases]
-                        if mention_lower in aliases:
-                            cursor.execute('''
-                            INSERT INTO quick_event_characters (quick_event_id, character_id)
-                            VALUES (?, ?)
-                            ''', (quick_event_id, char_dict['id']))
-                            break
+            if cursor.fetchone():
+                # Add the character reference
+                cursor.execute('''
+                INSERT OR IGNORE INTO quick_event_characters (quick_event_id, character_id)
+                VALUES (?, ?)
+                ''', (quick_event_id, char_id))
         
         conn.commit()
     except sqlite3.Error as e:
@@ -1564,7 +1515,7 @@ def update_quick_event(conn: sqlite3.Connection, quick_event_id: int,
         
         if text is not None:
             # Convert @mentions to [char:ID] format if possible
-            processed_text = process_character_references(conn, text, quick_event_id)
+            processed_text = centralized_process_quick_event_references(conn, text, quick_event_id)
             update_fields.append('text = ?')
             params.append(processed_text)
             
@@ -1619,70 +1570,8 @@ def process_character_references(conn: sqlite3.Connection, text: str, quick_even
     Returns:
         Processed text with character references in [char:ID] format
     """
-    try:
-        # Find all @mentions in the text
-        import re
-        mentions = re.findall(r'@(\w+)', text)
-        
-        if not mentions:
-            return text
-            
-        # Get the story ID for this quick event
-        cursor = conn.cursor()
-        cursor.execute('''
-        SELECT c.story_id 
-        FROM quick_events qe
-        JOIN characters c ON qe.character_id = c.id
-        WHERE qe.id = ?
-        ''', (quick_event_id,))
-        
-        result = cursor.fetchone()
-        if not result:
-            return text
-            
-        story_id = dict(result).get('story_id')
-        if not story_id:
-            return text
-            
-        # Get all characters in the story
-        cursor.execute('''
-        SELECT id, name, aliases 
-        FROM characters 
-        WHERE story_id = ?
-        ''', (story_id,))
-        
-        characters = cursor.fetchall()
-        
-        # Process each mention
-        processed_text = text
-        for mention in mentions:
-            mention_lower = mention.lower()
-            
-            # Try to find a matching character
-            for character in characters:
-                char_dict = dict(character)
-                char_name = char_dict['name'].lower()
-                char_id = char_dict['id']
-                
-                # Check if mention matches character name
-                if mention_lower == char_name or mention_lower in char_name.split():
-                    # Replace @mention with [char:ID] format
-                    processed_text = processed_text.replace(f"@{mention}", f"[char:{char_id}]")
-                    break
-                    
-                # Check aliases if available
-                if char_dict.get('aliases'):
-                    aliases = char_dict['aliases'].lower().split(',')
-                    aliases = [alias.strip() for alias in aliases]
-                    if mention_lower in aliases:
-                        processed_text = processed_text.replace(f"@{mention}", f"[char:{char_id}]")
-                        break
-                        
-        return processed_text
-        
-    except Exception as e:
-        print(f"Error processing character references: {e}")
-        return text
+    # Use the centralized implementation while maintaining the same interface
+    return centralized_process_quick_event_references(conn, text, quick_event_id)
 
 
 def create_quick_event(conn: sqlite3.Connection, text: str, character_id: int, 
@@ -1717,7 +1606,7 @@ def create_quick_event(conn: sqlite3.Connection, text: str, character_id: int,
         quick_event_id = cursor.lastrowid
         
         # Now that we have an ID, process the text to convert @mentions to [char:ID] format
-        processed_text = process_character_references(conn, text, quick_event_id)
+        processed_text = centralized_process_quick_event_references(conn, text, quick_event_id)
         
         # If we converted any mentions, update the text
         if processed_text != text:
