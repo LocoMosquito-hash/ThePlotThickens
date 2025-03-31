@@ -22,11 +22,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QBuffer, QByteArray, QSettings, QPoint
 from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QKeyEvent, QTextCursor, QIcon, QColor
 
-from app.utils.character_completer import (
-    CharacterCompleter,
-    convert_mentions_to_char_refs,
-    convert_char_refs_to_mentions
-)
+from app.utils.character_completer import CharacterCompleter
+
+# Import the centralized character reference functions
+from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
 
 from app.db_sqlite import (
     get_character, update_character, get_story, get_character_quick_events,
@@ -206,22 +205,8 @@ class QuickEventItem(QListWidgetItem):
         Returns:
             Formatted text for display
         """
-        import re
-        
-        # Create a mapping of character IDs to names
-        char_id_to_name = {str(char['id']): char['name'] for char in characters}
-        
-        # Replace [char:ID] references with @CharacterName
-        def replace_char_ref(match):
-            char_id = match.group(1)
-            if char_id in char_id_to_name:
-                return f"@{char_id_to_name[char_id]}"
-            return match.group(0)  # Keep original if no match
-            
-        # Process the text with regex substitution
-        processed_text = re.sub(r'\[char:(\d+)\]', replace_char_ref, text)
-        
-        return processed_text
+        # Use the centralized implementation while maintaining the same interface
+        return convert_char_refs_to_mentions(text, characters)
 
 
 class ImageSelectionDialog(QDialog):
