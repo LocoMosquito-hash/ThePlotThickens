@@ -18,6 +18,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QObject
 from PyQt6.QtGui import QKeySequence, QKeyEvent, QTextCursor, QShortcut
 
+# Import the centralized character reference functions
+from app.utils.character_references import (
+    convert_mentions_to_char_refs as centralized_convert_mentions_to_char_refs,
+    convert_char_refs_to_mentions as centralized_convert_char_refs_to_mentions
+)
+
 
 class CharacterCompleter(QWidget):
     """Enhanced popup widget for character tag autocompletion.
@@ -503,30 +509,8 @@ def convert_mentions_to_char_refs(text: str, characters: List[Dict[str, Any]]) -
     Returns:
         Text with @mentions converted to [char:ID] format
     """
-    # Create a map of character names to IDs for efficient lookup
-    char_map = {char['name'].lower(): char['id'] for char in characters}
-    
-    # Define the regex pattern for finding character mentions
-    pattern = r'@([A-Za-z0-9\s\.\-]+)'
-    
-    def replace_mention(match):
-        """Replace a character mention with [char:ID] format.
-        
-        Args:
-            match: Regex match object
-            
-        Returns:
-            Replacement string
-        """
-        name = match.group(1).strip()
-        lower_name = name.lower()
-        
-        if lower_name in char_map:
-            return f"[char:{char_map[lower_name]}]"
-        return match.group(0)  # Keep original if character not found
-    
-    # Replace all mentions
-    return re.sub(pattern, replace_mention, text)
+    # Use the centralized implementation while maintaining the exact same interface
+    return centralized_convert_mentions_to_char_refs(text, characters)
 
 
 def convert_char_refs_to_mentions(text: str, characters: List[Dict[str, Any]]) -> str:
@@ -539,29 +523,8 @@ def convert_char_refs_to_mentions(text: str, characters: List[Dict[str, Any]]) -
     Returns:
         Text with [char:ID] references converted to @mentions
     """
-    # Create a map of character IDs to names for efficient lookup
-    id_map = {char['id']: char['name'] for char in characters}
-    
-    # Define the regex pattern for finding character references
-    pattern = r'\[char:(\d+)\]'
-    
-    def replace_char_ref(match):
-        """Replace a [char:ID] reference with @mention format.
-        
-        Args:
-            match: Regex match object
-            
-        Returns:
-            Replacement string
-        """
-        char_id = int(match.group(1))
-        
-        if char_id in id_map:
-            return f"@{id_map[char_id]}"
-        return match.group(0)  # Keep original if character not found
-    
-    # Replace all character references
-    return re.sub(pattern, replace_char_ref, text)
+    # Use the centralized implementation while maintaining the exact same interface
+    return centralized_convert_char_refs_to_mentions(text, characters)
 
 
 def extract_character_ids_from_text(text: str) -> List[int]:
