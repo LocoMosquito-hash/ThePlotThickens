@@ -32,13 +32,13 @@ class QuickEventsManager:
     
     # ==== Quick Event Creation ====
     
-    def create_quick_event(self, text: str, character_id: int, 
+    def create_quick_event(self, text: str, character_id: Optional[int] = None, 
                          sequence_number: int = 0) -> int:
         """Create a new quick event.
         
         Args:
             text: Text description of the quick event
-            character_id: ID of the character the quick event belongs to
+            character_id: Optional ID of the character the quick event belongs to
             sequence_number: Order in the timeline (default 0)
             
         Returns:
@@ -65,26 +65,72 @@ class QuickEventsManager:
             # Get the new quick event ID
             quick_event_id = cursor.lastrowid
             
-            # Get the story_id for this character to process character references
-            cursor.execute('SELECT story_id FROM characters WHERE id = ?', (character_id,))
-            row = cursor.fetchone()
-            story_id = dict(row).get('story_id') if row else None
-            
-            if story_id:
-                # Process the text to convert @mentions to [char:ID] format
-                processed_text = process_char_refs_from_db(self.conn, text, story_id)
+            # Process character references if we have a character_id to determine story_id
+            if character_id is not None:
+                # Get the story_id for this character to process character references
+                cursor.execute('SELECT story_id FROM characters WHERE id = ?', (character_id,))
+                row = cursor.fetchone()
+                story_id = dict(row).get('story_id') if row else None
                 
-                # If we converted any mentions, update the text
-                if processed_text != text:
-                    cursor.execute('''
-                    UPDATE quick_events
-                    SET text = ?
-                    WHERE id = ?
-                    ''', (processed_text, quick_event_id))
-                    self.conn.commit()
+                if story_id:
+                    # Process the text to convert @mentions to [char:ID] format
+                    processed_text = process_char_refs_from_db(self.conn, text, story_id)
+                    
+                    # If we converted any mentions, update the text
+                    if processed_text != text:
+                        cursor.execute('''
+                        UPDATE quick_events
+                        SET text = ?
+                        WHERE id = ?
+                        ''', (processed_text, quick_event_id))
+                        self.conn.commit()
+                    
+                    # Process character mentions/tags
+                    self._process_quick_event_character_tags(quick_event_id, processed_text)
+            else:
+                # Try to determine the story_id from any @mentions in the text
+                story_id = None
                 
-                # Process character mentions/tags
-                self._process_quick_event_character_tags(quick_event_id, processed_text)
+                # Process @mentions to extract potential character IDs
+                mentioned_chars = re.findall(r'@(\w+(?:\s+\w+)*)', text)
+                
+                if mentioned_chars:
+                    # Find characters that match the mentions
+                    placeholders = []
+                    query_params = []
+                    
+                    # Create search conditions for each character name
+                    for name in mentioned_chars:
+                        placeholders.append("name = ?")
+                        query_params.append(name)
+                    
+                    cursor.execute(f'''
+                    SELECT id, name, story_id FROM characters 
+                    WHERE {" OR ".join(placeholders)}
+                    LIMIT 1
+                    ''', query_params)
+                    
+                    char_result = cursor.fetchone()
+                    
+                    if char_result:
+                        char_dict = dict(char_result)
+                        story_id = char_dict.get('story_id')
+                
+                if story_id:
+                    # Process the text to convert @mentions to [char:ID] format
+                    processed_text = process_char_refs_from_db(self.conn, text, story_id)
+                    
+                    # If we converted any mentions, update the text
+                    if processed_text != text:
+                        cursor.execute('''
+                        UPDATE quick_events
+                        SET text = ?
+                        WHERE id = ?
+                        ''', (processed_text, quick_event_id))
+                        self.conn.commit()
+                    
+                    # Process character mentions/tags
+                    self._process_quick_event_character_tags(quick_event_id, processed_text)
             
             return quick_event_id
         except sqlite3.Error as e:
@@ -106,11 +152,12 @@ class QuickEventsManager:
                 
             cursor = self.conn.cursor()
             
-            # Get the character_id of the quick event to find the story_id
+            # Get the story_id by looking up the character_id of the quick event
+            # or by looking at the characters mentioned in the text if there's no owner
             cursor.execute('''
-            SELECT c.story_id 
+            SELECT qe.character_id, c.story_id
             FROM quick_events qe
-            JOIN characters c ON qe.character_id = c.id
+            LEFT JOIN characters c ON qe.character_id = c.id
             WHERE qe.id = ?
             ''', (quick_event_id,))
             
@@ -118,7 +165,22 @@ class QuickEventsManager:
             if not result:
                 return
                 
-            story_id = dict(result).get('story_id')
+            result_dict = dict(result)
+            character_id = result_dict.get('character_id')
+            story_id = result_dict.get('story_id')
+            
+            # If we don't have a story_id from the character_id (NULL), try to get it from one of the tagged characters
+            if story_id is None and char_ids:
+                # Try to find the story_id from one of the mentioned characters
+                char_id_placeholders = ','.join(['?'] * len(char_ids))
+                cursor.execute(f'''
+                SELECT story_id FROM characters WHERE id IN ({char_id_placeholders}) LIMIT 1
+                ''', char_ids)
+                
+                story_result = cursor.fetchone()
+                if story_result:
+                    story_id = dict(story_result).get('story_id')
+            
             if story_id is None:
                 return
                 
@@ -186,7 +248,7 @@ class QuickEventsManager:
         -- Get events where this character is tagged/mentioned
         SELECT qe.* FROM quick_events qe
         JOIN quick_event_characters qec ON qe.id = qec.quick_event_id
-        WHERE qec.character_id = ? AND qe.character_id != ?
+        WHERE qec.character_id = ? AND (qe.character_id != ? OR qe.character_id IS NULL)
         ORDER BY sequence_number, created_at
         ''', (character_id, character_id, character_id))
         

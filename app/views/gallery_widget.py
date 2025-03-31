@@ -3291,18 +3291,6 @@ class RegionSelectionDialog(QDialog):
             # Use existing functions to get characters
             from app.db_sqlite import get_story_characters
             self.characters = get_story_characters(self.db_conn, self.story_id)
-            
-            # Character dropdown removed
-            
-            # Update character tags label
-            if hasattr(self, 'character_tags_label') and self.characters:
-                char_names = [f"@{char['name']}" for char in self.characters]
-                self.character_tags_label.setText("Available character tags: " + ", ".join(char_names))
-            
-            # Set characters for tag completer
-            if hasattr(self, 'tag_completer'):
-                self.tag_completer.set_characters(self.characters)
-                
         except Exception as e:
             print(f"Error loading characters: {e}")
             self.characters = []
@@ -3311,7 +3299,8 @@ class RegionSelectionDialog(QDialog):
         """Load quick events for the story."""
         try:
             # Get quick events for the story
-            from app.db_sqlite import search_quick_events
+            from app.db_sqlite import search_quick_events, get_quick_event_tagged_characters
+            from app.utils.character_references import convert_char_refs_to_mentions
             
             self.quick_events = search_quick_events(
                 self.db_conn,
@@ -3331,18 +3320,34 @@ class RegionSelectionDialog(QDialog):
                 self.quick_events_combo.addItem("Select a quick event...", -1)
                 
                 for event in self.quick_events:
-                    # Format the text to display
+                    # Get the text and convert character references to @mentions
                     text = event.get('text', '')
+                    event_id = event.get('id')
+                    
+                    # If the text contains character references, convert them to @mentions
+                    if "[char:" in text:
+                        # Get tagged characters for the quick event
+                        tagged_characters = get_quick_event_tagged_characters(self.db_conn, event_id)
+                        text = convert_char_refs_to_mentions(text, tagged_characters)
+                    
+                    # Truncate long text
                     if len(text) > 50:
                         text = text[:47] + "..."
+                    
+                    # Show event text without prefix for events without an owner
                     character_id = event.get('character_id')
-                    character_name = "Unknown"
-                    for char in self.characters:
-                        if char.get('id') == character_id:
-                            character_name = char.get('name', "Unknown")
-                            break
-                    display_text = f"{character_name}: {text}"
-                    self.quick_events_combo.addItem(display_text, event.get('id'))
+                    if character_id:
+                        character_name = "Unknown"
+                        for char in self.characters:
+                            if char.get('id') == character_id:
+                                character_name = char.get('name', "Unknown")
+                                break
+                        display_text = f"{character_name}: {text}"
+                    else:
+                        # For events with no owner, just show the text directly
+                        display_text = text
+                    
+                    self.quick_events_combo.addItem(display_text, event_id)
             
         except Exception as e:
             print(f"Error loading quick events: {e}")
@@ -3486,39 +3491,19 @@ class RegionSelectionDialog(QDialog):
         qe_create_group = QGroupBox("Create New Quick Event")
         qe_create_layout = QVBoxLayout(qe_create_group)
 
-        # Text entry
-        qe_text_layout = QVBoxLayout()
-        qe_text_label = QLabel("Quick Event Text:")
-        qe_text_layout.addWidget(qe_text_label)
-
-        self.qe_text_edit = QTextEdit()
-        self.qe_text_edit.setPlaceholderText("Enter quick event text here...")
-        self.qe_text_edit.textChanged.connect(self.check_for_character_tag)
-        qe_text_layout.addWidget(self.qe_text_edit)
-        qe_create_layout.addLayout(qe_text_layout)
-        
-        # Character tags help
-        self.character_tags_label = QLabel("Available character tags: ")
-        self.character_tags_label.setWordWrap(True)
-        qe_create_layout.addWidget(self.character_tags_label)
-        
-        # Create quick event button
-        create_qe_button = QPushButton("Create Quick Event")
+        # Text entry - replaced with a single button
+        create_qe_button = QPushButton("Create New Quick Event")
         create_qe_button.clicked.connect(self.create_quick_event)
         qe_create_layout.addWidget(create_qe_button)
         
+        # Character tags help - not needed with new dialog approach
+        help_label = QLabel("This will open the Quick Event dialog where you can tag characters and enter text.")
+        help_label.setWordWrap(True)
+        qe_create_layout.addWidget(help_label)
+        
         qe_layout.addWidget(qe_create_group)
         
-        # Create a character tag completer that will show up when typing @
-        self.tag_completer = CharacterCompleter(self)
-        self.tag_completer.set_characters(self.characters)
-        self.tag_completer.character_selected.connect(self.on_character_selected)
-        self.tag_completer.attach_to_widget(
-            self.qe_text_edit,
-            add_shortcut=True,
-            shortcut_key="Ctrl+Space",
-            at_trigger=True
-        )
+        # Character completer is no longer needed here as it's in the dialog
         
         # Add tabs
         tabs.addTab(region_tab, "Region Selection")
@@ -3587,81 +3572,34 @@ class RegionSelectionDialog(QDialog):
     def create_quick_event(self):
         """Create a new quick event and add it to the database."""
         try:
-            # Get the first character from the list or a tagged character instead of using the combo box
-            character_id = None
-            if self.characters and len(self.characters) > 0:
-                character_id = self.characters[0].get('id')
-            # If no characters are available, use the first tagged character
-            if not character_id and self.tagged_characters and len(self.tagged_characters) > 0:
-                character_id = self.tagged_characters[0].get('character_id')
-                
-            if not character_id:
-                QMessageBox.warning(
-                    self,
-                    "Error",
-                    "No character available. Please tag a character first or add characters to your story.",
-                    QMessageBox.StandardButton.Ok
-                )
-                return
-
-            # Get the text
-            text = self.qe_text_edit.toPlainText().strip()
-            if not text:
-                QMessageBox.warning(
-                    self,
-                    "Error",
-                    "Please enter text for the quick event.",
-                    QMessageBox.StandardButton.Ok
-                )
-                return
-                
-            # Convert any @mentions to [char:ID] format using the centralized function
-            from app.db_sqlite import create_quick_event, get_next_quick_event_sequence_number
+            # Import the QuickEventManager
+            from app.utils.quick_event_manager import QuickEventManager
             
-            # Process the text with the centralized function
-            processed_text = convert_mentions_to_char_refs(text, self.characters)
+            # Create context for character recognition dialog
+            context = {
+                "source": "recognition_dialog",
+                "image_id": self.image_id,
+                "tagged_characters": [char.get('character_id') for char in self.tagged_characters],
+                "allow_extra_options": True,
+                "show_associate_checkbox": True
+            }
             
-            # Get sequence number
-            sequence_number = get_next_quick_event_sequence_number(self.db_conn, character_id)
+            # Show the dialog with specific options for this context
+            from app.utils.quick_event_utils import show_quick_event_dialog
             
-            # Create the quick event
-            quick_event_id = create_quick_event(
-                self.db_conn,
-                text=processed_text,
-                character_id=character_id,
-                sequence_number=sequence_number
+            show_quick_event_dialog(
+                db_conn=self.db_conn,
+                story_id=self.story_id,
+                parent=self,
+                callback=self.on_quick_event_created,
+                context=context,
+                options={
+                    "show_recent_events": True,
+                    "show_character_tags": True,
+                    "show_optional_note": True,
+                    "allow_characterless_events": True  # Always allow characterless events here
+                }
             )
-            
-            if quick_event_id:
-                # Store the new quick event ID
-                self.new_quick_event_id = quick_event_id
-                self.associated_quick_event_id = quick_event_id
-                
-                # Reload quick events
-                self.load_quick_events_data()
-                
-                # Find and select the new event in the combo box
-                for i in range(self.quick_events_combo.count()):
-                    if self.quick_events_combo.itemData(i) == quick_event_id:
-                        self.quick_events_combo.setCurrentIndex(i)
-                        break
-                
-                QMessageBox.information(
-                    self,
-                    "Success",
-                    "Quick event created successfully and associated with this image.",
-                    QMessageBox.StandardButton.Ok
-                )
-                
-                # Clear the text edit
-                self.qe_text_edit.clear()
-            else:
-                QMessageBox.warning(
-                    self,
-                    "Error",
-                    "Failed to create quick event.",
-                    QMessageBox.StandardButton.Ok
-                )
         except Exception as e:
             print(f"Error creating quick event: {e}")
             QMessageBox.critical(
@@ -3671,6 +3609,39 @@ class RegionSelectionDialog(QDialog):
                 QMessageBox.StandardButton.Ok
             )
             
+    def on_quick_event_created(self, event_id: int, text: str, context: Dict[str, Any]) -> None:
+        """Handle the quick event created signal.
+        
+        Args:
+            event_id: ID of the created quick event
+            text: Text of the quick event
+            context: Context dictionary passed to the dialog
+        """
+        if not event_id:
+            return
+            
+        # Store the new quick event ID
+        self.new_quick_event_id = event_id
+        self.associated_quick_event_id = event_id
+        
+        # Reload quick events
+        self.load_quick_events_data()
+        
+        # Find and select the new event in the combo box
+        for i in range(self.quick_events_combo.count()):
+            if self.quick_events_combo.itemData(i) == event_id:
+                self.quick_events_combo.setCurrentIndex(i)
+                break
+        
+        QMessageBox.information(
+            self,
+            "Success",
+            "Quick event created successfully and associated with this image.",
+            QMessageBox.StandardButton.Ok
+        )
+        
+        # No need to clear text edit since we're using dialog now
+    
     def on_quick_event_selected(self, index: int):
         """Handle selection of a quick event from the combo box.
         
@@ -3680,22 +3651,45 @@ class RegionSelectionDialog(QDialog):
         # Get the selected quick event ID
         self.associated_quick_event_id = self.quick_events_combo.itemData(index)
         
+        # Clear selection highlight when "Select a quick event..." is chosen
+        if self.associated_quick_event_id == -1:
+            return
+            
         # Log the selection
-        if self.associated_quick_event_id and self.associated_quick_event_id != -1:
+        if self.associated_quick_event_id:
             print(f"Selected quick event ID: {self.associated_quick_event_id}")
             
             # Find the quick event in the list
             for event in self.quick_events:
                 if event.get('id') == self.associated_quick_event_id:
-                    # If the quick event text has mentions, format them for display
+                    # Get the quick event text
                     text = event.get('text', '')
+                    character_id = event.get('character_id')
+                    
+                    # If the text contains character references, format them for display
                     if "[char:" in text:
                         # Get tagged characters for the quick event
                         from app.db_sqlite import get_quick_event_tagged_characters
+                        from app.utils.character_references import convert_char_refs_to_mentions
+                        
                         tagged_characters = get_quick_event_tagged_characters(self.db_conn, self.associated_quick_event_id)
                         formatted_text = convert_char_refs_to_mentions(text, tagged_characters)
-                        print(f"Quick event text: {formatted_text}")
-                    break
+                        
+                        # Update the combo box text based on whether there's a character owner
+                        current_text = self.quick_events_combo.currentText()
+                        
+                        if character_id:
+                            # For events with a character owner
+                            if ":" in current_text:
+                                prefix = current_text.split(":", 1)[0]
+                                display_text = f"{prefix}: {formatted_text}"
+                                self.quick_events_combo.setItemText(index, display_text)
+                            else:
+                                # For events without a character owner, just show the formatted text
+                                self.quick_events_combo.setItemText(index, formatted_text)
+                            
+                            print(f"Formatted quick event text: {formatted_text}")
+                        break
     
     def get_selected_character_data(self) -> Dict[str, Any]:
         """Get data for all selected characters and quick event.
@@ -4857,23 +4851,6 @@ class GraphicsTagView(QGraphicsView):
     def create_quick_event(self):
         """Create a new quick event and associate it with the image."""
         try:
-            # Get the first character from the list
-            character_id = None
-            if self.characters and len(self.characters) > 0:
-                character_id = self.characters[0].get('id')
-            # If no characters are available, use the first tagged character
-            if not character_id and self.tagged_characters and len(self.tagged_characters) > 0:
-                character_id = self.tagged_characters[0].get('character_id')
-                
-            if not character_id:
-                QMessageBox.warning(
-                    self,
-                    "Error",
-                    "No character available. Please tag a character first or add characters to your story.",
-                    QMessageBox.StandardButton.Ok
-                )
-                return
-                
             # Get the text
             text = self.qe_text_edit.toPlainText().strip()
             if not text:
@@ -4885,21 +4862,28 @@ class GraphicsTagView(QGraphicsView):
                 )
                 return
                 
+            # Make sure we have at least one character in the story to process @mentions
+            if not self.characters:
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    "No characters available in your story. Please add characters first.",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
+                
             # Convert any @mentions to [char:ID] format using the centralized function
             from app.db_sqlite import create_quick_event, get_next_quick_event_sequence_number
             
             # Process the text with the centralized function
             processed_text = convert_mentions_to_char_refs(text, self.characters)
             
-            # Get sequence number
-            sequence_number = get_next_quick_event_sequence_number(self.db_conn, character_id)
-            
-            # Create the quick event
+            # Create the quick event with no character owner (character_id=None)
             quick_event_id = create_quick_event(
                 self.db_conn,
                 text=processed_text,
-                character_id=character_id,
-                sequence_number=sequence_number
+                character_id=None,  # No character owner
+                sequence_number=0   # Default sequence number for characterless events
             )
             
             if quick_event_id:
@@ -4950,23 +4934,46 @@ class GraphicsTagView(QGraphicsView):
         # Get the selected quick event ID
         self.associated_quick_event_id = self.quick_events_combo.itemData(index)
         
+        # Clear selection highlight when "Select a quick event..." is chosen
+        if self.associated_quick_event_id == -1:
+            return
+            
         # Log the selection
-        if self.associated_quick_event_id and self.associated_quick_event_id != -1:
+        if self.associated_quick_event_id:
             print(f"Selected quick event ID: {self.associated_quick_event_id}")
             
             # Find the quick event in the list
             for event in self.quick_events:
                 if event.get('id') == self.associated_quick_event_id:
-                    # If the quick event text has mentions, format them for display
+                    # Get the quick event text
                     text = event.get('text', '')
+                    character_id = event.get('character_id')
+                    
+                    # If the text contains character references, format them for display
                     if "[char:" in text:
                         # Get tagged characters for the quick event
                         from app.db_sqlite import get_quick_event_tagged_characters
+                        from app.utils.character_references import convert_char_refs_to_mentions
+                        
                         tagged_characters = get_quick_event_tagged_characters(self.db_conn, self.associated_quick_event_id)
                         formatted_text = convert_char_refs_to_mentions(text, tagged_characters)
-                        print(f"Quick event text: {formatted_text}")
-                    break
-                    
+                        
+                        # Update the combo box text based on whether there's a character owner
+                        current_text = self.quick_events_combo.currentText()
+                        
+                        if character_id:
+                            # For events with a character owner
+                            if ":" in current_text:
+                                prefix = current_text.split(":", 1)[0]
+                                display_text = f"{prefix}: {formatted_text}"
+                                self.quick_events_combo.setItemText(index, display_text)
+                            else:
+                                # For events without a character owner, just show the formatted text
+                                self.quick_events_combo.setItemText(index, formatted_text)
+                            
+                            print(f"Formatted quick event text: {formatted_text}")
+                        break
+    
     def get_selected_character_data(self) -> Dict[str, Any]:
         """Get data for all selected characters and quick event.
         
@@ -5027,5 +5034,58 @@ class GraphicsTagView(QGraphicsView):
         # Get the selected quick event ID
         self.associated_quick_event_id = self.quick_events_combo.currentData()
         
+        
         # Call the parent accept
         super().accept()
+
+    def load_quick_events_data(self):
+        """Load quick events data for the combo box."""
+        try:
+            # Get quick events for the story
+            from app.db_sqlite import search_quick_events, get_quick_event_tagged_characters
+            from app.utils.character_references import convert_char_refs_to_mentions
+            
+            # Ensure we have loaded the quick events
+            if not hasattr(self, 'quick_events') or not self.quick_events:
+                self.load_quick_events()
+            
+            # Update the quick events combo box if it exists
+            if hasattr(self, 'quick_events_combo'):
+                self.quick_events_combo.clear()
+                self.quick_events_combo.addItem("Select a quick event...", -1)
+                
+                for event in self.quick_events:
+                    # Get the text and convert character references to @mentions
+                    text = event.get('text', '')
+                    event_id = event.get('id')
+                    
+                    # If the text contains character references, convert them to @mentions
+                    if "[char:" in text:
+                        # Get tagged characters for the quick event
+                        tagged_characters = get_quick_event_tagged_characters(self.db_conn, event_id)
+                        text = convert_char_refs_to_mentions(text, tagged_characters)
+                    
+                    # Truncate long text
+                    if len(text) > 50:
+                        text = text[:47] + "..."
+                    
+                    # Show event text without prefix for events without an owner
+                    character_id = event.get('character_id')
+                    if character_id:
+                        character_name = "Unknown"
+                        for char in self.characters:
+                            if char.get('id') == character_id:
+                                character_name = char.get('name', "Unknown")
+                                break
+                        display_text = f"{character_name}: {text}"
+                    else:
+                        # For events with no owner, just show the text directly
+                        display_text = text
+                    
+                    self.quick_events_combo.addItem(display_text, event_id)
+            
+        except Exception as e:
+            print(f"Error loading quick events data: {e}")
+            if hasattr(self, 'quick_events_combo'):
+                self.quick_events_combo.clear()
+                self.quick_events_combo.addItem("Select a quick event...", -1)

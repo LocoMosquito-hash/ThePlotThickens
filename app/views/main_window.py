@@ -32,6 +32,7 @@ from app.db_sqlite import (
 )
 from app.utils.character_completer import CharacterCompleter
 from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
+from app.utils.quick_event_utils import show_quick_event_dialog
 
 
 class QuickEventDialog(QDialog):
@@ -91,10 +92,13 @@ class QuickEventDialog(QDialog):
             # Format the events with character names
             formatted_events = []
             for event in events[:limit]:
-                # Get character name
+                # Get character name if character_id is present
                 character_id = event.get('character_id')
-                character = get_character(self.db_conn, character_id) if character_id else None
-                character_name = character.get('name', 'Unknown') if character else 'Unknown'
+                if character_id:
+                    character = get_character(self.db_conn, character_id)
+                    character_name = character.get('name', 'Unknown') if character else 'Unknown'
+                else:
+                    character_name = "General Event"
                 
                 # Format the text (replace [char:ID] with @Name)
                 text = event.get('text', '')
@@ -142,6 +146,18 @@ class QuickEventDialog(QDialog):
             characters_label.setWordWrap(True)
             characters_label.setStyleSheet("color: #666; font-style: italic;")
             layout.addWidget(characters_label)
+            
+            # Add note about optional character tagging
+            note_label = QLabel("Note: Character tagging is optional. You can create events without any character.")
+            note_label.setWordWrap(True)
+            note_label.setStyleSheet("color: #666; font-style: italic;")
+            layout.addWidget(note_label)
+        else:
+            # No characters available
+            no_chars_label = QLabel("No characters available. You can still create a general event.")
+            no_chars_label.setWordWrap(True)
+            no_chars_label.setStyleSheet("color: #666; font-style: italic;")
+            layout.addWidget(no_chars_label)
             
         # Recent events section
         if self.recent_events:
@@ -479,95 +495,81 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def add_quick_event(self) -> None:
-        """Open dialog to add a new quick event from any tab.
-        
-        This method can be triggered from any tab using Ctrl+Q shortcut.
-        It allows users to create quick events without having to go to a character's profile.
-        """
-        # Check if we have a story selected
-        if not self.current_story_id:
-            QMessageBox.warning(
-                self,
-                "No Story Selected",
-                "Please select a story first to add a quick event."
-            )
+        """Show dialog to add a quick event."""
+        if not hasattr(self, 'current_story_id') or not self.current_story_id:
+            QMessageBox.warning(self, "No Story Selected", "Please select a story first.")
             return
-            
-        # Open the quick event dialog
-        dialog = QuickEventDialog(self.db_conn, self.current_story_id, self)
         
-        if dialog.exec():
-            try:
-                # Get the text
-                text = dialog.get_text()
+        try:
+            # Create context information
+            context = {
+                "source": "main_window",
+                "current_tab": self.tab_widget.currentIndex(),
+                "tab_name": self.tab_widget.tabText(self.tab_widget.currentIndex()) if self.tab_widget.count() > 0 else None
+            }
+            
+            # Show the dialog
+            show_quick_event_dialog(
+                db_conn=self.db_conn,
+                story_id=self.current_story_id,
+                parent=self,
+                callback=self.on_quick_event_created,
+                context=context
+            )
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to create quick event: {str(e)}")
+
+    def on_quick_event_created(self, event_id: int, text: str, context: Dict[str, Any]) -> None:
+        """Handle the quick event created signal.
+        
+        Args:
+            event_id: ID of the created quick event
+            text: Text of the quick event
+            context: Context dictionary passed to the dialog
+        """
+        if not event_id:
+            return
+        
+        # Get character_id to display a proper message
+        cursor = self.db_conn.cursor()
+        cursor.execute("SELECT character_id FROM quick_events WHERE id = ?", (event_id,))
+        row = cursor.fetchone()
+        character_id = row['character_id'] if row else None
+        
+        # Show a success message
+        if character_id:
+            # Get character name for the success message
+            from app.db_sqlite import get_character
+            character = get_character(self.db_conn, character_id)
+            char_name = character.get('name', 'Unknown') if character else 'Unknown'
+            
+            QMessageBox.information(
+                self,
+                "Success",
+                f"Created a new quick event for {char_name}."
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "Success",
+                "Created a new general quick event."
+            )
+        
+        # Refresh the appropriate UI components based on the current tab
+        current_tab = self.tab_widget.currentWidget()
+        
+        # Refresh the timeline tab if it's currently visible
+        if current_tab is self.timeline:
+            # Reload quick events in the quick events tab
+            if hasattr(self.timeline, 'quick_events_tab') and hasattr(self.timeline.quick_events_tab, 'load_quick_events'):
+                self.timeline.quick_events_tab.load_quick_events()
                 
-                if not text.strip():
-                    QMessageBox.warning(self, "Error", "Quick event text cannot be empty.")
-                    return
-                
-                # Get character ID (may be None if no character specified)
-                character_id = dialog.get_character_id()
-                
-                if character_id is None:
-                    # If no character is specified, check if we have characters
-                    if dialog.characters:
-                        # Use the first character as default
-                        character_id = dialog.characters[0]['id']
-                        
-                        # Show a more specific message
-                        QMessageBox.information(
-                            self,
-                            "No Character Specified",
-                            f"No character was tagged in the text. Using the first character as default."
-                        )
-                    else:
-                        QMessageBox.warning(
-                            self,
-                            "No Characters Available",
-                            "Cannot create a quick event without any characters in the story."
-                        )
-                        return
-                
-                # Get the next sequence number for this character
-                sequence_number = get_next_quick_event_sequence_number(self.db_conn, character_id)
-                
-                # Create the quick event
-                quick_event_id = create_quick_event(
-                    self.db_conn,
-                    text,
-                    character_id,
-                    sequence_number
-                )
-                
-                if quick_event_id:
-                    # Get character name for the success message
-                    character = get_character(self.db_conn, character_id)
-                    char_name = character.get('name', 'Unknown') if character else 'Unknown'
-                    
-                    QMessageBox.information(
-                        self,
-                        "Success",
-                        f"Created a new quick event for {char_name}."
-                    )
-                    
-                    # If we're on the character board, refresh it
-                    current_tab = self.tab_widget.currentWidget()
-                    
-                    # Refresh the timeline tab if it's currently visible
-                    if current_tab is self.timeline:
-                        # Reload quick events in the quick events tab
-                        if hasattr(self.timeline, 'quick_events_tab') and hasattr(self.timeline.quick_events_tab, 'load_quick_events'):
-                            self.timeline.quick_events_tab.load_quick_events()
-                            
-                    # Refresh the gallery tab if it's currently visible
-                    elif current_tab is self.gallery:
-                        # Reload quick events if we're viewing image details
-                        if hasattr(self.gallery, 'refresh_quick_events'):
-                            self.gallery.refresh_quick_events()
-                else:
-                    QMessageBox.warning(self, "Error", "Failed to create quick event.")
-            except Exception as e:
-                QMessageBox.warning(self, "Error", f"Failed to create quick event: {str(e)}")
+        # Refresh the gallery tab if it's currently visible
+        elif current_tab is self.gallery:
+            # Reload quick events if we're viewing image details
+            if hasattr(self.gallery, 'refresh_quick_events'):
+                self.gallery.refresh_quick_events()
 
     def keyPressEvent(self, event) -> None:
         """Handle key press events.

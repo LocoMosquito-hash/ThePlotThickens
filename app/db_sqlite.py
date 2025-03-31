@@ -1574,14 +1574,14 @@ def process_character_references(conn: sqlite3.Connection, text: str, quick_even
     return centralized_process_quick_event_references(conn, text, quick_event_id)
 
 
-def create_quick_event(conn: sqlite3.Connection, text: str, character_id: int, 
+def create_quick_event(conn: sqlite3.Connection, text: str, character_id: Optional[int] = None, 
                       sequence_number: int = 0) -> int:
     """Create a new quick event.
     
     Args:
         conn: Database connection
         text: Text description of the quick event
-        character_id: ID of the character the quick event belongs to
+        character_id: Optional ID of the character the quick event belongs to (None for events with no character)
         sequence_number: Order in the timeline (default 0)
         
     Returns:
@@ -1605,20 +1605,22 @@ def create_quick_event(conn: sqlite3.Connection, text: str, character_id: int,
         # Get the new quick event ID
         quick_event_id = cursor.lastrowid
         
-        # Now that we have an ID, process the text to convert @mentions to [char:ID] format
-        processed_text = centralized_process_quick_event_references(conn, text, quick_event_id)
-        
-        # If we converted any mentions, update the text
-        if processed_text != text:
-            cursor.execute('''
-            UPDATE quick_events
-            SET text = ?
-            WHERE id = ?
-            ''', (processed_text, quick_event_id))
-            conn.commit()
-        
-        # Process character mentions/tags
-        process_quick_event_character_tags(conn, quick_event_id, processed_text)
+        # Process character references only if a character_id is provided
+        if character_id is not None:
+            # Now that we have an ID, process the text to convert @mentions to [char:ID] format
+            processed_text = centralized_process_quick_event_references(conn, text, quick_event_id)
+            
+            # If we converted any mentions, update the text
+            if processed_text != text:
+                cursor.execute('''
+                UPDATE quick_events
+                SET text = ?
+                WHERE id = ?
+                ''', (processed_text, quick_event_id))
+                conn.commit()
+            
+            # Process character mentions/tags
+            process_quick_event_character_tags(conn, quick_event_id, processed_text)
         
         return quick_event_id
     except sqlite3.Error as e:
@@ -2497,10 +2499,14 @@ def get_unassigned_quick_events(conn: sqlite3.Connection, story_id: int) -> List
         
         # Get quick events from characters in this story that aren't assigned to any scene
         cursor.execute('''
-        SELECT qe.*, c.name as character_name
+        SELECT qe.*, 
+               CASE 
+                   WHEN qe.character_id IS NULL THEN 'General Event' 
+                   ELSE c.name 
+               END as character_name
         FROM quick_events qe
-        JOIN characters c ON qe.character_id = c.id
-        WHERE c.story_id = ? AND qe.id NOT IN (
+        LEFT JOIN characters c ON qe.character_id = c.id
+        WHERE (c.story_id = ? OR qe.character_id IS NULL) AND qe.id NOT IN (
             SELECT quick_event_id FROM scene_quick_events
         )
         ORDER BY qe.created_at DESC
