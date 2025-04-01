@@ -2522,21 +2522,33 @@ def get_unassigned_quick_events(conn: sqlite3.Connection, story_id: int) -> List
     try:
         cursor = conn.cursor()
         
-        # Get quick events from characters in this story that aren't assigned to any scene
-        cursor.execute('''
-        SELECT qe.*, 
-               CASE 
-                   WHEN qe.character_id IS NULL THEN 'General Event' 
-                   ELSE c.name 
-               END as character_name
+        # First query: Get quick events with characters in this story that aren't assigned to any scene
+        character_query = '''
+        SELECT qe.*, c.name as character_name
         FROM quick_events qe
-        LEFT JOIN characters c ON qe.character_id = c.id
-        WHERE (c.story_id = ? OR qe.character_id IS NULL) AND qe.id NOT IN (
+        JOIN characters c ON qe.character_id = c.id
+        WHERE c.story_id = ? AND qe.id NOT IN (
             SELECT quick_event_id FROM scene_quick_events
         )
-        ORDER BY qe.created_at DESC
-        ''', (story_id,))
+        '''
         
+        # Second query: Get anonymous events (NULL character_id) linked to this story through images
+        anonymous_query = '''
+        SELECT DISTINCT qe.*, 'Anonymous' as character_name
+        FROM quick_events qe
+        JOIN quick_event_images qei ON qe.id = qei.quick_event_id
+        JOIN images i ON qei.image_id = i.id
+        WHERE qe.character_id IS NULL 
+        AND i.story_id = ?
+        AND qe.id NOT IN (
+            SELECT quick_event_id FROM scene_quick_events
+        )
+        '''
+        
+        # Combine both queries with UNION
+        full_query = f"{character_query} UNION {anonymous_query} ORDER BY created_at DESC"
+        
+        cursor.execute(full_query, (story_id, story_id))
         rows = cursor.fetchall()
         
         return [dict(row) for row in rows]

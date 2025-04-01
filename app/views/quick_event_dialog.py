@@ -20,6 +20,8 @@ from PyQt6.QtGui import QFocusEvent
 from app.utils.character_completer import CharacterCompleter
 from app.utils.quick_event_manager import QuickEventManager
 from app.db_sqlite import get_story_characters
+from app.utils.character_references import convert_char_refs_to_mentions
+from app.db_sqlite import get_quick_event_tagged_characters
 
 class FocusAwareTextEdit(QTextEdit):
     """QTextEdit subclass that emits a signal when it receives focus."""
@@ -120,14 +122,16 @@ class QuickEventDialog(QDialog):
         
         layout = QVBoxLayout(self)
         
-        # Check if we're in the Character Recognition window context
-        is_char_recog = self.context.get("source", "").startswith("recognition_dialog")
+        # Check if we're in a context that should show the dropdown
+        # Include both Character Recognition and Image Viewer contexts
+        is_dropdown_context = (self.context.get("source", "").startswith("recognition_dialog") or 
+                             self.context.get("source") == "image_viewer_shortcut")
         
         # Create button group for radio buttons
         self.input_group = QButtonGroup(self)
         
-        # If in Character Recognition context, show the dropdown for existing events
-        if is_char_recog:
+        # If in a context that should show the dropdown, display it
+        if is_dropdown_context:
             # Existing Events Dropdown Section
             existing_group = QGroupBox("Choose Existing Event")
             existing_layout = QVBoxLayout(existing_group)
@@ -144,7 +148,24 @@ class QuickEventDialog(QDialog):
             
             # Populate dropdown with recent events
             for event in self.recent_events:
-                display_text = event.get('text', '')
+                # Format character references to @mentions for display
+                event_id = event.get('id')
+                raw_text = event.get('text', '')
+                
+                # Get tagged characters for proper @mention conversion
+                tagged_characters = []
+                try:
+                    tagged_characters = get_quick_event_tagged_characters(self.db_conn, event_id)
+                except Exception as e:
+                    print(f"Error loading tagged characters for event {event_id}: {e}")
+                
+                # Format the text with @mentions - use all characters + tagged characters
+                formatted_text = raw_text
+                if "[char:" in raw_text:
+                    formatted_text = convert_char_refs_to_mentions(raw_text, self.characters + tagged_characters)
+                
+                # Truncate if too long
+                display_text = formatted_text
                 if len(display_text) > 60:
                     display_text = display_text[:57] + "..."
                     
@@ -220,8 +241,8 @@ class QuickEventDialog(QDialog):
             no_chars_label.setStyleSheet("color: #666; font-style: italic;")
             layout.addWidget(no_chars_label)
         
-        # Show recent events section only if not in Character Recognition (since we already show them in dropdown)
-        if not is_char_recog and self.options.get("show_recent_events", True) and self.recent_events:
+        # Show recent events section only if not in dropdown contexts (since we already show them in dropdown)
+        if not is_dropdown_context and self.options.get("show_recent_events", True) and self.recent_events:
             recent_label = QLabel("Recent events:")
             recent_label.setStyleSheet("color: #666; font-style: italic; margin-top: 5px;")
             layout.addWidget(recent_label)
@@ -329,10 +350,10 @@ class QuickEventDialog(QDialog):
     
     def save_quick_event(self):
         """Save the quick event and accept the dialog."""
-        # Check if we're in Character Recognition mode with radio buttons
-        is_char_recog = hasattr(self, 'existing_radio') and hasattr(self, 'text_radio')
+        # Check if we're in a dialog with radio buttons
+        is_radio_dialog = hasattr(self, 'existing_radio') and hasattr(self, 'text_radio')
         
-        if is_char_recog:
+        if is_radio_dialog:
             # Using existing event
             if self.existing_radio.isChecked():
                 if not self.selected_existing_event_id:

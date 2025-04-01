@@ -1114,6 +1114,10 @@ class ImageDetailDialog(QDialog):
         self.status_bar = QStatusBar(self)
         
         self.init_ui()
+        
+        # Setup keyboard shortcuts
+        self.setup_shortcuts()
+        
         self.load_quick_events()
         self.load_character_tags()
     
@@ -1124,6 +1128,100 @@ class ImageDetailDialog(QDialog):
             QStatusBar: The status bar
         """
         return self.status_bar
+    
+    def setup_shortcuts(self):
+        """Setup keyboard shortcuts for the dialog."""
+        from PyQt6.QtGui import QKeySequence, QShortcut
+        
+        # Add CTRL+Q shortcut for quick event
+        quick_event_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
+        quick_event_shortcut.activated.connect(self.quick_event_shortcut_triggered)
+    
+    def quick_event_shortcut_triggered(self):
+        """Handle CTRL+Q shortcut key press - create a quick event with special rules."""
+        try:
+            # Import the needed utilities
+            from app.utils.quick_event_utils import show_quick_event_dialog
+            
+            # Create context for image viewer dialog
+            context = {
+                "source": "image_viewer_shortcut",
+                "image_id": self.image_id,
+                "allow_extra_options": True,
+                "show_associate_checkbox": True,
+                "shortcut": "CTRL+Q"
+            }
+            
+            # Debug output
+            print(f"\n[DEBUG] QuickEventDialog CTRL+Q triggered from Image Viewer - context: {context}\n")
+            
+            # Show the dialog with specific options for this context
+            show_quick_event_dialog(
+                db_conn=self.db_conn,
+                story_id=self.story_id,
+                parent=self,
+                callback=self.on_quick_event_created,
+                context=context,
+                options={
+                    "show_recent_events": True,
+                    "show_character_tags": True,
+                    "show_optional_note": True,
+                    "allow_characterless_events": True,
+                    "title": "Quick Event - Image Viewer"
+                }
+            )
+        except Exception as e:
+            import traceback
+            print(f"Error creating quick event from shortcut: {e}")
+            print(traceback.format_exc())
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Error creating quick event: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+    
+    def on_quick_event_created(self, event_id: int, text: str, context: Dict[str, Any]) -> None:
+        """Handle the quick event created signal.
+        
+        Args:
+            event_id: ID of the created quick event
+            text: Text of the quick event
+            context: Context dictionary passed to the dialog
+        """
+        if not event_id:
+            return
+        
+        # Debug info about the current state
+        print(f"[DEBUG] Quick event created - ID: {event_id}")
+        print(f"[DEBUG] Context data: {context}")
+        print(f"[DEBUG] Current image_id: {self.image_id}")
+        
+        try:
+            # Associate the quick event with the image
+            success = associate_quick_event_with_image(
+                self.db_conn, 
+                event_id, 
+                self.image_id
+            )
+            
+            if success:
+                # Show a success message
+                self.status_bar.showMessage(f"Quick event created and associated with this image", 5000)
+                
+                # Reload the quick events list
+                self.load_quick_events()
+                
+                # Switch to the Quick Events tab
+                for i in range(self.tab_widget.count()):
+                    if self.tab_widget.tabText(i) == "Quick Events":
+                        self.tab_widget.setCurrentIndex(i)
+                        break
+            else:
+                self.status_bar.showMessage("Failed to associate quick event with image", 5000)
+        except Exception as e:
+            print(f"Error associating quick event with image: {e}")
+            self.status_bar.showMessage(f"Error: {str(e)}", 5000)
     
     def init_ui(self):
         """Initialize the user interface."""
