@@ -86,6 +86,7 @@ class ThumbnailWidget(QFrame):
         self.original_pixmap = pixmap
         self.displayed_pixmap = pixmap
         self.is_nsfw = False
+        self.quick_event_text = ""
         
         # Visual styling
         self.setFrameShape(QFrame.Shape.Box)
@@ -100,14 +101,14 @@ class ThumbnailWidget(QFrame):
         # Delete button
         self.delete_btn = QPushButton("×")
         self.delete_btn.setFlat(True)
-        self.delete_btn.setFixedSize(20, 20)
+        self.delete_btn.setFixedSize(23, 23)  # Increased from 20x20
         self.delete_btn.setStyleSheet("""
             QPushButton { 
                 background-color: rgba(200, 0, 0, 0.7); 
                 color: white; 
-                border-radius: 10px; 
+                border-radius: 11px; 
                 font-weight: bold; 
-                font-size: 14px;
+                font-size: 16px;
             }
             QPushButton:hover { 
                 background-color: rgba(255, 0, 0, 0.9);
@@ -120,6 +121,7 @@ class ThumbnailWidget(QFrame):
         
         # Image label
         self.image_label = QLabel()
+        self.image_label.setMinimumSize(150, 130)  # Increased from 130x110
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.update_displayed_pixmap()
         self.layout.addWidget(self.image_label)
@@ -128,15 +130,25 @@ class ThumbnailWidget(QFrame):
         self.title_label = QLabel(title)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_label.setWordWrap(True)
-        self.title_label.setStyleSheet("color: white; font-size: 10px;")
+        self.title_label.setStyleSheet("color: white; font-size: 11px;")  # Increased from 10px
         self.layout.addWidget(self.title_label)
+        
+        # Quick event label
+        self.quick_event_label = QLabel()
+        self.quick_event_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.quick_event_label.setWordWrap(True)
+        self.quick_event_label.setStyleSheet("color: #aaffaa; font-size: 10px; font-style: italic; background-color: rgba(0, 0, 0, 0.2); border-radius: 3px; padding: 2px;")  # Increased from 9px
+        self.quick_event_label.setMaximumHeight(45)  # Increased from 40
+        self.layout.addWidget(self.quick_event_label)
+        self.quick_event_label.hide()  # Initially hidden until we have content
         
         # Connect signals
         self.delete_btn.clicked.connect(self._on_delete_clicked)
         
-        # Set size policy
+        # Set size policy - Fixed size to prevent shrinking
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.setFixedSize(150, 170)
+        self.setMinimumSize(170, 195)  # Increased from 150x170
+        self.setFixedSize(170, 230)  # Increased from 150x200
         
         # Enable context menu
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -144,8 +156,9 @@ class ThumbnailWidget(QFrame):
     
     def update_displayed_pixmap(self):
         """Update the displayed pixmap in the image label."""
+        # Scale to fit within the image label (150x130)
         scaled_pixmap = self.original_pixmap.scaled(
-            QSize(150, 170),
+            150, 130,  # Increased from 130x110
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation
         )
@@ -196,6 +209,27 @@ class ThumbnailWidget(QFrame):
             menu.addAction(delete_action)
             
             menu.exec(self.mapToGlobal(position))
+    
+    def set_quick_event_text(self, text: str) -> None:
+        """Set the quick event text for this thumbnail.
+        
+        Args:
+            text: Quick event text to display
+        """
+        if text and text.strip():
+            # Truncate if too long
+            max_length = 60
+            if len(text) > max_length:
+                self.quick_event_text = text[:max_length] + "..."
+            else:
+                self.quick_event_text = text
+                
+            self.quick_event_label.setText(self.quick_event_text)
+            self.quick_event_label.show()
+        else:
+            self.quick_event_text = ""
+            self.quick_event_label.setText("")
+            self.quick_event_label.hide()
 
 
 class QuickEventSelectionDialog(QDialog):
@@ -2232,6 +2266,9 @@ class GalleryWidget(QWidget):
         self.thumbnails_layout.setContentsMargins(10, 10, 10, 10)
         self.thumbnails_layout.setSpacing(10)
         
+        # Set fixed column width for the grid layout (5 columns)
+        self.thumbnails_container.setMinimumWidth(5 * 200)  # 5 thumbnails of 170px + spacing
+        
         # Add container to scroll area
         self.scroll_area.setWidget(self.thumbnails_container)
         
@@ -2256,7 +2293,7 @@ class GalleryWidget(QWidget):
             A plain pixmap with "NSFW" text
         """
         # Create a plain gray pixmap
-        pixmap = QPixmap(180, 150)
+        pixmap = QPixmap(170, 150)  # Increased from 180, 150
         pixmap.fill(QColor(80, 80, 80))
         
         # Add "NSFW" text
@@ -2329,7 +2366,7 @@ class GalleryWidget(QWidget):
         """
         # Scale the placeholder pixmap
         scaled_pixmap = self.placeholder_pixmap.scaled(
-            QSize(180, 150),
+            QSize(170, 150),  # Increased from 180, 150
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation
         )
@@ -2442,8 +2479,8 @@ class GalleryWidget(QWidget):
                 
             if not pixmap.isNull():
                 # Create thumbnail widget
-                row = i // 4  # 4 thumbnails per row
-                col = i % 4
+                row = i // 5  # 5 thumbnails per row (changed from 4)
+                col = i % 5   # 5 thumbnails per row (changed from 4)
                 thumbnail = ThumbnailWidget(image_id, pixmap, image['title'])
                 thumbnail.clicked.connect(self.on_thumbnail_clicked)
                 thumbnail.delete_requested.connect(self.on_delete_image)
@@ -2451,14 +2488,37 @@ class GalleryWidget(QWidget):
                 # Add to layout
                 self.thumbnails_layout.addWidget(thumbnail, row, col)
                 self.thumbnails[image_id] = thumbnail
+                
+                # Load quick events for this image
+                try:
+                    quick_events = get_image_quick_events(self.db_conn, image_id)
+                    if quick_events:
+                        # Get all characters to format mentions
+                        characters = get_story_characters(self.db_conn, self.current_story_id)
+                        
+                        # Format the first quick event's text
+                        first_event = quick_events[0]
+                        formatted_text = convert_char_refs_to_mentions(first_event['text'], characters)
+                        
+                        # Set the quick event text on the thumbnail
+                        thumbnail.set_quick_event_text(formatted_text)
+                except Exception as e:
+                    print(f"Error loading quick events for image {image_id}: {e}")
             else:
                 print(f"Warning: Failed to load thumbnail: {thumbnail_path}")
+        
+        # Ensure columns have equal width
+        for col in range(5):  # 5 columns (changed from 4)
+            self.thumbnails_layout.setColumnStretch(col, 1)
         
         # Update status
         if images:
             self.status_label.setText(f"Gallery for: {self.current_story_data['title']} ({len(images)} images)")
         else:
             self.status_label.setText(f"Gallery for: {self.current_story_data['title']} (No images)")
+            
+        # Ensure the container is properly sized
+        self.thumbnails_container.adjustSize()
     
     def clear_thumbnails(self) -> None:
         """Clear all thumbnails."""
