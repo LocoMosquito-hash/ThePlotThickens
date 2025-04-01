@@ -1152,7 +1152,8 @@ class QuickEventEditor(QDialog):
 class ImageDetailDialog(QDialog):
     """Dialog for viewing image details and managing associated quick events."""
     
-    def __init__(self, db_conn, image_id: int, image_data: Dict[str, Any], pixmap: QPixmap, parent=None):
+    def __init__(self, db_conn, image_id: int, image_data: Dict[str, Any], pixmap: QPixmap, parent=None, 
+                 gallery_images: List[int] = None, current_index: int = None):
         """Initialize the image detail dialog.
         
         Args:
@@ -1161,6 +1162,8 @@ class ImageDetailDialog(QDialog):
             image_data: Dictionary with image data
             pixmap: QPixmap of the image
             parent: Parent widget
+            gallery_images: List of image IDs in the gallery for navigation
+            current_index: Current index in the gallery image list
         """
         super().__init__(parent)
         self.db_conn = db_conn
@@ -1171,6 +1174,11 @@ class ImageDetailDialog(QDialog):
         self.pixmap = pixmap  # This may be scaled for display
         self.quick_events = []
         self.character_tags = []
+        self.parent_widget = parent
+        
+        # Navigation data
+        self.gallery_images = gallery_images or []
+        self.current_index = current_index
         
         # Get the story ID for this image
         self.story_id = image_data.get('story_id')
@@ -1213,6 +1221,109 @@ class ImageDetailDialog(QDialog):
         # Add CTRL+Q shortcut for quick event
         quick_event_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
         quick_event_shortcut.activated.connect(self.quick_event_shortcut_triggered)
+        
+        # Add arrow key shortcuts for navigation
+        left_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Left), self)
+        left_shortcut.activated.connect(self.navigate_to_previous)
+        
+        right_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Right), self)
+        right_shortcut.activated.connect(self.navigate_to_next)
+    
+    def keyPressEvent(self, event):
+        """Handle key press events for navigation."""
+        if event.key() == Qt.Key.Key_Left:
+            self.navigate_to_previous()
+        elif event.key() == Qt.Key.Key_Right:
+            self.navigate_to_next()
+        else:
+            super().keyPressEvent(event)
+    
+    def can_navigate_previous(self) -> bool:
+        """Check if navigation to previous image is possible."""
+        return self.gallery_images and self.current_index is not None and self.current_index > 0
+    
+    def can_navigate_next(self) -> bool:
+        """Check if navigation to next image is possible."""
+        return (self.gallery_images and self.current_index is not None and 
+                self.current_index < len(self.gallery_images) - 1)
+    
+    def navigate_to_previous(self):
+        """Navigate to the previous image in the gallery."""
+        if not self.can_navigate_previous():
+            return
+            
+        # Load previous image
+        self.current_index -= 1
+        self.load_image_at_current_index()
+    
+    def navigate_to_next(self):
+        """Navigate to the next image in the gallery."""
+        if not self.can_navigate_next():
+            return
+            
+        # Load next image
+        self.current_index += 1
+        self.load_image_at_current_index()
+    
+    def load_image_at_current_index(self):
+        """Load the image at the current index."""
+        if not self.gallery_images or self.current_index is None:
+            return
+            
+        try:
+            # Get the new image ID
+            new_image_id = self.gallery_images[self.current_index]
+            
+            # Get image data from database
+            cursor = self.db_conn.cursor()
+            cursor.execute("SELECT * FROM images WHERE id = ?", (new_image_id,))
+            image_data = cursor.fetchone()
+            
+            if not image_data:
+                self.status_bar.showMessage(f"Error: Image with ID {new_image_id} not found.", 5000)
+                return
+                
+            image_data = dict(image_data)
+            
+            # Load the image
+            image_path = os.path.join(image_data['path'], image_data['filename'])
+            if not os.path.exists(image_path):
+                self.status_bar.showMessage(f"Error: Image file not found at {image_path}", 5000)
+                return
+                
+            pixmap = QPixmap(image_path)
+            if pixmap.isNull():
+                self.status_bar.showMessage(f"Error: Failed to load image from {image_path}", 5000)
+                return
+                
+            # Update the dialog with new image data
+            self.image_id = new_image_id
+            self.image_data = image_data
+            self.orig_pixmap = pixmap
+            self.pixmap = pixmap
+            self.image_width = pixmap.width()
+            self.image_height = pixmap.height()
+            
+            # Update the window title
+            self.setWindowTitle(image_data.get('title') or f"Image {new_image_id}")
+            
+            # Update the image view
+            self.image_view.set_image(pixmap, self.image_width, self.image_height)
+            
+            # Update navigation buttons
+            self.prev_button.setEnabled(self.can_navigate_previous())
+            self.next_button.setEnabled(self.can_navigate_next())
+            
+            # Reload quick events and character tags
+            self.load_quick_events()
+            self.load_character_tags()
+            
+            # Show success message
+            self.status_bar.showMessage(f"Loaded image {self.current_index + 1} of {len(self.gallery_images)}", 3000)
+            
+        except Exception as e:
+            self.status_bar.showMessage(f"Error loading image: {str(e)}", 5000)
+            print(f"Error loading image: {e}")
     
     def quick_event_shortcut_triggered(self):
         """Handle CTRL+Q shortcut key press - create a quick event with special rules."""
@@ -1329,7 +1440,20 @@ class ImageDetailDialog(QDialog):
         
         image_view_layout.addLayout(tagging_toolbar)
         
-        # Create the graphics view for image and tags (NEW)
+        # Create main image view area with navigation buttons
+        image_nav_layout = QHBoxLayout()
+        
+        # Previous image button
+        self.prev_button = QPushButton("◀")
+        self.prev_button.setFixedWidth(40)
+        self.prev_button.setFixedHeight(80)
+        self.prev_button.clicked.connect(self.navigate_to_previous)
+        self.prev_button.setToolTip("Previous image (Left Arrow)")
+        if not self.can_navigate_previous():
+            self.prev_button.setEnabled(False)
+        image_nav_layout.addWidget(self.prev_button)
+        
+        # Create the graphics view for image and tags
         self.image_view = GraphicsTagView()
         
         # Set minimum size for the view
@@ -1345,84 +1469,83 @@ class ImageDetailDialog(QDialog):
         self.image_view.tag_selected.connect(self.on_tag_selected)
         
         # Add view to layout
-        image_view_layout.addWidget(self.image_view)
+        image_nav_layout.addWidget(self.image_view, 1)  # Give it stretch factor
         
+        # Next image button
+        self.next_button = QPushButton("▶")
+        self.next_button.setFixedWidth(40)
+        self.next_button.setFixedHeight(80)
+        self.next_button.clicked.connect(self.navigate_to_next)
+        self.next_button.setToolTip("Next image (Right Arrow)")
+        if not self.can_navigate_next():
+            self.next_button.setEnabled(False)
+        image_nav_layout.addWidget(self.next_button)
+        
+        image_view_layout.addLayout(image_nav_layout)
         image_layout.addLayout(image_view_layout)
         
-        # Image metadata
-        metadata_layout = QHBoxLayout()
+        # Add file info below image
+        info_layout = QHBoxLayout()
         
-        # Left side: basic info
-        info_layout = QVBoxLayout()
+        # File details
+        file_info = QLabel(f"Filename: {self.image_data.get('filename')}\nCreated: {self.image_data.get('created_at')}")
+        file_info.setStyleSheet("color: #666;")
+        info_layout.addWidget(file_info)
         
-        title = self.image_data.get('title', '')
-        filename = self.image_data.get('filename', '')
-        created_at = self.image_data.get('created_at', '')
-        description = self.image_data.get('description', '')
+        # Navigation count (if available)
+        if self.gallery_images and self.current_index is not None:
+            nav_info = QLabel(f"Image {self.current_index + 1} of {len(self.gallery_images)}")
+            nav_info.setAlignment(Qt.AlignmentFlag.AlignRight)
+            nav_info.setStyleSheet("color: #666;")
+            info_layout.addWidget(nav_info)
         
-        info_layout.addWidget(QLabel(f"<b>Title:</b> {title}"))
-        info_layout.addWidget(QLabel(f"<b>Filename:</b> {filename}"))
-        info_layout.addWidget(QLabel(f"<b>Created:</b> {created_at}"))
-        if description:
-            info_layout.addWidget(QLabel(f"<b>Description:</b> {description}"))
-            
-        metadata_layout.addLayout(info_layout)
-        metadata_layout.addStretch()
+        image_layout.addLayout(info_layout)
         
-        image_layout.addLayout(metadata_layout)
+        self.tab_widget.addTab(image_tab, "Image")
         
         # Quick Events tab
         quick_events_tab = QWidget()
         quick_events_layout = QVBoxLayout(quick_events_tab)
         
-        # Toolbar for quick events
-        toolbar_layout = QHBoxLayout()
+        # Add button to associate quick events
+        associate_button = QPushButton("Associate Quick Events")
+        associate_button.clicked.connect(self.associate_quick_events)
+        quick_events_layout.addWidget(associate_button)
         
-        self.associate_button = QPushButton("Associate Quick Events")
-        self.associate_button.clicked.connect(self.associate_quick_events)
-        toolbar_layout.addWidget(self.associate_button)
-        
-        self.create_quick_event_button = QPushButton("Create Quick Event")
-        self.create_quick_event_button.clicked.connect(self.create_quick_event)
-        toolbar_layout.addWidget(self.create_quick_event_button)
-        
-        toolbar_layout.addStretch()
-        quick_events_layout.addLayout(toolbar_layout)
-        
-        # Quick events list
+        # Create list widget for quick events
         self.quick_events_list = QListWidget()
         self.quick_events_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.quick_events_list.customContextMenuRequested.connect(self.show_quick_event_context_menu)
         quick_events_layout.addWidget(self.quick_events_list)
         
+        self.tab_widget.addTab(quick_events_tab, "Quick Events")
+        
         # Character Tags tab
         tags_tab = QWidget()
         tags_layout = QVBoxLayout(tags_tab)
         
-        # Toolbar for character tags
-        tags_toolbar_layout = QHBoxLayout()
+        # Add button to tag characters
+        tag_button = QPushButton("Tag Character")
+        tag_button.clicked.connect(lambda: self.toggle_tag_mode(True))
+        tags_layout.addWidget(tag_button)
         
-        self.remove_tag_button = QPushButton("Remove Selected Tag")
-        self.remove_tag_button.setEnabled(False)
-        self.remove_tag_button.clicked.connect(self.remove_selected_tag)
-        tags_toolbar_layout.addWidget(self.remove_tag_button)
+        # Create list widget for character tags
+        self.tags_list = QListWidget()
+        self.tags_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        self.tags_list.currentItemChanged.connect(self.on_tag_list_item_clicked)
+        tags_layout.addWidget(self.tags_list)
         
-        tags_toolbar_layout.addStretch()
-        tags_layout.addLayout(tags_toolbar_layout)
+        # Add button to remove selected tag
+        remove_tag_button = QPushButton("Remove Selected Tag")
+        remove_tag_button.clicked.connect(self.remove_selected_tag)
+        tags_layout.addWidget(remove_tag_button)
         
-        # Character tags list
-        self.character_tags_list = QListWidget()
-        self.character_tags_list.itemClicked.connect(self.on_tag_list_item_clicked)
-        tags_layout.addWidget(self.character_tags_list)
-        
-        # Add tabs
-        self.tab_widget.addTab(image_tab, "Image")
-        self.tab_widget.addTab(quick_events_tab, "Quick Events")
         self.tab_widget.addTab(tags_tab, "Character Tags")
         
+        # Add tabs to main layout
         main_layout.addWidget(self.tab_widget)
         
-        # Add status bar to the bottom of the dialog
+        # Add status bar to bottom of dialog
         main_layout.addWidget(self.status_bar)
         
         # Create close button
@@ -1485,27 +1608,17 @@ class ImageDetailDialog(QDialog):
         pass  # Method disabled
     
     def update_character_tags_list(self):
-        """Update the character tags list with current tags."""
-        self.character_tags_list.clear()
-        
-        if not self.character_tags:
-            empty_item = QListWidgetItem("No character tags on this image.")
-            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
-            self.character_tags_list.addItem(empty_item)
-            return
+        """Update the character tags list widget."""
+        # Clear existing items
+        self.tags_list.clear()
         
         # Add items for each tag
         for tag in self.character_tags:
+            # Create item with character name
             character_name = tag.get('character_name', 'Unknown')
-            position_text = f"({int(tag['x_position'] * 100)}%, {int(tag['y_position'] * 100)}%)"
-            
-            item = QListWidgetItem(f"{character_name} {position_text}")
-            item.setData(Qt.ItemDataRole.UserRole, tag['id'])
-            
-            if tag.get('note'):
-                item.setToolTip(tag['note'])
-                
-            self.character_tags_list.addItem(item)
+            item = QListWidgetItem(f"{character_name} ({int(tag['x_position']*100)}%, {int(tag['y_position']*100)}%)")
+            item.setData(Qt.ItemDataRole.UserRole, tag['id'])  # Store tag ID
+            self.tags_list.addItem(item)
     
     def add_character_tag(self, x_position, y_position):
         """Add a character tag at the given position.
@@ -1587,19 +1700,23 @@ class ImageDetailDialog(QDialog):
         self.remove_tag_button.setEnabled(True)
     
     def on_tag_list_item_clicked(self, item):
-        """Handle tag selection in the list.
+        """Handle tag list item click event.
         
         Args:
-            item: Selected list item
+            item: The clicked list item
         """
+        if not item:
+            return
+            
+        # Get tag ID from item data
         tag_id = item.data(Qt.ItemDataRole.UserRole)
-        
-        # Select the tag on the image
-        self.image_view.selected_tag_id = tag_id
-        self.image_view.update()
-        
-        # Enable the remove button
-        self.remove_tag_button.setEnabled(True)
+        if tag_id:
+            # Find the tag in the list
+            for tag in self.character_tags:
+                if tag['id'] == tag_id:
+                    # Update the image view to highlight this tag
+                    self.image_view.highlight_tag(tag_id)
+                    break
     
     def remove_selected_tag(self):
         """Remove the selected character tag."""
@@ -3341,13 +3458,35 @@ class GalleryWidget(QWidget):
                 self.show_error("Image Load Failed", f"Failed to load image from {image_path}")
                 return
             
+            # Get all image IDs in the gallery for navigation
+            gallery_image_ids = []
+            current_index = None
+            
+            # Get all images for the current story sorted by creation date (newest first)
+            cursor.execute('''
+            SELECT id FROM images
+            WHERE story_id = ?
+            ORDER BY created_at DESC
+            ''', (self.current_story_id,))
+            
+            gallery_image_ids = [row['id'] for row in cursor.fetchall()]
+            
+            # Find the index of the current image
+            try:
+                current_index = gallery_image_ids.index(image_id)
+                print(f"Image {image_id} is at index {current_index} of {len(gallery_image_ids)} images")
+            except ValueError:
+                print(f"Warning: Couldn't find image {image_id} in gallery images list")
+            
             # Show image detail dialog
             dialog = ImageDetailDialog(
                 self.db_conn,
                 image_id,
                 image_data,
                 pixmap,
-                parent=self
+                parent=self,
+                gallery_images=gallery_image_ids,
+                current_index=current_index
             )
             
             # Check for character tags
@@ -3364,7 +3503,7 @@ class GalleryWidget(QWidget):
             
         except Exception as e:
             self.show_error("Error", f"An error occurred: {str(e)}")
-            
+    
     def on_thumbnail_context_menu(self, position: QPoint, thumbnail: ThumbnailWidget) -> None:
         """Show context menu when right-clicking on a thumbnail.
         
@@ -3899,6 +4038,109 @@ class RegionSelectionDialog(QDialog):
         # Add CTRL+Q shortcut for quick event
         quick_event_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
         quick_event_shortcut.activated.connect(self.quick_event_shortcut_triggered)
+        
+        # Add arrow key shortcuts for navigation
+        left_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Left), self)
+        left_shortcut.activated.connect(self.navigate_to_previous)
+        
+        right_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Right), self)
+        right_shortcut.activated.connect(self.navigate_to_next)
+    
+    def keyPressEvent(self, event):
+        """Handle key press events for navigation."""
+        if event.key() == Qt.Key.Key_Left:
+            self.navigate_to_previous()
+        elif event.key() == Qt.Key.Key_Right:
+            self.navigate_to_next()
+        else:
+            super().keyPressEvent(event)
+    
+    def can_navigate_previous(self) -> bool:
+        """Check if navigation to previous image is possible."""
+        return self.gallery_images and self.current_index is not None and self.current_index > 0
+    
+    def can_navigate_next(self) -> bool:
+        """Check if navigation to next image is possible."""
+        return (self.gallery_images and self.current_index is not None and 
+                self.current_index < len(self.gallery_images) - 1)
+    
+    def navigate_to_previous(self):
+        """Navigate to the previous image in the gallery."""
+        if not self.can_navigate_previous():
+            return
+            
+        # Load previous image
+        self.current_index -= 1
+        self.load_image_at_current_index()
+    
+    def navigate_to_next(self):
+        """Navigate to the next image in the gallery."""
+        if not self.can_navigate_next():
+            return
+            
+        # Load next image
+        self.current_index += 1
+        self.load_image_at_current_index()
+    
+    def load_image_at_current_index(self):
+        """Load the image at the current index."""
+        if not self.gallery_images or self.current_index is None:
+            return
+            
+        try:
+            # Get the new image ID
+            new_image_id = self.gallery_images[self.current_index]
+            
+            # Get image data from database
+            cursor = self.db_conn.cursor()
+            cursor.execute("SELECT * FROM images WHERE id = ?", (new_image_id,))
+            image_data = cursor.fetchone()
+            
+            if not image_data:
+                self.status_bar.showMessage(f"Error: Image with ID {new_image_id} not found.", 5000)
+                return
+                
+            image_data = dict(image_data)
+            
+            # Load the image
+            image_path = os.path.join(image_data['path'], image_data['filename'])
+            if not os.path.exists(image_path):
+                self.status_bar.showMessage(f"Error: Image file not found at {image_path}", 5000)
+                return
+                
+            pixmap = QPixmap(image_path)
+            if pixmap.isNull():
+                self.status_bar.showMessage(f"Error: Failed to load image from {image_path}", 5000)
+                return
+                
+            # Update the dialog with new image data
+            self.image_id = new_image_id
+            self.image_data = image_data
+            self.orig_pixmap = pixmap
+            self.pixmap = pixmap
+            self.image_width = pixmap.width()
+            self.image_height = pixmap.height()
+            
+            # Update the window title
+            self.setWindowTitle(image_data.get('title') or f"Image {new_image_id}")
+            
+            # Update the image view
+            self.image_view.set_image(pixmap, self.image_width, self.image_height)
+            
+            # Update navigation buttons
+            self.prev_button.setEnabled(self.can_navigate_previous())
+            self.next_button.setEnabled(self.can_navigate_next())
+            
+            # Reload quick events and character tags
+            self.load_quick_events()
+            self.load_character_tags()
+            
+            # Show success message
+            self.status_bar.showMessage(f"Loaded image {self.current_index + 1} of {len(self.gallery_images)}", 3000)
+            
+        except Exception as e:
+            self.status_bar.showMessage(f"Error loading image: {str(e)}", 5000)
+            print(f"Error loading image: {e}")
     
     def quick_event_shortcut_triggered(self):
         """Handle CTRL+Q shortcut key press - create a quick event with special rules."""
@@ -5801,3 +6043,29 @@ class GraphicsTagView(QGraphicsView):
             if hasattr(self, 'quick_events_combo'):
                 self.quick_events_combo.clear()
                 self.quick_events_combo.addItem("Select a quick event...", -1)
+
+    def highlight_tag(self, tag_id: int) -> None:
+        """Highlight a specific tag.
+        
+        Args:
+            tag_id: ID of the tag to highlight
+        """
+        # Clear any previous selection
+        self.tag_mode = False
+        self.selected_tag_id = tag_id
+        
+        # Update all tag appearances
+        for tag_id in self.tag_items:
+            self.update_tag_appearance(tag_id)
+        
+        # If we have the tag, make sure it's visible in the view
+        if tag_id in self.tag_items:
+            # Get the rect item for the tag
+            rect_item, _, _ = self.tag_items[tag_id]
+            
+            # Center the view on the tag
+            tag_rect = rect_item.sceneBoundingRect()
+            self.centerOn(tag_rect.center())
+            
+            # Emit the tag selected signal
+            self.tag_selected.emit(tag_id)
