@@ -87,7 +87,12 @@ class QuickEventDialog(QDialog):
     
     def init_ui(self):
         """Initialize the user interface."""
-        self.setWindowTitle("Create Quick Event")
+        # Use custom title if provided
+        if "title" in self.options:
+            self.setWindowTitle(self.options["title"])
+        else:
+            self.setWindowTitle("Create Quick Event")
+            
         self.resize(450, 200)
         
         layout = QVBoxLayout(self)
@@ -111,6 +116,13 @@ class QuickEventDialog(QDialog):
                 note_label.setWordWrap(True)
                 note_label.setStyleSheet("color: #666; font-style: italic;")
                 layout.addWidget(note_label)
+                
+            # Special note for force_anonymous mode
+            if self.options.get("force_anonymous", False):
+                force_anon_label = QLabel("Note: This quick event will be created without a character owner.")
+                force_anon_label.setWordWrap(True)
+                force_anon_label.setStyleSheet("color: #c44; font-style: italic;")
+                layout.addWidget(force_anon_label)
         else:
             # No characters available
             no_chars_label = QLabel("No characters available. You can still create a general event.")
@@ -191,6 +203,11 @@ class QuickEventDialog(QDialog):
         Returns:
             Character ID or None for a characterless event
         """
+        # Check if we're forcing anonymous events (no character_id)
+        if self.options.get("force_anonymous", False):
+            print("[DEBUG] Forcing anonymous quick event (no character)")
+            return None
+            
         # If a specific character is preferred, use it
         if self.preferred_character_id is not None:
             # Ensure we return an integer even if a dictionary was passed

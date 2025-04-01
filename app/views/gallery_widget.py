@@ -43,7 +43,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QPixmap, QImage, QColor, QBrush, QPen, QPainter, QFont, 
     QPalette, QCursor, QIcon, QAction, QTransform, QClipboard, QImageReader,
-    QTextCursor, QStandardItemModel, QStandardItem
+    QTextCursor, QStandardItemModel, QStandardItem, QKeySequence, QShortcut
 )
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
@@ -1498,12 +1498,16 @@ class ImageDetailDialog(QDialog):
         # Group quick events by character
         events_by_character = {}
         for event in self.quick_events:
-            if event['character_id'] not in events_by_character:
-                events_by_character[event['character_id']] = {
-                    'name': event['character_name'],
+            character_id = event.get('character_id')
+            # Use "Anonymous" for NULL character_id events
+            character_name = event.get('character_name') if character_id is not None else "Anonymous"
+            
+            if character_id not in events_by_character:
+                events_by_character[character_id] = {
+                    'name': character_name,
                     'events': []
                 }
-            events_by_character[event['character_id']]['events'].append(event)
+            events_by_character[character_id]['events'].append(event)
             
         # Add items for each character and their events
         for character_id, data in events_by_character.items():
@@ -2638,7 +2642,7 @@ class GalleryWidget(QWidget):
             QApplication.processEvents()
             
             # Do character recognition 
-            region_dialog = RegionSelectionDialog(self.db_conn, image, self.current_story_id, self)
+            region_dialog = RegionSelectionDialog(self.db_conn, image, self.current_story_id, self, image_id=image_id)
             
             progress_dialog.setValue(100)
             progress_dialog.close()
@@ -3251,7 +3255,7 @@ class GalleryWidget(QWidget):
 class RegionSelectionDialog(QDialog):
     """Dialog for manually selecting regions to recognize characters in."""
     
-    def __init__(self, db_conn, image: QImage, story_id: int, parent=None):
+    def __init__(self, db_conn, image: QImage, story_id: int, parent=None, image_id: Optional[int] = None):
         """Initialize the region selection dialog.
         
         Args:
@@ -3259,6 +3263,7 @@ class RegionSelectionDialog(QDialog):
             image: The image to analyze
             story_id: The ID of the current story
             parent: Parent widget
+            image_id: Optional ID of the image being processed
         """
         super().__init__(parent)
         self.db_conn = db_conn
@@ -3278,13 +3283,85 @@ class RegionSelectionDialog(QDialog):
         # Image recognition utility
         self.image_recognition = ImageRecognitionUtil(db_conn)
         
+        # Set image_id - try multiple sources
+        self.image_id = image_id
+        
+        # If image_id is not provided directly, try to get it from parent
+        if not self.image_id:
+            if parent and hasattr(parent, 'image_id'):
+                self.image_id = parent.image_id
+            elif parent and hasattr(parent, 'selected_image_id'):
+                self.image_id = parent.selected_image_id
+        
+        # Debug output
+        print(f"[DEBUG] RegionSelectionDialog initialized with image_id: {self.image_id}")
+        
         # Initialize UI first, then load characters and quick events
         self.init_ui()
         
+        # Setup keyboard shortcuts
+        self.setup_shortcuts()
+        
         # Load characters and quick events AFTER UI is initialized
-        self.load_characters_data()  # This is the correct method name
+        self.load_characters_data()
         self.load_quick_events_data()
         
+    # Add shortcut setup method
+    def setup_shortcuts(self):
+        """Setup keyboard shortcuts for the dialog."""
+        from PyQt6.QtGui import QKeySequence, QShortcut
+        
+        # Add CTRL+Q shortcut for quick event
+        quick_event_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
+        quick_event_shortcut.activated.connect(self.quick_event_shortcut_triggered)
+    
+    def quick_event_shortcut_triggered(self):
+        """Handle CTRL+Q shortcut key press - create a quick event with special rules."""
+        try:
+            # Import the needed utilities
+            from app.utils.quick_event_utils import show_quick_event_dialog
+            
+            # Create context for character recognition dialog
+            context = {
+                "source": "recognition_dialog_shortcut",
+                "image_id": self.image_id,
+                "tagged_characters": [char.get('character_id') for char in self.tagged_characters],
+                "allow_extra_options": True,
+                "show_associate_checkbox": True,
+                "shortcut": "CTRL+Q"
+            }
+            
+            # Debug output
+            print(f"\n[DEBUG] QuickEventDialog CTRL+Q triggered from Character Recognition - context: {context}\n")
+            
+            # Show the dialog with specific options for this context
+            show_quick_event_dialog(
+                db_conn=self.db_conn,
+                story_id=self.story_id,
+                parent=self,
+                callback=self.on_quick_event_created,
+                context=context,
+                character_id=None,  # Force anonymous event (no character_id)
+                options={
+                    "show_recent_events": True,
+                    "show_character_tags": True,
+                    "show_optional_note": True,
+                    "allow_characterless_events": True,
+                    "title": "Quick Event - Character Recognition",
+                    "force_anonymous": True  # Special flag to enforce anonymous events
+                }
+            )
+        except Exception as e:
+            import traceback
+            print(f"Error creating quick event from shortcut: {e}")
+            print(traceback.format_exc())
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Error creating quick event: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+    
     def load_characters_data(self):
         """Load characters for the story."""
         try:
@@ -3624,6 +3701,63 @@ class RegionSelectionDialog(QDialog):
         self.new_quick_event_id = event_id
         self.associated_quick_event_id = event_id
         
+        # Debug info about the current state
+        print(f"[DEBUG] Quick event created - ID: {event_id}")
+        print(f"[DEBUG] Context data: {context}")
+        print(f"[DEBUG] Current image_id: {self.image_id}")
+        
+        # Get the image ID from context or from current instance
+        image_id = context.get("image_id", None) or self.image_id
+        
+        print(f"[DEBUG] Using image_id for association: {image_id}")
+        
+        # Associate the quick event with the current image if we have an image_id
+        if image_id:
+            from app.db_sqlite import associate_quick_event_with_image
+            try:
+                note = "Automatically associated via Character Recognition window"
+                print(f"[DEBUG] Associating quick event {event_id} with image {image_id}")
+                
+                success = associate_quick_event_with_image(
+                    self.db_conn, 
+                    event_id, 
+                    image_id, 
+                    note
+                )
+                
+                # Verify association was created by querying the database
+                cursor = self.db_conn.cursor()
+                cursor.execute(
+                    "SELECT id FROM quick_event_images WHERE quick_event_id = ? AND image_id = ?", 
+                    (event_id, image_id)
+                )
+                association = cursor.fetchone()
+                
+                if success and association:
+                    print(f"[DEBUG] Successfully associated quick event {event_id} with image {image_id}")
+                    print(f"[DEBUG] Association record ID: {association['id'] if association else 'None'}")
+                else:
+                    print(f"[ERROR] Failed to associate quick event {event_id} with image {image_id}")
+                    print(f"[ERROR] Association record found: {association is not None}")
+                    
+                    # Try to force the association again
+                    print(f"[DEBUG] Forcing association with direct SQL")
+                    from datetime import datetime
+                    now = datetime.now().isoformat()
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO quick_event_images 
+                        (quick_event_id, image_id, created_at, updated_at, note)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (event_id, image_id, now, now, note)
+                    )
+                    self.db_conn.commit()
+            except Exception as e:
+                import traceback
+                print(f"[ERROR] Error associating quick event with image: {e}")
+                print(traceback.format_exc())
+        
         # Reload quick events
         self.load_quick_events_data()
         
@@ -3633,14 +3767,13 @@ class RegionSelectionDialog(QDialog):
                 self.quick_events_combo.setCurrentIndex(i)
                 break
         
+        # Success message
         QMessageBox.information(
             self,
             "Success",
             "Quick event created successfully and associated with this image.",
             QMessageBox.StandardButton.Ok
         )
-        
-        # No need to clear text edit since we're using dialog now
     
     def on_quick_event_selected(self, index: int):
         """Handle selection of a quick event from the combo box.

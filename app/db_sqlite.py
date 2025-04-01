@@ -1806,10 +1806,11 @@ def get_image_quick_events(conn: sqlite3.Connection, image_id: int) -> List[Dict
     try:
         cursor = conn.cursor()
         
+        # Use LEFT JOIN to include events without a character (NULL character_id)
         cursor.execute('''
         SELECT qe.*, c.name as character_name, qei.note, qei.created_at as association_date
         FROM quick_events qe
-        JOIN characters c ON qe.character_id = c.id
+        LEFT JOIN characters c ON qe.character_id = c.id
         JOIN quick_event_images qei ON qe.id = qei.quick_event_id
         WHERE qei.image_id = ?
         ORDER BY qe.sequence_number, qe.created_at
