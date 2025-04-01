@@ -59,7 +59,8 @@ from app.db_sqlite import (
     get_image_character_tags, create_quick_event, get_next_quick_event_sequence_number,
     get_quick_event_characters, get_quick_event_tagged_characters,
     search_quick_events, get_story_folder_paths, create_image,
-    process_quick_event_character_tags, get_quick_event_scenes
+    process_quick_event_character_tags, get_quick_event_scenes,
+    add_image_to_scene, remove_image_from_scene, get_scene_images, get_image_scenes
 )
 
 # Import our image recognition utility
@@ -176,7 +177,9 @@ class ThumbnailWidget(QFrame):
     def mousePressEvent(self, event) -> None:
         """Handle mouse press events."""
         super().mousePressEvent(event)
-        self.clicked.emit(self.image_id)
+        # Only emit clicked signal for left-click
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self.image_id)
     
     def _on_delete_clicked(self) -> None:
         """Handle delete button click."""
@@ -2596,6 +2599,16 @@ class GalleryWidget(QWidget):
         # Sort images by creation timestamp (newest first)
         images.sort(key=lambda x: x['created_at'], reverse=True)
         
+        # If we have no scenes defined, treat all images as orphans
+        if not scenes:
+            row = 0
+            separator = SeparatorWidget("Ungrouped")
+            self.thumbnails_layout.addWidget(separator, row, 0, 1, 5)  # Span all 5 columns
+            row += 1
+            
+            self._display_image_list(images, row)
+            return
+        
         # Get all quick event associations for all images
         image_ids = [image['id'] for image in images]
         image_quick_events = {}
@@ -2604,8 +2617,12 @@ class GalleryWidget(QWidget):
             if quick_events:
                 image_quick_events[image_id] = quick_events
         
-        # Find scenes for each image through its quick events
+        # Find scenes for each image through:
+        # 1. Quick events associated with the image that are in scenes
+        # 2. Direct image-scene associations
         image_scenes = {}
+        
+        # First, process indirect associations via quick events
         for image_id, quick_events in image_quick_events.items():
             for quick_event in quick_events:
                 scenes_for_quick_event = get_quick_event_scenes(self.db_conn, quick_event['id'])
@@ -2616,15 +2633,14 @@ class GalleryWidget(QWidget):
                     for scene in scenes_for_quick_event:
                         image_scenes[image_id].add((scene['id'], scene['title'], scene['sequence_number']))
         
-        # If we have no scenes defined, treat all images as orphans
-        if not scenes:
-            row = 0
-            separator = SeparatorWidget("Ungrouped")
-            self.thumbnails_layout.addWidget(separator, row, 0, 1, 5)  # Span all 5 columns
-            row += 1
-            
-            self._display_image_list(images, row)
-            return
+        # Second, process direct image-scene associations
+        for image_id in image_ids:
+            direct_scenes = get_image_scenes(self.db_conn, image_id)
+            if direct_scenes:
+                if image_id not in image_scenes:
+                    image_scenes[image_id] = set()
+                for scene in direct_scenes:
+                    image_scenes[image_id].add((scene['id'], scene['title'], scene['sequence_number']))
         
         # Group images by scene
         scene_images = {}
@@ -3350,86 +3366,124 @@ class GalleryWidget(QWidget):
             self.show_error("Error", f"An error occurred: {str(e)}")
             
     def on_thumbnail_context_menu(self, position: QPoint, thumbnail: ThumbnailWidget) -> None:
-        """Show context menu for a thumbnail.
+        """Show context menu when right-clicking on a thumbnail.
         
         Args:
-            position: Position where to show the menu
-            thumbnail: The thumbnail widget that was right-clicked
+            position: Position where the context menu should appear
+            thumbnail: The thumbnail widget that was clicked
         """
         image_id = thumbnail.image_id
-        
         menu = QMenu()
         
-        # Add options to the context menu
-        view_action = QAction("View Image", self)
-        view_action.triggered.connect(lambda: self.on_thumbnail_clicked(image_id))
-        menu.addAction(view_action)
+        # Basic options
+        view_action = menu.addAction("View Image")
+        tag_action = menu.addAction("Tag Characters")
+        quick_events_action = menu.addAction("Quick Events")
+        menu.addSeparator()
+        delete_action = menu.addAction("Delete Image")
         
-        tag_characters_action = QAction("Tag Characters", self)
-        tag_characters_action.triggered.connect(lambda: self.open_image_for_tagging(image_id))
-        menu.addAction(tag_characters_action)
+        # Scene assignment menu
+        scene_menu = QMenu("Assign to Scene")
+        menu.addMenu(scene_menu)
         
-        delete_action = QAction("Delete Image", self)
-        delete_action.triggered.connect(lambda: self.on_delete_image(image_id))
-        menu.addAction(delete_action)
+        # Get available scenes
+        cursor = self.db_conn.cursor()
+        cursor.execute(
+            "SELECT id, title FROM events WHERE story_id = ? AND event_type = 'SCENE' ORDER BY sequence_number DESC",
+            (self.current_story_id,)
+        )
+        scenes = cursor.fetchall()
         
-        menu.exec(thumbnail.mapToGlobal(position))
+        # Get current scene assignments
+        current_scenes = get_image_scenes(self.db_conn, image_id)
+        current_scene_ids = [scene['id'] for scene in current_scenes]
         
-    def open_image_for_tagging(self, image_id: int) -> None:
-        """Open the image detail dialog with the Character Tags tab active.
+        scene_actions = []
+        
+        # Add scenes to the menu
+        for scene in scenes:
+            scene_action = scene_menu.addAction(scene['title'])
+            scene_action.setCheckable(True)
+            scene_action.setChecked(scene['id'] in current_scene_ids)
+            scene_actions.append((scene_action, scene['id']))
+        
+        # Add separator and "Remove All Assignments" option if there are any assigned scenes
+        if current_scene_ids:
+            scene_menu.addSeparator()
+            remove_all_action = scene_menu.addAction("Remove All Assignments")
+            scene_actions.append((remove_all_action, None))
+        
+        # Show the menu and get the selected action
+        selected_action = menu.exec(thumbnail.mapToGlobal(position))
+        
+        # Handle the selected action
+        if selected_action is None:
+            return
+            
+        if selected_action == view_action:
+            self.on_thumbnail_clicked(image_id)
+        elif selected_action == tag_action:
+            self.open_image_for_tagging(image_id)
+        elif selected_action == quick_events_action:
+            self.open_quick_event_dialog(image_id)
+        elif selected_action == delete_action:
+            self.on_delete_image(image_id)
+        else:
+            # Check if it's a scene assignment action
+            for action, scene_id in scene_actions:
+                if selected_action == action:
+                    if scene_id is None:
+                        # Remove all scene assignments
+                        for scene_id in current_scene_ids:
+                            remove_image_from_scene(self.db_conn, scene_id, image_id)
+                    else:
+                        # Toggle scene assignment
+                        if action.isChecked():
+                            # Add image to scene
+                            add_image_to_scene(self.db_conn, scene_id, image_id)
+                        else:
+                            # Remove image from scene
+                            remove_image_from_scene(self.db_conn, scene_id, image_id)
+                    
+                    # Reload the gallery to reflect changes
+                    self.load_images()
+                    break
+    
+    def open_quick_event_dialog(self, image_id: int) -> None:
+        """Open dialog to manage quick events for an image.
         
         Args:
-            image_id: ID of the image to tag
+            image_id: ID of the image
         """
-        try:
-            # Get image data
-            cursor = self.db_conn.cursor()
-            cursor.execute('''
-            SELECT * FROM images WHERE id = ?
-            ''', (image_id,))
+        # Get current quick events for this image
+        quick_events = get_image_quick_events(self.db_conn, image_id)
+        current_ids = [qe['id'] for qe in quick_events]
+        
+        # Open dialog to select quick events
+        dialog = QuickEventSelectionDialog(
+            self.db_conn, 
+            self.current_story_id, 
+            image_id, 
+            current_ids
+        )
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Get selected quick event IDs
+            selected_ids = dialog.get_selected_quick_event_ids()
             
-            image_data = cursor.fetchone()
+            # Remove associations that were unchecked
+            for qe_id in current_ids:
+                if qe_id not in selected_ids:
+                    remove_quick_event_image_association(self.db_conn, qe_id, image_id)
             
-            if not image_data:
-                self.show_error("Image Not Found", f"Image with ID {image_id} not found.")
-                return
+            # Add associations that were checked
+            for qe_id in selected_ids:
+                if qe_id not in current_ids:
+                    associate_quick_event_with_image(self.db_conn, qe_id, image_id)
             
-            image_data = dict(image_data)
-            
-            # Get the image path
-            image_path = os.path.join(image_data['path'], image_data['filename'])
-            
-            if not os.path.exists(image_path):
-                self.show_error("Image Not Found", f"Image file not found at {image_path}")
-                return
-            
-            # Load image
-            pixmap = QPixmap(image_path)
-            
-            if pixmap.isNull():
-                self.show_error("Image Load Failed", f"Failed to load image from {image_path}")
-                return
-            
-            # Show image detail dialog
-            dialog = ImageDetailDialog(
-                self.db_conn,
-                image_id,
-                image_data,
-                pixmap,
-                parent=self
-            )
-            
-            # Switch to the Character Tags tab (index 2)
-            dialog.tab_widget.setCurrentIndex(2)
-            
-            # Enable tag mode automatically
-            dialog.tag_mode_button.setChecked(True)
-            
-            dialog.exec()
-            
-        except Exception as e:
-            self.show_error("Error", f"An error occurred: {str(e)}")
-            
+            # Reload images to reflect changes
+            self.load_images()
+    
     def on_delete_image(self, image_id: int) -> None:
         """Handle image deletion.
         
