@@ -201,6 +201,21 @@ def create_tables(conn: sqlite3.Connection) -> None:
     )
     ''')
     
+    # Create scene_images table (for directly associating images with scenes)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS scene_images (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        scene_event_id INTEGER NOT NULL,
+        image_id INTEGER NOT NULL,
+        sequence_number INTEGER DEFAULT 0,
+        FOREIGN KEY (scene_event_id) REFERENCES events (id) ON DELETE CASCADE,
+        FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE,
+        UNIQUE(scene_event_id, image_id)
+    )
+    ''')
+    
     # Create timeline_views table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS timeline_views (
@@ -2554,4 +2569,132 @@ def get_unassigned_quick_events(conn: sqlite3.Connection, story_id: int) -> List
         return [dict(row) for row in rows]
     except sqlite3.Error as e:
         print(f"Error getting unassigned quick events: {e}")
+        return []
+
+
+def add_image_to_scene(conn: sqlite3.Connection, 
+                           scene_event_id: int, 
+                           image_id: int) -> int:
+    """Associate an image directly with a scene.
+    
+    Args:
+        conn: Database connection
+        scene_event_id: ID of the scene event
+        image_id: ID of the image
+        
+    Returns:
+        ID of the created association, or None if failed
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Get the next sequence number for this scene
+        cursor.execute('''
+        SELECT MAX(sequence_number) as max_seq
+        FROM scene_images
+        WHERE scene_event_id = ?
+        ''', (scene_event_id,))
+        
+        result = cursor.fetchone()
+        sequence_number = result['max_seq'] + 1 if result and result['max_seq'] is not None else 0
+        
+        # Insert the association
+        cursor.execute('''
+        INSERT INTO scene_images (
+            scene_event_id, image_id, sequence_number
+        ) VALUES (?, ?, ?)
+        ''', (scene_event_id, image_id, sequence_number))
+        
+        conn.commit()
+        return cursor.lastrowid
+    except sqlite3.Error as e:
+        print(f"Error adding image to scene: {e}")
+        conn.rollback()
+        return None
+
+
+def remove_image_from_scene(conn: sqlite3.Connection, 
+                                scene_event_id: int, 
+                                image_id: int) -> bool:
+    """Remove an image's direct association with a scene.
+    
+    Args:
+        conn: Database connection
+        scene_event_id: ID of the scene event
+        image_id: ID of the image
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        DELETE FROM scene_images
+        WHERE scene_event_id = ? AND image_id = ?
+        ''', (scene_event_id, image_id))
+        
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Error removing image from scene: {e}")
+        conn.rollback()
+        return False
+
+
+def get_scene_images(conn: sqlite3.Connection, scene_event_id: int) -> List[Dict[str, Any]]:
+    """Get all images directly associated with a scene.
+    
+    Args:
+        conn: Database connection
+        scene_event_id: ID of the scene event
+        
+    Returns:
+        List of image dictionaries with association data
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        SELECT i.*, si.sequence_number, si.id as association_id
+        FROM images i
+        JOIN scene_images si ON i.id = si.image_id
+        WHERE si.scene_event_id = ?
+        ORDER BY si.sequence_number, i.created_at DESC
+        ''', (scene_event_id,))
+        
+        rows = cursor.fetchall()
+        
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error getting scene images: {e}")
+        return []
+
+
+def get_image_scenes(conn: sqlite3.Connection, image_id: int) -> List[Dict[str, Any]]:
+    """Get all scenes that have a direct association with an image.
+    
+    Args:
+        conn: Database connection
+        image_id: ID of the image
+        
+    Returns:
+        List of event dictionaries with scene data
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        SELECT e.*, si.sequence_number
+        FROM events e
+        JOIN scene_images si ON e.id = si.scene_event_id
+        WHERE si.image_id = ? AND e.event_type = 'SCENE'
+        ORDER BY e.sequence_number
+        ''', (image_id,))
+        
+        rows = cursor.fetchall()
+        
+        return [dict(row) for row in rows]
+    except sqlite3.Error as e:
+        print(f"Error getting image scenes: {e}")
         return []
