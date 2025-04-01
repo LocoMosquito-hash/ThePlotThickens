@@ -11,13 +11,35 @@ from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTextEdit, QCheckBox, QMessageBox
+    QTextEdit, QCheckBox, QMessageBox, QComboBox, QRadioButton, 
+    QButtonGroup, QGroupBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QFocusEvent
 
 from app.utils.character_completer import CharacterCompleter
 from app.utils.quick_event_manager import QuickEventManager
 from app.db_sqlite import get_story_characters
+
+class FocusAwareTextEdit(QTextEdit):
+    """QTextEdit subclass that emits a signal when it receives focus."""
+    
+    focused = pyqtSignal()
+    
+    def focusInEvent(self, event: QFocusEvent) -> None:
+        """Override to emit signal while preserving original behavior."""
+        super().focusInEvent(event)
+        self.focused.emit()
+
+class FocusAwareComboBox(QComboBox):
+    """QComboBox subclass that emits a signal when it receives focus."""
+    
+    focused = pyqtSignal()
+    
+    def focusInEvent(self, event: QFocusEvent) -> None:
+        """Override to emit signal while preserving original behavior."""
+        super().focusInEvent(event)
+        self.focused.emit()
 
 class QuickEventDialog(QDialog):
     """
@@ -63,6 +85,7 @@ class QuickEventDialog(QDialog):
         self.initial_text = initial_text
         self.preferred_character_id = character_id
         self.result_event_id = None
+        self.selected_existing_event_id = None
         
         # Create a quick event manager
         self.qe_manager = QuickEventManager(db_conn)
@@ -70,10 +93,9 @@ class QuickEventDialog(QDialog):
         # Get all characters for the story for tagging
         self.characters = get_story_characters(db_conn, self.story_id)
         
-        # Load recent quick events if enabled
+        # Load recent quick events
         self.recent_events = []
-        if self.options.get("show_recent_events", True):
-            self.recent_events = self.qe_manager.get_recent_events(self.story_id, limit=3)
+        self.recent_events = self.qe_manager.get_recent_events(self.story_id, limit=15)
         
         # Initialize UI
         self.init_ui()
@@ -84,6 +106,7 @@ class QuickEventDialog(QDialog):
         # Set initial text if provided
         if self.initial_text:
             self.text_edit.setText(self.initial_text)
+            self.text_radio.setChecked(True)
     
     def init_ui(self):
         """Initialize the user interface."""
@@ -93,14 +116,81 @@ class QuickEventDialog(QDialog):
         else:
             self.setWindowTitle("Create Quick Event")
             
-        self.resize(450, 200)
+        self.resize(450, 300)
         
         layout = QVBoxLayout(self)
         
-        # Text edit - main focus of the dialog
-        self.text_edit = QTextEdit()
-        self.text_edit.setPlaceholderText("Enter quick event text. Use @name to tag characters (e.g., @John kissed @Mary)")
-        layout.addWidget(self.text_edit)
+        # Check if we're in the Character Recognition window context
+        is_char_recog = self.context.get("source", "").startswith("recognition_dialog")
+        
+        # Create button group for radio buttons
+        self.input_group = QButtonGroup(self)
+        
+        # If in Character Recognition context, show the dropdown for existing events
+        if is_char_recog:
+            # Existing Events Dropdown Section
+            existing_group = QGroupBox("Choose Existing Event")
+            existing_layout = QVBoxLayout(existing_group)
+            
+            # Radio button for existing events
+            self.existing_radio = QRadioButton("Use existing quick event:")
+            self.input_group.addButton(self.existing_radio)
+            existing_layout.addWidget(self.existing_radio)
+            
+            # Dropdown for recent events - using our custom subclass
+            self.events_dropdown = FocusAwareComboBox()
+            self.events_dropdown.addItem("Select an existing quick event", None)
+            self.events_dropdown.focused.connect(lambda: self.existing_radio.setChecked(True))
+            
+            # Populate dropdown with recent events
+            for event in self.recent_events:
+                display_text = event.get('text', '')
+                if len(display_text) > 60:
+                    display_text = display_text[:57] + "..."
+                    
+                # Format differently based on character or anonymous event
+                if event.get('character_name'):
+                    item_text = f"{event['character_name']}: {display_text}"
+                else:
+                    item_text = f"Anonymous: {display_text}"
+                    
+                self.events_dropdown.addItem(item_text, event.get('id'))
+            
+            self.events_dropdown.currentIndexChanged.connect(self.on_event_selected)
+            existing_layout.addWidget(self.events_dropdown)
+            
+            layout.addWidget(existing_group)
+            
+            # New Event Section
+            new_group = QGroupBox("Create New Event")
+            new_layout = QVBoxLayout(new_group)
+            
+            # Radio button for new event
+            self.text_radio = QRadioButton("Create new quick event:")
+            self.input_group.addButton(self.text_radio)
+            new_layout.addWidget(self.text_radio)
+            
+            # Text edit for new event - using our custom subclass
+            self.text_edit = FocusAwareTextEdit()
+            self.text_edit.setPlaceholderText("Enter quick event text. Use @name to tag characters (e.g., @John kissed @Mary)")
+            self.text_edit.focused.connect(lambda: self.text_radio.setChecked(True))
+            new_layout.addWidget(self.text_edit)
+            
+            layout.addWidget(new_group)
+            
+            # Set default selection
+            self.text_radio.setChecked(True)
+        else:
+            # Regular text edit without dropdown for other contexts
+            self.text_radio = QRadioButton()  # Hidden radio button for consistency
+            self.input_group.addButton(self.text_radio)
+            self.text_radio.setChecked(True)
+            self.text_radio.hide()
+            
+            # Text edit - main focus of the dialog
+            self.text_edit = QTextEdit()
+            self.text_edit.setPlaceholderText("Enter quick event text. Use @name to tag characters (e.g., @John kissed @Mary)")
+            layout.addWidget(self.text_edit)
         
         # Available characters section
         if self.options.get("show_character_tags", True) and self.characters:
@@ -130,14 +220,14 @@ class QuickEventDialog(QDialog):
             no_chars_label.setStyleSheet("color: #666; font-style: italic;")
             layout.addWidget(no_chars_label)
         
-        # Recent events section
-        if self.options.get("show_recent_events", True) and self.recent_events:
+        # Show recent events section only if not in Character Recognition (since we already show them in dropdown)
+        if not is_char_recog and self.options.get("show_recent_events", True) and self.recent_events:
             recent_label = QLabel("Recent events:")
             recent_label.setStyleSheet("color: #666; font-style: italic; margin-top: 5px;")
             layout.addWidget(recent_label)
             
             # Display each recent event
-            for event in self.recent_events:
+            for event in self.recent_events[:3]:  # Limit to 3 to save space
                 # Format the display based on whether there's a character
                 if event.get('character_name'):
                     text = f"{event['character_name']}: {event['text']}"
@@ -176,6 +266,14 @@ class QuickEventDialog(QDialog):
         
         layout.addLayout(button_layout)
     
+    def on_event_selected(self, index: int):
+        """Handle selection of an event from the dropdown."""
+        if hasattr(self, 'existing_radio'):
+            self.existing_radio.setChecked(True)
+        
+        if hasattr(self, 'events_dropdown'):
+            self.selected_existing_event_id = self.events_dropdown.currentData()
+    
     def setup_character_completer(self):
         """Setup character completer for @mentions."""
         self.tag_completer = CharacterCompleter(self)
@@ -191,6 +289,10 @@ class QuickEventDialog(QDialog):
     def on_character_selected(self, character_name: str):
         """Handle character selection from completer."""
         self.tag_completer.insert_character_tag(character_name)
+        
+        # Make sure text input radio is selected when typing character tags
+        if hasattr(self, 'text_radio'):
+            self.text_radio.setChecked(True)
     
     def get_event_text(self) -> str:
         """Get the plain text from the editor."""
@@ -227,11 +329,59 @@ class QuickEventDialog(QDialog):
     
     def save_quick_event(self):
         """Save the quick event and accept the dialog."""
-        text = self.get_event_text()
+        # Check if we're in Character Recognition mode with radio buttons
+        is_char_recog = hasattr(self, 'existing_radio') and hasattr(self, 'text_radio')
         
-        if not text.strip():
-            QMessageBox.warning(self, "Error", "Please enter text for the quick event.")
-            return
+        if is_char_recog:
+            # Using existing event
+            if self.existing_radio.isChecked():
+                if not self.selected_existing_event_id:
+                    QMessageBox.warning(self, "Error", "Please select an existing quick event from the dropdown.")
+                    return
+                
+                # Find the selected event text
+                for event in self.recent_events:
+                    if event.get('id') == self.selected_existing_event_id:
+                        # We return the existing event's ID and text
+                        self.result_event_id = self.selected_existing_event_id
+                        
+                        # Emit the signal with the result
+                        self.quick_event_created.emit(
+                            self.selected_existing_event_id,
+                            event.get('text', ''),
+                            self.context
+                        )
+                        
+                        # Accept the dialog
+                        self.accept()
+                        return
+                        
+                # If we get here, something went wrong
+                QMessageBox.warning(self, "Error", "Selected event not found.")
+                return
+            
+            # Creating new event (text radio selected)
+            elif self.text_radio.isChecked():
+                text = self.get_event_text()
+                
+                if not text.strip():
+                    QMessageBox.warning(self, "Error", "Please enter text for the quick event.")
+                    return
+                
+                # Continue with normal quick event creation flow
+            else:
+                # Neither radio button selected (shouldn't happen)
+                QMessageBox.warning(self, "Error", "Please either select an existing event or create a new one.")
+                return
+        else:
+            # Regular mode - just get the text
+            text = self.get_event_text()
+            
+            if not text.strip():
+                QMessageBox.warning(self, "Error", "Please enter text for the quick event.")
+                return
+        
+        # From here, we're creating a new event
         
         # Get character ID
         character_id = self.get_character_id()

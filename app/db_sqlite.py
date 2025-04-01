@@ -2279,10 +2279,10 @@ def search_quick_events(conn: sqlite3.Connection, story_id: int,
         
         print(f"DEBUG DB - search_quick_events called with: story_id={story_id}, character_id={character_id}, text_query={text_query}")
         
-        # Build the base query
+        # Build the base query for quick events with characters
         query = """
         SELECT DISTINCT qe.* FROM quick_events qe
-        JOIN characters c ON qe.character_id = c.id
+        LEFT JOIN characters c ON qe.character_id = c.id
         LEFT JOIN quick_event_characters qec ON qe.id = qec.quick_event_id
         WHERE c.story_id = ?
         """
@@ -2305,14 +2305,38 @@ def search_quick_events(conn: sqlite3.Connection, story_id: int,
             query += " AND qe.created_at <= ?"
             params.append(f"{to_date}T23:59:59")
             
-        # Add ordering and limit
-        query += " ORDER BY qe.created_at DESC LIMIT ?"
-        params.append(limit)
+        # Add a query to get events with NULL character_id
+        # Anonymously created events don't have a character_id to link to story_id,
+        # so we need to query them separately
+        query_null_character = """
+        SELECT qe.* FROM quick_events qe
+        JOIN quick_event_images qei ON qe.id = qei.quick_event_id
+        JOIN images i ON qei.image_id = i.id
+        WHERE qe.character_id IS NULL
+        AND i.story_id = ?
+        """
+        params_null = [story_id]
         
-        print(f"DEBUG DB - SQL Query: {query}")
-        print(f"DEBUG DB - Parameters: {params}")
+        if text_query:
+            query_null_character += " AND qe.text LIKE ?"
+            params_null.append(f"%{text_query}%")
+            
+        if from_date:
+            query_null_character += " AND qe.created_at >= ?"
+            params_null.append(f"{from_date}T00:00:00")
+            
+        if to_date:
+            query_null_character += " AND qe.created_at <= ?"
+            params_null.append(f"{to_date}T23:59:59")
         
-        cursor.execute(query, tuple(params))
+        # Combine both queries with UNION
+        full_query = f"{query} UNION {query_null_character} ORDER BY created_at DESC LIMIT ?"
+        combined_params = params + params_null + [limit]
+        
+        print(f"DEBUG DB - SQL Query: {full_query}")
+        print(f"DEBUG DB - Parameters: {combined_params}")
+        
+        cursor.execute(full_query, tuple(combined_params))
         rows = cursor.fetchall()
         
         print(f"DEBUG DB - Found {len(rows)} results")
