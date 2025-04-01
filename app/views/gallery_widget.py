@@ -4353,7 +4353,7 @@ class RegionSelectionDialog(QDialog):
         
         # Add to database checkbox
         self.add_to_db_checkbox = QCheckBox("Add face to recognition database")
-        self.add_to_db_checkbox.setChecked(False)
+        self.add_to_db_checkbox.setChecked(False)  # Set to unchecked by default
         result_group_layout.addWidget(self.add_to_db_checkbox)
         
         # Rebuild database button
@@ -4668,6 +4668,26 @@ class RegionSelectionDialog(QDialog):
         if hasattr(self, 'quick_events_combo'):
             self.associated_quick_event_id = self.quick_events_combo.currentData()
         
+        # Process any selected characters that need to be added to the recognition database
+        # This ensures the checkbox status is respected when the dialog is closed
+        if self.add_to_db_checkbox.isChecked() and self.tagged_characters:
+            for tag in self.tagged_characters:
+                # Check if this tag was already added to the recognition database
+                # by verifying if the tag has a 'added_to_recognition_db' flag
+                if not tag.get('added_to_recognition_db', False):
+                    # Find the region for this tag
+                    region_index = tag.get('region_index', -1)
+                    if region_index >= 0 and region_index < len(self.selected_regions):
+                        region = self.selected_regions[region_index]
+                        # Add to recognition database
+                        self.add_region_to_recognition_database(
+                            region, 
+                            tag['character_id'], 
+                            tag['character_name']
+                        )
+                        # Mark as added to avoid duplicate additions
+                        tag['added_to_recognition_db'] = True
+        
         # Call the parent accept
         super().accept()
     
@@ -4786,7 +4806,8 @@ class RegionSelectionDialog(QDialog):
                 'y': y_normalized,  # Adjusted Y (normalized)
                 'width': width_normalized,
                 'height': height_normalized
-            }
+            },
+            'added_to_recognition_db': False  # Track if already added to recognition database
         }
         
         # Check if this character is already tagged
@@ -4814,6 +4835,8 @@ class RegionSelectionDialog(QDialog):
         # Add to recognition database if checkbox is checked
         if self.add_to_db_checkbox.isChecked():
             self.add_region_to_recognition_database(region, character_data['character_id'], character_data['character_name'])
+            # Mark as added to recognition database
+            tag['added_to_recognition_db'] = True
         
         # Clear the selection
         self.result_list.clearSelection()
