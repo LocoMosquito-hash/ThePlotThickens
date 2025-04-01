@@ -59,7 +59,7 @@ from app.db_sqlite import (
     get_image_character_tags, create_quick_event, get_next_quick_event_sequence_number,
     get_quick_event_characters, get_quick_event_tagged_characters,
     search_quick_events, get_story_folder_paths, create_image,
-    process_quick_event_character_tags
+    process_quick_event_character_tags, get_quick_event_scenes
 )
 
 # Import our image recognition utility
@@ -214,22 +214,62 @@ class ThumbnailWidget(QFrame):
         """Set the quick event text for this thumbnail.
         
         Args:
-            text: Quick event text to display
+            text: Quick event text
         """
-        if text and text.strip():
-            # Truncate if too long
-            max_length = 60
-            if len(text) > max_length:
-                self.quick_event_text = text[:max_length] + "..."
-            else:
-                self.quick_event_text = text
-                
-            self.quick_event_label.setText(self.quick_event_text)
+        if text:
+            self.quick_event_text = text
+            # Truncate to roughly 120 characters
+            if len(text) > 120:
+                text = text[:117] + "..."
+            
+            # Set the text
+            self.quick_event_label.setText(text)
+            
+            # Show the label
             self.quick_event_label.show()
         else:
             self.quick_event_text = ""
-            self.quick_event_label.setText("")
             self.quick_event_label.hide()
+
+
+class SeparatorWidget(QFrame):
+    """Widget for displaying a separator with a title between image groups."""
+    
+    def __init__(self, title: str, parent=None) -> None:
+        """Initialize the separator widget.
+        
+        Args:
+            title: Title text to display
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        
+        # Visual styling
+        self.setFrameShape(QFrame.Shape.Box)
+        self.setLineWidth(2)
+        self.setStyleSheet("""
+            SeparatorWidget {
+                border-top: 2px solid #666;
+                border-bottom: 2px solid #666;
+                background-color: #333;
+                margin-top: 10px;
+                margin-bottom: 5px;
+            }
+        """)
+        
+        # Layout
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(10, 5, 10, 5)
+        
+        # Title label
+        self.title_label = QLabel(title)
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
+        self.layout.addWidget(self.title_label)
+        
+        # Set size policy - Expanding horizontally, fixed vertically
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setMinimumHeight(40)
 
 
 class QuickEventSelectionDialog(QDialog):
@@ -2205,6 +2245,12 @@ class GalleryWidget(QWidget):
         # Create image recognition utility
         self.image_recognition = ImageRecognitionUtil(db_conn)
         
+        # Flag to track NSFW mode
+        self.nsfw_mode = False
+        
+        # Flag to track scene grouping mode
+        self.scene_grouping_mode = False
+        
         self.init_ui()
     
     def init_ui(self) -> None:
@@ -2251,6 +2297,12 @@ class GalleryWidget(QWidget):
         self.nsfw_checkbox.stateChanged.connect(self.on_nsfw_toggle)
         button_layout.addWidget(self.nsfw_checkbox)
         
+        # Add Scene Grouping checkbox
+        self.scene_grouping_checkbox = QCheckBox("Group by Scenes")
+        self.scene_grouping_checkbox.setToolTip("Group thumbnails by their associated scenes")
+        self.scene_grouping_checkbox.stateChanged.connect(self.on_scene_grouping_toggle)
+        button_layout.addWidget(self.scene_grouping_checkbox)
+        
         # Add button layout to main layout
         main_layout.addLayout(button_layout)
         
@@ -2282,9 +2334,6 @@ class GalleryWidget(QWidget):
         
         # Create placeholder pixmap for NSFW mode
         self.placeholder_pixmap = self._create_nsfw_placeholder()
-        
-        # Flag to track NSFW mode
-        self.nsfw_mode = False
     
     def _create_nsfw_placeholder(self) -> QPixmap:
         """Create a placeholder pixmap for NSFW mode.
@@ -2346,6 +2395,19 @@ class GalleryWidget(QWidget):
                                     print(f"Restored thumbnail {image_id} to normal mode")
                 except Exception as e:
                     print(f"Error updating thumbnail {image_id}: {str(e)}")
+    
+    def on_scene_grouping_toggle(self, state: int) -> None:
+        """Handle scene grouping toggle state change.
+        
+        Args:
+            state: Qt.CheckState value
+        """
+        print(f"Scene grouping toggle state changed to value: {state}")
+        self.scene_grouping_mode = (state == 2)  # Qt.CheckState.Checked is 2
+        print(f"Scene grouping mode is now: {'ON' if self.scene_grouping_mode else 'OFF'}")
+        
+        # Reload images with new grouping layout
+        self.load_images()
     
     def update_thumbnail_visibility(self) -> None:
         """Update all thumbnails based on NSFW mode."""
@@ -2444,73 +2506,13 @@ class GalleryWidget(QWidget):
         )
         images = cursor.fetchall()
         
-        # Create thumbnails
-        for i, image in enumerate(images):
-            image_id = image['id']
-            filename = image['filename']
+        if not self.scene_grouping_mode:
+            # Classic view - no scene grouping
+            self._display_images_classic_view(images)
+        else:
+            # Scene grouping view
+            self._display_images_with_scene_grouping(images)
             
-            # Get thumbnail path
-            thumbnails_folder = os.path.join(os.path.dirname(image['path']), "thumbnails")
-            thumbnail_path = os.path.join(thumbnails_folder, filename)
-            
-            # Check if thumbnail exists, if not, generate it
-            if not os.path.exists(thumbnail_path):
-                # Load original image
-                original_path = os.path.join(image['path'], filename)
-                if os.path.exists(original_path):
-                    original_image = QImage(original_path)
-                    if not original_image.isNull():
-                        # Generate and save thumbnail
-                        thumbnail = self._generate_thumbnail(original_image)
-                        os.makedirs(thumbnails_folder, exist_ok=True)
-                        thumbnail.save(thumbnail_path, "PNG")
-                    else:
-                        print(f"Warning: Failed to load original image: {original_path}")
-                        continue
-                else:
-                    print(f"Warning: Original image not found: {original_path}")
-                    continue
-            
-            # Choose pixmap based on NSFW mode
-            if self.nsfw_mode:
-                pixmap = self.placeholder_pixmap
-            else:
-                pixmap = QPixmap(thumbnail_path)
-                
-            if not pixmap.isNull():
-                # Create thumbnail widget
-                row = i // 5  # 5 thumbnails per row (changed from 4)
-                col = i % 5   # 5 thumbnails per row (changed from 4)
-                thumbnail = ThumbnailWidget(image_id, pixmap, image['title'])
-                thumbnail.clicked.connect(self.on_thumbnail_clicked)
-                thumbnail.delete_requested.connect(self.on_delete_image)
-                
-                # Add to layout
-                self.thumbnails_layout.addWidget(thumbnail, row, col)
-                self.thumbnails[image_id] = thumbnail
-                
-                # Load quick events for this image
-                try:
-                    quick_events = get_image_quick_events(self.db_conn, image_id)
-                    if quick_events:
-                        # Get all characters to format mentions
-                        characters = get_story_characters(self.db_conn, self.current_story_id)
-                        
-                        # Format the first quick event's text
-                        first_event = quick_events[0]
-                        formatted_text = convert_char_refs_to_mentions(first_event['text'], characters)
-                        
-                        # Set the quick event text on the thumbnail
-                        thumbnail.set_quick_event_text(formatted_text)
-                except Exception as e:
-                    print(f"Error loading quick events for image {image_id}: {e}")
-            else:
-                print(f"Warning: Failed to load thumbnail: {thumbnail_path}")
-        
-        # Ensure columns have equal width
-        for col in range(5):  # 5 columns (changed from 4)
-            self.thumbnails_layout.setColumnStretch(col, 1)
-        
         # Update status
         if images:
             self.status_label.setText(f"Gallery for: {self.current_story_data['title']} ({len(images)} images)")
@@ -2520,12 +2522,383 @@ class GalleryWidget(QWidget):
         # Ensure the container is properly sized
         self.thumbnails_container.adjustSize()
     
+    def _display_images_classic_view(self, images: List[Dict[str, Any]]) -> None:
+        """Display images in the classic gallery view (no grouping).
+        
+        Args:
+            images: List of image data dictionaries
+        """
+        # Create thumbnails
+        for i, image in enumerate(images):
+            image_id = image['id']
+            
+            # Get thumbnail pixmap
+            pixmap = self._get_image_thumbnail_pixmap(image)
+            if pixmap.isNull():
+                continue
+                
+            # Create thumbnail widget
+            row = i // 5  # 5 thumbnails per row
+            col = i % 5
+            thumbnail = ThumbnailWidget(image_id, pixmap, image['title'])
+            thumbnail.clicked.connect(self.on_thumbnail_clicked)
+            thumbnail.delete_requested.connect(self.on_delete_image)
+            
+            # Add to layout
+            self.thumbnails_layout.addWidget(thumbnail, row, col)
+            self.thumbnails[image_id] = thumbnail
+            
+            # Load quick events for this image
+            self._set_thumbnail_quick_event_text(thumbnail, image_id)
+        
+        # Ensure columns have equal width
+        for col in range(5):
+            self.thumbnails_layout.setColumnStretch(col, 1)
+    
+    def _display_images_with_scene_grouping(self, images: List[Dict[str, Any]]) -> None:
+        """Display images grouped by scenes.
+        
+        Args:
+            images: List of image data dictionaries
+        """
+        if not images:
+            return
+            
+        # Convert images from sqlite3.Row objects to dictionaries
+        images_dict = []
+        for image in images:
+            image_dict = dict(image)
+            images_dict.append(image_dict)
+        
+        # Replace the original images list with our dictionary version
+        images = images_dict
+            
+        # Get all scenes in this story
+        cursor = self.db_conn.cursor()
+        cursor.execute(
+            "SELECT id, title, sequence_number FROM events WHERE story_id = ? AND event_type = 'SCENE' ORDER BY sequence_number DESC",
+            (self.current_story_id,)
+        )
+        scenes = cursor.fetchall()
+        
+        # First, obtain creation timestamps for all images
+        for image in images:
+            cursor.execute(
+                "SELECT created_at FROM images WHERE id = ?",
+                (image['id'],)
+            )
+            result = cursor.fetchone()
+            if result:
+                image['created_at'] = result['created_at']
+            else:
+                image['created_at'] = '1970-01-01 00:00:00'  # Default fallback
+        
+        # Sort images by creation timestamp (newest first)
+        images.sort(key=lambda x: x['created_at'], reverse=True)
+        
+        # Get all quick event associations for all images
+        image_ids = [image['id'] for image in images]
+        image_quick_events = {}
+        for image_id in image_ids:
+            quick_events = get_image_quick_events(self.db_conn, image_id)
+            if quick_events:
+                image_quick_events[image_id] = quick_events
+        
+        # Find scenes for each image through its quick events
+        image_scenes = {}
+        for image_id, quick_events in image_quick_events.items():
+            for quick_event in quick_events:
+                scenes_for_quick_event = get_quick_event_scenes(self.db_conn, quick_event['id'])
+                if scenes_for_quick_event:
+                    # Associate image with all scenes containing the quick event
+                    if image_id not in image_scenes:
+                        image_scenes[image_id] = set()
+                    for scene in scenes_for_quick_event:
+                        image_scenes[image_id].add((scene['id'], scene['title'], scene['sequence_number']))
+        
+        # If we have no scenes defined, treat all images as orphans
+        if not scenes:
+            row = 0
+            separator = SeparatorWidget("Ungrouped")
+            self.thumbnails_layout.addWidget(separator, row, 0, 1, 5)  # Span all 5 columns
+            row += 1
+            
+            self._display_image_list(images, row)
+            return
+        
+        # Group images by scene
+        scene_images = {}
+        orphan_images = []
+        
+        for image in images:
+            image_id = image['id']
+            if image_id in image_scenes:
+                for scene_id, scene_title, sequence_number in image_scenes[image_id]:
+                    if scene_id not in scene_images:
+                        scene_images[scene_id] = {
+                            'title': scene_title,
+                            'sequence_number': sequence_number,
+                            'images': [],
+                            # Get the newest creation timestamp for any quick event in this scene
+                            'newest_timestamp': self._get_scene_newest_timestamp(scene_id)
+                        }
+                    scene_images[scene_id]['images'].append(image)
+            else:
+                # Image not associated with a scene
+                orphan_images.append(image)
+        
+        # If we have no images in any scenes, treat all images as orphans
+        if not scene_images:
+            row = 0
+            separator = SeparatorWidget("Ungrouped")
+            self.thumbnails_layout.addWidget(separator, row, 0, 1, 5)  # Span all 5 columns
+            row += 1
+            
+            self._display_image_list(orphan_images, row)
+            return
+        
+        # Sort scenes by sequence number (newest first)
+        sorted_scenes = sorted(
+            scene_images.items(),
+            key=lambda x: x[1]['sequence_number'],
+            reverse=True
+        )
+        
+        # Now create a chronological display order with scenes and ungrouped images interspersed
+        display_order = []
+        
+        # First, organize orphaned images by timestamp
+        orphan_images_by_timestamp = {}
+        for image in orphan_images:
+            timestamp = image['created_at']
+            if timestamp not in orphan_images_by_timestamp:
+                orphan_images_by_timestamp[timestamp] = []
+            orphan_images_by_timestamp[timestamp].append(image)
+        
+        # Then find cutpoints between scenes for placing orphaned images
+        scene_timestamps = [(scene_id, data['newest_timestamp']) for scene_id, data in scene_images.items()]
+        scene_timestamps.sort(key=lambda x: x[1], reverse=True)  # Sort by timestamp, newest first
+        
+        # If we have scene timestamps, add the first scene
+        if scene_timestamps:
+            first_scene_id = scene_timestamps[0][0]
+            display_order.append(('scene', first_scene_id))
+            
+            # Find orphan images that need to go above the first scene
+            orphans_before_first = []
+            for image in orphan_images:
+                if image['created_at'] > scene_timestamps[0][1]:
+                    orphans_before_first.append(image)
+            
+            # If we have orphans before the first scene, add them at the very top
+            if orphans_before_first:
+                display_order.insert(0, ('ungrouped', orphans_before_first))
+        
+        # Now handle remaining scenes and orphans
+        for i in range(len(scene_timestamps) - 1):
+            current_scene_id, current_timestamp = scene_timestamps[i]
+            next_scene_id, next_timestamp = scene_timestamps[i + 1]
+            
+            # Find orphan images that belong between these two scenes
+            orphans_between = []
+            for image in orphan_images:
+                if next_timestamp < image['created_at'] < current_timestamp:
+                    orphans_between.append(image)
+            
+            if orphans_between:
+                display_order.append(('ungrouped', orphans_between))
+            
+            # Add the next scene
+            display_order.append(('scene', next_scene_id))
+            
+        # Find orphan images that need to go below the last scene
+        if scene_timestamps:
+            last_scene_id, last_timestamp = scene_timestamps[-1]
+            orphans_after_last = []
+            for image in orphan_images:
+                if image['created_at'] < last_timestamp:
+                    orphans_after_last.append(image)
+            
+            # If we have orphans after the last scene, add them at the very bottom
+            if orphans_after_last:
+                display_order.append(('ungrouped', orphans_after_last))
+        
+        # Now display everything according to our calculated order
+        row = 0
+        for item_type, item_data in display_order:
+            if item_type == 'scene':
+                scene_id = item_data
+                scene_data = scene_images[scene_id]
+                
+                # Add a separator for this scene
+                separator = SeparatorWidget(scene_data['title'])
+                self.thumbnails_layout.addWidget(separator, row, 0, 1, 5)  # Span all 5 columns
+                row += 1
+                
+                # Display this scene's images
+                row = self._display_image_list(scene_data['images'], row)
+                
+                # Add some spacing
+                row += 1
+            
+            elif item_type == 'ungrouped':
+                ungrouped_images = item_data
+                if ungrouped_images:
+                    # Add separator for ungrouped images
+                    separator = SeparatorWidget("Ungrouped")
+                    self.thumbnails_layout.addWidget(separator, row, 0, 1, 5)  # Span all 5 columns
+                    row += 1
+                    
+                    # Display ungrouped images
+                    row = self._display_image_list(ungrouped_images, row)
+                    
+                    # Add some spacing
+                    row += 1
+        
+        # Ensure columns have equal width
+        for col in range(5):
+            self.thumbnails_layout.setColumnStretch(col, 1)
+    
+    def _get_scene_newest_timestamp(self, scene_id: int) -> str:
+        """Get the newest timestamp for any quick event in a scene.
+        
+        Args:
+            scene_id: ID of the scene
+            
+        Returns:
+            Timestamp string of the newest quick event
+        """
+        cursor = self.db_conn.cursor()
+        cursor.execute("""
+            SELECT MAX(qe.created_at) as newest_timestamp
+            FROM quick_events qe
+            JOIN scene_quick_events sqe ON qe.id = sqe.quick_event_id
+            WHERE sqe.scene_event_id = ?
+        """, (scene_id,))
+        
+        result = cursor.fetchone()
+        if result and result['newest_timestamp']:
+            return result['newest_timestamp']
+        else:
+            # If no quick events found, use scene creation date
+            cursor.execute("""
+                SELECT created_at FROM events
+                WHERE id = ?
+            """, (scene_id,))
+            
+            result = cursor.fetchone()
+            if result and result['created_at']:
+                return result['created_at']
+            
+            # Last resort fallback
+            return '1970-01-01 00:00:00'
+    
+    def _display_image_list(self, images: List[Dict[str, Any]], start_row: int) -> int:
+        """Display a list of images starting at the specified row.
+        
+        Args:
+            images: List of image data dictionaries
+            start_row: Starting row index
+            
+        Returns:
+            The next available row index
+        """
+        row = start_row
+        for i, image in enumerate(images):
+            image_id = image['id']
+            pixmap = self._get_image_thumbnail_pixmap(image)
+            if pixmap.isNull():
+                continue
+                
+            col = i % 5
+            if col == 0 and i > 0:
+                row += 1
+                
+            thumbnail = ThumbnailWidget(image_id, pixmap, image['title'])
+            thumbnail.clicked.connect(self.on_thumbnail_clicked)
+            thumbnail.delete_requested.connect(self.on_delete_image)
+            
+            self.thumbnails_layout.addWidget(thumbnail, row, col)
+            self.thumbnails[image_id] = thumbnail
+            
+            self._set_thumbnail_quick_event_text(thumbnail, image_id)
+        
+        # Move to next row for future content
+        if images and len(images) % 5 != 0:
+            row += 1
+            
+        return row
+    
+    def _get_image_thumbnail_pixmap(self, image: Dict[str, Any]) -> QPixmap:
+        """Get the thumbnail pixmap for an image.
+        
+        Args:
+            image: Image data dictionary
+            
+        Returns:
+            QPixmap object of the thumbnail, possibly a placeholder if in NSFW mode
+        """
+        # Choose pixmap based on NSFW mode
+        if self.nsfw_mode:
+            return self.placeholder_pixmap
+            
+        # Get thumbnail path
+        filename = image['filename']
+        thumbnails_folder = os.path.join(os.path.dirname(image['path']), "thumbnails")
+        thumbnail_path = os.path.join(thumbnails_folder, filename)
+        
+        # Check if thumbnail exists, if not, generate it
+        if not os.path.exists(thumbnail_path):
+            # Load original image
+            original_path = os.path.join(image['path'], filename)
+            if os.path.exists(original_path):
+                original_image = QImage(original_path)
+                if not original_image.isNull():
+                    # Generate and save thumbnail
+                    thumbnail = self._generate_thumbnail(original_image)
+                    os.makedirs(thumbnails_folder, exist_ok=True)
+                    thumbnail.save(thumbnail_path, "PNG")
+                else:
+                    print(f"Warning: Failed to load original image: {original_path}")
+                    return QPixmap()
+            else:
+                print(f"Warning: Original image not found: {original_path}")
+                return QPixmap()
+        
+        # Load the thumbnail pixmap
+        pixmap = QPixmap(thumbnail_path)
+        return pixmap
+    
+    def _set_thumbnail_quick_event_text(self, thumbnail: ThumbnailWidget, image_id: int) -> None:
+        """Set the quick event text for a thumbnail widget.
+        
+        Args:
+            thumbnail: The thumbnail widget
+            image_id: ID of the image
+        """
+        try:
+            quick_events = get_image_quick_events(self.db_conn, image_id)
+            if quick_events:
+                # Get all characters to format mentions
+                characters = get_story_characters(self.db_conn, self.current_story_id)
+                
+                # Format the first quick event's text
+                first_event = quick_events[0]
+                formatted_text = convert_char_refs_to_mentions(first_event['text'], characters)
+                
+                # Set the quick event text on the thumbnail
+                thumbnail.set_quick_event_text(formatted_text)
+        except Exception as e:
+            print(f"Error loading quick events for image {image_id}: {e}")
+    
     def clear_thumbnails(self) -> None:
-        """Clear all thumbnails."""
-        # Remove all thumbnails from layout
-        for thumbnail in self.thumbnails.values():
-            self.thumbnails_layout.removeWidget(thumbnail)
-            thumbnail.deleteLater()
+        """Clear all thumbnails and separators."""
+        # Remove all widgets from layout
+        for i in reversed(range(self.thumbnails_layout.count())):
+            widget = self.thumbnails_layout.itemAt(i).widget()
+            if widget:
+                self.thumbnails_layout.removeWidget(widget)
+                widget.deleteLater()
         
         # Clear thumbnails dictionary
         self.thumbnails.clear()
