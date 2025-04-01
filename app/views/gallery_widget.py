@@ -5137,10 +5137,10 @@ class GraphicsTagView(QGraphicsView):
         print(f"INITIAL TRANSFORM: m11={matrix.m11():.3f}, m22={matrix.m22():.3f}, dx={matrix.dx():.1f}, dy={matrix.dy():.1f}")
     
     def _update_view_transform(self):
-        """Update the view transformation to ensure the image fills the entire view.
+        """Update the view transformation to ensure the image fits entirely within the view.
         
         This method calculates the perfect scale and position for the image
-        to completely fill the view without any margins.
+        to fit completely within the view without cropping any part.
         """
         if not self.image_item or not self.scene:
             return
@@ -5156,22 +5156,16 @@ class GraphicsTagView(QGraphicsView):
         scale_x = viewport_size.width() / scene_rect.width()
         scale_y = viewport_size.height() / scene_rect.height()
         
-        # Use the larger scale factor to ensure the image fills the view completely
-        scale = max(scale_x, scale_y)
+        # Use the smaller scale factor to ensure the entire image fits in the view
+        scale = min(scale_x, scale_y)
         
         # Create a transform that scales the image
         transform = QTransform()
         transform.scale(scale, scale)
         
         # Calculate offsets to center the image
-        if scale == scale_x:
-            # If scaling by width, center vertically
-            dx = 0
-            dy = (viewport_size.height() - (scene_rect.height() * scale)) / 2
-        else:
-            # If scaling by height, center horizontally
-            dx = (viewport_size.width() - (scene_rect.width() * scale)) / 2
-            dy = 0
+        dx = (viewport_size.width() - (scene_rect.width() * scale)) / 2
+        dy = (viewport_size.height() - (scene_rect.height() * scale)) / 2
         
         # Apply translation
         transform.translate(dx/scale, dy/scale)
