@@ -1595,11 +1595,12 @@ class ImageDetailDialog(QDialog):
         
         # Add a label to the batch panel
         batch_title = QLabel("Batch Operations")
-        batch_title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        batch_title.setStyleSheet("font-weight: bold; font-size: 14px; color: #333333;")
         batch_layout.addWidget(batch_title)
         
         # Add a dummy widget to ensure the panel has some height
         batch_info = QLabel("Select images using checkboxes")
+        batch_info.setStyleSheet("color: #333333;")
         batch_layout.addWidget(batch_info)
         
         # Hide the batch panel initially
@@ -2521,11 +2522,12 @@ class GalleryWidget(QWidget):
         
         # Add a label to the batch panel
         batch_title = QLabel("Batch Operations")
-        batch_title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        batch_title.setStyleSheet("font-weight: bold; font-size: 14px; color: #333333;")
         batch_layout.addWidget(batch_title)
         
         # Add a dummy widget to ensure the panel has some height
         batch_info = QLabel("Select images using checkboxes")
+        batch_info.setStyleSheet("color: #333333;")
         batch_layout.addWidget(batch_info)
         
         # Hide the batch panel initially
