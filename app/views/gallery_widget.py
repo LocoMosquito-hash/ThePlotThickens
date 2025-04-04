@@ -1603,6 +1603,20 @@ class ImageDetailDialog(QDialog):
         batch_info.setStyleSheet("color: #333333;")
         batch_layout.addWidget(batch_info)
         
+        # Add batch operation buttons
+        batch_buttons_layout = QHBoxLayout()
+        
+        # Move to Scene button
+        self.move_to_scene_button = QPushButton("Move to Scene...")
+        self.move_to_scene_button.setToolTip("Move selected images to a scene")
+        self.move_to_scene_button.setStyleSheet("color: #333333;")
+        self.move_to_scene_button.clicked.connect(self.on_move_to_scene)
+        batch_buttons_layout.addWidget(self.move_to_scene_button)
+        
+        # Add more batch buttons here as needed
+        
+        batch_layout.addLayout(batch_buttons_layout)
+        
         # Hide the batch panel initially
         self.batch_panel.setVisible(False)
         
@@ -2529,6 +2543,20 @@ class GalleryWidget(QWidget):
         batch_info = QLabel("Select images using checkboxes")
         batch_info.setStyleSheet("color: #333333;")
         batch_layout.addWidget(batch_info)
+        
+        # Add batch operation buttons
+        batch_buttons_layout = QHBoxLayout()
+        
+        # Move to Scene button
+        self.move_to_scene_button = QPushButton("Move to Scene...")
+        self.move_to_scene_button.setToolTip("Move selected images to a scene")
+        self.move_to_scene_button.setStyleSheet("color: #333333;")
+        self.move_to_scene_button.clicked.connect(self.on_move_to_scene)
+        batch_buttons_layout.addWidget(self.move_to_scene_button)
+        
+        # Add more batch buttons here as needed
+        
+        batch_layout.addLayout(batch_buttons_layout)
         
         # Hide the batch panel initially
         self.batch_panel.setVisible(False)
@@ -4122,6 +4150,64 @@ class GalleryWidget(QWidget):
             QApplication.processEvents()
             
         print(f"Selected thumbnails: {len(self.selected_thumbnails)}, batch panel visible: {self.batch_panel.isVisible()}")
+    
+    def on_move_to_scene(self) -> None:
+        """Handle the Move to Scene batch operation."""
+        if not self.selected_thumbnails:
+            return
+        
+        # Create and show the scene selection dialog
+        dialog = SceneSelectionDialog(self.db_conn, self.current_story_id, parent=self)
+        result = dialog.exec()
+        
+        if result == QDialog.DialogCode.Accepted:
+            scene_id = dialog.get_selected_scene_id()
+            if scene_id is not None:
+                # Get scene title for feedback
+                cursor = self.db_conn.cursor()
+                cursor.execute("SELECT title FROM events WHERE id = ?", (scene_id,))
+                scene = cursor.fetchone()
+                scene_title = scene['title'] if scene else f"Scene {scene_id}"
+                
+                # Add all selected images to the scene
+                success_count = 0
+                error_count = 0
+                
+                for image_id in self.selected_thumbnails:
+                    try:
+                        # Add image to scene - handle both new assignments and existing ones
+                        cursor.execute(
+                            "SELECT id FROM scene_images WHERE scene_event_id = ? AND image_id = ?", 
+                            (scene_id, image_id)
+                        )
+                        existing = cursor.fetchone()
+                        
+                        if not existing:
+                            add_image_to_scene(self.db_conn, scene_id, image_id)
+                        
+                        success_count += 1
+                    except Exception as e:
+                        print(f"Error associating image {image_id} with scene {scene_id}: {e}")
+                        error_count += 1
+                
+                # Show feedback message
+                if error_count == 0:
+                    QMessageBox.information(
+                        self,
+                        "Images Moved",
+                        f"{success_count} images have been moved to '{scene_title}'."
+                    )
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Operation Partially Completed",
+                        f"{success_count} images moved to '{scene_title}'. {error_count} errors occurred."
+                    )
+                
+                # Clear selections and refresh gallery
+                self.selected_thumbnails.clear()
+                self.batch_panel.setVisible(False)
+                self.load_images()
 
 
 class RegionSelectionDialog(QDialog):
@@ -6240,3 +6326,154 @@ class GraphicsTagView(QGraphicsView):
             
             # Emit the tag selected signal
             self.tag_selected.emit(tag_id)
+
+
+class SceneSelectionDialog(QDialog):
+    """Dialog for selecting a scene from the story."""
+    
+    def __init__(self, db_conn, story_id: int, parent=None):
+        """Initialize the scene selection dialog.
+        
+        Args:
+            db_conn: Database connection
+            story_id: ID of the story
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.db_conn = db_conn
+        self.story_id = story_id
+        self.selected_scene_id = None
+        
+        self.setWindowTitle("Select Scene")
+        self.setMinimumWidth(400)
+        self.setMinimumHeight(300)
+        
+        self.init_ui()
+        self.load_scenes()
+    
+    def init_ui(self) -> None:
+        """Initialize the user interface."""
+        main_layout = QVBoxLayout(self)
+        
+        # Instructions label
+        instructions = QLabel("Select a scene to move the images to:")
+        instructions.setStyleSheet("color: #333333; font-weight: bold;")
+        main_layout.addWidget(instructions)
+        
+        # Scene list
+        self.scene_list = QListWidget()
+        self.scene_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        main_layout.addWidget(self.scene_list)
+        
+        # Button layout
+        button_layout = QHBoxLayout()
+        
+        # Cancel button
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_button)
+        
+        # Select button
+        self.select_button = QPushButton("Select")
+        self.select_button.clicked.connect(self.accept)
+        self.select_button.setEnabled(False)
+        button_layout.addWidget(self.select_button)
+        
+        main_layout.addLayout(button_layout)
+        
+        # Connect signals
+        self.scene_list.itemSelectionChanged.connect(self.on_selection_changed)
+    
+    def load_scenes(self) -> None:
+        """Load scenes from the database."""
+        try:
+            cursor = self.db_conn.cursor()
+            cursor.execute(
+                "SELECT id, title, sequence_number FROM events WHERE story_id = ? AND event_type = 'SCENE' ORDER BY sequence_number DESC",
+                (self.story_id,)
+            )
+            scenes = cursor.fetchall()
+            
+            for scene in scenes:
+                item = QListWidgetItem(scene['title'])
+                item.setData(Qt.ItemDataRole.UserRole, scene['id'])
+                self.scene_list.addItem(item)
+                
+        except Exception as e:
+            print(f"Error loading scenes: {e}")
+    
+    def on_selection_changed(self) -> None:
+        """Handle selection changes in the scene list."""
+        selected_items = self.scene_list.selectedItems()
+        self.select_button.setEnabled(len(selected_items) > 0)
+        
+        if selected_items:
+            self.selected_scene_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
+        else:
+            self.selected_scene_id = None
+    
+    def get_selected_scene_id(self) -> Optional[int]:
+        """Get the ID of the selected scene.
+        
+        Returns:
+            ID of the selected scene, or None if no scene is selected
+        """
+        return self.selected_scene_id
+
+    def on_move_to_scene(self) -> None:
+        """Handle the Move to Scene batch operation."""
+        if not self.selected_thumbnails:
+            return
+        
+        # Create and show the scene selection dialog
+        dialog = SceneSelectionDialog(self.db_conn, self.current_story_id, parent=self)
+        result = dialog.exec()
+        
+        if result == QDialog.DialogCode.Accepted:
+            scene_id = dialog.get_selected_scene_id()
+            if scene_id is not None:
+                # Get scene title for feedback
+                cursor = self.db_conn.cursor()
+                cursor.execute("SELECT title FROM events WHERE id = ?", (scene_id,))
+                scene = cursor.fetchone()
+                scene_title = scene['title'] if scene else f"Scene {scene_id}"
+                
+                # Add all selected images to the scene
+                success_count = 0
+                error_count = 0
+                
+                for image_id in self.selected_thumbnails:
+                    try:
+                        # Add image to scene - handle both new assignments and existing ones
+                        cursor.execute(
+                            "SELECT id FROM scene_images WHERE scene_event_id = ? AND image_id = ?", 
+                            (scene_id, image_id)
+                        )
+                        existing = cursor.fetchone()
+                        
+                        if not existing:
+                            add_image_to_scene(self.db_conn, scene_id, image_id)
+                        
+                        success_count += 1
+                    except Exception as e:
+                        print(f"Error associating image {image_id} with scene {scene_id}: {e}")
+                        error_count += 1
+                
+                # Show feedback message
+                if error_count == 0:
+                    QMessageBox.information(
+                        self,
+                        "Images Moved",
+                        f"{success_count} images have been moved to '{scene_title}'."
+                    )
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Operation Partially Completed",
+                        f"{success_count} images moved to '{scene_title}'. {error_count} errors occurred."
+                    )
+                
+                # Clear selections and refresh gallery
+                self.selected_thumbnails.clear()
+                self.batch_panel.setVisible(False)
+                self.load_images()
