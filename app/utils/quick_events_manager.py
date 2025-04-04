@@ -296,9 +296,12 @@ class QuickEventsManager:
             cursor = self.conn.cursor()
             
             cursor.execute('''
-            SELECT qe.*, c.name as character_name, sqe.sequence_number, sqe.id as association_id
+            SELECT qe.*, 
+                   CASE WHEN qe.character_id IS NULL THEN 'Anonymous' ELSE c.name END as character_name, 
+                   sqe.sequence_number, 
+                   sqe.id as association_id
             FROM quick_events qe
-            JOIN characters c ON qe.character_id = c.id
+            LEFT JOIN characters c ON qe.character_id = c.id
             JOIN scene_quick_events sqe ON qe.id = sqe.quick_event_id
             WHERE sqe.scene_event_id = ?
             ORDER BY sqe.sequence_number, qe.created_at
