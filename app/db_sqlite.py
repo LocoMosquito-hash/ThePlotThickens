@@ -397,6 +397,52 @@ def get_all_stories(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
     return [dict(row) for row in cursor.fetchall()]
 
 
+def update_story(conn: sqlite3.Connection, story_id: int, title: str, description: str, 
+                type_name: str, universe: Optional[str] = None, is_part_of_series: bool = False, 
+                series_name: Optional[str] = None, series_order: Optional[int] = None, 
+                author: Optional[str] = None, year: Optional[int] = None) -> Dict[str, Any]:
+    """Update an existing story in the database.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story to update
+        title: Story title
+        description: Story description
+        type_name: Story type name
+        universe: Universe name
+        is_part_of_series: Whether the story is part of a series
+        series_name: Series name
+        series_order: Order within the series
+        author: Author name
+        year: Year of publication
+        
+    Returns:
+        Updated story data
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    UPDATE stories SET
+        title = ?,
+        description = ?,
+        type_name = ?,
+        universe = ?,
+        is_part_of_series = ?,
+        series_name = ?,
+        series_order = ?,
+        author = ?,
+        year = ?,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+    ''', (title, description, type_name, universe, 1 if is_part_of_series else 0, 
+         series_name, series_order, author, year, story_id))
+    
+    conn.commit()
+    
+    # Return the updated story data
+    return get_story(conn, story_id)
+
+
 # Character functions
 def create_character(conn, name, story_id, aliases=None, is_main_character=False, age_value=None, age_category=None, gender=None, avatar_path=None):
     """Create a new character.
