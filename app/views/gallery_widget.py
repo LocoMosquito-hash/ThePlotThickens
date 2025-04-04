@@ -3038,7 +3038,10 @@ class GalleryWidget(QWidget):
     
     def keyPressEvent(self, event) -> None:
         """Handle keyboard events."""
-        if event.key() == Qt.Key.Key_V and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+        # Check for Ctrl+V to paste image
+        if (event.key() == Qt.Key.Key_V and 
+            event.modifiers() == Qt.KeyboardModifier.ControlModifier):
+            print("CTRL+V detected, pasting image")
             self.paste_image()
         else:
             super().keyPressEvent(event)
@@ -3679,6 +3682,11 @@ class GalleryWidget(QWidget):
                 
                 # Reload images to update layout
                 self.load_images()
+                
+                # Make sure the paste button is enabled and set focus back to the gallery widget
+                if self.current_story_id:
+                    self.paste_button.setEnabled(True)
+                self.setFocus()
     
     def show_error(self, title: str, message: str) -> None:
         """Show error message.
