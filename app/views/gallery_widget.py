@@ -71,6 +71,7 @@ class ThumbnailWidget(QFrame):
     
     clicked = pyqtSignal(int)  # Signal emitted when thumbnail is clicked
     delete_requested = pyqtSignal(int)  # Signal emitted when delete button is clicked
+    checkbox_toggled = pyqtSignal(int, bool)  # Signal emitted when checkbox is toggled (image_id, checked)
     
     def __init__(self, image_id: int, pixmap: QPixmap, title: str = "", parent=None) -> None:
         """Initialize the thumbnail widget.
@@ -99,6 +100,31 @@ class ThumbnailWidget(QFrame):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(5, 5, 5, 5)
         
+        # Top controls layout
+        top_controls = QHBoxLayout()
+        
+        # Checkbox for selection
+        self.checkbox = QCheckBox()
+        self.checkbox.setChecked(False)  # Explicitly set to unchecked
+        self.checkbox.setToolTip("Select for batch operations")
+        # Make checkbox more prominent
+        self.checkbox.setStyleSheet("""
+            QCheckBox {
+                background-color: rgba(255, 255, 255, 0.8);
+                border-radius: 3px;
+                padding: 2px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+            }
+        """)
+        self.checkbox.stateChanged.connect(self._on_checkbox_toggled)
+        top_controls.addWidget(self.checkbox)
+        
+        # Add spacer to push delete button to the right
+        top_controls.addStretch(1)
+        
         # Delete button
         self.delete_btn = QPushButton("×")
         self.delete_btn.setFlat(True)
@@ -115,45 +141,51 @@ class ThumbnailWidget(QFrame):
                 background-color: rgba(255, 0, 0, 0.9);
             }
         """)
-        delete_layout = QHBoxLayout()
-        delete_layout.addStretch(1)
-        delete_layout.addWidget(self.delete_btn)
-        self.layout.addLayout(delete_layout)
+        self.delete_btn.clicked.connect(self._on_delete_clicked)
+        top_controls.addWidget(self.delete_btn)
+        
+        self.layout.addLayout(top_controls)
         
         # Image label
         self.image_label = QLabel()
         self.image_label.setMinimumSize(150, 130)  # Increased from 130x110
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_label.setScaledContents(False)
         self.update_displayed_pixmap()
         self.layout.addWidget(self.image_label)
         
-        # Title label
-        self.title_label = QLabel(title)
-        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.title_label.setWordWrap(True)
-        self.title_label.setStyleSheet("color: white; font-size: 11px;")  # Increased from 10px
-        self.layout.addWidget(self.title_label)
-        
-        # Quick event label
+        # Quick event label (optional, shown only if set)
         self.quick_event_label = QLabel()
-        self.quick_event_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.quick_event_label.setWordWrap(True)
-        self.quick_event_label.setStyleSheet("color: #aaffaa; font-size: 10px; font-style: italic; background-color: rgba(0, 0, 0, 0.2); border-radius: 3px; padding: 2px;")  # Increased from 9px
-        self.quick_event_label.setMaximumHeight(45)  # Increased from 40
+        self.quick_event_label.setStyleSheet("color: #cccccc; font-size: 9px;")
+        self.quick_event_label.setMaximumHeight(60)
+        self.quick_event_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.layout.addWidget(self.quick_event_label)
-        self.quick_event_label.hide()  # Initially hidden until we have content
+        self.quick_event_label.hide()
         
-        # Connect signals
-        self.delete_btn.clicked.connect(self._on_delete_clicked)
+        # Make the thumbnail clickable for image viewing (except for checkbox area)
+        self.setMouseTracking(True)
         
-        # Set size policy - Fixed size to prevent shrinking
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.setMinimumSize(170, 195)  # Increased from 150x170
-        self.setFixedSize(170, 230)  # Increased from 150x200
-        
-        # Enable context menu
+        # Set a context menu policy
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
+    
+    def mousePressEvent(self, event) -> None:
+        """Handle mouse press events."""
+        # Don't trigger thumbnail click if clicking on the checkbox (let the checkbox handle it)
+        checkbox_rect = self.checkbox.geometry()
+        if not checkbox_rect.contains(event.pos()):
+            super().mousePressEvent(event)
+            # Only emit clicked signal for left-click
+            if event.button() == Qt.MouseButton.LeftButton:
+                self.clicked.emit(self.image_id)
+
+    def _on_checkbox_toggled(self, state: int) -> None:
+        """Handle checkbox toggle."""
+        # Qt.CheckState.Checked is 2
+        is_checked = (state == 2)  # Use direct integer comparison for reliability
+        print(f"Checkbox on thumbnail {self.image_id} toggled to {is_checked} (state value: {state})")
+        self.checkbox_toggled.emit(self.image_id, is_checked)
     
     def update_displayed_pixmap(self):
         """Update the displayed pixmap in the image label."""
@@ -164,7 +196,11 @@ class ThumbnailWidget(QFrame):
             Qt.TransformationMode.SmoothTransformation
         )
         self.image_label.setPixmap(scaled_pixmap)
-    
+
+    def _on_delete_clicked(self) -> None:
+        """Handle delete button click."""
+        self.delete_requested.emit(self.image_id)
+
     def update_pixmap(self, new_pixmap: QPixmap):
         """Update the thumbnail's pixmap.
         
@@ -173,17 +209,6 @@ class ThumbnailWidget(QFrame):
         """
         self.original_pixmap = new_pixmap
         self.update_displayed_pixmap()
-    
-    def mousePressEvent(self, event) -> None:
-        """Handle mouse press events."""
-        super().mousePressEvent(event)
-        # Only emit clicked signal for left-click
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit(self.image_id)
-    
-    def _on_delete_clicked(self) -> None:
-        """Handle delete button click."""
-        self.delete_requested.emit(self.image_id)
     
     def show_context_menu(self, position):
         """Show context menu when right-clicking on the thumbnail.
@@ -237,6 +262,7 @@ class ThumbnailWidget(QFrame):
 
 class SeparatorWidget(QFrame):
     """Widget for displaying a separator with a title between image groups."""
+    
     
     def __init__(self, title: str, parent=None) -> None:
         """Initialize the separator widget.
@@ -1557,6 +1583,56 @@ class ImageDetailDialog(QDialog):
         button_layout.addStretch()
         button_layout.addWidget(close_button)
         main_layout.addLayout(button_layout)
+        
+        # Add button layout to main layout
+        main_layout.addLayout(button_layout)
+        
+        # Create batch operations panel (initially hidden)
+        self.batch_panel = QWidget()
+        self.batch_panel.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; margin: 5px;")
+        batch_layout = QVBoxLayout(self.batch_panel)
+        batch_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Add a label to the batch panel
+        batch_title = QLabel("Batch Operations")
+        batch_title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        batch_layout.addWidget(batch_title)
+        
+        # Add a dummy widget to ensure the panel has some height
+        batch_info = QLabel("Select images using checkboxes")
+        batch_layout.addWidget(batch_info)
+        
+        # Hide the batch panel initially
+        self.batch_panel.setVisible(False)
+        
+        # Add batch panel to main layout
+        main_layout.addWidget(self.batch_panel)
+        
+        # Create scroll area for thumbnails
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
+        # Create container widget for thumbnails
+        self.thumbnails_container = QWidget()
+        self.thumbnails_layout = QGridLayout(self.thumbnails_container)
+        self.thumbnails_layout.setContentsMargins(10, 10, 10, 10)
+        self.thumbnails_layout.setSpacing(10)
+        
+        # Set fixed column width for the grid layout (5 columns)
+        self.thumbnails_container.setMinimumWidth(5 * 200)  # 5 thumbnails of 170px + spacing
+        
+        # Add container to scroll area
+        self.scroll_area.setWidget(self.thumbnails_container)
+        
+        # Add scroll area to main layout
+        main_layout.addWidget(self.scroll_area)
+        
+        # Create status label
+        self.status_label = QLabel("No story selected")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        main_layout.addWidget(self.status_label)
     
     def toggle_tag_mode(self, enabled):
         """Toggle character tagging mode.
@@ -2356,11 +2432,11 @@ class GalleryWidget(QWidget):
             parent: Parent widget
         """
         super().__init__(parent)
-        
         self.db_conn = db_conn
         self.current_story_id: Optional[int] = None
         self.current_story_data: Optional[Dict[str, Any]] = None
         self.thumbnails: Dict[int, ThumbnailWidget] = {}
+        self.selected_thumbnails = set()  # Set of selected image IDs
         
         # Create image recognition utility
         self.image_recognition = ImageRecognitionUtil(db_conn)
@@ -2371,7 +2447,18 @@ class GalleryWidget(QWidget):
         # Flag to track scene grouping mode
         self.scene_grouping_mode = False
         
+        # Initialize network manager for downloading images
+        self.network_manager = None
+        
+        # Print for debugging
+        print("Initializing GalleryWidget and setting up UI components")
+        
+        # Initialize UI components
         self.init_ui()
+        
+        # Debug print
+        print(f"GalleryWidget initialized, batch panel exists: {hasattr(self, 'batch_panel')}")
+        print(f"Batch panel visibility: {self.batch_panel.isVisible() if hasattr(self, 'batch_panel') else 'N/A'}")
     
     def init_ui(self) -> None:
         """Set up the user interface."""
@@ -2426,6 +2513,27 @@ class GalleryWidget(QWidget):
         # Add button layout to main layout
         main_layout.addLayout(button_layout)
         
+        # Create batch operations panel (initially hidden)
+        self.batch_panel = QWidget()
+        self.batch_panel.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; margin: 5px;")
+        batch_layout = QVBoxLayout(self.batch_panel)
+        batch_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Add a label to the batch panel
+        batch_title = QLabel("Batch Operations")
+        batch_title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        batch_layout.addWidget(batch_title)
+        
+        # Add a dummy widget to ensure the panel has some height
+        batch_info = QLabel("Select images using checkboxes")
+        batch_layout.addWidget(batch_info)
+        
+        # Hide the batch panel initially
+        self.batch_panel.setVisible(False)
+        
+        # Add batch panel to main layout
+        main_layout.addWidget(self.batch_panel)
+        
         # Create scroll area for thumbnails
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -2451,28 +2559,25 @@ class GalleryWidget(QWidget):
         self.status_label = QLabel("No story selected")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         main_layout.addWidget(self.status_label)
-        
-        # Create placeholder pixmap for NSFW mode
-        self.placeholder_pixmap = self._create_nsfw_placeholder()
     
     def _create_nsfw_placeholder(self) -> QPixmap:
-        """Create a placeholder pixmap for NSFW mode.
+        """Create a placeholder pixmap for NSFW content."""
+        # Create placeholder pixmap for NSFW mode
+        self.placeholder_pixmap = QPixmap(170, 150)  # Increased from 180, 150
+        self.placeholder_pixmap.fill(Qt.GlobalColor.darkGray)
         
-        Returns:
-            A plain pixmap with "NSFW" text
-        """
-        # Create a plain gray pixmap
-        pixmap = QPixmap(170, 150)  # Increased from 180, 150
-        pixmap.fill(QColor(80, 80, 80))
-        
-        # Add "NSFW" text
-        painter = QPainter(pixmap)
-        painter.setPen(QPen(QColor(200, 200, 200)))
-        painter.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "Null")
+        # Draw text on the pixmap
+        painter = QPainter(self.placeholder_pixmap)
+        painter.setPen(Qt.GlobalColor.white)
+        painter.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        painter.drawText(
+            self.placeholder_pixmap.rect(),
+            Qt.AlignmentFlag.AlignCenter,
+            "NSFW Content\nHidden"
+        )
         painter.end()
         
-        return pixmap
+        return self.placeholder_pixmap
     
     def on_nsfw_toggle(self, state: int) -> None:
         """Handle NSFW toggle state change.
@@ -2663,6 +2768,7 @@ class GalleryWidget(QWidget):
             thumbnail = ThumbnailWidget(image_id, pixmap, image['title'])
             thumbnail.clicked.connect(self.on_thumbnail_clicked)
             thumbnail.delete_requested.connect(self.on_delete_image)
+            thumbnail.checkbox_toggled.connect(self.on_thumbnail_checkbox_toggled)
             
             # Add to layout
             self.thumbnails_layout.addWidget(thumbnail, row, col)
@@ -2892,6 +2998,7 @@ class GalleryWidget(QWidget):
         for col in range(5):
             self.thumbnails_layout.setColumnStretch(col, 1)
     
+    
     def _get_scene_newest_timestamp(self, scene_id: int) -> str:
         """Get the newest timestamp for any quick event in a scene.
         
@@ -2950,6 +3057,7 @@ class GalleryWidget(QWidget):
             thumbnail = ThumbnailWidget(image_id, pixmap, image['title'])
             thumbnail.clicked.connect(self.on_thumbnail_clicked)
             thumbnail.delete_requested.connect(self.on_delete_image)
+            thumbnail.checkbox_toggled.connect(self.on_thumbnail_checkbox_toggled)
             
             self.thumbnails_layout.addWidget(thumbnail, row, col)
             self.thumbnails[image_id] = thumbnail
@@ -3033,8 +3141,12 @@ class GalleryWidget(QWidget):
                 self.thumbnails_layout.removeWidget(widget)
                 widget.deleteLater()
         
-        # Clear thumbnails dictionary
+        # Clear thumbnails dictionary and selected thumbnails set
         self.thumbnails.clear()
+        self.selected_thumbnails.clear()
+        
+        # Hide batch operations panel
+        self.batch_panel.setVisible(False)
     
     def keyPressEvent(self, event) -> None:
         """Handle keyboard events."""
@@ -3982,6 +4094,32 @@ class GalleryWidget(QWidget):
             )
         
         return False
+
+    def on_thumbnail_checkbox_toggled(self, image_id: int, checked: bool) -> None:
+        """Handle thumbnail checkbox toggled.
+        
+        Args:
+            image_id: ID of the image
+            checked: Whether the checkbox is checked
+        """
+        print(f"Thumbnail checkbox toggled: image_id={image_id}, checked={checked}")
+        
+        if checked:
+            self.selected_thumbnails.add(image_id)
+        else:
+            self.selected_thumbnails.discard(image_id)
+        
+        # Show/hide batch operations panel based on selection
+        has_selections = len(self.selected_thumbnails) > 0
+        self.batch_panel.setVisible(has_selections)
+        
+        # Force update the layout to ensure the panel is visible
+        if has_selections:
+            self.batch_panel.repaint()
+            self.batch_panel.update()
+            QApplication.processEvents()
+            
+        print(f"Selected thumbnails: {len(self.selected_thumbnails)}, batch panel visible: {self.batch_panel.isVisible()}")
 
 
 class RegionSelectionDialog(QDialog):
