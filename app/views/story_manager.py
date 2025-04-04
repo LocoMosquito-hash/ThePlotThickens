@@ -103,17 +103,6 @@ class StoryManagerWidget(QWidget):
             self.type_combo.addItem(str(story_type), story_type.name)
         details_layout.addRow("Type:", self.type_combo)
         
-        self.folder_edit = QLineEdit()
-        self.folder_edit.setReadOnly(True)
-        folder_layout = QHBoxLayout()
-        folder_layout.addWidget(self.folder_edit)
-        
-        self.browse_button = QPushButton("Browse...")
-        self.browse_button.clicked.connect(self.on_browse_folder)
-        folder_layout.addWidget(self.browse_button)
-        
-        details_layout.addRow("Folder:", folder_layout)
-        
         self.universe_edit = QLineEdit()
         details_layout.addRow("Universe:", self.universe_edit)
         
@@ -193,9 +182,6 @@ class StoryManagerWidget(QWidget):
         if type_index >= 0:
             self.type_combo.setCurrentIndex(type_index)
         
-        # Set the folder path
-        self.folder_edit.setText(story_data["folder_path"])
-        
         # Enable the load button
         self.load_story_button.setEnabled(True)
         
@@ -220,7 +206,6 @@ class StoryManagerWidget(QWidget):
         self.title_edit.clear()
         self.description_edit.clear()
         self.type_combo.setCurrentIndex(0)
-        self.folder_edit.clear()
         self.universe_edit.clear()
         self.series_check.setCurrentIndex(0)
         self.series_name_edit.clear()
@@ -375,29 +360,6 @@ class StoryManagerWidget(QWidget):
         
         # Emit the story selected signal
         self.story_selected.emit(story_id, story_data)
-    
-    def on_browse_folder(self) -> None:
-        """Handle browse folder button click."""
-        # Get the user folder from settings
-        user_folder = self.settings.value("user_folder", "")
-        
-        if not user_folder:
-            QMessageBox.warning(
-                self,
-                "User Folder Not Set",
-                "Please set the User Folder in Settings before selecting a story folder."
-            )
-            return
-        
-        # Open a folder dialog
-        folder = QFileDialog.getExistingDirectory(
-            self,
-            "Select Story Folder",
-            os.path.join(user_folder, "Stories")
-        )
-        
-        if folder:
-            self.folder_edit.setText(folder)
     
     def on_series_changed(self, index: int) -> None:
         """Handle series selection change.

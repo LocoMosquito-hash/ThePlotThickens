@@ -2444,6 +2444,9 @@ class GalleryWidget(QWidget):
         # Flag to track NSFW mode
         self.nsfw_mode = False
         
+        # Create the NSFW placeholder pixmap
+        self._create_nsfw_placeholder()
+        
         # Flag to track scene grouping mode
         self.scene_grouping_mode = False
         
@@ -2604,37 +2607,8 @@ class GalleryWidget(QWidget):
         self.nsfw_mode = (state == 2)  # Qt.CheckState.Checked is 2
         print(f"NSFW mode is now: {'ON' if self.nsfw_mode else 'OFF'}")
         
-        # Update thumbnails if we have any loaded
-        if len(self.thumbnails) > 0:
-            print(f"Updating {len(self.thumbnails)} thumbnails")
-            for image_id, thumbnail in self.thumbnails.items():
-                try:
-                    if self.nsfw_mode:
-                        # Replace with NSFW placeholder
-                        thumbnail.update_pixmap(self.placeholder_pixmap)
-                        print(f"Set thumbnail {image_id} to NSFW mode")
-                    else:
-                        # Restore original thumbnail
-                        # Get the original pixmap path
-                        cursor = self.db_conn.cursor()
-                        cursor.execute(
-                            "SELECT filename, path FROM images WHERE id = ?",
-                            (image_id,)
-                        )
-                        image = cursor.fetchone()
-                        
-                        if image:
-                            thumbnails_folder = os.path.join(os.path.dirname(image['path']), "thumbnails")
-                            thumbnail_path = os.path.join(thumbnails_folder, image['filename'])
-                            
-                            if os.path.exists(thumbnail_path):
-                                # Load the original thumbnail
-                                pixmap = QPixmap(thumbnail_path)
-                                if not pixmap.isNull():
-                                    thumbnail.update_pixmap(pixmap)
-                                    print(f"Restored thumbnail {image_id} to normal mode")
-                except Exception as e:
-                    print(f"Error updating thumbnail {image_id}: {str(e)}")
+        # Update all thumbnails using the dedicated method
+        self.update_thumbnail_visibility()
     
     def on_scene_grouping_toggle(self, state: int) -> None:
         """Handle scene grouping toggle state change.
@@ -2666,6 +2640,10 @@ class GalleryWidget(QWidget):
         Args:
             thumbnail: The thumbnail widget to update
         """
+        # Make sure we have a placeholder pixmap
+        if not hasattr(self, 'placeholder_pixmap') or self.placeholder_pixmap is None:
+            self._create_nsfw_placeholder()
+            
         # Scale the placeholder pixmap
         scaled_pixmap = self.placeholder_pixmap.scaled(
             QSize(170, 150),  # Increased from 180, 150
