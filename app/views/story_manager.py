@@ -17,13 +17,13 @@ from typing import Optional, List, Dict, Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QLabel, QLineEdit, QTextEdit, QComboBox, QFormLayout,
-    QGroupBox, QFileDialog, QMessageBox, QSplitter
+    QGroupBox, QFileDialog, QMessageBox, QSplitter, QApplication
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QSettings
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QPixmap, QImage, QClipboard
 
 from app.db_sqlite import (
-    StoryType, create_story, get_all_stories, get_story, update_story_folder_path
+    StoryType, create_story, update_story, get_all_stories, get_story, update_story_folder_path
 )
 from app.views.settings_dialog import SettingsDialog
 
@@ -45,6 +45,7 @@ class StoryManagerWidget(QWidget):
         self.db_conn = db_conn
         self.stories: List[Dict[str, Any]] = []
         self.settings = QSettings("ThePlotThickens", "ThePlotThickens")
+        self.artwork_pixmap: Optional[QPixmap] = None
         
         self.init_ui()
         self.load_stories()
@@ -102,6 +103,27 @@ class StoryManagerWidget(QWidget):
         for story_type in StoryType:
             self.type_combo.addItem(str(story_type), story_type.name)
         details_layout.addRow("Type:", self.type_combo)
+        
+        # Artwork section
+        artwork_layout = QVBoxLayout()
+        self.artwork_label = QLabel("No artwork set")
+        self.artwork_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.artwork_label.setMinimumHeight(150)
+        self.artwork_label.setStyleSheet("background-color: #444; border: 1px solid #666;")
+        artwork_layout.addWidget(self.artwork_label)
+        
+        artwork_buttons_layout = QHBoxLayout()
+        self.paste_artwork_button = QPushButton("Paste from Clipboard")
+        self.paste_artwork_button.clicked.connect(self.on_paste_artwork)
+        artwork_buttons_layout.addWidget(self.paste_artwork_button)
+        
+        self.clear_artwork_button = QPushButton("Clear")
+        self.clear_artwork_button.clicked.connect(self.on_clear_artwork)
+        self.clear_artwork_button.setEnabled(False)
+        artwork_buttons_layout.addWidget(self.clear_artwork_button)
+        
+        artwork_layout.addLayout(artwork_buttons_layout)
+        details_layout.addRow("Artwork:", artwork_layout)
         
         self.universe_edit = QLineEdit()
         details_layout.addRow("Universe:", self.universe_edit)
@@ -182,6 +204,40 @@ class StoryManagerWidget(QWidget):
         if type_index >= 0:
             self.type_combo.setCurrentIndex(type_index)
         
+        # Set the universe
+        self.universe_edit.setText(story_data["universe"] or "")
+        
+        # Set series information
+        is_part_of_series = story_data["is_part_of_series"] in (True, 1)
+        self.series_check.setCurrentIndex(1 if is_part_of_series else 0)
+        
+        if is_part_of_series:
+            self.series_name_edit.setEnabled(True)
+            self.series_name_edit.setText(story_data["series_name"] or "")
+            
+            self.series_order_edit.setEnabled(True)
+            if story_data["series_order"] is not None:
+                self.series_order_edit.setText(str(story_data["series_order"]))
+            else:
+                self.series_order_edit.clear()
+        else:
+            self.series_name_edit.setEnabled(False)
+            self.series_name_edit.clear()
+            
+            self.series_order_edit.setEnabled(False)
+            self.series_order_edit.clear()
+        
+        # Set author and year
+        self.author_edit.setText(story_data["author"] or "")
+        
+        if story_data["year"] is not None:
+            self.year_edit.setText(str(story_data["year"]))
+        else:
+            self.year_edit.clear()
+        
+        # Load artwork if it exists
+        self.load_artwork(story_data["folder_path"])
+        
         # Enable the load button
         self.load_story_button.setEnabled(True)
         
@@ -215,6 +271,9 @@ class StoryManagerWidget(QWidget):
         self.author_edit.clear()
         self.year_edit.clear()
         
+        # Clear the artwork
+        self.clear_artwork()
+        
         # Deselect any story in the list
         self.story_list.clearSelection()
         
@@ -236,12 +295,129 @@ class StoryManagerWidget(QWidget):
             "Enter details for your new story and click 'Save Story' when ready."
         )
     
+    def on_paste_artwork(self) -> None:
+        """Handle paste artwork button click - paste image from clipboard."""
+        clipboard = QApplication.clipboard()
+        pixmap = clipboard.pixmap()
+        
+        if pixmap.isNull():
+            QMessageBox.warning(
+                self,
+                "No Image in Clipboard",
+                "There is no image in the clipboard. Copy an image first."
+            )
+            return
+        
+        # Store the pixmap and display it
+        self.artwork_pixmap = pixmap
+        self.display_artwork()
+        self.clear_artwork_button.setEnabled(True)
+    
+    def on_clear_artwork(self) -> None:
+        """Handle clear artwork button click."""
+        self.clear_artwork()
+    
+    def clear_artwork(self) -> None:
+        """Clear the artwork display and data."""
+        self.artwork_pixmap = None
+        self.artwork_label.setText("No artwork set")
+        self.artwork_label.setPixmap(QPixmap())
+        self.clear_artwork_button.setEnabled(False)
+    
+    def display_artwork(self) -> None:
+        """Display the current artwork pixmap in the label."""
+        if self.artwork_pixmap:
+            # Calculate the size to fit the label while maintaining aspect ratio
+            label_size = self.artwork_label.size()
+            scaled_pixmap = self.artwork_pixmap.scaled(
+                label_size, 
+                Qt.AspectRatioMode.KeepAspectRatio, 
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.artwork_label.setPixmap(scaled_pixmap)
+            self.artwork_label.setText("")
+    
+    def load_artwork(self, folder_path: str) -> None:
+        """Load artwork from the story folder if it exists.
+        
+        Args:
+            folder_path: Path to the story folder
+        """
+        if not folder_path:
+            self.clear_artwork()
+            return
+        
+        artwork_path = os.path.join(folder_path, "artwork.png")
+        if os.path.exists(artwork_path):
+            pixmap = QPixmap(artwork_path)
+            if not pixmap.isNull():
+                self.artwork_pixmap = pixmap
+                self.display_artwork()
+                self.clear_artwork_button.setEnabled(True)
+                return
+        
+        # No artwork found
+        self.clear_artwork()
+    
+    def save_artwork(self, folder_path: str) -> None:
+        """Save the artwork to the story folder.
+        
+        Args:
+            folder_path: Path to the story folder
+        """
+        if not self.artwork_pixmap or not folder_path:
+            return
+        
+        # Ensure the folder exists
+        os.makedirs(folder_path, exist_ok=True)
+        
+        # Save the artwork
+        artwork_path = os.path.join(folder_path, "artwork.png")
+        self.artwork_pixmap.save(artwork_path, "PNG")
+    
     def on_save_story(self) -> None:
         """Handle save story button click."""
         # Get the form data
         title = self.title_edit.text().strip()
         description = self.description_edit.toPlainText().strip()
         type_name = self.type_combo.currentData()
+        universe = self.universe_edit.text().strip() or None
+        
+        # Get series information
+        is_part_of_series = self.series_check.currentData() in (True, 1)
+        series_name = None
+        series_order = None
+        
+        if is_part_of_series:
+            series_name = self.series_name_edit.text().strip() or None
+            series_order_text = self.series_order_edit.text().strip()
+            if series_order_text:
+                try:
+                    series_order = int(series_order_text)
+                except ValueError:
+                    QMessageBox.warning(
+                        self,
+                        "Invalid Series Order",
+                        "Series order must be a number. Please enter a valid number."
+                    )
+                    self.series_order_edit.setFocus()
+                    return
+        
+        # Get author and year
+        author = self.author_edit.text().strip() or None
+        year = None
+        year_text = self.year_edit.text().strip()
+        if year_text:
+            try:
+                year = int(year_text)
+            except ValueError:
+                QMessageBox.warning(
+                    self,
+                    "Invalid Year",
+                    "Year must be a number. Please enter a valid year."
+                )
+                self.year_edit.setFocus()
+                return
         
         # Validate the form data
         if not title:
@@ -278,17 +454,49 @@ class StoryManagerWidget(QWidget):
                     break
             
             if story_data:
-                # Update the story data
-                story_data["title"] = title
-                story_data["description"] = description
-                story_data["type_name"] = type_name
-                
-                # TODO: Update the story in the database
-                QMessageBox.information(
-                    self,
-                    "Not Implemented",
-                    "Updating existing stories is not yet implemented."
-                )
+                try:
+                    # Update the story in the database
+                    updated_story = update_story(
+                        self.db_conn,
+                        story_id=story_id,
+                        title=title,
+                        description=description,
+                        type_name=type_name,
+                        universe=universe,
+                        is_part_of_series=is_part_of_series,
+                        series_name=series_name,
+                        series_order=series_order,
+                        author=author,
+                        year=year
+                    )
+                    
+                    # Save artwork if available
+                    if self.artwork_pixmap:
+                        self.save_artwork(story_data["folder_path"])
+                    
+                    # Update local copy of the story data
+                    for i, story in enumerate(self.stories):
+                        if story["id"] == story_id:
+                            self.stories[i] = updated_story
+                            break
+                    
+                    # Update the item in the list widget if title changed
+                    if story_data["title"] != title:
+                        item = selected_items[0]
+                        item.setText(title)
+                    
+                    # Show a success message
+                    QMessageBox.information(
+                        self,
+                        "Story Updated",
+                        f"Story '{title}' updated successfully."
+                    )
+                except Exception as e:
+                    QMessageBox.critical(
+                        self,
+                        "Error",
+                        f"Failed to update story: {str(e)}"
+                    )
                 return
         
         # We're creating a new story
@@ -303,7 +511,13 @@ class StoryManagerWidget(QWidget):
                 title=title,
                 description=description,
                 type_name=type_name,
-                folder_path=""  # Temporary, will be updated after we get the ID
+                folder_path="",  # Temporary, will be updated after we get the ID
+                universe=universe,
+                is_part_of_series=is_part_of_series,
+                series_name=series_name,
+                series_order=series_order,
+                author=author,
+                year=year
             )
             
             # Create the story folder with a random ID to avoid conflicts with saga titles
@@ -313,6 +527,10 @@ class StoryManagerWidget(QWidget):
             
             # Update the story with the folder path
             story_data = update_story_folder_path(self.db_conn, story_id, story_folder)
+            
+            # Save artwork if available
+            if self.artwork_pixmap:
+                self.save_artwork(story_folder)
             
             # Add the story to the list
             self.stories.append(story_data)
@@ -367,8 +585,9 @@ class StoryManagerWidget(QWidget):
         Args:
             index: Index of the selected item
         """
-        # TODO: Implement series selection
-        pass
+        is_part_of_series = self.series_check.currentData() in (True, 1)
+        self.series_name_edit.setEnabled(is_part_of_series)
+        self.series_order_edit.setEnabled(is_part_of_series)
 
     def add_story_to_list(self, story_data: Dict[str, Any]) -> None:
         """Add a story to the list widget.
