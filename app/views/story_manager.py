@@ -17,15 +17,110 @@ from typing import Optional, List, Dict, Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QLabel, QLineEdit, QTextEdit, QComboBox, QFormLayout,
-    QGroupBox, QFileDialog, QMessageBox, QSplitter, QApplication
+    QGroupBox, QFileDialog, QMessageBox, QSplitter, QApplication, QStyledItemDelegate, QStyle
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QSettings
-from PyQt6.QtGui import QFont, QPixmap, QImage, QClipboard
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QSettings, QRect
+from PyQt6.QtGui import QFont, QPixmap, QImage, QClipboard, QPainter, QColor, QBrush, QPen
 
 from app.db_sqlite import (
     StoryType, create_story, update_story, get_all_stories, get_story, update_story_folder_path
 )
 from app.views.settings_dialog import SettingsDialog
+
+
+class StoryItemDelegate(QStyledItemDelegate):
+    """Custom delegate to display story items with artwork thumbnails."""
+    
+    def __init__(self) -> None:
+        """Initialize the delegate."""
+        super().__init__()
+        self.title_height = 20  # Height for story title
+        self.thumbnail_height = 60  # Height for artwork thumbnail
+        self.margin = 5  # Margin between elements
+    
+    def sizeHint(self, option, index) -> QSize:
+        """Return the size hint for the item.
+        
+        Args:
+            option: Style options
+            index: Item index
+            
+        Returns:
+            Suggested size for the item
+        """
+        # Get the artwork data
+        artwork_path = index.data(Qt.ItemDataRole.UserRole + 1)
+        
+        # Base height includes title and margins
+        height = self.title_height + self.margin * 2
+        
+        # Add artwork height if available
+        if artwork_path and os.path.exists(artwork_path):
+            height += self.thumbnail_height + self.margin
+        
+        return QSize(option.rect.width(), height)
+    
+    def paint(self, painter: QPainter, option, index) -> None:
+        """Paint the item.
+        
+        Args:
+            painter: Painter to use
+            option: Style options
+            index: Item index
+        """
+        painter.save()
+        
+        # Draw background
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, option.palette.highlight())
+            text_color = option.palette.highlightedText().color()
+        else:
+            painter.fillRect(option.rect, option.palette.base())
+            text_color = option.palette.text().color()
+        
+        # Calculate title rect
+        title_rect = QRect(
+            option.rect.left() + self.margin,
+            option.rect.top() + self.margin,
+            option.rect.width() - 2 * self.margin,
+            self.title_height
+        )
+        
+        # Draw title
+        title = index.data(Qt.ItemDataRole.DisplayRole)
+        painter.setPen(QPen(text_color))
+        painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, title)
+        
+        # Get the artwork data
+        artwork_path = index.data(Qt.ItemDataRole.UserRole + 1)
+        
+        # Draw artwork if available
+        if artwork_path and os.path.exists(artwork_path):
+            # Load the pixmap
+            pixmap = QPixmap(artwork_path)
+            if not pixmap.isNull():
+                # Calculate artwork rect
+                artwork_rect = QRect(
+                    option.rect.left() + self.margin,
+                    title_rect.bottom() + self.margin,
+                    option.rect.width() - 2 * self.margin,
+                    self.thumbnail_height
+                )
+                
+                # Scale and draw the artwork
+                scaled_pixmap = pixmap.scaled(
+                    artwork_rect.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                
+                # Center the pixmap in the artwork rect
+                pixmap_x = artwork_rect.left() + (artwork_rect.width() - scaled_pixmap.width()) // 2
+                pixmap_y = artwork_rect.top()
+                painter.drawPixmap(pixmap_x, pixmap_y, scaled_pixmap)
+        
+        painter.restore()
 
 
 class StoryManagerWidget(QWidget):
@@ -67,6 +162,10 @@ class StoryManagerWidget(QWidget):
         self.story_list = QListWidget()
         self.story_list.setMinimumWidth(300)
         self.story_list.currentItemChanged.connect(self.on_story_selected)
+        # Set the custom delegate for story items
+        self.story_list.setItemDelegate(StoryItemDelegate())
+        self.story_list.setSpacing(2)  # Add some space between items
+        
         left_layout.addWidget(QLabel("Stories:"))
         left_layout.addWidget(self.story_list)
         
@@ -162,6 +261,24 @@ class StoryManagerWidget(QWidget):
         # Set initial splitter sizes
         splitter.setSizes([300, 700])
     
+    def get_artwork_path(self, folder_path: str) -> Optional[str]:
+        """Get the path to the story artwork if it exists.
+        
+        Args:
+            folder_path: Path to the story folder
+            
+        Returns:
+            Path to the artwork file or None if not found
+        """
+        if not folder_path:
+            return None
+        
+        artwork_path = os.path.join(folder_path, "artwork.png")
+        if os.path.exists(artwork_path):
+            return artwork_path
+        
+        return None
+    
     def load_stories(self) -> None:
         """Load stories from the database."""
         self.stories = get_all_stories(self.db_conn)
@@ -170,6 +287,11 @@ class StoryManagerWidget(QWidget):
         for story in self.stories:
             item = QListWidgetItem(story["title"])
             item.setData(Qt.ItemDataRole.UserRole, story["id"])
+            
+            # Add artwork path if available
+            artwork_path = self.get_artwork_path(story["folder_path"])
+            item.setData(Qt.ItemDataRole.UserRole + 1, artwork_path)
+            
             self.story_list.addItem(item)
     
     def on_story_selected(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
@@ -375,6 +497,28 @@ class StoryManagerWidget(QWidget):
         artwork_path = os.path.join(folder_path, "artwork.png")
         self.artwork_pixmap.save(artwork_path, "PNG")
     
+    def update_story_list_item(self, story_id: int) -> None:
+        """Update the story list item with the current artwork.
+        
+        Args:
+            story_id: ID of the story to update
+        """
+        # Find the story item
+        for i in range(self.story_list.count()):
+            item = self.story_list.item(i)
+            if item.data(Qt.ItemDataRole.UserRole) == story_id:
+                # Find the story data to get the folder path
+                for story in self.stories:
+                    if story["id"] == story_id:
+                        # Get the artwork path
+                        artwork_path = self.get_artwork_path(story["folder_path"])
+                        # Update the item data
+                        item.setData(Qt.ItemDataRole.UserRole + 1, artwork_path)
+                        # Force a repaint
+                        self.story_list.update()
+                        break
+                break
+    
     def on_save_story(self) -> None:
         """Handle save story button click."""
         # Get the form data
@@ -473,6 +617,7 @@ class StoryManagerWidget(QWidget):
                     # Save artwork if available
                     if self.artwork_pixmap:
                         self.save_artwork(story_data["folder_path"])
+                        self.update_story_list_item(story_id)
                     
                     # Update local copy of the story data
                     for i, story in enumerate(self.stories):
@@ -538,6 +683,11 @@ class StoryManagerWidget(QWidget):
             # Add the story to the list widget
             item = QListWidgetItem(title)
             item.setData(Qt.ItemDataRole.UserRole, story_id)
+            
+            # Add artwork path if available
+            artwork_path = self.get_artwork_path(story_folder)
+            item.setData(Qt.ItemDataRole.UserRole + 1, artwork_path)
+            
             self.story_list.addItem(item)
             
             # Select the new story
@@ -597,5 +747,10 @@ class StoryManagerWidget(QWidget):
         """
         item = QListWidgetItem(story_data["title"])
         item.setData(Qt.ItemDataRole.UserRole, story_data["id"])
+        
+        # Add artwork path if available
+        artwork_path = self.get_artwork_path(story_data["folder_path"])
+        item.setData(Qt.ItemDataRole.UserRole + 1, artwork_path)
+        
         self.story_list.addItem(item)
         self.story_list.setCurrentItem(item) 
