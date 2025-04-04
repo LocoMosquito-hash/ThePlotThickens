@@ -17,6 +17,7 @@ from PyQt6.QtGui import QPalette, QColor
 from app.db_sqlite import initialize_database
 from app.views.main_window import MainWindow
 from app.utils.image_recognition_util import ImageRecognitionUtil
+from app.utils.theme_manager import ThemeManager
 
 
 def _create_dark_palette() -> QPalette:
@@ -55,8 +56,11 @@ def main() -> None:
     """Main entry point for the application."""
     print("Starting The Plot Thickens application...")
     
+    # Get the application directory
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    
     # Initialize the database
-    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "the_plot_thickens.db")
+    db_path = os.path.join(app_dir, "..", "the_plot_thickens.db")
     print(f"Database path: {db_path}")
     try:
         db_conn = initialize_database(db_path)
@@ -76,16 +80,16 @@ def main() -> None:
     print("Creating QApplication instance...")
     app = QApplication(sys.argv)
     
-    # Set application style
-    app.setStyle("Fusion")
-    
-    # Set dark theme
-    app.setPalette(_create_dark_palette())
+    # Initialize and apply the theme
+    theme_manager = ThemeManager(app_dir)
+    theme_manager.apply_theme()
     
     # Create and show the main window
     print("Creating main window...")
     try:
         window = MainWindow(db_conn)
+        # Pass the theme manager to the main window
+        window.theme_manager = theme_manager
         print("Showing main window...")
         window.show()
     except Exception as e:

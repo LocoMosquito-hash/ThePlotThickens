@@ -94,7 +94,7 @@ class ThumbnailWidget(QFrame):
         self.setFrameShape(QFrame.Shape.Box)
         self.setFrameShadow(QFrame.Shadow.Plain)
         self.setLineWidth(1)
-        self.setStyleSheet("ThumbnailWidget { border: 1px solid #666; background-color: #333; }")
+        # Remove custom styling to allow ThumbnailWidget to inherit from PyQtDarkTheme
         
         # Layout
         self.layout = QVBoxLayout(self)
@@ -107,18 +107,7 @@ class ThumbnailWidget(QFrame):
         self.checkbox = QCheckBox()
         self.checkbox.setChecked(False)  # Explicitly set to unchecked
         self.checkbox.setToolTip("Select for batch operations")
-        # Make checkbox more prominent
-        self.checkbox.setStyleSheet("""
-            QCheckBox {
-                background-color: rgba(255, 255, 255, 0.8);
-                border-radius: 3px;
-                padding: 2px;
-            }
-            QCheckBox::indicator {
-                width: 16px;
-                height: 16px;
-            }
-        """)
+        # Remove custom styling to allow checkbox to inherit from PyQtDarkTheme
         self.checkbox.stateChanged.connect(self._on_checkbox_toggled)
         top_controls.addWidget(self.checkbox)
         
@@ -129,16 +118,12 @@ class ThumbnailWidget(QFrame):
         self.delete_btn = QPushButton("×")
         self.delete_btn.setFlat(True)
         self.delete_btn.setFixedSize(23, 23)  # Increased from 20x20
+        # Use simplified styling that works with both dark and light themes
         self.delete_btn.setStyleSheet("""
             QPushButton { 
-                background-color: rgba(200, 0, 0, 0.7); 
-                color: white; 
                 border-radius: 11px; 
                 font-weight: bold; 
                 font-size: 16px;
-            }
-            QPushButton:hover { 
-                background-color: rgba(255, 0, 0, 0.9);
             }
         """)
         self.delete_btn.clicked.connect(self._on_delete_clicked)
@@ -157,7 +142,7 @@ class ThumbnailWidget(QFrame):
         # Quick event label (optional, shown only if set)
         self.quick_event_label = QLabel()
         self.quick_event_label.setWordWrap(True)
-        self.quick_event_label.setStyleSheet("color: #cccccc; font-size: 9px;")
+        self.quick_event_label.setStyleSheet("font-size: 9px;")  # Remove explicit color to inherit from theme
         self.quick_event_label.setMaximumHeight(60)
         self.quick_event_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.layout.addWidget(self.quick_event_label)
@@ -1589,18 +1574,18 @@ class ImageDetailDialog(QDialog):
         
         # Create batch operations panel (initially hidden)
         self.batch_panel = QWidget()
-        self.batch_panel.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; margin: 5px;")
+        # Remove custom styling to allow batch panel to inherit from PyQtDarkTheme
         batch_layout = QVBoxLayout(self.batch_panel)
         batch_layout.setContentsMargins(10, 10, 10, 10)
         
         # Add a label to the batch panel
         batch_title = QLabel("Batch Operations")
-        batch_title.setStyleSheet("font-weight: bold; font-size: 14px; color: #333333;")
+        # Remove custom styling to allow batch panel to inherit from PyQtDarkTheme
         batch_layout.addWidget(batch_title)
         
         # Add a dummy widget to ensure the panel has some height
         batch_info = QLabel("Select images using checkboxes")
-        batch_info.setStyleSheet("color: #333333;")
+        # Remove custom styling to allow batch panel to inherit from PyQtDarkTheme
         batch_layout.addWidget(batch_info)
         
         # Add batch operation buttons
@@ -1609,7 +1594,7 @@ class ImageDetailDialog(QDialog):
         # Move to Scene button
         self.move_to_scene_button = QPushButton("Move to Scene...")
         self.move_to_scene_button.setToolTip("Move selected images to a scene")
-        self.move_to_scene_button.setStyleSheet("color: #333333;")
+        # Remove custom styling to allow button to inherit from PyQtDarkTheme
         self.move_to_scene_button.clicked.connect(self.on_move_to_scene)
         batch_buttons_layout.addWidget(self.move_to_scene_button)
         
@@ -2530,18 +2515,18 @@ class GalleryWidget(QWidget):
         
         # Create batch operations panel (initially hidden)
         self.batch_panel = QWidget()
-        self.batch_panel.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; margin: 5px;")
+        # Remove custom styling to allow batch panel to inherit from PyQtDarkTheme
         batch_layout = QVBoxLayout(self.batch_panel)
         batch_layout.setContentsMargins(10, 10, 10, 10)
         
         # Add a label to the batch panel
         batch_title = QLabel("Batch Operations")
-        batch_title.setStyleSheet("font-weight: bold; font-size: 14px; color: #333333;")
+        # Remove custom styling to allow batch panel to inherit from PyQtDarkTheme
         batch_layout.addWidget(batch_title)
         
         # Add a dummy widget to ensure the panel has some height
         batch_info = QLabel("Select images using checkboxes")
-        batch_info.setStyleSheet("color: #333333;")
+        # Remove custom styling to allow batch panel to inherit from PyQtDarkTheme
         batch_layout.addWidget(batch_info)
         
         # Add batch operation buttons
@@ -2550,7 +2535,7 @@ class GalleryWidget(QWidget):
         # Move to Scene button
         self.move_to_scene_button = QPushButton("Move to Scene...")
         self.move_to_scene_button.setToolTip("Move selected images to a scene")
-        self.move_to_scene_button.setStyleSheet("color: #333333;")
+        # Remove custom styling to allow button to inherit from PyQtDarkTheme
         self.move_to_scene_button.clicked.connect(self.on_move_to_scene)
         batch_buttons_layout.addWidget(self.move_to_scene_button)
         
@@ -6135,6 +6120,239 @@ class GraphicsTagView(QGraphicsView):
                 f"Error creating quick event: {str(e)}",
                 QMessageBox.StandardButton.Ok
             )
+    
+    def on_quick_event_selected(self, index: int):
+        """Handle selection of a quick event from the combo box.
+        
+        Args:
+            index: Index of the selected item
+        """
+        # Get the selected quick event ID
+        self.associated_quick_event_id = self.quick_events_combo.itemData(index)
+        
+        # Clear selection highlight when "Select a quick event..." is chosen
+        if self.associated_quick_event_id == -1:
+            return
+            
+        # Log the selection
+        if self.associated_quick_event_id:
+            print(f"Selected quick event ID: {self.associated_quick_event_id}")
+            
+            # Find the quick event in the list
+            for event in self.quick_events:
+                if event.get('id') == self.associated_quick_event_id:
+                    # Get the quick event text
+                    text = event.get('text', '')
+                    character_id = event.get('character_id')
+                    
+                    # If the text contains character references, format them for display
+                    if "[char:" in text:
+                        # Get tagged characters for the quick event
+                        from app.db_sqlite import get_quick_event_tagged_characters
+                        from app.utils.character_references import convert_char_refs_to_mentions
+                        
+                        tagged_characters = get_quick_event_tagged_characters(self.db_conn, self.associated_quick_event_id)
+                        formatted_text = convert_char_refs_to_mentions(text, tagged_characters)
+                        
+                        # Update the combo box text based on whether there's a character owner
+                        current_text = self.quick_events_combo.currentText()
+                        
+                        if character_id:
+                            # For events with a character owner
+                            if ":" in current_text:
+                                prefix = current_text.split(":", 1)[0]
+                                display_text = f"{prefix}: {formatted_text}"
+                                self.quick_events_combo.setItemText(index, display_text)
+                            else:
+                                # For events without a character owner, just show the formatted text
+                                self.quick_events_combo.setItemText(index, formatted_text)
+                            
+                            print(f"Formatted quick event text: {formatted_text}")
+                        break
+    
+    def get_selected_character_data(self) -> Dict[str, Any]:
+        """Get data for all selected characters and quick event.
+        
+        Returns:
+            Dictionary with character data and quick event ID
+        """
+        return {
+            'characters': self.tagged_characters,
+            'quick_event_id': self.associated_quick_event_id if self.associated_quick_event_id and self.associated_quick_event_id != -1 else None
+        }
+
+
+    def on_character_selected(self, character_name: str):
+        """Handle character selection from completer.
+        
+        Args:
+            character_name: Name of the selected character
+        """
+        self.tag_completer.insert_character_tag(character_name)
+        
+    def insert_character_tag(self, character_name: str):
+        """Insert a character tag at the current cursor position.
+        
+        Args:
+            character_name: Name of the character to insert
+        """
+        if not hasattr(self, 'qe_text_edit'):
+            return
+            
+        cursor = self.qe_text_edit.textCursor()
+        text = self.qe_text_edit.toPlainText()
+        pos = cursor.position()
+        
+        # Find the @ that started this tag
+        tag_start = text.rfind('@', 0, pos)
+        
+        if tag_start >= 0:
+            # Delete everything from the @ to the cursor
+            cursor.setPosition(tag_start)
+            cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
+            cursor.removeSelectedText()
+            
+            # Insert the character name with the @ prefix
+            cursor.insertText(f"@{character_name}")
+            
+            # Add a space after the insertion if appropriate
+            if cursor.position() < len(self.qe_text_edit.toPlainText()) and self.qe_text_edit.toPlainText()[cursor.position()] != ' ':
+                cursor.insertText(" ")
+            
+            # Hide the completer
+            self.tag_completer.hide()
+            
+            # Set focus back to the text edit
+            self.qe_text_edit.setFocus()
+    
+    def create_quick_event(self):
+        """Create a new quick event and add it to the database."""
+        try:
+            # Import the QuickEventManager
+            from app.utils.quick_event_manager import QuickEventManager
+            
+            # Create context for character recognition dialog
+            context = {
+                "source": "recognition_dialog",
+                "image_id": self.image_id,
+                "tagged_characters": [char.get('character_id') for char in self.tagged_characters],
+                "allow_extra_options": True,
+                "show_associate_checkbox": True
+            }
+            
+            # Show the dialog with specific options for this context
+            from app.utils.quick_event_utils import show_quick_event_dialog
+            
+            show_quick_event_dialog(
+                db_conn=self.db_conn,
+                story_id=self.story_id,
+                parent=self,
+                callback=self.on_quick_event_created,
+                context=context,
+                options={
+                    "show_recent_events": True,
+                    "show_character_tags": True,
+                    "show_optional_note": True,
+                    "allow_characterless_events": True  # Always allow characterless events here
+                }
+            )
+        except Exception as e:
+            print(f"Error creating quick event: {e}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Error creating quick event: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+            
+    def on_quick_event_created(self, event_id: int, text: str, context: Dict[str, Any]) -> None:
+        """Handle the quick event created signal.
+        
+        Args:
+            event_id: ID of the created quick event
+            text: Text of the quick event
+            context: Context dictionary passed to the dialog
+        """
+        if not event_id:
+            return
+            
+        # Store the new quick event ID
+        self.new_quick_event_id = event_id
+        self.associated_quick_event_id = event_id
+        
+        # Debug info about the current state
+        print(f"[DEBUG] Quick event created - ID: {event_id}")
+        print(f"[DEBUG] Context data: {context}")
+        print(f"[DEBUG] Current image_id: {self.image_id}")
+        
+        # Get the image ID from context or from current instance
+        image_id = context.get("image_id", None) or self.image_id
+        
+        print(f"[DEBUG] Using image_id for association: {image_id}")
+        
+        # Associate the quick event with the current image if we have an image_id
+        if image_id:
+            from app.db_sqlite import associate_quick_event_with_image
+            try:
+                note = "Automatically associated via Character Recognition window"
+                print(f"[DEBUG] Associating quick event {event_id} with image {image_id}")
+                
+                success = associate_quick_event_with_image(
+                    self.db_conn, 
+                    event_id, 
+                    image_id, 
+                    note
+                )
+                
+                # Verify association was created by querying the database
+                cursor = self.db_conn.cursor()
+                cursor.execute(
+                    "SELECT id FROM quick_event_images WHERE quick_event_id = ? AND image_id = ?", 
+                    (event_id, image_id)
+                )
+                association = cursor.fetchone()
+                
+                if success and association:
+                    print(f"[DEBUG] Successfully associated quick event {event_id} with image {image_id}")
+                    print(f"[DEBUG] Association record ID: {association['id'] if association else 'None'}")
+                else:
+                    print(f"[ERROR] Failed to associate quick event {event_id} with image {image_id}")
+                    print(f"[ERROR] Association record found: {association is not None}")
+                    
+                    # Try to force the association again
+                    print(f"[DEBUG] Forcing association with direct SQL")
+                    from datetime import datetime
+                    now = datetime.now().isoformat()
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO quick_event_images 
+                        (quick_event_id, image_id, created_at, updated_at, note)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (event_id, image_id, now, now, note)
+                    )
+                    self.db_conn.commit()
+            except Exception as e:
+                import traceback
+                print(f"[ERROR] Error associating quick event with image: {e}")
+                print(traceback.format_exc())
+        
+        # Reload quick events
+        self.load_quick_events_data()
+        
+        # Find and select the new event in the combo box
+        for i in range(self.quick_events_combo.count()):
+            if self.quick_events_combo.itemData(i) == event_id:
+                self.quick_events_combo.setCurrentIndex(i)
+                break
+        
+        # Success message
+        QMessageBox.information(
+            self,
+            "Success",
+            "Quick event created successfully and associated with this image.",
+            QMessageBox.StandardButton.Ok
+        )
     
     def on_quick_event_selected(self, index: int):
         """Handle selection of a quick event from the combo box.
