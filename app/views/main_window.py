@@ -262,6 +262,7 @@ class MainWindow(QMainWindow):
         self.db_conn = db_conn
         self.current_story_id: Optional[int] = None
         self.settings = QSettings("ThePlotThickens", "ThePlotThickens")
+        self.theme_manager = None  # This will be set in main.py
         
         self.init_ui()
         self.restore_window_state()
@@ -318,9 +319,6 @@ class MainWindow(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Ready")
-        
-        # Set dark theme
-        self.set_dark_theme()
     
     def create_menus(self) -> None:
         """Create the application menus."""
@@ -362,6 +360,13 @@ class MainWindow(QMainWindow):
         preferences_action.setStatusTip("Open the settings dialog")
         preferences_action.triggered.connect(self.on_open_settings)
         settings_menu.addAction(preferences_action)
+        
+        # Add Theme toggle action
+        self.theme_action = QAction("Toggle &Theme (Dark/Light)", self)
+        self.theme_action.setShortcut("Ctrl+T")
+        self.theme_action.setStatusTip("Toggle between dark and light themes")
+        self.theme_action.triggered.connect(self.on_toggle_theme)
+        settings_menu.addAction(self.theme_action)
     
     def on_open_recognition_viewer(self) -> None:
         """Open the recognition database viewer dialog."""
@@ -375,69 +380,12 @@ class MainWindow(QMainWindow):
         if settings_dialog.exec():
             self.status_bar.showMessage("Settings saved", 3000)
     
-    def set_dark_theme(self) -> None:
-        """Apply dark theme to the application."""
-        self.setStyleSheet("""
-            QMainWindow, QWidget {
-                background-color: #2D2D30;
-                color: #FFFFFF;
-            }
-            QTabWidget::pane {
-                border: 1px solid #3E3E42;
-                background-color: #2D2D30;
-            }
-            QTabBar::tab {
-                background-color: #3E3E42;
-                color: #FFFFFF;
-                padding: 8px 16px;
-                margin-right: 2px;
-            }
-            QTabBar::tab:selected {
-                background-color: #007ACC;
-            }
-            QPushButton {
-                background-color: #3E3E42;
-                color: #FFFFFF;
-                border: 1px solid #555555;
-                padding: 5px 10px;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #505050;
-            }
-            QPushButton:pressed {
-                background-color: #007ACC;
-            }
-            QLineEdit, QTextEdit, QComboBox {
-                background-color: #333337;
-                color: #FFFFFF;
-                border: 1px solid #555555;
-                padding: 3px;
-            }
-            QStatusBar {
-                background-color: #007ACC;
-                color: #FFFFFF;
-            }
-            QMenuBar {
-                background-color: #2D2D30;
-                color: #FFFFFF;
-            }
-            QMenuBar::item {
-                background-color: #2D2D30;
-                color: #FFFFFF;
-            }
-            QMenuBar::item:selected {
-                background-color: #3E3E42;
-            }
-            QMenu {
-                background-color: #2D2D30;
-                color: #FFFFFF;
-                border: 1px solid #3E3E42;
-            }
-            QMenu::item:selected {
-                background-color: #3E3E42;
-            }
-        """)
+    def on_toggle_theme(self) -> None:
+        """Toggle between dark and light themes."""
+        if self.theme_manager:
+            self.theme_manager.toggle_theme()
+            current_theme = self.theme_manager.get_current_theme()
+            self.status_bar.showMessage(f"Theme changed to {current_theme}", 3000)
     
     def on_story_selected(self, story_id: int, story_data: Dict[str, Any]) -> None:
         """Handle story selection.
