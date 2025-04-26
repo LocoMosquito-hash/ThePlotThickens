@@ -5003,6 +5003,9 @@ class RegionSelectionDialog(QDialog):
         # Update the tagged list
         self.update_tagged_list()
         
+        # Update the region list item to include character name
+        self.update_region_list_item(region_index)
+        
         # Add to recognition database if checkbox is checked
         if self.add_to_db_checkbox.isChecked():
             self.add_region_to_recognition_database(region, character_data['character_id'], character_data['character_name'])
@@ -5024,7 +5027,30 @@ class RegionSelectionDialog(QDialog):
             item.setData(Qt.ItemDataRole.UserRole, tag)
             self.tagged_list.addItem(item)
             
+    def update_region_list_item(self, region_index: int):
+        """Update the region list item to include the character name if tagged.
         
+        Args:
+            region_index: Index of the region to update
+        """
+        if 0 <= region_index < len(self.selected_regions):
+            region = self.selected_regions[region_index]
+            width = int(region['width'])
+            height = int(region['height'])
+            
+            # Find if this region has a character tag
+            character_name = None
+            for tag in self.tagged_characters:
+                if tag['region_index'] == region_index:
+                    character_name = tag['character_name']
+                    break
+            
+            # Update the region list item text
+            if character_name:
+                self.region_list.item(region_index).setText(f"Region {region_index + 1}: {width}x{height} - {character_name}")
+            else:
+                self.region_list.item(region_index).setText(f"Region {region_index + 1}: {width}x{height}")
+    
     def resizeEvent(self, event):
         """Handle resize events to maintain view fit.
         
@@ -5385,7 +5411,7 @@ class RegionSelectionDialog(QDialog):
             
             # Rename remaining regions
             for i in range(self.region_list.count()):
-                self.region_list.item(i).setText(f"Region {i + 1}: {int(self.selected_regions[i]['width'])}x{int(self.selected_regions[i]['height'])}")
+                self.update_region_list_item(i)
     
     def clear_all_regions(self):
         """Clear all selected regions."""
