@@ -4497,19 +4497,13 @@ class RegionSelectionDialog(QDialog):
         region_layout.addWidget(region_group)
         
         # Result list
-        result_group = QGroupBox("Character Recognition Results")
+        result_group = QGroupBox("Character Recognition Results (Click to Tag)")
         result_group_layout = QVBoxLayout(result_group)
         
         self.result_list = QListWidget()
         self.result_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.result_list.itemSelectionChanged.connect(self.on_character_selection_changed)
         result_group_layout.addWidget(self.result_list)
-        
-        # Save tag button
-        self.save_tag_button = QPushButton("Save Character Tag")
-        self.save_tag_button.clicked.connect(self.save_current_tag)
-        self.save_tag_button.setEnabled(False)
-        result_group_layout.addWidget(self.save_tag_button)
         
         # Add to database checkbox
         self.add_to_db_checkbox = QCheckBox("Add face to recognition database")
@@ -4921,13 +4915,13 @@ class RegionSelectionDialog(QDialog):
             )
     
     def on_character_selection_changed(self):
-        """Enable/disable save tag button based on character selection."""
+        """Automatically save tag when a character is selected."""
         selected_items = self.result_list.selectedItems()
-        # Only enable if one item is selected and it's not a header item
-        self.save_tag_button.setEnabled(
-            len(selected_items) == 1 and 
-            selected_items[0].data(Qt.ItemDataRole.UserRole) is not None
-        )
+        
+        # Only proceed if one valid item is selected and it's not a header item
+        if selected_items and len(selected_items) == 1 and selected_items[0].data(Qt.ItemDataRole.UserRole) is not None:
+            # Automatically save the tag
+            self.save_current_tag()
     
     def save_current_tag(self):
         """Save the currently selected character tag."""
@@ -4991,6 +4985,17 @@ class RegionSelectionDialog(QDialog):
                 # Remove existing tag
                 self.tagged_characters.remove(existing_tag)
                 break
+        
+        # Remove any existing tags for the same region
+        to_remove = []
+        for existing_tag in self.tagged_characters:
+            if existing_tag['region_index'] == region_index:
+                to_remove.append(existing_tag)
+        
+        # Remove identified tags
+        for tag_to_remove in to_remove:
+            self.tagged_characters.remove(tag_to_remove)
+            print(f"Removed existing tag for character {tag_to_remove['character_name']} from region {region_index}")
         
         # Add the tag
         self.tagged_characters.append(tag)
