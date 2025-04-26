@@ -4584,8 +4584,14 @@ class RegionSelectionDialog(QDialog):
         splitter.addWidget(view_widget)
         splitter.addWidget(controls_widget)
         splitter.setSizes([600, 400])  # Set initial sizes
-            
-
+        
+        # Create a status bar at the bottom of the dialog
+        self.status_bar = QStatusBar()
+        # Disable resize grip in the corner since the dialog already has resize handles
+        # and the grip can interfere with the layout or appear redundant
+        self.status_bar.setSizeGripEnabled(False)
+        main_layout.addWidget(self.status_bar)
+    
     def on_character_selected(self, character_name: str):
         """Handle character selection from completer.
         
@@ -5001,13 +5007,8 @@ class RegionSelectionDialog(QDialog):
         # Clear the selection
         self.result_list.clearSelection()
         
-        # Show confirmation message
-        QMessageBox.information(
-            self,
-            "Tag Saved",
-            f"Character tag for {tag['character_name']} has been saved.",
-            QMessageBox.StandardButton.Ok
-        )
+        # Show confirmation message in the status bar instead of a message box
+        self.status_bar.showMessage(f"Character tag for {tag['character_name']} has been saved.", 5000)
             
     def update_tagged_list(self):
         """Update the list of tagged characters."""
@@ -5436,29 +5437,24 @@ class RegionSelectionDialog(QDialog):
             
             if feature_id:
                 print(f"Added region to recognition database for {character_name} (ID: {character_id}), feature ID: {feature_id}")
-                QMessageBox.information(
-                    self,
-                    "Added to Recognition Database",
-                    f"The selected region has been added to {character_name}'s recognition database. "
-                    f"This will improve character recognition in future images.",
-                    QMessageBox.StandardButton.Ok
-                )
+                # Use status bar instead of message box
+                self.status_bar.showMessage(f"Added region to recognition database for {character_name}", 5000)
             else:
                 print(f"Failed to add region to recognition database for {character_name}")
-                QMessageBox.warning(
-                    self,
-                    "Failed to Add to Database",
-                    f"Failed to add the region to {character_name}'s recognition database.",
-                    QMessageBox.StandardButton.Ok
-                )
+                # Use status bar instead of message box
+                self.status_bar.showMessage(f"Failed to add region to {character_name}'s recognition database", 5000)
         except Exception as e:
             print(f"Error adding region to recognition database: {e}")
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Error adding region to recognition database: {str(e)}",
-                QMessageBox.StandardButton.Ok
-            )
+            # Use status bar instead of message box
+            self.status_bar.showMessage(f"Error adding region to recognition database: {str(e)}", 5000)
+    
+    def statusBar(self):
+        """Get the status bar.
+        
+        Returns:
+            QStatusBar: The status bar
+        """
+        return self.status_bar
 
 
 class GraphicsTagView(QGraphicsView):
