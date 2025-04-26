@@ -4489,6 +4489,13 @@ class RegionSelectionDialog(QDialog):
         self.remove_region_button.setEnabled(False)
         region_buttons.addWidget(self.remove_region_button)
         
+        # Add "Add to Recognition DB" button
+        self.add_to_db_button = QPushButton("Add to Recognition DB")
+        self.add_to_db_button.clicked.connect(self.add_selected_region_to_db)
+        self.add_to_db_button.setEnabled(False)
+        self.add_to_db_button.setToolTip("Add the selected region to the recognition database")
+        region_buttons.addWidget(self.add_to_db_button)
+        
         clear_all_button = QPushButton("Clear All")
         clear_all_button.clicked.connect(self.clear_all_regions)
         region_buttons.addWidget(clear_all_button)
@@ -4505,10 +4512,10 @@ class RegionSelectionDialog(QDialog):
         self.result_list.itemSelectionChanged.connect(self.on_character_selection_changed)
         result_group_layout.addWidget(self.result_list)
         
-        # Add to database checkbox
-        self.add_to_db_checkbox = QCheckBox("Add face to recognition database")
-        self.add_to_db_checkbox.setChecked(False)  # Set to unchecked by default
-        result_group_layout.addWidget(self.add_to_db_checkbox)
+        # Remove global add to database checkbox
+        # self.add_to_db_checkbox = QCheckBox("Add face to recognition database")
+        # self.add_to_db_checkbox.setChecked(False)
+        # result_group_layout.addWidget(self.add_to_db_checkbox)
         
         # Rebuild database button
         rebuild_button = QPushButton("Rebuild Recognition Database")
@@ -4828,26 +4835,6 @@ class RegionSelectionDialog(QDialog):
         if hasattr(self, 'quick_events_combo'):
             self.associated_quick_event_id = self.quick_events_combo.currentData()
         
-        # Process any selected characters that need to be added to the recognition database
-        # This ensures the checkbox status is respected when the dialog is closed
-        if self.add_to_db_checkbox.isChecked() and self.tagged_characters:
-            for tag in self.tagged_characters:
-                # Check if this tag was already added to the recognition database
-                # by verifying if the tag has a 'added_to_recognition_db' flag
-                if not tag.get('added_to_recognition_db', False):
-                    # Find the region for this tag
-                    region_index = tag.get('region_index', -1)
-                    if region_index >= 0 and region_index < len(self.selected_regions):
-                        region = self.selected_regions[region_index]
-                        # Add to recognition database
-                        self.add_region_to_recognition_database(
-                            region, 
-                            tag['character_id'], 
-                            tag['character_name']
-                        )
-                        # Mark as added to avoid duplicate additions
-                        tag['added_to_recognition_db'] = True
-        
         # Call the parent accept
         super().accept()
     
@@ -5006,11 +4993,8 @@ class RegionSelectionDialog(QDialog):
         # Update the region list item to include character name
         self.update_region_list_item(region_index)
         
-        # Add to recognition database if checkbox is checked
-        if self.add_to_db_checkbox.isChecked():
-            self.add_region_to_recognition_database(region, character_data['character_id'], character_data['character_name'])
-            # Mark as added to recognition database
-            tag['added_to_recognition_db'] = True
+        # Enable the "Add to Recognition DB" button since we now have a character tagged to this region
+        self.add_to_db_button.setEnabled(True)
         
         # Clear the selection
         self.result_list.clearSelection()
@@ -5315,7 +5299,17 @@ class RegionSelectionDialog(QDialog):
         Args:
             row: Selected row index
         """
+        # Enable/disable remove button
         self.remove_region_button.setEnabled(row >= 0)
+        
+        # Enable/disable add to db button, only if region has a character tag
+        self.add_to_db_button.setEnabled(False)
+        if row >= 0 and row < len(self.selected_regions):
+            # Check if this region has a character assigned
+            for tag in self.tagged_characters:
+                if tag['region_index'] == row:
+                    self.add_to_db_button.setEnabled(True)
+                    break
         
         if row >= 0 and row < len(self.selected_regions):
             # Update result list to show characters for the selected region
@@ -5486,6 +5480,53 @@ class RegionSelectionDialog(QDialog):
             QStatusBar: The status bar
         """
         return self.status_bar
+
+    # Add new method to add selected region to recognition database
+    def add_selected_region_to_db(self):
+        """Add the currently selected region to the recognition database."""
+        row = self.region_list.currentRow()
+        if row < 0 or row >= len(self.selected_regions):
+            return
+            
+        # Find the character tag for this region
+        character_tag = None
+        for tag in self.tagged_characters:
+            if tag['region_index'] == row:
+                character_tag = tag
+                break
+                
+        if not character_tag:
+            self.status_bar.showMessage("No character tagged for this region", 5000)
+            return
+            
+        if character_tag['added_to_recognition_db']:
+            # Already added to database, confirm if user wants to add again
+            reply = QMessageBox.question(
+                self,
+                "Already Added",
+                f"This region has already been added to {character_tag['character_name']}'s recognition database. Add again?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                return
+        
+        # Add to recognition database
+        region = self.selected_regions[row]
+        self.add_region_to_recognition_database(
+            region, 
+            character_tag['character_id'], 
+            character_tag['character_name']
+        )
+        
+        # Mark as added to recognition database
+        character_tag['added_to_recognition_db'] = True
+        
+        # Update the status bar with a success message
+        self.status_bar.showMessage(
+            f"Added region to {character_tag['character_name']}'s recognition database", 
+            5000
+        )
 
 
 class GraphicsTagView(QGraphicsView):
