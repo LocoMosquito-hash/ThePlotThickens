@@ -5285,8 +5285,8 @@ class RegionSelectionDialog(QDialog):
                     })
                     self.result_list.addItem(item)
                     
-            # Disable save button until a character is selected
-            self.save_tag_button.setEnabled(False)
+            # We no longer need this line since the save_tag_button was removed
+            # self.save_tag_button.setEnabled(False)
         except Exception as e:
             print(f"Error during character recognition: {e}")
             item = QListWidgetItem(f"Error during character recognition: {str(e)}")
