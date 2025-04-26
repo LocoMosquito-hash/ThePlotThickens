@@ -1572,42 +1572,6 @@ class ImageDetailDialog(QDialog):
         # Add button layout to main layout
         main_layout.addLayout(button_layout)
         
-        # Create batch operations panel (initially hidden)
-        self.batch_panel = QWidget()
-        # Remove custom styling to allow batch panel to inherit from PyQtDarkTheme
-        batch_layout = QVBoxLayout(self.batch_panel)
-        batch_layout.setContentsMargins(10, 10, 10, 10)
-        
-        # Add a label to the batch panel
-        batch_title = QLabel("Batch Operations")
-        # Remove custom styling to allow batch panel to inherit from PyQtDarkTheme
-        batch_layout.addWidget(batch_title)
-        
-        # Add a dummy widget to ensure the panel has some height
-        batch_info = QLabel("Select images using checkboxes")
-        # Remove custom styling to allow batch panel to inherit from PyQtDarkTheme
-        batch_layout.addWidget(batch_info)
-        
-        # Add batch operation buttons
-        batch_buttons_layout = QHBoxLayout()
-        
-        # Move to Scene button
-        self.move_to_scene_button = QPushButton("Move to Scene...")
-        self.move_to_scene_button.setToolTip("Move selected images to a scene")
-        # Remove custom styling to allow button to inherit from PyQtDarkTheme
-        self.move_to_scene_button.clicked.connect(self.on_move_to_scene)
-        batch_buttons_layout.addWidget(self.move_to_scene_button)
-        
-        # Add more batch buttons here as needed
-        
-        batch_layout.addLayout(batch_buttons_layout)
-        
-        # Hide the batch panel initially
-        self.batch_panel.setVisible(False)
-        
-        # Add batch panel to main layout
-        main_layout.addWidget(self.batch_panel)
-        
         # Create scroll area for thumbnails
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -4370,7 +4334,6 @@ class RegionSelectionDialog(QDialog):
                     "show_recent_events": True,
                     "show_character_tags": True,
                     "show_optional_note": True,
-                    "allow_characterless_events": True,
                     "title": "Quick Event - Character Recognition",
                     "force_anonymous": True  # Special flag to enforce anonymous events
                 }
