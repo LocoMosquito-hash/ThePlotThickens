@@ -4887,6 +4887,9 @@ class RegionSelectionDialog(QDialog):
         if hasattr(self, 'quick_events_combo'):
             self.associated_quick_event_id = self.quick_events_combo.currentData()
         
+        # Process checked characters in the on-scene list
+        self.tag_checked_onscene_characters()
+        
         # Call the parent accept
         super().accept()
     
@@ -5586,6 +5589,63 @@ class RegionSelectionDialog(QDialog):
             f"Added region to {character_tag['character_name']}'s recognition database", 
             5000
         )
+
+    def create_regionless_tag(self, character_id: int, character_name: str):
+        """Create a tag for a character without a specific region.
+        
+        Args:
+            character_id: ID of the character to tag
+            character_name: Name of the character
+        """
+        # Check if this character is already tagged
+        for existing_tag in self.tagged_characters:
+            if existing_tag['character_id'] == character_id:
+                # Character already tagged, no need to add again
+                return
+                
+        # Create a tag record with regionless marker
+        tag = {
+            'character_id': character_id,
+            'character_name': character_name,
+            'similarity': 1.0,  # 100% match as it's manually selected
+            'region_index': -1,  # -1 indicates no specific region
+            'region': {
+                'x': 0.5,  # Center of the image horizontally
+                'y': 0.5,  # Center of the image vertically
+                'width': 0,  # No width (regionless)
+                'height': 0  # No height (regionless)
+            },
+            'added_to_recognition_db': False,  # Track if already added to recognition database
+            'regionless': True  # Mark as a regionless tag
+        }
+        
+        # Add the tag
+        self.tagged_characters.append(tag)
+            
+        # Update the tagged list
+        self.update_tagged_list()
+        
+        # Show confirmation message in the status bar
+        self.status_bar.showMessage(f"Character tag for {character_name} (no region) has been saved.", 5000)
+
+    def tag_checked_onscene_characters(self):
+        """Tag all checked characters in the on-scene characters list without regions."""
+        if not hasattr(self, 'onscene_list'):
+            return
+            
+        # Get all checked characters
+        for i in range(self.onscene_list.count()):
+            item = self.onscene_list.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                character_id = item.data(Qt.ItemDataRole.UserRole)
+                character_name = item.text()
+                
+                # Tag this character without a region
+                self.create_regionless_tag(character_id, character_name)
+                
+                # Update the last tagged timestamp for this character
+                from app.db_sqlite import update_character_last_tagged
+                update_character_last_tagged(self.db_conn, self.story_id, character_id)
 
 
 class GraphicsTagView(QGraphicsView):
