@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QComboBox, QSpinBox, QCheckBox, QPushButton,
     QFileDialog, QMessageBox, QApplication, QGroupBox, QListWidget, 
     QListWidgetItem, QMenu, QInputDialog, QTextEdit, QFrame, QSplitter,
-    QToolButton
+    QToolButton, QTreeWidget, QTreeWidgetItem, QStyle
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QBuffer, QByteArray, QSettings, QPoint
 from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QKeyEvent, QTextCursor, QIcon, QColor
@@ -667,28 +667,6 @@ class QuickEventsTab(QWidget):
         menu.exec(QCursor.pos())
 
 
-class CharacterDetailItem(QListWidgetItem):
-    """List item representing a character detail."""
-    
-    def __init__(self, detail_data: Dict[str, Any]):
-        """Initialize the character detail item.
-        
-        Args:
-            detail_data: Dictionary with the detail data
-        """
-        super().__init__()
-        
-        self.detail_id = detail_data['id']
-        self.detail_text = detail_data['detail_text']
-        self.detail_type = detail_data['detail_type']
-        self.sequence_number = detail_data['sequence_number']
-        
-        self.setText(self.detail_text)
-        
-        # Set tooltip with additional info
-        self.setToolTip(f"Type: {self.detail_type}")
-
-
 class CharacterDetailsTab(QWidget):
     """Tab for managing character details."""
     
@@ -703,6 +681,20 @@ class CharacterDetailsTab(QWidget):
         super().__init__(parent)
         self.db_conn = db_conn
         self.character_id = character_id
+        
+        # Define the global categories
+        self.global_categories = [
+            ("Work", "WORK"),
+            ("Study", "STUDY"),
+            ("Relationship Status", "RELATIONSHIP"),
+            ("Housing", "HOUSING"),
+            # Keep existing categories
+            ("General", "GENERAL"),
+            ("Background", "BACKGROUND"),
+            ("Personality", "PERSONALITY"),
+            ("Physical", "PHYSICAL"),
+        ]
+        
         self.init_ui()
         self.load_details()
         
@@ -710,111 +702,161 @@ class CharacterDetailsTab(QWidget):
         """Initialize the user interface."""
         layout = QVBoxLayout(self)
         
-        # Details type selector
-        type_layout = QHBoxLayout()
-        type_layout.addWidget(QLabel("Filter by type:"))
+        # Filter layout (top)
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Filter by type:"))
         
         self.type_combo = QComboBox()
         self.type_combo.addItem("All", None)
-        self.type_combo.addItem("General", "GENERAL")
-        self.type_combo.addItem("Background", "BACKGROUND")
-        self.type_combo.addItem("Personality", "PERSONALITY")
-        self.type_combo.addItem("Physical", "PHYSICAL")
-        self.type_combo.addItem("Relationships", "RELATIONSHIPS")
-        self.type_combo.currentIndexChanged.connect(self.filter_details)
-        type_layout.addWidget(self.type_combo)
         
-        type_layout.addStretch()
+        # Add global categories to combo box
+        for name, code in self.global_categories:
+            self.type_combo.addItem(name, code)
+            
+        self.type_combo.currentIndexChanged.connect(self.filter_details)
+        filter_layout.addWidget(self.type_combo)
+        
+        filter_layout.addStretch()
         
         # Add button
         self.add_button = QPushButton("Add Detail")
         self.add_button.clicked.connect(self.add_detail)
-        type_layout.addWidget(self.add_button)
+        filter_layout.addWidget(self.add_button)
         
-        layout.addLayout(type_layout)
+        layout.addLayout(filter_layout)
         
-        # Details list
-        self.details_list = QListWidget()
-        self.details_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.details_list.customContextMenuRequested.connect(self.show_context_menu)
-        self.details_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
+        # Details tree view
+        self.details_tree = QTreeWidget()
+        self.details_tree.setHeaderLabels(["Details"])
+        self.details_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.details_tree.customContextMenuRequested.connect(self.show_context_menu)
+        self.details_tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
+        self.details_tree.setDragDropMode(QTreeWidget.DragDropMode.InternalMove)
+        self.details_tree.setExpandsOnDoubleClick(True)
+        self.details_tree.setAnimated(True)
+        self.details_tree.setIndentation(20)
+        
+        # Connect folder icon updating when expanded/collapsed
+        folder_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DirClosedIcon)
+        open_folder_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon)
+        
+        self.details_tree.itemExpanded.connect(
+            lambda item: item.setIcon(0, open_folder_icon) if not hasattr(item, 'detail_id') else None
+        )
+        self.details_tree.itemCollapsed.connect(
+            lambda item: item.setIcon(0, folder_icon) if not hasattr(item, 'detail_id') else None
+        )
         
         # Enable drag and drop for reordering
-        self.details_list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
-        self.details_list.model().rowsMoved.connect(self.on_items_reordered)
+        self.details_tree.model().rowsMoved.connect(self.on_items_reordered)
         
-        layout.addWidget(self.details_list)
+        layout.addWidget(self.details_tree)
     
     def load_details(self):
         """Load details for this character."""
         try:
             self.details = get_character_details(self.db_conn, self.character_id)
-            self.update_details_list()
+            self.update_details_tree()
         except Exception as e:
             print(f"Error loading character details: {e}")
             QMessageBox.warning(self, "Error", f"Failed to load character details: {str(e)}")
             
-    def update_details_list(self):
-        """Update the details list with current details."""
-        self.details_list.clear()
+    def update_details_tree(self):
+        """Update the details tree with current details."""
+        self.details_tree.clear()
         
         if not self.details:
-            empty_item = QListWidgetItem("No details added yet.")
-            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
-            self.details_list.addItem(empty_item)
+            empty_item = QTreeWidgetItem(["No details added yet."])
+            # Make it non-selectable
+            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.details_tree.addTopLevelItem(empty_item)
             return
+        
+        # Create a dictionary to store category items
+        category_items = {}
+        
+        # Get folder icons for categories - using theme-compatible icons
+        folder_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_DirClosedIcon)
         
         # Filter by type if needed
         selected_type = self.type_combo.currentData()
         
+        # Create category nodes
+        if selected_type is None:
+            # Create all category folders
+            for name, code in self.global_categories:
+                category_item = QTreeWidgetItem([name])
+                category_item.setData(0, Qt.ItemDataRole.UserRole, code)
+                category_item.setFlags(category_item.flags() | Qt.ItemFlag.ItemIsAutoTristate)
+                # Add folder icon
+                category_item.setIcon(0, folder_icon)
+                category_items[code] = category_item
+                self.details_tree.addTopLevelItem(category_item)
+        else:
+            # Create just one category folder
+            for name, code in self.global_categories:
+                if code == selected_type:
+                    category_item = QTreeWidgetItem([name])
+                    category_item.setData(0, Qt.ItemDataRole.UserRole, code)
+                    category_item.setFlags(category_item.flags() | Qt.ItemFlag.ItemIsAutoTristate)
+                    # Add folder icon
+                    category_item.setIcon(0, folder_icon)
+                    category_items[code] = category_item
+                    self.details_tree.addTopLevelItem(category_item)
+                    break
+        
+        # Add details to their respective categories
         for detail in self.details:
-            if selected_type is None or detail['detail_type'] == selected_type:
-                item = CharacterDetailItem(detail)
-                self.details_list.addItem(item)
+            detail_type = detail['detail_type']
+            
+            # Skip if filtering and not matching
+            if selected_type is not None and detail_type != selected_type:
+                continue
+                
+            # If the category doesn't exist yet, create an "Other" category
+            if detail_type not in category_items:
+                category_item = QTreeWidgetItem(["Other"])
+                category_item.setData(0, Qt.ItemDataRole.UserRole, "OTHER")
+                # Add folder icon
+                category_item.setIcon(0, folder_icon)
+                category_items[detail_type] = category_item
+                self.details_tree.addTopLevelItem(category_item)
+            
+            # Create the detail item
+            detail_item = QTreeWidgetItem([detail['detail_text']])
+            detail_item.setData(0, Qt.ItemDataRole.UserRole, detail['id'])
+            detail_item.setToolTip(0, detail['detail_text'])
+            
+            # Store the detail data for later use
+            detail_item.detail_id = detail['id']
+            detail_item.detail_text = detail['detail_text']
+            detail_item.detail_type = detail['detail_type']
+            detail_item.sequence_number = detail['sequence_number']
+            
+            # Add to the appropriate category
+            category_items[detail_type].addChild(detail_item)
+        
+        # Expand all categories
+        self.details_tree.expandAll()
                 
     def filter_details(self):
         """Filter details by type."""
-        self.update_details_list()
+        self.update_details_tree()
         
     def add_detail(self):
         """Add a new character detail."""
-        # Show dialog to get detail text
-        detail_text, ok = QInputDialog.getText(
-            self,
-            "Add Character Detail",
-            "Enter detail (e.g., 'Afraid of heights' or 'Has a scar on left cheek'):"
-        )
+        # Show the add detail dialog
+        dialog = AddDetailDialog(self.global_categories, parent=self)
         
-        if not ok or not detail_text.strip():
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-            
-        # Get the detail type
-        detail_types = [
-            ("General", "GENERAL"),
-            ("Background", "BACKGROUND"),
-            ("Personality", "PERSONALITY"),
-            ("Physical", "PHYSICAL"),
-            ("Relationships", "RELATIONSHIPS")
-        ]
         
-        type_names = [t[0] for t in detail_types]
-        type_codes = [t[1] for t in detail_types]
+        # Get the entered data
+        detail_text = dialog.get_detail_text()
+        detail_type = dialog.get_detail_type()
         
-        selected_type, ok = QInputDialog.getItem(
-            self,
-            "Detail Type",
-            "Select the type of detail:",
-            type_names,
-            0,  # Default to first item
-            False  # Non-editable
-        )
-        
-        if not ok:
+        if not detail_text:
             return
-            
-        # Get the type code
-        type_index = type_names.index(selected_type)
-        detail_type = type_codes[type_index]
         
         try:
             # Add the detail to the database
@@ -826,7 +868,7 @@ class CharacterDetailsTab(QWidget):
             )
             
             if detail_id:
-                # Reload details to update the list
+                # Reload details to update the tree
                 self.load_details()
             else:
                 QMessageBox.warning(self, "Error", "Failed to add character detail.")
@@ -834,56 +876,33 @@ class CharacterDetailsTab(QWidget):
             print(f"Error adding character detail: {e}")
             QMessageBox.warning(self, "Error", f"Failed to add character detail: {str(e)}")
             
-    def edit_detail(self, item: CharacterDetailItem):
+    def edit_detail(self, item):
         """Edit a character detail.
         
         Args:
-            item: The detail item to edit
+            item: The detail tree item to edit
         """
-        # Show dialog to edit detail text
-        detail_text, ok = QInputDialog.getText(
-            self,
-            "Edit Character Detail",
-            "Detail:",
-            text=item.detail_text
+        # Only allow editing detail items, not category folders
+        if not hasattr(item, 'detail_id'):
+            return
+        
+        # Show the edit detail dialog
+        dialog = AddDetailDialog(
+            self.global_categories,
+            detail_text=item.detail_text,
+            detail_type=item.detail_type,
+            parent=self
         )
         
-        if not ok or not detail_text.strip():
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-            
-        # Get the detail type
-        detail_types = [
-            ("General", "GENERAL"),
-            ("Background", "BACKGROUND"),
-            ("Personality", "PERSONALITY"),
-            ("Physical", "PHYSICAL"),
-            ("Relationships", "RELATIONSHIPS")
-        ]
         
-        type_names = [t[0] for t in detail_types]
-        type_codes = [t[1] for t in detail_types]
+        # Get the entered data
+        detail_text = dialog.get_detail_text()
+        detail_type = dialog.get_detail_type()
         
-        # Find the current type index
-        try:
-            current_type_index = type_codes.index(item.detail_type)
-        except ValueError:
-            current_type_index = 0  # Default to General if type not found
-        
-        selected_type, ok = QInputDialog.getItem(
-            self,
-            "Detail Type",
-            "Select the type of detail:",
-            type_names,
-            current_type_index,
-            False  # Non-editable
-        )
-        
-        if not ok:
+        if not detail_text:
             return
-            
-        # Get the type code
-        type_index = type_names.index(selected_type)
-        detail_type = type_codes[type_index]
         
         try:
             # Update the detail in the database
@@ -895,7 +914,7 @@ class CharacterDetailsTab(QWidget):
             )
             
             if success:
-                # Reload details to update the list
+                # Reload details to update the tree
                 self.load_details()
             else:
                 QMessageBox.warning(self, "Error", "Failed to update character detail.")
@@ -903,12 +922,16 @@ class CharacterDetailsTab(QWidget):
             print(f"Error updating character detail: {e}")
             QMessageBox.warning(self, "Error", f"Failed to update character detail: {str(e)}")
             
-    def delete_detail(self, item: CharacterDetailItem):
+    def delete_detail(self, item):
         """Delete a character detail.
         
         Args:
-            item: The detail item to delete
+            item: The detail tree item to delete
         """
+        # Only allow deleting detail items, not category folders
+        if not hasattr(item, 'detail_id'):
+            return
+            
         # Confirm deletion
         confirm = QMessageBox.question(
             self,
@@ -925,7 +948,7 @@ class CharacterDetailsTab(QWidget):
             success = delete_character_detail(self.db_conn, item.detail_id)
             
             if success:
-                # Reload details to update the list
+                # Reload details to update the tree
                 self.load_details()
             else:
                 QMessageBox.warning(self, "Error", "Failed to delete character detail.")
@@ -936,18 +959,28 @@ class CharacterDetailsTab(QWidget):
     def on_items_reordered(self):
         """Handle reordering of items through drag and drop."""
         try:
+            # This is more complex with a tree structure
+            # We'll need to update sequence numbers within each category
+            
             # Update sequence numbers for all items
-            for i in range(self.details_list.count()):
-                item = self.details_list.item(i)
+            sequence = 0
+            
+            for cat_idx in range(self.details_tree.topLevelItemCount()):
+                category = self.details_tree.topLevelItem(cat_idx)
                 
-                # Skip non-detail items
-                if not isinstance(item, CharacterDetailItem):
-                    continue
+                for detail_idx in range(category.childCount()):
+                    item = category.child(detail_idx)
                     
-                # Update sequence number
-                if item.sequence_number != i:
-                    update_character_detail_sequence(self.db_conn, item.detail_id, i)
-                    item.sequence_number = i
+                    # Skip non-detail items
+                    if not hasattr(item, 'detail_id'):
+                        continue
+                        
+                    # Update sequence number
+                    if item.sequence_number != sequence:
+                        update_character_detail_sequence(self.db_conn, item.detail_id, sequence)
+                        item.sequence_number = sequence
+                    
+                    sequence += 1
                     
             # Reload the data to ensure everything is in sync
             self.load_details()
@@ -961,9 +994,13 @@ class CharacterDetailsTab(QWidget):
         Args:
             position: Position where the menu should be displayed
         """
-        item = self.details_list.itemAt(position)
+        item = self.details_tree.itemAt(position)
         
-        if not item or not isinstance(item, CharacterDetailItem):
+        if not item:
+            return
+            
+        # Only show edit/delete options for detail items, not categories
+        if not hasattr(item, 'detail_id'):
             return
             
         menu = QMenu(self)
@@ -977,7 +1014,88 @@ class CharacterDetailsTab(QWidget):
         menu.addAction(delete_action)
         
         # Show the menu
-        menu.exec(self.details_list.mapToGlobal(position))
+        menu.exec(self.details_tree.mapToGlobal(position))
+
+
+class AddDetailDialog(QDialog):
+    """Dialog for adding or editing a character detail with category support."""
+    
+    def __init__(self, categories: List[Tuple[str, str]], 
+                 detail_text: str = "", detail_type: str = None, parent=None):
+        """Initialize the add detail dialog.
+        
+        Args:
+            categories: List of (name, code) tuples for categories
+            detail_text: Initial detail text (for edit mode)
+            detail_type: Initial detail type (for edit mode)
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.categories = categories
+        self.detail_text = detail_text
+        self.detail_type = detail_type
+        self.init_ui()
+        
+    def init_ui(self):
+        """Initialize the user interface."""
+        self.setWindowTitle("Character Detail")
+        self.resize(400, 150)
+        
+        layout = QVBoxLayout(self)
+        
+        # Detail text
+        layout.addWidget(QLabel("Enter detail (e.g., 'Afraid of heights' or 'Has a scar on left cheek'):"))
+        self.text_edit = QLineEdit(self.detail_text)
+        layout.addWidget(self.text_edit)
+        
+        # Category selection
+        layout.addWidget(QLabel("Category:"))
+        self.category_combo = QComboBox()
+        
+        # Populate category dropdown
+        selected_index = 0
+        for i, (name, code) in enumerate(self.categories):
+            self.category_combo.addItem(name, code)
+            if code == self.detail_type:
+                selected_index = i
+                
+        # Set the current selection if editing
+        if self.detail_type:
+            self.category_combo.setCurrentIndex(selected_index)
+            
+        layout.addWidget(self.category_combo)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        
+        self.ok_button = QPushButton("OK")
+        self.ok_button.clicked.connect(self.accept)
+        self.ok_button.setDefault(True)
+        
+        button_layout.addWidget(self.cancel_button)
+        button_layout.addWidget(self.ok_button)
+        
+        layout.addLayout(button_layout)
+        
+    def get_detail_text(self) -> str:
+        """Get the entered detail text.
+        
+        Returns:
+            The detail text entered by the user
+        """
+        return self.text_edit.text().strip()
+        
+    def get_detail_type(self) -> str:
+        """Get the selected detail type code.
+        
+        Returns:
+            The code of the selected detail type
+        """
+        return self.category_combo.currentData()
 
 
 class CharacterDialog(QDialog):
