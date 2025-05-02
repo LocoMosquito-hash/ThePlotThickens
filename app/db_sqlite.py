@@ -319,6 +319,23 @@ def create_tables(conn: sqlite3.Connection) -> None:
     )
     ''')
     
+    # Create character_last_tagged table to track when characters were last tagged in a story
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS character_last_tagged (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        story_id INTEGER NOT NULL,
+        character_id INTEGER NOT NULL,
+        last_tagged_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE CASCADE,
+        FOREIGN KEY (character_id) REFERENCES characters (id) ON DELETE CASCADE,
+        UNIQUE(story_id, character_id)
+    )
+    ''')
+    
+    # Create indexes for efficient querying
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_character_last_tagged_story_id ON character_last_tagged(story_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_character_last_tagged_character_id ON character_last_tagged(character_id)')
+    
     conn.commit()
 
 
@@ -722,6 +739,9 @@ def initialize_database(db_path: str) -> sqlite3.Connection:
     # Make sure the image_character_tags table is created
     create_image_character_tags_table(conn)
     
+    # Make sure the character_last_tagged table is created
+    create_character_last_tagged_table(conn)
+    
     return conn
 
 
@@ -940,8 +960,7 @@ def get_character_images(conn: sqlite3.Connection, character_id: int) -> List[Di
         WHERE it.character_id = ?
         ORDER BY i.created_at DESC
         """,
-        (character_id,)
-    )
+        (character_id,))
     return [dict(row) for row in cursor.fetchall()]
 
 
@@ -2747,3 +2766,129 @@ def get_image_scenes(conn: sqlite3.Connection, image_id: int) -> List[Dict[str, 
     except sqlite3.Error as e:
         print(f"Error getting image scenes: {e}")
         return []
+
+
+def update_character_last_tagged(conn, story_id: int, character_id: int) -> None:
+    """Update the last tagged timestamp for a character in a story.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        character_id: ID of the character
+    """
+    try:
+        print(f"DEBUG: update_character_last_tagged called for story_id={story_id}, character_id={character_id}")
+        
+        # Create the table if it doesn't exist
+        create_character_last_tagged_table(conn)
+        
+        cursor = conn.cursor()
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"DEBUG: Setting last_tagged to {current_time}")
+        
+        # Check if an entry already exists for this character in this story
+        cursor.execute('''
+        SELECT id FROM character_last_tagged
+        WHERE story_id = ? AND character_id = ?
+        ''', (story_id, character_id))
+        
+        existing = cursor.fetchone()
+        
+        if existing:
+            # Update existing entry
+            cursor.execute('''
+            UPDATE character_last_tagged
+            SET last_tagged_at = ?
+            WHERE story_id = ? AND character_id = ?
+            ''', (current_time, story_id, character_id))
+        else:
+            # Create new entry
+            cursor.execute('''
+            INSERT INTO character_last_tagged (story_id, character_id, last_tagged_at)
+            VALUES (?, ?, ?)
+            ''', (story_id, character_id, current_time))
+        
+        conn.commit()
+        
+        # Verify the update
+        cursor.execute('''
+        SELECT last_tagged_at FROM character_last_tagged
+        WHERE story_id = ? AND character_id = ?
+        ''', (story_id, character_id))
+        
+        result = cursor.fetchone()
+        if result:
+            print(f"DEBUG: Updated timestamp is: {result[0]}")
+        else:
+            print("DEBUG: Failed to retrieve updated timestamp!")
+    except Exception as e:
+        print(f"Error updating character last tagged timestamp: {e}")
+        # Continue without updating the timestamp
+
+def get_characters_by_last_tagged(conn, story_id: int) -> List[Dict[str, Any]]:
+    """Get all characters for a story ordered by last tagged timestamp.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+    
+    Returns:
+        List of character dictionaries ordered by most recently tagged first
+    """
+    try:
+        print(f"DEBUG: get_characters_by_last_tagged called for story ID {story_id}")
+        cursor = conn.cursor()
+        
+        # First ensure the table exists
+        create_character_last_tagged_table(conn)
+        
+        # Join characters with character_last_tagged table, using LEFT JOIN to include
+        # characters that have never been tagged
+        cursor.execute('''
+        SELECT c.id, c.name, c.avatar_path, c.story_id, 
+               clt.last_tagged_at as last_tagged
+        FROM characters c
+        LEFT JOIN character_last_tagged clt ON c.id = clt.character_id AND c.story_id = clt.story_id
+        WHERE c.story_id = ?
+        ORDER BY COALESCE(clt.last_tagged_at, '1970-01-01') DESC, c.name
+        ''', (story_id,))
+        
+        results = [dict(row) for row in cursor.fetchall()]
+        
+        # Debug dump of all character data with timestamps
+        print("DEBUG: Character data from database:")
+        for i, character in enumerate(results):
+            print(f"  {i+1}. ID: {character['id']}, Name: {character['name']}, Last Tagged: {character.get('last_tagged', 'Never')}")
+            
+        return results
+    except Exception as e:
+        print(f"Error in get_characters_by_last_tagged: {e}")
+        # In case of error, fall back to regular character retrieval
+        return get_story_characters(conn, story_id)
+
+def create_character_last_tagged_table(conn: sqlite3.Connection) -> None:
+    """Create the character_last_tagged table if it doesn't exist.
+    
+    Args:
+        conn: Database connection
+    """
+    cursor = conn.cursor()
+    
+    # Create character_last_tagged table to track when characters were last tagged in a story
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS character_last_tagged (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        story_id INTEGER NOT NULL,
+        character_id INTEGER NOT NULL,
+        last_tagged_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE CASCADE,
+        FOREIGN KEY (character_id) REFERENCES characters (id) ON DELETE CASCADE,
+        UNIQUE(story_id, character_id)
+    )
+    ''')
+    
+    # Create indexes for efficient querying
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_character_last_tagged_story_id ON character_last_tagged(story_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_character_last_tagged_character_id ON character_last_tagged(character_id)')
+    
+    conn.commit()
