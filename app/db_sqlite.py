@@ -2120,6 +2120,16 @@ def create_character_details_table(conn: sqlite3.Connection) -> None:
     This table stores miscellaneous details about characters like traits, 
     background info, personality characteristics, etc.
     
+    The detail_type field can be one of:
+    - WORK: Work-related details
+    - STUDY: Education and academic details
+    - RELATIONSHIP: Relationship status details
+    - HOUSING: Living situation details
+    - GENERAL: General character details
+    - BACKGROUND: Character background information
+    - PERSONALITY: Personality traits
+    - PHYSICAL: Physical characteristics
+    
     Args:
         conn: Database connection
     """
@@ -2151,7 +2161,8 @@ def add_character_detail(conn: sqlite3.Connection,
         conn: Database connection
         character_id: ID of the character
         detail_text: Text describing the detail (e.g., "Afraid of heights")
-        detail_type: Category of detail (e.g., "TRAIT", "BACKGROUND", "PERSONALITY")
+        detail_type: Category of detail (e.g., "WORK", "STUDY", "RELATIONSHIP", "HOUSING",
+                    "GENERAL", "BACKGROUND", "PERSONALITY", "PHYSICAL")
         
     Returns:
         ID of the new detail or None if failed
@@ -2265,6 +2276,9 @@ def delete_character_detail(conn: sqlite3.Connection, detail_id: int) -> bool:
 
 def get_character_details(conn: sqlite3.Connection, character_id: int) -> List[Dict[str, Any]]:
     """Get all details for a character.
+    
+    This function returns character details sorted by their sequence number.
+    If a category filter is applied in the UI, it will be handled there.
     
     Args:
         conn: Database connection

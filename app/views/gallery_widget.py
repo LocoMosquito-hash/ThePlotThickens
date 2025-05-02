@@ -7017,9 +7017,13 @@ class OnSceneCharacterListWidget(CharacterListWidget):
                     
                     # If we get here, we don't have a valid avatar
                     # Just show the character name
+                    character_name = "Unknown"
+                    if result and 'name' in result:
+                        character_name = result['name']
+                    
                     QToolTip.showText(
                         self.mapToGlobal(event.pos()), 
-                        f"<b>{result.get('name', 'Unknown')}</b>" if result else "<b>Unknown</b>"
+                        f"<b>{character_name}</b>"
                     )
             else:
                 self.hoveredItem = None
