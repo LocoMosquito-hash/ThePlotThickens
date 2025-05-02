@@ -60,7 +60,8 @@ from app.db_sqlite import (
     get_quick_event_characters, get_quick_event_tagged_characters,
     search_quick_events, get_story_folder_paths, create_image,
     process_quick_event_character_tags, get_quick_event_scenes,
-    add_image_to_scene, remove_image_from_scene, get_scene_images, get_image_scenes
+    add_image_to_scene, remove_image_from_scene, get_scene_images, get_image_scenes,
+    update_character_last_tagged, get_characters_by_last_tagged
 )
 
 # Import our image recognition utility
@@ -4350,14 +4351,42 @@ class RegionSelectionDialog(QDialog):
             )
     
     def load_characters_data(self):
-        """Load characters for the story."""
-        try:
-            # Use existing functions to get characters
-            from app.db_sqlite import get_story_characters
-            self.characters = get_story_characters(self.db_conn, self.story_id)
-        except Exception as e:
-            print(f"Error loading characters: {e}")
-            self.characters = []
+        """Load character data for the current story."""
+        # Load characters for quick events
+        cursor = self.db_conn.cursor()
+        cursor.execute('SELECT id, name FROM characters WHERE story_id = ? ORDER BY name', (self.story_id,))
+        self.characters = []
+        for row in cursor:
+            self.characters.append({
+                'id': row['id'],
+                'name': row['name']
+            })
+            
+        # Populate the on-scene characters list
+        self.populate_onscene_characters()
+    
+    def populate_onscene_characters(self):
+        """Populate the on-scene characters list with checkboxes, sorted by last tagged."""
+        if not hasattr(self, 'onscene_list'):
+            return
+            
+        self.onscene_list.clear()
+        
+        # Get characters sorted by last tagged timestamp
+        from app.db_sqlite import get_characters_by_last_tagged
+        characters = get_characters_by_last_tagged(self.db_conn, self.story_id)
+        
+        if not characters:
+            return
+            
+        # Add all characters with checkboxes
+        for character in characters:
+            item = QListWidgetItem(character['name'])
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)  # All unchecked by default
+            item.setData(Qt.ItemDataRole.UserRole, character['id'])  # Store character ID
+            # Add additional data for tooltips if needed
+            self.onscene_list.addItem(item)
     
     def load_quick_events_data(self):
         """Load quick events for the story."""
@@ -4472,6 +4501,14 @@ class RegionSelectionDialog(QDialog):
         region_tab = QWidget()
         region_layout = QVBoxLayout(region_tab)
         
+        # Create a horizontal layout for the lists
+        lists_layout = QHBoxLayout()
+        
+        # Create a container for the left side lists
+        left_lists_container = QWidget()
+        left_lists_layout = QVBoxLayout(left_lists_container)
+        left_lists_layout.setContentsMargins(0, 0, 0, 0)
+        
         # Region list
         region_group = QGroupBox("Selected Regions")
         region_group_layout = QVBoxLayout(region_group)
@@ -4501,7 +4538,9 @@ class RegionSelectionDialog(QDialog):
         region_buttons.addWidget(clear_all_button)
         
         region_group_layout.addLayout(region_buttons)
-        region_layout.addWidget(region_group)
+        
+        # Add region group to left lists layout
+        left_lists_layout.addWidget(region_group)
         
         # Result list
         result_group = QGroupBox("Character Recognition Results (Click to Tag)")
@@ -4513,17 +4552,29 @@ class RegionSelectionDialog(QDialog):
         self.result_list.itemSelectionChanged.connect(self.on_character_selection_changed)
         result_group_layout.addWidget(self.result_list)
         
-        # Remove global add to database checkbox
-        # self.add_to_db_checkbox = QCheckBox("Add face to recognition database")
-        # self.add_to_db_checkbox.setChecked(False)
-        # result_group_layout.addWidget(self.add_to_db_checkbox)
-        
         # Rebuild database button
         rebuild_button = QPushButton("Rebuild Recognition Database")
         rebuild_button.clicked.connect(self.rebuild_recognition_database)
         result_group_layout.addWidget(rebuild_button)
         
-        region_layout.addWidget(result_group)
+        # Add result group to left lists layout
+        left_lists_layout.addWidget(result_group)
+        
+        # Add left lists container to the horizontal layout
+        lists_layout.addWidget(left_lists_container, 2)  # 2:1 ratio for left:right
+        
+        # Create on-scene characters list (right side)
+        onscene_group = QGroupBox("On-scene Characters")
+        onscene_layout = QVBoxLayout(onscene_group)
+        
+        self.onscene_list = OnSceneCharacterListWidget(self.db_conn)
+        onscene_layout.addWidget(self.onscene_list)
+        
+        # Add on-scene group to the horizontal layout
+        lists_layout.addWidget(onscene_group, 1)  # 2:1 ratio for left:right
+        
+        # Add horizontal lists layout to the region tab
+        region_layout.addLayout(lists_layout)
         
         # Tab 2: Tagged characters
         tagged_tab = QWidget()
@@ -5000,9 +5051,16 @@ class RegionSelectionDialog(QDialog):
         # Clear the selection
         self.result_list.clearSelection()
         
+        # Update the last tagged timestamp for this character
+        from app.db_sqlite import update_character_last_tagged
+        update_character_last_tagged(self.db_conn, self.story_id, tag['character_id'])
+        
+        # Refresh the on-scene characters list to reflect the new order
+        self.populate_onscene_characters()
+        
         # Show confirmation message in the status bar instead of a message box
         self.status_bar.showMessage(f"Character tag for {tag['character_name']} has been saved.", 5000)
-            
+    
     def update_tagged_list(self):
         """Update the list of tagged characters."""
         self.tagged_list.clear()
@@ -6815,3 +6873,101 @@ class CharacterListWidget(QListWidget):
         self.hoveredItem = None
         QToolTip.hideText()
         super().leaveEvent(event)
+
+
+class OnSceneCharacterListWidget(CharacterListWidget):
+    """A custom QListWidget for on-scene characters that shows avatars on hover."""
+    
+    def __init__(self, db_conn, parent=None):
+        """Initialize the on-scene character list widget.
+        
+        Args:
+            db_conn: Database connection
+            parent: Parent widget
+        """
+        super().__init__(db_conn, parent)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.setSortingEnabled(False)  # Disable sorting to preserve character last_tagged order
+    
+    def mouseMoveEvent(self, event):
+        """Handle mouse move events to show character avatars.
+        
+        Args:
+            event: Mouse event
+        """
+        # Get the item under the cursor
+        item = self.itemAt(event.pos())
+        
+        # Only process if we have a valid item
+        if item:
+            character_id = item.data(Qt.ItemDataRole.UserRole)
+            if character_id:
+                # If this is a new item being hovered, show the tooltip
+                if self.hoveredItem != item:
+                    self.hoveredItem = item
+                    
+                    # Get the character's avatar from the database
+                    cursor = self.db_conn.cursor()
+                    cursor.execute("SELECT name, avatar_path FROM characters WHERE id = ?", (character_id,))
+                    result = cursor.fetchone()
+                    
+                    if result and result['avatar_path']:
+                        character_name = result['name']
+                        avatar_path = result['avatar_path']
+                        if os.path.exists(avatar_path):
+                            # Create a pixmap from the avatar
+                            pixmap = QPixmap(avatar_path)
+                            if not pixmap.isNull():
+                                # Scale the pixmap to 160x160 preserving aspect ratio
+                                pixmap = pixmap.scaled(
+                                    160, 160, 
+                                    Qt.AspectRatioMode.KeepAspectRatio,
+                                    Qt.TransformationMode.SmoothTransformation
+                                )
+                                
+                                # Create HTML for the tooltip with the image
+                                from app.utils.color_utils import string_to_color, get_contrasting_text_color
+                                
+                                # Generate a consistent color based on character name
+                                bg_color = string_to_color(character_name)
+                                text_color = get_contrasting_text_color(bg_color)
+                                
+                                # Save the pixmap to a temporary QByteArray
+                                byte_array = QByteArray()
+                                buffer = QBuffer(byte_array)
+                                buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+                                pixmap.save(buffer, "PNG")
+                                
+                                # Convert to base64 for inline HTML
+                                image_data = byte_array.toBase64().data().decode()
+                                
+                                # Create HTML tooltip with character name and avatar
+                                html = f"""
+                                <div style="background-color:{bg_color}; color:{text_color}; padding:5px; text-align:center;">
+                                    <b>{character_name}</b>
+                                </div>
+                                <div style="text-align:center; padding:5px;">
+                                    <img src="data:image/png;base64,{image_data}" width="160" height="160" style="max-width:160px; max-height:160px;"/>
+                                </div>
+                                """
+                                
+                                # Show the tooltip at the cursor position
+                                QToolTip.showText(self.mapToGlobal(event.pos()), html)
+                                return
+                    
+                    # If we get here, we don't have a valid avatar
+                    # Just show the character name
+                    QToolTip.showText(
+                        self.mapToGlobal(event.pos()), 
+                        f"<b>{result.get('name', 'Unknown')}</b>" if result else "<b>Unknown</b>"
+                    )
+            else:
+                self.hoveredItem = None
+                QToolTip.hideText()
+        else:
+            self.hoveredItem = None
+            QToolTip.hideText()
+        
+        # Call QListWidget's mouseMoveEvent directly instead of using super()
+        # This avoids the parent class's check for 'character_id' in data
+        QListWidget.mouseMoveEvent(self, event)
