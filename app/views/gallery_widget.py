@@ -160,11 +160,20 @@ class ThumbnailWidget(QFrame):
         """Handle mouse press events."""
         # Don't trigger thumbnail click if clicking on the checkbox (let the checkbox handle it)
         checkbox_rect = self.checkbox.geometry()
+        
+        # If clicking outside the checkbox area
         if not checkbox_rect.contains(event.pos()):
-            super().mousePressEvent(event)
-            # Only emit clicked signal for left-click
-            if event.button() == Qt.MouseButton.LeftButton:
-                self.clicked.emit(self.image_id)
+            # Check if CTRL is pressed
+            if event.modifiers() & Qt.KeyboardModifier.ControlModifier and event.button() == Qt.MouseButton.LeftButton:
+                # If CTRL+click, toggle the checkbox
+                current_state = self.checkbox.checkState()
+                new_state = Qt.CheckState.Unchecked if current_state == Qt.CheckState.Checked else Qt.CheckState.Checked
+                self.checkbox.setCheckState(new_state)
+            else:
+                # Normal behavior - pass to parent and emit clicked signal for left-click
+                super().mousePressEvent(event)
+                if event.button() == Qt.MouseButton.LeftButton:
+                    self.clicked.emit(self.image_id)
 
     def _on_checkbox_toggled(self, state: int) -> None:
         """Handle checkbox toggle."""
