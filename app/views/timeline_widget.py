@@ -1861,11 +1861,14 @@ class TimelineWidget(QWidget):
         
         # Create a container for the timeline content
         self.timeline_container = QWidget()
+        self.timeline_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.timeline_container_layout = QVBoxLayout(self.timeline_container)
+        self.timeline_container_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
         
         # Create the horizontal timeline widget
         self.horizontal_timeline = HorizontalTimelineWidget(self)
         self.horizontal_timeline.event_clicked.connect(self.select_event)
+        self.horizontal_timeline.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.timeline_container_layout.addWidget(self.horizontal_timeline)
         
         # Create the list view widget (initially hidden)
@@ -1873,6 +1876,9 @@ class TimelineWidget(QWidget):
         self.timeline_layout = QVBoxLayout(self.timeline_content)
         self.timeline_container_layout.addWidget(self.timeline_content)
         self.timeline_content.hide()  # Hide by default, show horizontal timeline
+        
+        # Add stretch to push widgets to the top
+        self.timeline_container_layout.addStretch(1)
         
         self.scroll_area.setWidget(self.timeline_container)
         timeline_layout.addWidget(self.scroll_area)
@@ -1957,6 +1963,11 @@ class TimelineWidget(QWidget):
         # Update the horizontal timeline
         self.horizontal_timeline.set_events(filtered_events)
         
+        # Adjust scroll area to new content width
+        if filtered_events and len(filtered_events) > 5:  # Only if we have enough events to warrant scrolling
+            # Give the timeline widget a chance to update its size
+            QTimer.singleShot(10, self.update_scroll_area)
+        
         if not filtered_events:
             empty_label = QLabel("No events to display. Create your first event using the 'Add Event' button.")
             empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1988,6 +1999,23 @@ class TimelineWidget(QWidget):
             
         # Add stretch to push events to the top
         self.timeline_layout.addStretch()
+        
+    def update_scroll_area(self):
+        """Update the scroll area after the timeline has been resized."""
+        # Get the actual size of the timeline widget
+        timeline_width = self.horizontal_timeline.width()
+        container_width = self.timeline_container.width()
+        
+        # If the timeline is wider than its container, we need a scrollbar
+        if timeline_width > container_width:
+            # Ensure horizontal scrollbar is visible
+            self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+            
+            # Force the timeline container to be at least as wide as the timeline
+            self.timeline_container.setMinimumWidth(timeline_width)
+        else:
+            # If timeline fits, we can still show scroll bar for consistency
+            self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
     
     def add_hierarchical_events(self, events_by_parent, parent_id, level):
         """Add events to the hierarchical view.
@@ -2429,6 +2457,8 @@ class HorizontalTimelineWidget(QWidget):
         self.event_positions = {}  # Maps event_id to x position
         self.conn = None
         self.event_characters = {}  # Maps event_id to list of characters
+        # Minimum distance between events in pixels
+        self.min_event_spacing = 100
         
         # Get database connection from parent if available
         if parent and hasattr(parent, 'conn'):
@@ -2442,11 +2472,32 @@ class HorizontalTimelineWidget(QWidget):
         # Sort primarily by sequence_number
         self.events = sorted(events, key=lambda e: (e.get('sequence_number', 0), e.get('start_date', '')))
         self.calculate_timeline_range()
+        self.calculate_minimum_width()
         
         # Load character data for each event
         self.load_event_characters()
         
         self.update()
+    
+    def calculate_minimum_width(self):
+        """Calculate the minimum width needed to maintain spacing between events."""
+        if not self.events:
+            return
+            
+        # Calculate required width based on number of events and minimum spacing
+        num_events = len(self.events)
+        required_width = (num_events * self.min_event_spacing) + 100  # 50px margin on each side
+        
+        # Compare with parent width if available
+        parent_width = self.parent().width() if self.parent() else 800
+        
+        # Set width to either the required width or the parent width, whichever is larger
+        self.setMinimumWidth(required_width)
+        
+        # If the required width is greater than the parent width, we'll need scrolling
+        if required_width > parent_width:
+            # Ensure our width is set large enough for scrolling
+            self.resize(required_width, self.height())
         
     def load_event_characters(self):
         """Load character data for all events."""
@@ -2488,26 +2539,43 @@ class HorizontalTimelineWidget(QWidget):
             self.timeline_end = str(max_seq)
             
     def get_event_x_position(self, event: Dict[str, Any]) -> int:
-        """Calculate the x position for an event based on its sequence number."""
-        width = self.width() - 100  # Leave margin on both sides
+        """Calculate the x position for an event based on its sequence number with minimum spacing."""
+        if not self.events:
+            return 50
         
-        # Use sequence number as primary positioning factor
-        sequence = event.get('sequence_number', 0)
+        # Get the total number of events
+        num_events = len(self.events)
         
-        # Get min and max sequence numbers
+        # If there's only one event, center it
+        if num_events == 1:
+            return self.width() // 2
+        
+        # Determine if we're using proportional spacing or equal spacing
         min_seq = int(self.timeline_start) if self.timeline_start.isdigit() else 0
         max_seq = int(self.timeline_end) if self.timeline_end.isdigit() else 100
         
-        # If all events have the same sequence, space them evenly
-        if min_seq == max_seq:
+        # If all events have the same sequence, distribute them evenly with minimum spacing
+        if min_seq == max_seq or (max_seq - min_seq) < num_events:
+            # Get index of the current event
             index = self.events.index(event)
-            return int(50 + (index / max(1, len(self.events) - 1)) * width)
-        
-        # Calculate position based on sequence number
-        range_width = max(1, max_seq - min_seq)  # Avoid division by zero
-        position = (sequence - min_seq) / range_width
-        
-        return int(50 + position * width)
+            
+            # Use equal spacing between events with the minimum spacing
+            total_width = max(self.width(), (num_events - 1) * self.min_event_spacing + 100)
+            
+            # Calculate position based on equal spacing
+            return int(50 + (index * self.min_event_spacing))
+        else:
+            # Use proportional spacing based on sequence numbers
+            sequence = event.get('sequence_number', 0)
+            range_width = max(1, max_seq - min_seq)  # Avoid division by zero
+            
+            # Calculate the total width required
+            total_width = max(self.width() - 100, range_width * self.min_event_spacing)
+            
+            # Calculate position based on sequence number
+            position_ratio = (sequence - min_seq) / range_width
+            
+            return int(50 + position_ratio * total_width)
             
     def paintEvent(self, event):
         """Paint the timeline widget."""
@@ -2642,6 +2710,16 @@ class HorizontalTimelineWidget(QWidget):
             
         painter.end()
         
+    def resizeEvent(self, event):
+        """Handle resize events to recalculate positions."""
+        super().resizeEvent(event)
+        self.update()  # Redraw the timeline
+        
+        # Notify parent to update scroll area if this is a width change
+        if event.oldSize().width() != event.size().width() and self.parent() and hasattr(self.parent(), 'update_scroll_area'):
+            # Use a timer to ensure the resize is complete before updating scroll area
+            QTimer.singleShot(10, self.parent().update_scroll_area)
+        
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press events to select events."""
         if event.button() == Qt.MouseButton.LeftButton:
@@ -2661,4 +2739,4 @@ class HorizontalTimelineWidget(QWidget):
                 self.event_clicked.emit(closest_event_id)
                 self.update()
                 
-        super().mousePressEvent(event) 
+        super().mousePressEvent(event)

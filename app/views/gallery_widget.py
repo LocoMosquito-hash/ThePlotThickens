@@ -2854,72 +2854,28 @@ class GalleryWidget(QWidget):
             self._display_image_list(orphan_images, row)
             return
         
-        # Sort scenes by sequence number (newest first)
+        # Now create a chronological display order with scenes and ungrouped images interspersed
+        # Create a new display order with scenes only
+        display_order = []
+        
+        # Sort scenes by sequence number (highest first = newest scenes first)
         sorted_scenes = sorted(
             scene_images.items(),
             key=lambda x: x[1]['sequence_number'],
             reverse=True
         )
         
-        # Now create a chronological display order with scenes and ungrouped images interspersed
-        display_order = []
+        # Add all scenes in order of sequence number (highest first)
+        for scene_id, scene_data in sorted_scenes:
+            display_order.append(('scene', scene_id))
         
-        # First, organize orphaned images by timestamp
-        orphan_images_by_timestamp = {}
-        for image in orphan_images:
-            timestamp = image['created_at']
-            if timestamp not in orphan_images_by_timestamp:
-                orphan_images_by_timestamp[timestamp] = []
-            orphan_images_by_timestamp[timestamp].append(image)
-        
-        # Then find cutpoints between scenes for placing orphaned images
-        scene_timestamps = [(scene_id, data['newest_timestamp']) for scene_id, data in scene_images.items()]
-        scene_timestamps.sort(key=lambda x: x[1], reverse=True)  # Sort by timestamp, newest first
-        
-        # If we have scene timestamps, add the first scene
-        if scene_timestamps:
-            first_scene_id = scene_timestamps[0][0]
-            display_order.append(('scene', first_scene_id))
+        # Now, place unassigned images in a separate group at the top
+        if orphan_images:
+            # Sort orphaned images by creation timestamp (newest first)
+            orphan_images.sort(key=lambda x: x['created_at'], reverse=True)
+            # Insert the ungrouped section at the beginning of display_order
+            display_order.insert(0, ('ungrouped', orphan_images))
             
-            # Find orphan images that need to go above the first scene
-            orphans_before_first = []
-            for image in orphan_images:
-                if image['created_at'] > scene_timestamps[0][1]:
-                    orphans_before_first.append(image)
-            
-            # If we have orphans before the first scene, add them at the very top
-            if orphans_before_first:
-                display_order.insert(0, ('ungrouped', orphans_before_first))
-        
-        # Now handle remaining scenes and orphans
-        for i in range(len(scene_timestamps) - 1):
-            current_scene_id, current_timestamp = scene_timestamps[i]
-            next_scene_id, next_timestamp = scene_timestamps[i + 1]
-            
-            # Find orphan images that belong between these two scenes
-            orphans_between = []
-            for image in orphan_images:
-                if next_timestamp < image['created_at'] < current_timestamp:
-                    orphans_between.append(image)
-            
-            if orphans_between:
-                display_order.append(('ungrouped', orphans_between))
-            
-            # Add the next scene
-            display_order.append(('scene', next_scene_id))
-            
-        # Find orphan images that need to go below the last scene
-        if scene_timestamps:
-            last_scene_id, last_timestamp = scene_timestamps[-1]
-            orphans_after_last = []
-            for image in orphan_images:
-                if image['created_at'] < last_timestamp:
-                    orphans_after_last.append(image)
-            
-            # If we have orphans after the last scene, add them at the very bottom
-            if orphans_after_last:
-                display_order.append(('ungrouped', orphans_after_last))
-        
         # Now display everything according to our calculated order
         row = 0
         for item_type, item_data in display_order:
@@ -4103,7 +4059,18 @@ class GalleryWidget(QWidget):
                 
                 for image_id in self.selected_thumbnails:
                     try:
-                        # Add image to scene - handle both new assignments and existing ones
+                        # First, remove the image from any existing scenes
+                        cursor.execute(
+                            "SELECT scene_event_id FROM scene_images WHERE image_id = ?", 
+                            (image_id,)
+                        )
+                        existing_scenes = cursor.fetchall()
+                        
+                        for existing_scene in existing_scenes:
+                            remove_image_from_scene(self.db_conn, existing_scene['scene_event_id'], image_id)
+                            print(f"Removed image {image_id} from scene {existing_scene['scene_event_id']}")
+                        
+                        # Now add to the new scene
                         cursor.execute(
                             "SELECT id FROM scene_images WHERE scene_event_id = ? AND image_id = ?", 
                             (scene_id, image_id)
@@ -4140,6 +4107,9 @@ class GalleryWidget(QWidget):
 
 class RegionSelectionDialog(QDialog):
     """Dialog for manually selecting regions to recognize characters in."""
+    
+    # Static class variable to store the IDs of characters tagged in the last session
+    last_tagged_character_ids = []
     
     def __init__(self, db_conn, image: QImage, story_id: int, parent=None, image_id: Optional[int] = None):
         """Initialize the region selection dialog.
@@ -4383,7 +4353,13 @@ class RegionSelectionDialog(QDialog):
         for character in characters:
             item = QListWidgetItem(character['name'])
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setCheckState(Qt.CheckState.Unchecked)  # All unchecked by default
+            
+            # Pre-check characters that were tagged in the last session
+            if character['id'] in RegionSelectionDialog.last_tagged_character_ids:
+                item.setCheckState(Qt.CheckState.Checked)
+            else:
+                item.setCheckState(Qt.CheckState.Unchecked)
+                
             item.setData(Qt.ItemDataRole.UserRole, character['id'])  # Store character ID
             # Add additional data for tooltips if needed
             self.onscene_list.addItem(item)
@@ -4882,15 +4858,18 @@ class RegionSelectionDialog(QDialog):
         }
     
     def accept(self):
-        """Override accept to save the selected quick event association."""
-        # Get the selected quick event ID
-        if hasattr(self, 'quick_events_combo'):
-            self.associated_quick_event_id = self.quick_events_combo.currentData()
+        """Override accept to save the selected quick event association and process checked characters."""
+        # Get the selected quick event ID if a quick event is selected
+        if hasattr(self, 'quick_events_combo') and self.quick_events_combo.currentData() != -1:
+            self.selected_quick_event_id = self.quick_events_combo.currentData()
         
-        # Process checked characters in the on-scene list
+        # Process the checked characters before accepting
         self.tag_checked_onscene_characters()
         
-        # Call the parent accept
+        # Store the character IDs that were tagged in this session for future use
+        RegionSelectionDialog.last_tagged_character_ids = [tag['character_id'] for tag in self.tagged_characters]
+        
+        # Call the parent accept method
         super().accept()
     
     def rebuild_recognition_database(self):
@@ -6790,7 +6769,18 @@ class SceneSelectionDialog(QDialog):
                 
                 for image_id in self.selected_thumbnails:
                     try:
-                        # Add image to scene - handle both new assignments and existing ones
+                        # First, remove the image from any existing scenes
+                        cursor.execute(
+                            "SELECT scene_event_id FROM scene_images WHERE image_id = ?", 
+                            (image_id,)
+                        )
+                        existing_scenes = cursor.fetchall()
+                        
+                        for existing_scene in existing_scenes:
+                            remove_image_from_scene(self.db_conn, existing_scene['scene_event_id'], image_id)
+                            print(f"Removed image {image_id} from scene {existing_scene['scene_event_id']}")
+                        
+                        # Now add to the new scene
                         cursor.execute(
                             "SELECT id FROM scene_images WHERE scene_event_id = ? AND image_id = ?", 
                             (scene_id, image_id)
