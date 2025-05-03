@@ -8,29 +8,42 @@ This widget displays a gallery of images for a story.
 """
 
 import os
+import sys
+import time
+import io
 import re
+import pickle
 import string
 import random
-from typing import List, Dict, Any, Optional, Tuple
+import base64
+import urllib.parse
+import tempfile
+from pathlib import Path
+from typing import List, Dict, Any, Optional, Tuple, Set, Union
 from datetime import datetime
 
+import numpy as np
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QGridLayout, QFileDialog, QMessageBox,
     QSizePolicy, QFrame, QApplication, QDialog, QListWidget,
     QListWidgetItem, QMenu, QTabWidget, QSplitter, QComboBox,
-    QTextEdit, QCheckBox, QGroupBox, QGraphicsView, QGraphicsScene, QGraphicsRectItem, 
+    QToolButton, QInputDialog, QTextEdit, QCheckBox, QProgressBar,
+    QGroupBox, QGraphicsView, QGraphicsScene, QGraphicsRectItem, 
     QGraphicsPixmapItem, QGraphicsItem, QGraphicsTextItem, QProgressDialog,
-    QStatusBar, QToolTip, QAbstractItemView, QDialogButtonBox
+    QStyleFactory, QMainWindow, QStatusBar, QToolTip, QRadioButton,
+    QSpinBox, QLineEdit, QAbstractItemView, QDialogButtonBox
 )
 from PyQt6.QtCore import (
     Qt, QSize, pyqtSignal, QByteArray, QUrl, QBuffer, QIODevice, 
-    QPoint, QRect, QRectF, QPointF, QTimer
+    QPoint, QRect, QRectF, QPointF, QRegularExpression, QSortFilterProxyModel,
+    QTimer
 )
 from PyQt6.QtGui import (
     QPixmap, QImage, QColor, QBrush, QPen, QPainter, QFont, 
-    QCursor, QAction, QTransform, QTextCursor, QKeySequence, QShortcut
+    QPalette, QCursor, QIcon, QAction, QTransform, QClipboard, QImageReader,
+    QTextCursor, QStandardItemModel, QStandardItem, QKeySequence, QShortcut
 )
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
@@ -42,11 +55,12 @@ from app.db_sqlite import (
     get_image_quick_events, get_character_quick_events,
     associate_quick_event_with_image, remove_quick_event_image_association,
     get_story_characters, get_character,
-    add_character_tag_to_image, remove_character_tag,
+    add_character_tag_to_image, update_character_tag, remove_character_tag,
     get_image_character_tags, create_quick_event, get_next_quick_event_sequence_number,
-    get_quick_event_tagged_characters,
+    get_quick_event_characters, get_quick_event_tagged_characters,
+    search_quick_events, get_story_folder_paths, create_image,
     process_quick_event_character_tags, get_quick_event_scenes,
-    add_image_to_scene, remove_image_from_scene, get_image_scenes,
+    add_image_to_scene, remove_image_from_scene, get_scene_images, get_image_scenes,
     update_character_last_tagged, get_characters_by_last_tagged
 )
 
@@ -1223,6 +1237,7 @@ class ImageDetailDialog(QDialog):
     
     def setup_shortcuts(self):
         """Setup keyboard shortcuts for the dialog."""
+        from PyQt6.QtGui import QKeySequence, QShortcut
         
         # Add CTRL+Q shortcut for quick event
         quick_event_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
@@ -1401,7 +1416,7 @@ class ImageDetailDialog(QDialog):
             
             if success:
                 # Show a success message
-                self.status_bar.showMessage("Quick event created and associated with this image", 5000)
+                self.status_bar.showMessage(f"Quick event created and associated with this image", 5000)
                 
                 # Reload the quick events list
                 self.load_quick_events()
@@ -2465,6 +2480,13 @@ class GalleryWidget(QWidget):
         self.filters_button.setEnabled(False)  # Disabled until a story is selected
         button_layout.addWidget(self.filters_button)
         
+        # Add clear filters button
+        self.clear_filters_button = QPushButton("Clear Filters")
+        self.clear_filters_button.setToolTip("Clear all active filters")
+        self.clear_filters_button.clicked.connect(self.clear_filters)
+        self.clear_filters_button.setEnabled(False)  # Disabled until filters are applied
+        button_layout.addWidget(self.clear_filters_button)
+        
         # Add spacer to push buttons to the left
         button_layout.addStretch()
         
@@ -2618,7 +2640,7 @@ class GalleryWidget(QWidget):
             Qt.TransformationMode.SmoothTransformation
         )
         # Use the new update_pixmap method to properly update the thumbnail
-        thumbnail.update_pixmap(scaled_pixmap)
+        thumbnail.update_pixmap(self.placeholder_pixmap)
         print(f"Set thumbnail {thumbnail.image_id} to NSFW mode")
     
     def set_thumbnail_normal(self, thumbnail: ThumbnailWidget, image_id: int) -> None:
@@ -2663,6 +2685,7 @@ class GalleryWidget(QWidget):
         self.import_button.setEnabled(True)
         self.rebuild_recognition_button.setEnabled(True)
         self.filters_button.setEnabled(True)  # Enable the filters button
+        self.clear_filters_button.setEnabled(False)  # Disable until filters are applied
         
         # Initialize active_filters if needed
         if not hasattr(self, 'active_filters'):
@@ -3810,6 +3833,7 @@ class GalleryWidget(QWidget):
         Returns:
             List of image URLs
         """
+        import re
         
         # Find all img tags
         img_tags = re.findall(r'<img[^>]+src="([^"]+)"', html)
@@ -4125,6 +4149,9 @@ class GalleryWidget(QWidget):
         # Set the current filters
         dialog.character_filters = self.active_filters.copy() if hasattr(self, 'active_filters') else []
         
+        # Populate the filter list with current filters
+        dialog.populate_filter_list()
+        
         # Show the dialog
         if dialog.exec():
             # Get the filters
@@ -4192,11 +4219,32 @@ class GalleryWidget(QWidget):
                 
             # Update status
             self.update_filter_status()
+            
+            # Enable clear filters button when filters are active
+            if hasattr(self, 'active_filters') and self.active_filters:
+                self.clear_filters_button.setEnabled(True)
                 
         except Exception as e:
             print(f"Error applying filters: {e}")
             self.status_label.setText(f"Error: {str(e)}")
 
+    def clear_filters(self) -> None:
+        """Clear all active filters and refresh the gallery."""
+        if hasattr(self, 'active_filters'):
+            self.active_filters = []
+            
+        # Reload all images
+        self.load_images()
+        
+        # Update status to reflect no filters
+        if hasattr(self, 'current_story_data') and self.current_story_data:
+            self.status_label.setText(f"Gallery for: {self.current_story_data['title']} ({len(self.thumbnails)} images)")
+        else:
+            self.status_label.setText(f"Gallery: {len(self.thumbnails)} images")
+        
+        # Disable clear button
+        self.clear_filters_button.setEnabled(False)
+            
     def update_filter_status(self) -> None:
         """Update the status label with info about current filters."""
         # If no active filters, nothing special to show
@@ -4282,6 +4330,7 @@ class RegionSelectionDialog(QDialog):
     # Add shortcut setup method
     def setup_shortcuts(self):
         """Setup keyboard shortcuts for the dialog."""
+        from PyQt6.QtGui import QKeySequence, QShortcut
         
         # Add CTRL+Q shortcut for quick event
         quick_event_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
@@ -4459,6 +4508,7 @@ class RegionSelectionDialog(QDialog):
         self.onscene_list.clear()
         
         # Get characters sorted by last tagged timestamp
+        from app.db_sqlite import get_characters_by_last_tagged
         characters = get_characters_by_last_tagged(self.db_conn, self.story_id)
         
         if not characters:
@@ -4787,6 +4837,7 @@ class RegionSelectionDialog(QDialog):
         """Create a new quick event and add it to the database."""
         try:
             # Import the QuickEventManager
+            from app.utils.quick_event_manager import QuickEventManager
             
             # Create context for character recognition dialog
             context = {
@@ -4877,7 +4928,7 @@ class RegionSelectionDialog(QDialog):
                     print(f"[ERROR] Association record found: {association is not None}")
                     
                     # Try to force the association again
-                    print("[DEBUG] Forcing association with direct SQL")
+                    print(f"[DEBUG] Forcing association with direct SQL")
                     from datetime import datetime
                     now = datetime.now().isoformat()
                     cursor.execute(
@@ -5148,6 +5199,7 @@ class RegionSelectionDialog(QDialog):
         self.result_list.clearSelection()
         
         # Update the last tagged timestamp for this character
+        from app.db_sqlite import update_character_last_tagged
         update_character_last_tagged(self.db_conn, self.story_id, tag['character_id'])
         
         # Refresh the on-scene characters list to reflect the new order
@@ -6184,7 +6236,7 @@ class GraphicsTagView(QGraphicsView):
         rel_y = max(0.0, min(1.0, rel_y))
         
         # Print detailed debug info
-        print("VIEW TO NORM COORDS:")
+        print(f"VIEW TO NORM COORDS:")
         print(f"  - View pos: ({view_pos.x()}, {view_pos.y()})")
         print(f"  - Scene pos: ({scene_pos.x():.1f}, {scene_pos.y():.1f})")
         print(f"  - Scene dimensions: {scene_width}x{scene_height}")
@@ -6212,7 +6264,7 @@ class GraphicsTagView(QGraphicsView):
         scene_y = rel_y * scene_height
         
         # Print detailed debug info
-        print("NORM TO SCENE COORDS:")
+        print(f"NORM TO SCENE COORDS:")
         print(f"  - Normalized: ({rel_x:.4f}, {rel_y:.4f})")
         print(f"  - Scene dimensions: {scene_width}x{scene_height}")
         print(f"  - Scene pos: ({scene_x:.1f}, {scene_y:.1f})")
@@ -6289,7 +6341,7 @@ class GraphicsTagView(QGraphicsView):
                 return
                 
             # Convert any @mentions to [char:ID] format using the centralized function
-            from app.db_sqlite import create_quick_event
+            from app.db_sqlite import create_quick_event, get_next_quick_event_sequence_number
             
             # Process the text with the centralized function
             processed_text = convert_mentions_to_char_refs(text, self.characters)
@@ -6449,6 +6501,7 @@ class GraphicsTagView(QGraphicsView):
         """Create a new quick event and add it to the database."""
         try:
             # Import the QuickEventManager
+            from app.utils.quick_event_manager import QuickEventManager
             
             # Create context for character recognition dialog
             context = {
@@ -6539,7 +6592,7 @@ class GraphicsTagView(QGraphicsView):
                     print(f"[ERROR] Association record found: {association is not None}")
                     
                     # Try to force the association again
-                    print("[DEBUG] Forcing association with direct SQL")
+                    print(f"[DEBUG] Forcing association with direct SQL")
                     from datetime import datetime
                     now = datetime.now().isoformat()
                     cursor.execute(
@@ -6690,7 +6743,7 @@ class GraphicsTagView(QGraphicsView):
         """Load quick events data for the combo box."""
         try:
             # Get quick events for the story
-            from app.db_sqlite import get_quick_event_tagged_characters
+            from app.db_sqlite import search_quick_events, get_quick_event_tagged_characters
             from app.utils.character_references import convert_char_refs_to_mentions
             
             # Ensure we have loaded the quick events
@@ -7189,6 +7242,11 @@ class GalleryFilterDialog(QDialog):
         remove_button.clicked.connect(self.remove_selected_filters)
         filter_layout.addWidget(remove_button)
         
+        # Add clear all button for filter selections
+        clear_all_button = QPushButton("Clear All")
+        clear_all_button.clicked.connect(self.clear_all_filters)
+        filter_layout.addWidget(clear_all_button)
+        
         lists_layout.addWidget(filter_group)
         
         main_layout.addLayout(lists_layout)
@@ -7320,6 +7378,47 @@ class GalleryFilterDialog(QDialog):
             # Remove from the list
             row = self.filter_list.row(item)
             self.filter_list.takeItem(row)
+    
+    def clear_all_filters(self):
+        """Clear all filters from the list."""
+        self.filter_list.clear()
+        self.character_filters.clear()
+    
+    def populate_filter_list(self):
+        """Populate the filter list with current filters."""
+        # Clear the list first
+        self.filter_list.clear()
+        
+        # Get the characters data for name lookup
+        from app.db_sqlite import get_story_characters
+        characters = get_story_characters(self.db_conn, self.story_id)
+        character_dict = {char['id']: char for char in characters}
+        
+        # Add each filter to the list
+        for character_id, include in self.character_filters:
+            if character_id in character_dict:
+                character_name = character_dict[character_id].get('name', 'Unknown')
+                
+                # Create new filter item
+                prefix = "+ " if include else "- "
+                item = QListWidgetItem(f"{prefix}{character_name}")
+                
+                # Store filter data
+                filter_data = {
+                    'id': character_id,
+                    'name': character_name,
+                    'include': include
+                }
+                item.setData(Qt.ItemDataRole.UserRole, filter_data)
+                
+                # Set color based on include/exclude
+                if include:
+                    item.setForeground(QBrush(QColor("#4CAF50")))  # Green for include
+                else:
+                    item.setForeground(QBrush(QColor("#F44336")))  # Red for exclude
+                
+                # Add to the list
+                self.filter_list.addItem(item)
     
     def get_character_filters(self) -> List[Tuple[int, bool]]:
         """Get the character filters.
