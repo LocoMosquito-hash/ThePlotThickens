@@ -1548,9 +1548,9 @@ class ImageDetailDialog(QDialog):
         tags_layout.addWidget(self.tags_list)
         
         # Add button to remove selected tag
-        remove_tag_button = QPushButton("Remove Selected Tag")
-        remove_tag_button.clicked.connect(self.remove_selected_tag)
-        tags_layout.addWidget(remove_tag_button)
+        self.remove_tag_button = QPushButton("Remove Selected Tag")
+        self.remove_tag_button.clicked.connect(self.remove_selected_tag)
+        tags_layout.addWidget(self.remove_tag_button)
         
         self.tab_widget.addTab(tags_tab, "Character Tags")
         
@@ -1731,14 +1731,15 @@ class ImageDetailDialog(QDialog):
             tag_id: ID of the selected tag
         """
         # Select the corresponding item in the list
-        for i in range(self.character_tags_list.count()):
-            item = self.character_tags_list.item(i)
+        for i in range(self.tags_list.count()):
+            item = self.tags_list.item(i)
             if item.data(Qt.ItemDataRole.UserRole) == tag_id:
-                self.character_tags_list.setCurrentItem(item)
+                self.tags_list.setCurrentItem(item)
                 break
                 
-        # Enable the remove button
-        self.remove_tag_button.setEnabled(True)
+        # Enable the remove button if it exists
+        if hasattr(self, 'remove_tag_button'):
+            self.remove_tag_button.setEnabled(True)
     
     def on_tag_list_item_clicked(self, item):
         """Handle tag list item click event.
@@ -1762,7 +1763,7 @@ class ImageDetailDialog(QDialog):
     def remove_selected_tag(self):
         """Remove the selected character tag."""
         # Get the selected tag ID
-        current_item = self.character_tags_list.currentItem()
+        current_item = self.tags_list.currentItem()
         if not current_item:
             return
             
