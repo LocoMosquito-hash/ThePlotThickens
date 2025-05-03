@@ -8,9 +8,8 @@ This module defines the dialog for editing character data.
 """
 
 import os
-import sys
 import time
-from typing import Optional, Dict, Any, List, Tuple, Set
+from typing import Optional, Dict, Any, List, Tuple
 
 from PyQt6.QtWidgets import (
     QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,

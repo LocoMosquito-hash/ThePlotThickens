@@ -311,7 +311,7 @@ class QuickEventSelectionDialog(QDialog):
         """
         super().__init__(parent)
         self.db_conn = db_conn
-        self.story_id = story_id
+        self.current_story_id = story_id
         self.image_id = image_id
         self.current_quick_event_ids = current_quick_event_ids or []
         self.selected_quick_event_ids = []
@@ -358,7 +358,7 @@ class QuickEventSelectionDialog(QDialog):
         """Load characters for the story."""
         try:
             # Get all characters for the story
-            characters = get_story_characters(self.db_conn, self.story_id)
+            characters = get_story_characters(self.db_conn, self.current_story_id)
             
             # Add to combo box
             self.character_combo.clear()
@@ -2473,6 +2473,13 @@ class GalleryWidget(QWidget):
         self.rebuild_recognition_button.setEnabled(False)  # Disabled until a story is selected
         button_layout.addWidget(self.rebuild_recognition_button)
         
+        # Add filters button
+        self.filters_button = QPushButton("Filters...")
+        self.filters_button.setToolTip("Filter images by characters")
+        self.filters_button.clicked.connect(self.show_filters_dialog)
+        self.filters_button.setEnabled(False)  # Disabled until a story is selected
+        button_layout.addWidget(self.filters_button)
+        
         # Add spacer to push buttons to the left
         button_layout.addStretch()
         
@@ -2670,6 +2677,11 @@ class GalleryWidget(QWidget):
         self.paste_button.setEnabled(True)
         self.import_button.setEnabled(True)
         self.rebuild_recognition_button.setEnabled(True)
+        self.filters_button.setEnabled(True)  # Enable the filters button
+        
+        # Initialize active_filters if needed
+        if not hasattr(self, 'active_filters'):
+            self.active_filters = []
         
         # Update status
         self.status_label.setText(f"Gallery for: {story_data['title']}")
@@ -3813,7 +3825,6 @@ class GalleryWidget(QWidget):
         Returns:
             List of image URLs
         """
-        import re
         
         # Find all img tags
         img_tags = re.findall(r'<img[^>]+src="([^"]+)"', html)
@@ -4113,6 +4124,117 @@ class GalleryWidget(QWidget):
                 self.selected_thumbnails.clear()
                 self.batch_panel.setVisible(False)
                 self.load_images()
+
+    def show_filters_dialog(self):
+        """Show the gallery filters dialog."""
+        if not self.current_story_id:
+            return
+            
+        # Initialize active filters if needed
+        if not hasattr(self, 'active_filters'):
+            self.active_filters = []
+            
+        # Create the dialog
+        dialog = GalleryFilterDialog(self.db_conn, self.current_story_id, self)
+        
+        # Set the current filters
+        dialog.character_filters = self.active_filters.copy() if hasattr(self, 'active_filters') else []
+        
+        # Show the dialog
+        if dialog.exec():
+            # Get the filters
+            self.active_filters = dialog.get_character_filters()
+            
+            # Apply the filters
+            self.apply_filters()
+            
+            # Update status with filter info
+            self.update_filter_status()
+
+    def apply_filters(self):
+        """Apply the active filters to the gallery."""
+        if not hasattr(self, 'active_filters') or not self.active_filters:
+            # If no filters, reload all images
+            self.load_images()
+            return
+            
+        # Get all images
+        from app.db_sqlite import get_story_images, get_image_character_tags
+            
+        try:
+            # Get all images for the story
+            all_images = get_story_images(self.db_conn, self.current_story_id)
+            filtered_images = []
+            
+            # For each image, check if it matches the filters
+            for image in all_images:
+                # Get character tags for this image
+                tags = get_image_character_tags(self.db_conn, image['id'])
+                tagged_character_ids = [tag['character_id'] for tag in tags]
+                
+                # Check if image satisfies filter conditions
+                satisfies_filters = True
+                
+                for character_id, include in self.active_filters:
+                    if include:
+                        # Must include this character
+                        if character_id not in tagged_character_ids:
+                            satisfies_filters = False
+                            break
+                    else:
+                        # Must exclude this character
+                        if character_id in tagged_character_ids:
+                            satisfies_filters = False
+                            break
+                
+                # If image satisfies all filters, add it to the filtered list
+                if satisfies_filters:
+                    filtered_images.append(image)
+            
+            # Clear all existing thumbnails
+            self.clear_thumbnails()
+            
+            # Handle empty result
+            if not filtered_images:
+                self.status_label.setText("No images match the current filters.")
+                return
+                
+            # Display the filtered images
+            if self.scene_grouping_mode:
+                self._display_images_with_scene_grouping(filtered_images)
+            else:
+                self._display_images_classic_view(filtered_images)
+                
+            # Update status
+            self.update_filter_status()
+                
+        except Exception as e:
+            print(f"Error applying filters: {e}")
+            self.status_label.setText(f"Error: {str(e)}")
+
+    def update_filter_status(self) -> None:
+        """Update the status label with info about current filters."""
+        # If no active filters, nothing special to show
+        if not hasattr(self, 'active_filters') or not self.active_filters:
+            return
+            
+        # Count included and excluded filters
+        include_count = sum(1 for _, include in self.active_filters if include)
+        exclude_count = sum(1 for _, include in self.active_filters if not include)
+        
+        # Get the number of images
+        visible_count = len(self.thumbnails) if self.thumbnails else 0
+        
+        # Create filter status
+        filter_parts = []
+        if include_count > 0:
+            filter_parts.append(f"{include_count} included")
+        if exclude_count > 0:
+            filter_parts.append(f"{exclude_count} excluded")
+            
+        if filter_parts:
+            filter_text = f"Filters active: {', '.join(filter_parts)}"
+            self.status_label.setText(f"Gallery: {visible_count} images • {filter_text}")
 
 
 class RegionSelectionDialog(QDialog):
@@ -7035,3 +7157,194 @@ class OnSceneCharacterListWidget(CharacterListWidget):
         # Call QListWidget's mouseMoveEvent directly instead of using super()
         # This avoids the parent class's check for 'character_id' in data
         QListWidget.mouseMoveEvent(self, event)
+
+
+class GalleryFilterDialog(QDialog):
+    """Dialog for filtering gallery images by character tags."""
+    
+    def __init__(self, db_conn, story_id: int, parent=None):
+        """Initialize the gallery filter dialog.
+        
+        Args:
+            db_conn: Database connection
+            story_id: ID of the story
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.db_conn = db_conn
+        self.story_id = story_id
+        self.character_filters = []  # List of tuples (character_id, include/exclude)
+        
+        self.setWindowTitle("Gallery Filters")
+        self.resize(600, 500)
+        self.init_ui()
+        self.load_characters()
+    
+    def init_ui(self):
+        """Initialize the user interface."""
+        main_layout = QVBoxLayout(self)
+        
+        # Create lists layout
+        lists_layout = QHBoxLayout()
+        
+        # Left side - Characters list
+        char_group = QGroupBox("Characters")
+        char_layout = QVBoxLayout(char_group)
+        
+        self.character_list = CharacterListWidget(self.db_conn)
+        char_layout.addWidget(self.character_list)
+        
+        lists_layout.addWidget(char_group)
+        
+        # Right side - Filter selections list
+        filter_group = QGroupBox("Filter Selections")
+        filter_layout = QVBoxLayout(filter_group)
+        
+        self.filter_list = QListWidget()
+        self.filter_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        filter_layout.addWidget(self.filter_list)
+        
+        # Add remove button for filter selections
+        remove_button = QPushButton("Remove Selected")
+        remove_button.clicked.connect(self.remove_selected_filters)
+        filter_layout.addWidget(remove_button)
+        
+        lists_layout.addWidget(filter_group)
+        
+        main_layout.addLayout(lists_layout)
+        
+        # Action buttons
+        button_layout = QHBoxLayout()
+        
+        self.apply_button = QPushButton("Apply")
+        self.apply_button.clicked.connect(self.accept)
+        
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        
+        button_layout.addStretch()
+        button_layout.addWidget(self.apply_button)
+        button_layout.addWidget(self.cancel_button)
+        
+        main_layout.addLayout(button_layout)
+    
+    def load_characters(self):
+        """Load characters for the story."""
+        try:
+            from app.db_sqlite import get_story_characters
+            
+            # Get characters for the story
+            characters = get_story_characters(self.db_conn, self.story_id)
+            
+            # Clear the list and repopulate
+            self.character_list.clear()
+            
+            for character in characters:
+                # Create an item with the character name
+                item = QListWidgetItem(character.get('name', 'Unknown'))
+                
+                # Store the character data in the item
+                item.setData(Qt.ItemDataRole.UserRole, character)
+                
+                # Add buttons for include and exclude
+                widget = QWidget()
+                layout = QHBoxLayout(widget)
+                layout.setContentsMargins(5, 0, 5, 0)
+                
+                # Character name label
+                name_label = QLabel(character.get('name', 'Unknown'))
+                layout.addWidget(name_label, 1)  # 1 is the stretch factor
+                
+                # Include button
+                include_button = QPushButton("+")
+                include_button.setFixedSize(24, 24)
+                include_button.setStyleSheet("background-color: #4CAF50; color: white;")
+                include_button.clicked.connect(lambda checked, char=character: self.add_character_filter(char, True))
+                layout.addWidget(include_button)
+                
+                # Exclude button
+                exclude_button = QPushButton("-")
+                exclude_button.setFixedSize(24, 24)
+                exclude_button.setStyleSheet("background-color: #F44336; color: white;")
+                exclude_button.clicked.connect(lambda checked, char=character: self.add_character_filter(char, False))
+                layout.addWidget(exclude_button)
+                
+                # Set the item widget
+                self.character_list.addItem(item)
+                self.character_list.setItemWidget(item, widget)
+                
+        except Exception as e:
+            print(f"Error loading characters for filter dialog: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to load characters: {str(e)}")
+    
+    def add_character_filter(self, character: Dict[str, Any], include: bool):
+        """Add a character to the filter list.
+        
+        Args:
+            character: Character data dictionary
+            include: True to include, False to exclude
+        """
+        character_id = character.get('id')
+        character_name = character.get('name', 'Unknown')
+        
+        # Check if already in the list
+        for i in range(self.filter_list.count()):
+            item = self.filter_list.item(i)
+            filter_data = item.data(Qt.ItemDataRole.UserRole)
+            if filter_data.get('id') == character_id:
+                # Remove existing item if it's different type (include/exclude)
+                if filter_data.get('include') != include:
+                    self.filter_list.takeItem(i)
+                    break
+                else:
+                    # Already in the list with same type, do nothing
+                    return
+        
+        # Create new filter item
+        prefix = "+ " if include else "- "
+        item = QListWidgetItem(f"{prefix}{character_name}")
+        
+        # Store filter data
+        filter_data = {
+            'id': character_id,
+            'name': character_name,
+            'include': include
+        }
+        item.setData(Qt.ItemDataRole.UserRole, filter_data)
+        
+        # Set color based on include/exclude
+        if include:
+            item.setForeground(QBrush(QColor("#4CAF50")))  # Green for include
+        else:
+            item.setForeground(QBrush(QColor("#F44336")))  # Red for exclude
+        
+        # Add to the list
+        self.filter_list.addItem(item)
+        
+        # Update character_filters
+        self.character_filters.append((character_id, include))
+    
+    def remove_selected_filters(self):
+        """Remove the selected filters from the list."""
+        selected_items = self.filter_list.selectedItems()
+        
+        for item in selected_items:
+            filter_data = item.data(Qt.ItemDataRole.UserRole)
+            character_id = filter_data.get('id')
+            include = filter_data.get('include')
+            
+            # Remove from character_filters
+            if (character_id, include) in self.character_filters:
+                self.character_filters.remove((character_id, include))
+            
+            # Remove from the list
+            row = self.filter_list.row(item)
+            self.filter_list.takeItem(row)
+    
+    def get_character_filters(self) -> List[Tuple[int, bool]]:
+        """Get the character filters.
+        
+        Returns:
+            List of tuples (character_id, include/exclude)
+        """
+        return self.character_filters
