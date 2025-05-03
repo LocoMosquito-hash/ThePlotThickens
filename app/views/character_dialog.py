@@ -15,11 +15,11 @@ from PyQt6.QtWidgets import (
     QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QComboBox, QSpinBox, QCheckBox, QPushButton,
     QFileDialog, QMessageBox, QApplication, QGroupBox, QListWidget, 
-    QListWidgetItem, QMenu, QInputDialog, QTextEdit, QFrame, QSplitter,
-    QToolButton, QTreeWidget, QTreeWidgetItem, QStyle
+    QListWidgetItem, QMenu, QTextEdit, QSplitter,
+    QTreeWidget, QTreeWidgetItem, QStyle
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QBuffer, QByteArray, QSettings, QPoint
-from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QKeyEvent, QTextCursor, QIcon, QColor
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint
+from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QColor
 
 from app.utils.character_completer import CharacterCompleter
 
@@ -27,9 +27,9 @@ from app.utils.character_completer import CharacterCompleter
 from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
 
 from app.db_sqlite import (
-    get_character, update_character, get_story, get_character_quick_events,
+    get_character, get_story, get_character_quick_events,
     create_quick_event, update_quick_event, delete_quick_event, 
-    get_next_quick_event_sequence_number, get_quick_event_characters, get_quick_event_tagged_characters,
+    get_next_quick_event_sequence_number, get_quick_event_tagged_characters,
     get_story_characters, get_quick_event_images, associate_quick_event_with_image,
     remove_quick_event_image_association, get_story_images,
     add_character_detail, update_character_detail, delete_character_detail, 
@@ -1346,13 +1346,13 @@ class CharacterDialog(QDialog):
             if not pixmap.isNull():
                 scaled_pixmap = self._scale_pixmap_for_avatar(pixmap)
                 self.avatar_preview.setPixmap(scaled_pixmap)
-                print(f"DEBUG: Avatar loaded successfully")
+                print("DEBUG: Avatar loaded successfully")
             else:
                 self.avatar_preview.setText("No Avatar")
                 print(f"DEBUG: Failed to load avatar from path: {avatar_path}")
         else:
             self.avatar_preview.setText("No Avatar")
-            print(f"DEBUG: No avatar path specified")
+            print("DEBUG: No avatar path specified")
         
         # Set aliases
         if self.character_data['aliases']:

@@ -8,42 +8,29 @@ This widget displays a gallery of images for a story.
 """
 
 import os
-import sys
-import time
-import io
 import re
-import pickle
 import string
 import random
-import base64
-import urllib.parse
-import tempfile
-from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Set, Union
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 
-import numpy as np
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QGridLayout, QFileDialog, QMessageBox,
     QSizePolicy, QFrame, QApplication, QDialog, QListWidget,
     QListWidgetItem, QMenu, QTabWidget, QSplitter, QComboBox,
-    QToolButton, QInputDialog, QTextEdit, QCheckBox, QProgressBar,
-    QGroupBox, QGraphicsView, QGraphicsScene, QGraphicsRectItem, 
+    QTextEdit, QCheckBox, QGroupBox, QGraphicsView, QGraphicsScene, QGraphicsRectItem, 
     QGraphicsPixmapItem, QGraphicsItem, QGraphicsTextItem, QProgressDialog,
-    QStyleFactory, QMainWindow, QStatusBar, QToolTip, QRadioButton,
-    QSpinBox, QLineEdit, QAbstractItemView, QDialogButtonBox
+    QStatusBar, QToolTip, QAbstractItemView, QDialogButtonBox
 )
 from PyQt6.QtCore import (
     Qt, QSize, pyqtSignal, QByteArray, QUrl, QBuffer, QIODevice, 
-    QPoint, QRect, QRectF, QPointF, QRegularExpression, QSortFilterProxyModel,
-    QTimer
+    QPoint, QRect, QRectF, QPointF, QTimer
 )
 from PyQt6.QtGui import (
     QPixmap, QImage, QColor, QBrush, QPen, QPainter, QFont, 
-    QPalette, QCursor, QIcon, QAction, QTransform, QClipboard, QImageReader,
-    QTextCursor, QStandardItemModel, QStandardItem, QKeySequence, QShortcut
+    QCursor, QAction, QTransform, QTextCursor, QKeySequence, QShortcut
 )
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
@@ -55,12 +42,11 @@ from app.db_sqlite import (
     get_image_quick_events, get_character_quick_events,
     associate_quick_event_with_image, remove_quick_event_image_association,
     get_story_characters, get_character,
-    add_character_tag_to_image, update_character_tag, remove_character_tag,
+    add_character_tag_to_image, remove_character_tag,
     get_image_character_tags, create_quick_event, get_next_quick_event_sequence_number,
-    get_quick_event_characters, get_quick_event_tagged_characters,
-    search_quick_events, get_story_folder_paths, create_image,
+    get_quick_event_tagged_characters,
     process_quick_event_character_tags, get_quick_event_scenes,
-    add_image_to_scene, remove_image_from_scene, get_scene_images, get_image_scenes,
+    add_image_to_scene, remove_image_from_scene, get_image_scenes,
     update_character_last_tagged, get_characters_by_last_tagged
 )
 
@@ -1237,7 +1223,6 @@ class ImageDetailDialog(QDialog):
     
     def setup_shortcuts(self):
         """Setup keyboard shortcuts for the dialog."""
-        from PyQt6.QtGui import QKeySequence, QShortcut
         
         # Add CTRL+Q shortcut for quick event
         quick_event_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
@@ -1416,7 +1401,7 @@ class ImageDetailDialog(QDialog):
             
             if success:
                 # Show a success message
-                self.status_bar.showMessage(f"Quick event created and associated with this image", 5000)
+                self.status_bar.showMessage("Quick event created and associated with this image", 5000)
                 
                 # Reload the quick events list
                 self.load_quick_events()
@@ -2633,7 +2618,7 @@ class GalleryWidget(QWidget):
             Qt.TransformationMode.SmoothTransformation
         )
         # Use the new update_pixmap method to properly update the thumbnail
-        thumbnail.update_pixmap(self.placeholder_pixmap)
+        thumbnail.update_pixmap(scaled_pixmap)
         print(f"Set thumbnail {thumbnail.image_id} to NSFW mode")
     
     def set_thumbnail_normal(self, thumbnail: ThumbnailWidget, image_id: int) -> None:
@@ -4297,7 +4282,6 @@ class RegionSelectionDialog(QDialog):
     # Add shortcut setup method
     def setup_shortcuts(self):
         """Setup keyboard shortcuts for the dialog."""
-        from PyQt6.QtGui import QKeySequence, QShortcut
         
         # Add CTRL+Q shortcut for quick event
         quick_event_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
@@ -4475,7 +4459,6 @@ class RegionSelectionDialog(QDialog):
         self.onscene_list.clear()
         
         # Get characters sorted by last tagged timestamp
-        from app.db_sqlite import get_characters_by_last_tagged
         characters = get_characters_by_last_tagged(self.db_conn, self.story_id)
         
         if not characters:
@@ -4804,7 +4787,6 @@ class RegionSelectionDialog(QDialog):
         """Create a new quick event and add it to the database."""
         try:
             # Import the QuickEventManager
-            from app.utils.quick_event_manager import QuickEventManager
             
             # Create context for character recognition dialog
             context = {
@@ -4895,7 +4877,7 @@ class RegionSelectionDialog(QDialog):
                     print(f"[ERROR] Association record found: {association is not None}")
                     
                     # Try to force the association again
-                    print(f"[DEBUG] Forcing association with direct SQL")
+                    print("[DEBUG] Forcing association with direct SQL")
                     from datetime import datetime
                     now = datetime.now().isoformat()
                     cursor.execute(
@@ -5166,7 +5148,6 @@ class RegionSelectionDialog(QDialog):
         self.result_list.clearSelection()
         
         # Update the last tagged timestamp for this character
-        from app.db_sqlite import update_character_last_tagged
         update_character_last_tagged(self.db_conn, self.story_id, tag['character_id'])
         
         # Refresh the on-scene characters list to reflect the new order
@@ -6203,7 +6184,7 @@ class GraphicsTagView(QGraphicsView):
         rel_y = max(0.0, min(1.0, rel_y))
         
         # Print detailed debug info
-        print(f"VIEW TO NORM COORDS:")
+        print("VIEW TO NORM COORDS:")
         print(f"  - View pos: ({view_pos.x()}, {view_pos.y()})")
         print(f"  - Scene pos: ({scene_pos.x():.1f}, {scene_pos.y():.1f})")
         print(f"  - Scene dimensions: {scene_width}x{scene_height}")
@@ -6231,7 +6212,7 @@ class GraphicsTagView(QGraphicsView):
         scene_y = rel_y * scene_height
         
         # Print detailed debug info
-        print(f"NORM TO SCENE COORDS:")
+        print("NORM TO SCENE COORDS:")
         print(f"  - Normalized: ({rel_x:.4f}, {rel_y:.4f})")
         print(f"  - Scene dimensions: {scene_width}x{scene_height}")
         print(f"  - Scene pos: ({scene_x:.1f}, {scene_y:.1f})")
@@ -6308,7 +6289,7 @@ class GraphicsTagView(QGraphicsView):
                 return
                 
             # Convert any @mentions to [char:ID] format using the centralized function
-            from app.db_sqlite import create_quick_event, get_next_quick_event_sequence_number
+            from app.db_sqlite import create_quick_event
             
             # Process the text with the centralized function
             processed_text = convert_mentions_to_char_refs(text, self.characters)
@@ -6468,7 +6449,6 @@ class GraphicsTagView(QGraphicsView):
         """Create a new quick event and add it to the database."""
         try:
             # Import the QuickEventManager
-            from app.utils.quick_event_manager import QuickEventManager
             
             # Create context for character recognition dialog
             context = {
@@ -6559,7 +6539,7 @@ class GraphicsTagView(QGraphicsView):
                     print(f"[ERROR] Association record found: {association is not None}")
                     
                     # Try to force the association again
-                    print(f"[DEBUG] Forcing association with direct SQL")
+                    print("[DEBUG] Forcing association with direct SQL")
                     from datetime import datetime
                     now = datetime.now().isoformat()
                     cursor.execute(
@@ -6710,7 +6690,7 @@ class GraphicsTagView(QGraphicsView):
         """Load quick events data for the combo box."""
         try:
             # Get quick events for the story
-            from app.db_sqlite import search_quick_events, get_quick_event_tagged_characters
+            from app.db_sqlite import get_quick_event_tagged_characters
             from app.utils.character_references import convert_char_refs_to_mentions
             
             # Ensure we have loaded the quick events
