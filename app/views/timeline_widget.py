@@ -5,33 +5,24 @@ Timeline Widget for The Plot Thickens application.
 This widget displays events on a timeline and allows for event management.
 """
 
-import os
 import re
-import time
-import json
 import logging
-from typing import Optional, Dict, Any, List, Tuple, Set, Union
+from typing import Optional, Dict, Any, List
 from datetime import datetime
-import math
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QToolBar, QMenu,
-    QLineEdit, QLabel, QComboBox, QPushButton, QSpinBox, QRadioButton, 
-    QSplitter, QCheckBox, QFormLayout, QGroupBox, QDialog, QSizePolicy,
-    QTextEdit, QSpacerItem, QFrame, QListWidget, QListWidgetItem, 
-    QTabWidget, QAbstractItemView, QAbstractScrollArea, QColorDialog,
-    QMessageBox, QToolButton, QApplication, QInputDialog, QDateEdit,
-    QCalendarWidget, QGridLayout, QDialogButtonBox, QStyledItemDelegate,
-    QStackedWidget
+    QLineEdit, QLabel, QComboBox, QPushButton, QSpinBox, QSplitter, QFormLayout, QGroupBox, QDialog, QSizePolicy,
+    QTextEdit, QFrame, QListWidget, QListWidgetItem, 
+    QTabWidget, QAbstractItemView, QColorDialog,
+    QMessageBox, QToolButton, QInputDialog, QDateEdit
 )
 from PyQt6.QtCore import (
-    Qt, QSize, QPoint, QRect, QRectF, QEvent, QObject, pyqtSignal, 
-    QStandardPaths, QTimer, QDate, QPointF
+    Qt, QRectF, QEvent, pyqtSignal, 
+    QTimer, QDate
 )
 from PyQt6.QtGui import (
-    QPainter, QBrush, QPen, QColor, QFont, QPixmap, QIcon, QKeyEvent,
-    QTextCursor, QFontMetrics, QMouseEvent, QTextCharFormat, QPalette,
-    QTransform, QAction, QPainterPath, QBrush
+    QPainter, QPen, QColor, QFont, QFontMetrics, QMouseEvent, QAction, QPainterPath, QBrush
 )
 
 from app.utils.character_completer import CharacterCompleter
@@ -40,16 +31,13 @@ from app.utils.character_references import convert_mentions_to_char_refs, conver
 
 from app.db_sqlite import (
     create_event, get_event, update_event, delete_event, 
-    get_story_events, add_character_to_event, remove_character_from_event,
-    get_event_characters, get_character_events, create_timeline_view,
-    get_timeline_view, get_story_timeline_views, update_timeline_view,
-    delete_timeline_view, get_story_characters, search_quick_events,
-    get_story_characters_with_events, get_character_quick_events,
-    get_quick_event_characters, get_quick_event_tagged_characters,
+    get_story_events, add_character_to_event, get_event_characters, create_timeline_view,
+    get_story_timeline_views, update_timeline_view,
+    get_story_characters, search_quick_events,
+    get_story_characters_with_events, get_quick_event_tagged_characters,
     get_quick_event_images, get_character, add_quick_event_to_scene, 
-    remove_quick_event_from_scene, get_scene_quick_events, 
-    get_quick_event_scenes, get_unassigned_quick_events,
-    get_next_quick_event_sequence_number, get_story_board_views
+    get_scene_quick_events, 
+    get_unassigned_quick_events
 )
 
 # Configure logging
@@ -1495,7 +1483,7 @@ class QuickEventSearchTab(QWidget):
             if len(self.search_results) > 0:
                 print(f"DEBUG - First result: id={self.search_results[0]['id']}, text={self.search_results[0]['text'][:30]}...")
             else:
-                print(f"DEBUG - No results found")
+                print("DEBUG - No results found")
             
             # Load all characters for the story to properly format character references
             self.characters = get_story_characters(self.conn, self.story_id)
