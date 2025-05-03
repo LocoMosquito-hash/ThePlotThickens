@@ -7192,6 +7192,258 @@ class OnSceneCharacterListWidget(CharacterListWidget):
         QListWidget.mouseMoveEvent(self, event)
 
 
+class GalleryFilterCharacterListWidget(CharacterListWidget):
+    """A custom CharacterListWidget for the GalleryFilterDialog that shows avatars on hover."""
+    
+    def __init__(self, db_conn, parent=None):
+        """Initialize the gallery filter character list widget."""
+        super().__init__(db_conn, parent)
+        
+    def mouseMoveEvent(self, event):
+        """Handle mouse move events to show character avatars.
+        
+        This overrides the parent class method to look inside item widgets.
+        
+        Args:
+            event: Mouse event
+        """
+        point = event.pos()
+        
+        # Try to get the item at the cursor position
+        item = self.itemAt(point)
+        
+        # Only process if we have a valid item
+        if item:
+            # Check if the item has a widget
+            widget = self.itemWidget(item)
+            if widget:
+                # The item has a widget, directly look for character data in the item
+                data = item.data(Qt.ItemDataRole.UserRole)
+                if data and isinstance(data, dict) and 'character_id' in data:
+                    character_id = data['character_id']
+                    character_name = data.get('character_name', "Unknown")
+                    
+                    # If this is a new item being hovered, show the tooltip
+                    if self.hoveredItem != item:
+                        self.hoveredItem = item
+                        
+                        # Get avatar and display tooltip
+                        cursor = self.db_conn.cursor()
+                        cursor.execute("SELECT avatar_path FROM characters WHERE id = ?", (character_id,))
+                        result = cursor.fetchone()
+                        
+                        if result and result['avatar_path']:
+                            avatar_path = result['avatar_path']
+                            if os.path.exists(avatar_path):
+                                # Create and display tooltip with avatar
+                                pixmap = QPixmap(avatar_path)
+                                if not pixmap.isNull():
+                                    # Scale the pixmap
+                                    pixmap = pixmap.scaled(
+                                        160, 160, 
+                                        Qt.AspectRatioMode.KeepAspectRatio,
+                                        Qt.TransformationMode.SmoothTransformation
+                                    )
+                                    
+                                    # Create HTML for tooltip
+                                    from app.utils.color_utils import string_to_color, get_contrasting_text_color
+                                    bg_color = string_to_color(character_name)
+                                    text_color = get_contrasting_text_color(bg_color)
+                                    
+                                    # Save pixmap to byte array
+                                    byte_array = QByteArray()
+                                    buffer = QBuffer(byte_array)
+                                    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+                                    pixmap.save(buffer, "PNG")
+                                    
+                                    # Create HTML tooltip
+                                    image_data = byte_array.toBase64().data().decode()
+                                    html = f"""
+                                    <div style="background-color:{bg_color}; color:{text_color}; padding:5px; text-align:center;">
+                                        <b>{character_name}</b>
+                                    </div>
+                                    <div style="text-align:center; padding:5px;">
+                                        <img src="data:image/png;base64,{image_data}" width="160" height="160" style="max-width:160px; max-height:160px;"/>
+                                    </div>
+                                    """
+                                    
+                                    QToolTip.showText(self.mapToGlobal(point), html)
+                                    return
+                        
+                        # Fallback to just showing the character name
+                        QToolTip.showText(
+                            self.mapToGlobal(point), 
+                            f"<b>{character_name}</b>"
+                        )
+                else:
+                    # Traditional way, try to get data from UserRole
+                    super().mouseMoveEvent(event)
+            else:
+                # No widget, handle normally
+                super().mouseMoveEvent(event)
+        else:
+            # No item, hide tooltip
+            self.hoveredItem = None
+            QToolTip.hideText()
+            
+        # Call parent handler for other aspects of mouse move
+        super().mouseMoveEvent(event)
+
+class FilterCharacterListWidget(CharacterListWidget):
+    """A CharacterListWidget subclass that shows avatars on hover and handles right-click context menus."""
+    
+    def __init__(self, db_conn, parent=None):
+        """Initialize the filter character list widget."""
+        super().__init__(db_conn, parent)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
+    
+    def show_context_menu(self, position):
+        """Show a context menu for the item at position.
+        
+        Args:
+            position: Position where the context menu should be shown
+        """
+        item = self.itemAt(position)
+        if not item:
+            return
+            
+        # Get character data from the item
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(data, dict) or 'character' not in data:
+            return
+            
+        character = data.get('character')
+        if not character:
+            return
+            
+        # Find parent dialog with add_character_filter method
+        parent_dialog = self.parent()
+        while parent_dialog and not (isinstance(parent_dialog, QDialog) and hasattr(parent_dialog, 'add_character_filter')):
+            parent_dialog = parent_dialog.parent()
+            
+        if not parent_dialog:
+            return
+            
+        # Create context menu
+        menu = QMenu(self)
+        
+        # Create actions with color indicators
+        include_action = QAction("➕ Include in filters", self)
+        include_action.triggered.connect(lambda: parent_dialog.add_character_filter(character, True))
+        
+        # Set color for include action (green)
+        include_action_font = include_action.font()
+        include_action_font.setBold(True)
+        include_action.setFont(include_action_font)
+        
+        
+        exclude_action = QAction("➖ Exclude from filters", self)
+        exclude_action.triggered.connect(lambda: parent_dialog.add_character_filter(character, False))
+        
+        # Set color for exclude action (red)
+        exclude_action_font = exclude_action.font()
+        exclude_action_font.setBold(True)
+        exclude_action.setFont(exclude_action_font)
+        
+        
+        # Add actions to menu
+        menu.addAction(include_action)
+        menu.addAction(exclude_action)
+        
+        # Show context menu
+        menu.exec(self.mapToGlobal(position))
+    
+    def mouseMoveEvent(self, event):
+        """Handle mouse move events to show character avatars.
+        
+        Args:
+            event: Mouse event
+        """
+        # Get the item under the cursor
+        item = self.itemAt(event.pos())
+        
+        # Only process if we have a valid item
+        if item:
+            # Get the data directly from the item
+            data = item.data(Qt.ItemDataRole.UserRole)
+            
+            # Check if data contains character_id (this is our character data)
+            if isinstance(data, dict) and 'character_id' in data:
+                character_id = data['character_id']
+                
+                # If this is a new item being hovered, show the tooltip
+                if self.hoveredItem != item:
+                    self.hoveredItem = item
+                    
+                    # Get the character's avatar from the database
+                    cursor = self.db_conn.cursor()
+                    cursor.execute("SELECT avatar_path FROM characters WHERE id = ?", (character_id,))
+                    result = cursor.fetchone()
+                    
+                    if result and result['avatar_path']:
+                        avatar_path = result['avatar_path']
+                        if os.path.exists(avatar_path):
+                            # Create a pixmap from the avatar
+                            pixmap = QPixmap(avatar_path)
+                            if not pixmap.isNull():
+                                # Scale the pixmap to 160x160 preserving aspect ratio
+                                pixmap = pixmap.scaled(
+                                    160, 160, 
+                                    Qt.AspectRatioMode.KeepAspectRatio,
+                                    Qt.TransformationMode.SmoothTransformation
+                                )
+                                
+                                # Create HTML for the tooltip with the image
+                                from app.utils.color_utils import string_to_color, get_contrasting_text_color
+                                
+                                # Generate a consistent color based on character name
+                                character_name = data.get('character_name', "Unknown")
+                                bg_color = string_to_color(character_name)
+                                text_color = get_contrasting_text_color(bg_color)
+                                
+                                # Save the pixmap to a temporary QByteArray
+                                byte_array = QByteArray()
+                                buffer = QBuffer(byte_array)
+                                buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+                                pixmap.save(buffer, "PNG")
+                                
+                                # Convert to base64 for inline HTML
+                                image_data = byte_array.toBase64().data().decode()
+                                
+                                # Create HTML tooltip with character name and avatar
+                                html = f"""
+                                <div style="background-color:{bg_color}; color:{text_color}; padding:5px; text-align:center;">
+                                    <b>{character_name}</b>
+                                </div>
+                                <div style="text-align:center; padding:5px;">
+                                    <img src="data:image/png;base64,{image_data}" width="160" height="160" style="max-width:160px; max-height:160px;"/>
+                                </div>
+                                """
+                                
+                                # Show the tooltip at the cursor position
+                                QToolTip.showText(self.mapToGlobal(event.pos()), html)
+                                return
+                    
+                    # If we get here, we don't have a valid avatar
+                    # Just show the character name
+                    QToolTip.showText(
+                        self.mapToGlobal(event.pos()), 
+                        f"<b>{data.get('character_name', 'Unknown')}</b>"
+                    )
+                    return
+            
+            # No character data, hide tooltip
+            self.hoveredItem = None
+            QToolTip.hideText()
+        else:
+            self.hoveredItem = None
+            QToolTip.hideText()
+        
+        # Call parent for standard mouse movement handling
+        super().mouseMoveEvent(event)
+
+
 class GalleryFilterDialog(QDialog):
     """Dialog for filtering gallery images by character tags."""
     
@@ -7224,7 +7476,7 @@ class GalleryFilterDialog(QDialog):
         char_group = QGroupBox("Characters")
         char_layout = QVBoxLayout(char_group)
         
-        self.character_list = CharacterListWidget(self.db_conn)
+        self.character_list = FilterCharacterListWidget(self.db_conn)
         char_layout.addWidget(self.character_list)
         
         lists_layout.addWidget(char_group)
@@ -7278,38 +7530,24 @@ class GalleryFilterDialog(QDialog):
             self.character_list.clear()
             
             for character in characters:
-                # Create an item with the character name
+                # Create a single item with the character name and tooltip
                 item = QListWidgetItem(character.get('name', 'Unknown'))
                 
-                # Store the character data in the item
-                item.setData(Qt.ItemDataRole.UserRole, character)
+                # Prepare the data for avatar display on hover
+                character_data = {
+                    'character_id': character['id'],
+                    'character_name': character['name'],
+                    'character': character  # Store full character data for context menu
+                }
                 
-                # Add buttons for include and exclude
-                widget = QWidget()
-                layout = QHBoxLayout(widget)
-                layout.setContentsMargins(5, 0, 5, 0)
+                # Set tool tip to indicate right-click action
+                item.setToolTip("Right-click to add/exclude from filters")
                 
-                # Character name label
-                name_label = QLabel(character.get('name', 'Unknown'))
-                layout.addWidget(name_label, 1)  # 1 is the stretch factor
+                # Store the character data
+                item.setData(Qt.ItemDataRole.UserRole, character_data)
                 
-                # Include button
-                include_button = QPushButton("+")
-                include_button.setFixedSize(24, 24)
-                include_button.setStyleSheet("background-color: #4CAF50; color: white;")
-                include_button.clicked.connect(lambda checked, char=character: self.add_character_filter(char, True))
-                layout.addWidget(include_button)
-                
-                # Exclude button
-                exclude_button = QPushButton("-")
-                exclude_button.setFixedSize(24, 24)
-                exclude_button.setStyleSheet("background-color: #F44336; color: white;")
-                exclude_button.clicked.connect(lambda checked, char=character: self.add_character_filter(char, False))
-                layout.addWidget(exclude_button)
-                
-                # Set the item widget
+                # Add to the list
                 self.character_list.addItem(item)
-                self.character_list.setItemWidget(item, widget)
                 
         except Exception as e:
             print(f"Error loading characters for filter dialog: {e}")
@@ -7342,10 +7580,12 @@ class GalleryFilterDialog(QDialog):
         prefix = "+ " if include else "- "
         item = QListWidgetItem(f"{prefix}{character_name}")
         
-        # Store filter data
+        # Store filter data with format compatible with avatar display
         filter_data = {
             'id': character_id,
             'name': character_name,
+            'character_id': character_id,
+            'character_name': character_name,
             'include': include
         }
         item.setData(Qt.ItemDataRole.UserRole, filter_data)
