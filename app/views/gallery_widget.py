@@ -2473,6 +2473,13 @@ class GalleryWidget(QWidget):
         self.rebuild_recognition_button.setEnabled(False)  # Disabled until a story is selected
         button_layout.addWidget(self.rebuild_recognition_button)
         
+        # Add decision points button
+        self.decision_points_button = QPushButton("Decision Points")
+        self.decision_points_button.setToolTip("Manage decision points for the story")
+        self.decision_points_button.clicked.connect(self.open_decision_point_dialog)
+        self.decision_points_button.setEnabled(False)  # Disabled until a story is selected
+        button_layout.addWidget(self.decision_points_button)
+        
         # Add filters button
         self.filters_button = QPushButton("Filters...")
         self.filters_button.setToolTip("Filter images by characters")
@@ -2671,7 +2678,7 @@ class GalleryWidget(QWidget):
                     print(f"Restored thumbnail {image_id} to normal mode")
     
     def set_story(self, story_id: int, story_data: Dict[str, Any]) -> None:
-        """Set the current story.
+        """Set the story for the gallery.
         
         Args:
             story_id: ID of the story
@@ -2686,6 +2693,7 @@ class GalleryWidget(QWidget):
         self.rebuild_recognition_button.setEnabled(True)
         self.filters_button.setEnabled(True)  # Enable the filters button
         self.clear_filters_button.setEnabled(False)  # Disable until filters are applied
+        self.decision_points_button.setEnabled(True)  # Enable the decision points button
         
         # Initialize active_filters if needed
         if not hasattr(self, 'active_filters'):

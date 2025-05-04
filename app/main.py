@@ -9,7 +9,6 @@ This module initializes the application and starts the GUI.
 
 import sys
 import os
-from typing import Optional
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPalette, QColor
@@ -84,12 +83,22 @@ def main() -> None:
     theme_manager = ThemeManager(app_dir)
     theme_manager.apply_theme()
     
+    # Apply decision points patch
+    try:
+        from app.views.gallery_widget import GalleryWidget
+        from app.views.gallery_widget_decision_points import apply_to_gallery_widget
+        apply_to_gallery_widget(GalleryWidget)
+        print("Decision points patch applied successfully")
+    except Exception as e:
+        print(f"Warning: Could not apply decision points patch: {e}")
+    
     # Create and show the main window
     print("Creating main window...")
     try:
         window = MainWindow(db_conn)
         # Pass the theme manager to the main window
         window.theme_manager = theme_manager
+        
         print("Showing main window...")
         window.show()
     except Exception as e:
