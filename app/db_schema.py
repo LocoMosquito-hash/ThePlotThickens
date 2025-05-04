@@ -109,6 +109,7 @@ class Story(Base):
     images = relationship("Image", back_populates="story", cascade="all, delete-orphan")
     events = relationship("Event", back_populates="story", cascade="all, delete-orphan")
     board_views = relationship("StoryBoardView", back_populates="story", cascade="all, delete-orphan")
+    decision_points = relationship("DecisionPoint", back_populates="story", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Story(id={self.id}, title='{self.title}', type={self.type})>"
@@ -589,6 +590,52 @@ class ImageTag(Base):
             self.y = None
             self.width = None
             self.height = None
+
+
+class DecisionPoint(Base):
+    """Model representing a decision point in a story."""
+    __tablename__ = 'decision_points'
+    
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Decision point information
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # Foreign keys
+    story_id = Column(Integer, ForeignKey('stories.id'), nullable=False)
+    
+    # Relationships
+    story = relationship("Story", back_populates="decision_points")
+    options = relationship("DecisionOption", back_populates="decision_point", cascade="all, delete-orphan")
+    
+    def __repr__(self):
+        return f"<DecisionPoint(id={self.id}, title='{self.title}')>"
+
+
+class DecisionOption(Base):
+    """Model representing an option for a decision point."""
+    __tablename__ = 'decision_options'
+    
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Option information
+    text = Column(String(255), nullable=False)
+    is_selected = Column(Boolean, default=False)
+    display_order = Column(Integer, nullable=False, default=0)
+    
+    # Foreign keys
+    decision_point_id = Column(Integer, ForeignKey('decision_points.id'), nullable=False)
+    
+    # Relationships
+    decision_point = relationship("DecisionPoint", back_populates="options")
+    
+    def __repr__(self):
+        return f"<DecisionOption(id={self.id}, text='{self.text}', selected={self.is_selected})>"
 
 
 # Database connection and session management

@@ -742,6 +742,9 @@ def initialize_database(db_path: str) -> sqlite3.Connection:
     # Make sure the character_last_tagged table is created
     create_character_last_tagged_table(conn)
     
+    # Make sure the decision_points table is created
+    create_decision_points_table(conn)
+    
     return conn
 
 
@@ -2906,3 +2909,288 @@ def create_character_last_tagged_table(conn: sqlite3.Connection) -> None:
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_character_last_tagged_character_id ON character_last_tagged(character_id)')
     
     conn.commit()
+
+def create_decision_points_table(conn: sqlite3.Connection) -> None:
+    """Create the decision_points and decision_options tables if they don't exist."""
+    cursor = conn.cursor()
+    
+    # Create decision_points table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS decision_points (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        title TEXT NOT NULL,
+        description TEXT,
+        story_id INTEGER NOT NULL,
+        FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    # Create decision_options table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS decision_options (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        text TEXT NOT NULL,
+        is_selected INTEGER DEFAULT 0,
+        display_order INTEGER DEFAULT 0,
+        decision_point_id INTEGER NOT NULL,
+        FOREIGN KEY (decision_point_id) REFERENCES decision_points (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    conn.commit()
+
+
+def create_decision_point(conn: sqlite3.Connection, 
+                         title: str, 
+                         story_id: int,
+                         description: Optional[str] = None) -> int:
+    """Create a new decision point.
+    
+    Args:
+        conn: Database connection
+        title: Title of the decision point
+        story_id: ID of the story
+        description: Optional description
+        
+    Returns:
+        The ID of the newly created decision point
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    INSERT INTO decision_points (title, description, story_id)
+    VALUES (?, ?, ?)
+    ''', (title, description, story_id))
+    
+    conn.commit()
+    return cursor.lastrowid
+
+
+def get_decision_point(conn: sqlite3.Connection, decision_point_id: int) -> Dict[str, Any]:
+    """Get a decision point by ID.
+    
+    Args:
+        conn: Database connection
+        decision_point_id: ID of the decision point
+        
+    Returns:
+        Decision point data
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    SELECT * FROM decision_points WHERE id = ?
+    ''', (decision_point_id,))
+    
+    row = cursor.fetchone()
+    if row:
+        return dict(row)
+    return {}
+
+
+def get_story_decision_points(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
+    """Get all decision points for a story.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        
+    Returns:
+        List of decision points
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    SELECT * FROM decision_points 
+    WHERE story_id = ?
+    ORDER BY created_at DESC
+    ''', (story_id,))
+    
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def update_decision_point(conn: sqlite3.Connection, 
+                         decision_point_id: int, 
+                         title: Optional[str] = None,
+                         description: Optional[str] = None) -> bool:
+    """Update a decision point.
+    
+    Args:
+        conn: Database connection
+        decision_point_id: ID of the decision point
+        title: New title (optional)
+        description: New description (optional)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    cursor = conn.cursor()
+    
+    # Build update query based on provided fields
+    update_fields = []
+    params = []
+    
+    if title is not None:
+        update_fields.append("title = ?")
+        params.append(title)
+    
+    if description is not None:
+        update_fields.append("description = ?")
+        params.append(description)
+    
+    if not update_fields:
+        return False  # Nothing to update
+    
+    # Add updated_at timestamp
+    update_fields.append("updated_at = CURRENT_TIMESTAMP")
+    
+    # Build the final query
+    query = f'''
+    UPDATE decision_points 
+    SET {", ".join(update_fields)}
+    WHERE id = ?
+    '''
+    
+    params.append(decision_point_id)
+    
+    cursor.execute(query, params)
+    conn.commit()
+    
+    return cursor.rowcount > 0
+
+
+def delete_decision_point(conn: sqlite3.Connection, decision_point_id: int) -> bool:
+    """Delete a decision point.
+    
+    Args:
+        conn: Database connection
+        decision_point_id: ID of the decision point
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    DELETE FROM decision_points WHERE id = ?
+    ''', (decision_point_id,))
+    
+    conn.commit()
+    
+    return cursor.rowcount > 0
+
+
+def add_decision_option(conn: sqlite3.Connection,
+                       decision_point_id: int,
+                       text: str,
+                       is_selected: bool = False,
+                       display_order: int = 0) -> int:
+    """Add an option to a decision point.
+    
+    Args:
+        conn: Database connection
+        decision_point_id: ID of the decision point
+        text: Text of the option
+        is_selected: Whether this option is selected
+        display_order: Order to display the option
+        
+    Returns:
+        The ID of the newly created option
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    INSERT INTO decision_options (text, is_selected, display_order, decision_point_id)
+    VALUES (?, ?, ?, ?)
+    ''', (text, 1 if is_selected else 0, display_order, decision_point_id))
+    
+    conn.commit()
+    return cursor.lastrowid
+
+
+def get_decision_options(conn: sqlite3.Connection, decision_point_id: int) -> List[Dict[str, Any]]:
+    """Get all options for a decision point.
+    
+    Args:
+        conn: Database connection
+        decision_point_id: ID of the decision point
+        
+    Returns:
+        List of options
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    SELECT * FROM decision_options 
+    WHERE decision_point_id = ?
+    ORDER BY display_order
+    ''', (decision_point_id,))
+    
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def select_decision_option(conn: sqlite3.Connection, option_id: int) -> bool:
+    """Mark an option as selected and unselect others for the same decision point.
+    
+    Args:
+        conn: Database connection
+        option_id: ID of the option to select
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    cursor = conn.cursor()
+    
+    # First, get the decision_point_id for this option
+    cursor.execute('''
+    SELECT decision_point_id FROM decision_options WHERE id = ?
+    ''', (option_id,))
+    
+    row = cursor.fetchone()
+    if not row:
+        return False
+    
+    decision_point_id = row['decision_point_id']
+    
+    # Then, unselect all options for this decision point
+    cursor.execute('''
+    UPDATE decision_options 
+    SET is_selected = 0, updated_at = CURRENT_TIMESTAMP
+    WHERE decision_point_id = ?
+    ''', (decision_point_id,))
+    
+    # Finally, select the specified option
+    cursor.execute('''
+    UPDATE decision_options 
+    SET is_selected = 1, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+    ''', (option_id,))
+    
+    conn.commit()
+    
+    return True
+
+
+def delete_decision_option(conn: sqlite3.Connection, option_id: int) -> bool:
+    """Delete an option.
+    
+    Args:
+        conn: Database connection
+        option_id: ID of the option
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    DELETE FROM decision_options WHERE id = ?
+    ''', (option_id,))
+    
+    conn.commit()
+    
+    return cursor.rowcount > 0
