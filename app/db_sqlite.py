@@ -745,6 +745,9 @@ def initialize_database(db_path: str) -> sqlite3.Connection:
     # Make sure the decision_points table is created
     create_decision_points_table(conn)
     
+    # Run migrations for decision points
+    migrate_decision_points_table(conn)
+    
     return conn
 
 
@@ -2128,6 +2131,8 @@ def create_character_details_table(conn: sqlite3.Connection) -> None:
     - STUDY: Education and academic details
     - RELATIONSHIP: Relationship status details
     - HOUSING: Living situation details
+    - FAMILY: Family members and relationships
+    - QUOTES: Memorable quotes and sayings
     - GENERAL: General character details
     - BACKGROUND: Character background information
     - PERSONALITY: Personality traits
@@ -2165,7 +2170,7 @@ def add_character_detail(conn: sqlite3.Connection,
         character_id: ID of the character
         detail_text: Text describing the detail (e.g., "Afraid of heights")
         detail_type: Category of detail (e.g., "WORK", "STUDY", "RELATIONSHIP", "HOUSING",
-                    "GENERAL", "BACKGROUND", "PERSONALITY", "PHYSICAL")
+                    "FAMILY", "QUOTES", "GENERAL", "BACKGROUND", "PERSONALITY", "PHYSICAL")
         
     Returns:
         ID of the new detail or None if failed
@@ -2923,6 +2928,7 @@ def create_decision_points_table(conn: sqlite3.Connection) -> None:
         title TEXT NOT NULL,
         description TEXT,
         story_id INTEGER NOT NULL,
+        is_ordered_list INTEGER DEFAULT 0,
         FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE CASCADE
     )
     ''')
@@ -2936,6 +2942,7 @@ def create_decision_points_table(conn: sqlite3.Connection) -> None:
         text TEXT NOT NULL,
         is_selected INTEGER DEFAULT 0,
         display_order INTEGER DEFAULT 0,
+        played_order INTEGER DEFAULT NULL,
         decision_point_id INTEGER NOT NULL,
         FOREIGN KEY (decision_point_id) REFERENCES decision_points (id) ON DELETE CASCADE
     )
@@ -2947,7 +2954,8 @@ def create_decision_points_table(conn: sqlite3.Connection) -> None:
 def create_decision_point(conn: sqlite3.Connection, 
                          title: str, 
                          story_id: int,
-                         description: Optional[str] = None) -> int:
+                         description: Optional[str] = None,
+                         is_ordered_list: bool = False) -> int:
     """Create a new decision point.
     
     Args:
@@ -2955,6 +2963,7 @@ def create_decision_point(conn: sqlite3.Connection,
         title: Title of the decision point
         story_id: ID of the story
         description: Optional description
+        is_ordered_list: Whether this is an ordered list (True) or single choice (False)
         
     Returns:
         The ID of the newly created decision point
@@ -2962,9 +2971,9 @@ def create_decision_point(conn: sqlite3.Connection,
     cursor = conn.cursor()
     
     cursor.execute('''
-    INSERT INTO decision_points (title, description, story_id)
-    VALUES (?, ?, ?)
-    ''', (title, description, story_id))
+    INSERT INTO decision_points (title, description, story_id, is_ordered_list)
+    VALUES (?, ?, ?, ?)
+    ''', (title, description, story_id, 1 if is_ordered_list else 0))
     
     conn.commit()
     return cursor.lastrowid
@@ -3016,7 +3025,8 @@ def get_story_decision_points(conn: sqlite3.Connection, story_id: int) -> List[D
 def update_decision_point(conn: sqlite3.Connection, 
                          decision_point_id: int, 
                          title: Optional[str] = None,
-                         description: Optional[str] = None) -> bool:
+                         description: Optional[str] = None,
+                         is_ordered_list: Optional[bool] = None) -> bool:
     """Update a decision point.
     
     Args:
@@ -3024,6 +3034,7 @@ def update_decision_point(conn: sqlite3.Connection,
         decision_point_id: ID of the decision point
         title: New title (optional)
         description: New description (optional)
+        is_ordered_list: Whether this is an ordered list (optional)
         
     Returns:
         True if successful, False otherwise
@@ -3041,6 +3052,10 @@ def update_decision_point(conn: sqlite3.Connection,
     if description is not None:
         update_fields.append("description = ?")
         params.append(description)
+    
+    if is_ordered_list is not None:
+        update_fields.append("is_ordered_list = ?")
+        params.append(1 if is_ordered_list else 0)
     
     if not update_fields:
         return False  # Nothing to update
@@ -3088,7 +3103,8 @@ def add_decision_option(conn: sqlite3.Connection,
                        decision_point_id: int,
                        text: str,
                        is_selected: bool = False,
-                       display_order: int = 0) -> int:
+                       display_order: int = 0,
+                       played_order: Optional[int] = None) -> int:
     """Add an option to a decision point.
     
     Args:
@@ -3097,6 +3113,7 @@ def add_decision_option(conn: sqlite3.Connection,
         text: Text of the option
         is_selected: Whether this option is selected
         display_order: Order to display the option
+        played_order: The order in which this option is played (for ordered lists)
         
     Returns:
         The ID of the newly created option
@@ -3104,9 +3121,9 @@ def add_decision_option(conn: sqlite3.Connection,
     cursor = conn.cursor()
     
     cursor.execute('''
-    INSERT INTO decision_options (text, is_selected, display_order, decision_point_id)
-    VALUES (?, ?, ?, ?)
-    ''', (text, 1 if is_selected else 0, display_order, decision_point_id))
+    INSERT INTO decision_options (text, is_selected, display_order, played_order, decision_point_id)
+    VALUES (?, ?, ?, ?, ?)
+    ''', (text, 1 if is_selected else 0, display_order, played_order, decision_point_id))
     
     conn.commit()
     return cursor.lastrowid
@@ -3194,3 +3211,35 @@ def delete_decision_option(conn: sqlite3.Connection, option_id: int) -> bool:
     conn.commit()
     
     return cursor.rowcount > 0
+
+def migrate_decision_points_table(conn: sqlite3.Connection) -> None:
+    """Add new columns to decision_points and decision_options tables if they don't exist."""
+    cursor = conn.cursor()
+    
+    # Check if the is_ordered_list column exists in decision_points table
+    cursor.execute("PRAGMA table_info(decision_points)")
+    columns = cursor.fetchall()
+    column_names = [col['name'] for col in columns]
+    
+    if 'is_ordered_list' not in column_names:
+        print("Adding is_ordered_list column to decision_points table")
+        cursor.execute('''
+        ALTER TABLE decision_points
+        ADD COLUMN is_ordered_list INTEGER DEFAULT 0
+        ''')
+        conn.commit()
+    
+    # Check if the played_order column exists in decision_options table
+    cursor.execute("PRAGMA table_info(decision_options)")
+    columns = cursor.fetchall()
+    column_names = [col['name'] for col in columns]
+    
+    if 'played_order' not in column_names:
+        print("Adding played_order column to decision_options table")
+        cursor.execute('''
+        ALTER TABLE decision_options
+        ADD COLUMN played_order INTEGER DEFAULT NULL
+        ''')
+        conn.commit()
+    
+    return True

@@ -29,6 +29,12 @@ from app.utils.character_completer import CharacterCompleter
 # Import the centralized character reference functions
 from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
 
+# Import decision points tab directly
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+from app.views.decision_points_tab import DecisionPointsTab
+
 from app.db_sqlite import (
     create_event, get_event, update_event, delete_event, 
     get_story_events, add_character_to_event, get_event_characters, create_timeline_view,
@@ -1722,47 +1728,62 @@ class QuickEventSearchTab(QWidget):
 
 
 class TimelineWidget(QWidget):
-    """Widget for displaying and managing a timeline of events."""
+    """Main timeline widget for managing and viewing story events."""
     
     def __init__(self, conn, story_id: int, parent=None):
+        """Initialize the timeline widget.
+        
+        Args:
+            conn: Database connection
+            story_id: ID of the story
+            parent: Parent widget
+        """
         super().__init__(parent)
+        
         self.conn = conn
         self.story_id = story_id
-        self.events = []
         self.selected_event_id = None
+        self.events_data = []
         self.timeline_views = []
-        self.current_view_id = None
-        self.current_view_type = "CHRONOLOGICAL"
+        self.current_view_id = None  # Add this line
+        self.current_view_type = "CHRONOLOGICAL"  # Add this line
         
         self.init_ui()
-        self.load_events()
-        self.load_timeline_views()
         
     def init_ui(self):
-        """Initialize the UI components."""
+        """Set up the user interface."""
+        # Main layout
         main_layout = QVBoxLayout(self)
         
-        # Create a tab widget to hold timeline and quick events
+        # Main tab widget
         self.tab_widget = QTabWidget()
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
         
-        # Create the timeline tab
+        # Timeline tab
         self.timeline_tab = QWidget()
         self.setup_timeline_tab()
         self.tab_widget.addTab(self.timeline_tab, "Timeline")
         
-        # Create the quick events search tab
-        self.quick_events_tab = QuickEventSearchTab(self.conn, self.story_id, parent=self)
-        self.tab_widget.addTab(self.quick_events_tab, "Quick Events")
+        # Quick events search tab
+        self.search_tab = QuickEventSearchTab(self.conn, self.story_id)
+        self.tab_widget.addTab(self.search_tab, "Quick Events")
+        
+        # Decision Points tab
+        self.decision_points_tab = DecisionPointsTab(self.conn, self.story_id)
+        self.tab_widget.addTab(self.decision_points_tab, "Decision Points")
         
         main_layout.addWidget(self.tab_widget)
         
-        # Connect tab changed signal
-        self.tab_widget.currentChanged.connect(self.on_tab_changed)
-        
+        # Load initial data
+        self.load_timeline_views()
+        self.load_events()
+
     def on_tab_changed(self, index):
         """Handle tab change events."""
-        # If switching to Quick Events tab, make sure it has the latest story_id and reload characters
-        if index == 1 and self.tab_widget.tabText(index) == "Quick Events":
+        tab_text = self.tab_widget.tabText(index)
+        
+        # If switching to Quick Events tab, refresh data
+        if tab_text == "Quick Events":
             tab = self.tab_widget.widget(index)
             if isinstance(tab, QuickEventSearchTab):
                 if tab.story_id != self.story_id:
@@ -1770,7 +1791,17 @@ class TimelineWidget(QWidget):
                 
                 # Always reload characters when switching to this tab
                 tab.load_characters()
-        
+                
+        # If switching to Decision Points tab, refresh the list
+        elif tab_text == "Decision Points":
+            tab = self.tab_widget.widget(index)
+            if isinstance(tab, DecisionPointsTab):
+                if tab.story_id != self.story_id:
+                    tab.story_id = self.story_id
+                    
+                # Reload decision points when switching to this tab
+                tab.load_decision_points()
+    
     def setup_timeline_tab(self):
         """Set up the timeline tab UI."""
         timeline_layout = QVBoxLayout(self.timeline_tab)
@@ -1791,6 +1822,13 @@ class TimelineWidget(QWidget):
         self.add_scene_btn.setToolTip("Add a new scene with quick events")
         self.add_scene_btn.clicked.connect(self.add_scene)
         toolbar.addWidget(self.add_scene_btn)
+        
+        # Add decision points button
+        self.decision_points_btn = QToolButton()
+        self.decision_points_btn.setText("Decision Points")
+        self.decision_points_btn.setToolTip("Manage decision points")
+        self.decision_points_btn.clicked.connect(self.show_decision_points_tab)
+        toolbar.addWidget(self.decision_points_btn)
         
         toolbar.addSeparator()
         
@@ -1924,14 +1962,19 @@ class TimelineWidget(QWidget):
             if self.story_id <= 0:
                 return
                 
-            self.events = get_story_events(self.conn, self.story_id)
+            self.events_data = get_story_events(self.conn, self.story_id)
             self.display_events()
             self.horizontal_timeline.set_events(self.filter_events())
             
             # Refresh the quick events tab with current story_id
-            if hasattr(self, 'quick_events_tab'):
-                self.quick_events_tab.story_id = self.story_id
-                self.quick_events_tab.load_characters()
+            if hasattr(self, 'search_tab'):
+                self.search_tab.story_id = self.story_id
+                self.search_tab.load_characters()
+            
+            # Refresh the decision points tab with current story_id
+            if hasattr(self, 'decision_points_tab'):
+                self.decision_points_tab.story_id = self.story_id
+                self.decision_points_tab.load_decision_points()
             
         except Exception as e:
             logger.error(f"Error loading events: {e}")
@@ -2045,10 +2088,10 @@ class TimelineWidget(QWidget):
         filter_text = self.filter_type.currentText()
         
         if filter_text == "All":
-            return self.events
+            return self.events_data
             
         filtered = []
-        for event in self.events:
+        for event in self.events_data:
             if filter_text == "Scenes" and event.get('event_type') == "SCENE":
                 filtered.append(event)
             elif filter_text == "Chapters" and event.get('event_type') == "CHAPTER":
@@ -2071,7 +2114,7 @@ class TimelineWidget(QWidget):
         self.horizontal_timeline.set_selected_event(event_id)
         
         # Find the event in our list
-        event = next((e for e in self.events if e['id'] == event_id), None)
+        event = next((e for e in self.events_data if e['id'] == event_id), None)
         if not event:
             # Clear details
             self.event_title_label.setText("No event selected")
@@ -2229,7 +2272,7 @@ class TimelineWidget(QWidget):
             return
             
         # Get the current event
-        event = next((e for e in self.events if e['id'] == self.selected_event_id), None)
+        event = next((e for e in self.events_data if e['id'] == self.selected_event_id), None)
         if not event:
             return
             
@@ -2237,7 +2280,7 @@ class TimelineWidget(QWidget):
         current_seq = event.get('sequence_number', 0)
         
         # Find events with lower sequence numbers
-        earlier_events = [e for e in self.events if e.get('sequence_number', 0) < current_seq]
+        earlier_events = [e for e in self.events_data if e.get('sequence_number', 0) < current_seq]
         
         if not earlier_events:
             # Already at the beginning
@@ -2274,7 +2317,7 @@ class TimelineWidget(QWidget):
             return
             
         # Get the current event
-        event = next((e for e in self.events if e['id'] == self.selected_event_id), None)
+        event = next((e for e in self.events_data if e['id'] == self.selected_event_id), None)
         if not event:
             return
             
@@ -2282,7 +2325,7 @@ class TimelineWidget(QWidget):
         current_seq = event.get('sequence_number', 0)
         
         # Find events with higher sequence numbers
-        later_events = [e for e in self.events if e.get('sequence_number', 0) > current_seq]
+        later_events = [e for e in self.events_data if e.get('sequence_number', 0) > current_seq]
         
         if not later_events:
             # Already at the end
@@ -2350,7 +2393,7 @@ class TimelineWidget(QWidget):
             return
         
         # Get the event type
-        event = next((e for e in self.events if e['id'] == self.selected_event_id), None)
+        event = next((e for e in self.events_data if e['id'] == self.selected_event_id), None)
         if not event:
             return
             
@@ -2391,44 +2434,37 @@ class TimelineWidget(QWidget):
     def load_timeline_views(self):
         """Load timeline views from the database."""
         try:
-            if self.story_id <= 0:
-                return
-                
             self.timeline_views = get_story_timeline_views(self.conn, self.story_id)
             
-            # Clear and repopulate the view selector
+            # Update the view selector
             self.view_selector.clear()
-            
-            if not self.timeline_views:
-                # Create a default view if none exists
-                default_view_id = create_timeline_view(
-                    self.conn,
-                    "Default View",
-                    self.story_id,
-                    "Default chronological view",
-                    "CHRONOLOGICAL"
-                )
-                
-                if default_view_id:
-                    self.timeline_views = get_story_timeline_views(self.conn, self.story_id)
-                    
             for view in self.timeline_views:
                 self.view_selector.addItem(view['name'], view['id'])
-            
-            # Select the first view or the current view if it exists
-            if self.current_view_id:
-                index = self.view_selector.findData(self.current_view_id)
-                if index >= 0:
-                    self.view_selector.setCurrentIndex(index)
-                else:
-                    self.current_view_id = None
-                    
-            if not self.current_view_id and self.timeline_views:
+                
+            # Select the first view by default
+            if self.timeline_views:
+                self.view_selector.setCurrentIndex(0)
                 self.current_view_id = self.timeline_views[0]['id']
                 
+                # Set the view type
+                view_type = self.timeline_views[0]['view_type']
+                self.current_view_type = view_type if view_type else "CHRONOLOGICAL"
+                index = 0 if self.current_view_type == "CHRONOLOGICAL" else 1
+                self.view_type_selector.setCurrentIndex(index)
+            else:
+                # Create a default view if none exists
+                self.add_timeline_view()
         except Exception as e:
             logger.error(f"Error loading timeline views: {e}")
             QMessageBox.critical(self, "Error", f"Failed to load timeline views: {str(e)}")
+            
+    def show_decision_points_tab(self):
+        """Switch to the Decision Points tab."""
+        # Find the index of the Decision Points tab
+        for i in range(self.tab_widget.count()):
+            if self.tab_widget.tabText(i) == "Decision Points":
+                self.tab_widget.setCurrentIndex(i)
+                break
 
 
 class HorizontalTimelineWidget(QWidget):

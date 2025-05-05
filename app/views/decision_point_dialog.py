@@ -65,26 +65,32 @@ if TESSERACT_AVAILABLE:
 class DecisionPointDialog(QDialog):
     """Dialog for managing decision points."""
     
-    def __init__(self, db_conn, story_id: int, parent=None):
+    def __init__(self, db_conn, story_id: int, parent=None, decision_point_id: Optional[int] = None):
         """Initialize the decision point dialog.
         
         Args:
             db_conn: Database connection
             story_id: ID of the story
             parent: Parent widget
+            decision_point_id: ID of the decision point to edit (None for a new decision point)
         """
         super().__init__(parent)
         self.db_conn = db_conn
         self.story_id = story_id
-        self.decision_point_id = None
+        self.decision_point_id = decision_point_id
         self.options_list = []
         self.current_image: Optional[QImage] = None
+        self.is_ordered_list = False  # Default to single choice
         
-        self.setWindowTitle("Add decision point")
+        self.setWindowTitle("Add decision point" if decision_point_id is None else "Edit decision point")
         self.setMinimumWidth(600)
         self.setMinimumHeight(600)
         
         self.init_ui()
+        
+        # If editing an existing decision point, load its data
+        if self.decision_point_id:
+            self.load_decision_point_data()
     
     def init_ui(self):
         """Set up the user interface."""
@@ -129,6 +135,12 @@ class DecisionPointDialog(QDialog):
         scroll_area.setWidget(self.options_container)
         
         options_layout.addWidget(scroll_area)
+        
+        # Add the Convert to ordered list button
+        self.convert_button = QPushButton("Convert to ordered list")
+        self.convert_button.clicked.connect(self.toggle_ordered_list)
+        options_layout.addWidget(self.convert_button)
+        
         decision_layout.addWidget(options_group)
         
         # Add the decision tab
@@ -535,45 +547,181 @@ class DecisionPointDialog(QDialog):
         if ok and option_text.strip():
             self.add_option(option_text)
     
-    def add_option(self, option_text: str, is_selected: bool = False):
+    def add_option(self, option_text: str, is_selected: bool = False, played_order: Optional[int] = None):
         """Add an option to the list.
         
         Args:
             option_text: Text of the option
             is_selected: Whether the option is selected
+            played_order: The order value for ordered lists
         """
         # Create a container for the option and its radio button
         option_container = QWidget()
         option_layout = QHBoxLayout(option_container)
         option_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Create a radio button for the option
-        radio_button = QRadioButton(option_text)
-        radio_button.setChecked(is_selected)
-        option_layout.addWidget(radio_button)
+        if self.is_ordered_list:
+            # Add a textbox for ordering
+            order_box = QLineEdit()
+            order_box.setFixedWidth(30)
+            order_box.setPlaceholderText("#")
+            option_layout.addWidget(order_box)
+            
+            # Add a label for the option text
+            label = QLabel(option_text)
+            option_layout.addWidget(label)
+            
+            # Set order value if provided
+            if played_order is not None:
+                order_box.setText(str(played_order))
+            elif is_selected:
+                order_box.setText("1")
+        else:
+            # Create a radio button for the option
+            radio_button = QRadioButton(option_text)
+            radio_button.setChecked(is_selected)
+            option_layout.addWidget(radio_button)
         
         # Add the container to the options layout
         self.options_container_layout.addWidget(option_container)
         
         # Add the option to the list
-        self.options_list.append({
+        option_item = {
             "text": option_text,
-            "radio_button": radio_button,
             "container": option_container,
             "is_selected": is_selected
-        })
+        }
+        
+        if self.is_ordered_list:
+            option_item["order_box"] = order_box
+            option_item["label"] = label
+        else:
+            option_item["radio_button"] = radio_button
+            
+        self.options_list.append(option_item)
     
+    def toggle_ordered_list(self):
+        """Toggle between radio buttons and ordered list mode."""
+        # Switch the mode
+        self.is_ordered_list = not self.is_ordered_list
+        
+        # Change button text
+        if self.is_ordered_list:
+            self.convert_button.setText("Convert to single choice")
+        else:
+            self.convert_button.setText("Convert to ordered list")
+        
+        # Save current selections/ordering
+        selections = []
+        for option in self.options_list:
+            if not self.is_ordered_list:  # We just switched to ordered list
+                selections.append({
+                    "text": option["text"],
+                    "is_selected": option.get("radio_button", {}).isChecked() if "radio_button" in option else False
+                })
+            else:  # We just switched to single choice
+                order_text = option.get("order_box", QLineEdit()).text().strip()
+                selections.append({
+                    "text": option["text"],
+                    "order": order_text if order_text else ""
+                })
+        
+        # Clear existing options
+        self.clear_options()
+        
+        # Re-add options with the new UI mode
+        for i, selection in enumerate(selections):
+            if self.is_ordered_list:  # Now in ordered list mode
+                # If this was the selected radio option, make it #1
+                is_selected = selection.get("is_selected", False)
+                self.add_option(selection["text"], is_selected)
+            else:  # Now in single choice mode
+                order = selection.get("order", "")
+                self.add_option(selection["text"], order == "1")
+
+    def clear_options(self):
+        """Clear all options from the UI."""
+        # Remove all option widgets
+        for option in self.options_list:
+            option["container"].deleteLater()
+        
+        # Clear the list
+        self.options_list = []
+
     def get_selected_option_index(self) -> int:
         """Get the index of the selected option.
         
         Returns:
             Index of the selected option, or -1 if none is selected
         """
-        for i, option in enumerate(self.options_list):
-            if option["radio_button"].isChecked():
-                return i
+        if self.is_ordered_list:
+            # In ordered list mode, find the option with order 1
+            for i, option in enumerate(self.options_list):
+                if option["order_box"].text() == "1":
+                    return i
+        else:
+            # In radio button mode
+            for i, option in enumerate(self.options_list):
+                if option["radio_button"].isChecked():
+                    return i
         return -1
-    
+
+    def validate_ordered_list(self) -> bool:
+        """Validate the ordered list input.
+        
+        Returns:
+            True if valid, False otherwise
+        """
+        if not self.is_ordered_list:
+            return True
+            
+        # Collect all order values
+        orders = []
+        for option in self.options_list:
+            order_text = option["order_box"].text().strip()
+            
+            # Check if all boxes are filled
+            if not order_text:
+                QMessageBox.warning(
+                    self, 
+                    "Validation Error", 
+                    "All order boxes must be filled."
+                )
+                return False
+                
+            # Check if values are integers
+            try:
+                order = int(order_text)
+                
+                # Check if values are in valid range
+                if order < 1 or order > len(self.options_list):
+                    QMessageBox.warning(
+                        self, 
+                        "Validation Error", 
+                        f"Order values must be between 1 and {len(self.options_list)}."
+                    )
+                    return False
+                    
+                orders.append(order)
+            except ValueError:
+                QMessageBox.warning(
+                    self, 
+                    "Validation Error", 
+                    "Order values must be integers."
+                )
+                return False
+        
+        # Check for duplicates
+        if len(set(orders)) != len(orders):
+            QMessageBox.warning(
+                self, 
+                "Validation Error", 
+                "Each option must have a unique order number."
+            )
+            return False
+            
+        return True
+
     def get_next_decision_point_number(self) -> int:
         """Get the next sequential decision point number for the current story.
         
@@ -607,6 +755,65 @@ class DecisionPointDialog(QDialog):
             print(f"Error getting next decision point number: {e}")
             return 1  # Start with 1 if there's any error
     
+    def load_decision_point_data(self):
+        """Load data for an existing decision point."""
+        try:
+            from app.db_sqlite import get_decision_point, get_decision_options
+            
+            # Get the decision point data
+            decision_point = get_decision_point(self.db_conn, self.decision_point_id)
+            if not decision_point:
+                QMessageBox.critical(
+                    self, 
+                    "Error",
+                    f"Decision point with ID {self.decision_point_id} not found.",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
+            
+            # Set the title
+            self.title_edit.setText(decision_point.get('title', ''))
+            
+            # Set the ordered list state
+            self.is_ordered_list = bool(decision_point.get('is_ordered_list', 0))
+            
+            # Update the convert button text
+            if self.is_ordered_list:
+                self.convert_button.setText("Convert to single choice")
+            else:
+                self.convert_button.setText("Convert to ordered list")
+            
+            # Get the options
+            options = get_decision_options(self.db_conn, self.decision_point_id)
+            
+            # Clear existing options
+            self.clear_options()
+            
+            # Add the options to the UI
+            for option in options:
+                played_order = option.get('played_order')
+                
+                if self.is_ordered_list and played_order is not None:
+                    self.add_option(
+                        option.get('text', ''),
+                        option.get('is_selected', 0) == 1,
+                        played_order
+                    )
+                else:
+                    self.add_option(
+                        option.get('text', ''),
+                        option.get('is_selected', 0) == 1
+                    )
+            
+        except Exception as e:
+            print(f"Error loading decision point data: {e}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to load decision point data: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+
     def accept(self):
         """Handle dialog acceptance (save)."""
         # Make sure we're on the decision point tab
@@ -622,32 +829,131 @@ class DecisionPointDialog(QDialog):
             QMessageBox.warning(self, "Error", "Please add at least one option.")
             return
         
-        selected_index = self.get_selected_option_index()
-        if selected_index == -1:
-            QMessageBox.warning(self, "Error", "Please select one of the options.")
-            return
+        # In ordered list mode, validate the input
+        if self.is_ordered_list:
+            if not self.validate_ordered_list():
+                return
+        else:
+            # In single choice mode, check that an option is selected
+            selected_index = self.get_selected_option_index()
+            if selected_index == -1:
+                QMessageBox.warning(self, "Error", "Please select one of the options.")
+                return
         
         # Save the decision point and options to the database
         try:
             from app.db_sqlite import (
-                create_decision_point, add_decision_option, select_decision_option
+                create_decision_point, add_decision_option, select_decision_option,
+                update_decision_point, get_decision_options, delete_decision_option
             )
             
-            # Create the decision point
-            decision_point_id = create_decision_point(self.db_conn, title, self.story_id)
-            
-            # Add the options
-            for i, option in enumerate(self.options_list):
-                option_id = add_decision_option(
-                    self.db_conn, 
-                    decision_point_id, 
-                    option["text"],
-                    option["radio_button"].isChecked(),
-                    i
+            if self.decision_point_id:
+                # Update existing decision point
+                success = update_decision_point(
+                    self.db_conn,
+                    self.decision_point_id,
+                    title,
+                    is_ordered_list=self.is_ordered_list
                 )
-            
-            # Store the decision point ID
-            self.decision_point_id = decision_point_id
+                
+                if not success:
+                    QMessageBox.critical(
+                        self,
+                        "Error",
+                        "Failed to update decision point.",
+                        QMessageBox.StandardButton.Ok
+                    )
+                    return
+                
+                # Get existing options to compare with current options
+                existing_options = get_decision_options(self.db_conn, self.decision_point_id)
+                
+                # Delete options that were removed
+                for existing_option in existing_options:
+                    # Check if this option is still in our list
+                    option_found = False
+                    for new_option in self.options_list:
+                        if hasattr(new_option, 'option_id') and new_option.option_id == existing_option['id']:
+                            option_found = True
+                            break
+                    
+                    if not option_found:
+                        # Option was removed, delete it
+                        delete_decision_option(self.db_conn, existing_option['id'])
+                
+                # Update or add options
+                for i, option in enumerate(self.options_list):
+                    option_text = option["text"]
+                    
+                    if self.is_ordered_list:
+                        # In ordered list mode, get the order and use it to set display_order
+                        order = int(option["order_box"].text())
+                        is_selected = (order == 1)  # Order 1 is the initially selected option
+                        display_order = i
+                        played_order = order
+                    else:
+                        # In single choice mode
+                        is_selected = option["radio_button"].isChecked()
+                        display_order = i
+                        played_order = None
+                    
+                    if hasattr(option, 'option_id'):
+                        # Update existing option
+                        # This would require an update_decision_option function
+                        # For now, we'll delete and recreate
+                        delete_decision_option(self.db_conn, option.option_id)
+                        add_decision_option(
+                            self.db_conn,
+                            self.decision_point_id,
+                            option_text,
+                            is_selected,
+                            display_order,
+                            played_order
+                        )
+                    else:
+                        # Add new option
+                        add_decision_option(
+                            self.db_conn,
+                            self.decision_point_id,
+                            option_text,
+                            is_selected,
+                            display_order,
+                            played_order
+                        )
+            else:
+                # Create new decision point
+                decision_point_id = create_decision_point(
+                    self.db_conn, 
+                    title, 
+                    self.story_id,
+                    is_ordered_list=self.is_ordered_list
+                )
+                
+                # Add the options
+                for i, option in enumerate(self.options_list):
+                    if self.is_ordered_list:
+                        # In ordered list mode, get the order
+                        order = int(option["order_box"].text())
+                        is_selected = (order == 1)  # Order 1 is the initially selected option
+                        display_order = i
+                        played_order = order
+                    else:
+                        # In single choice mode
+                        is_selected = option["radio_button"].isChecked()
+                        display_order = i
+                        played_order = None
+                        
+                    option_id = add_decision_option(
+                        self.db_conn, 
+                        decision_point_id, 
+                        option["text"],
+                        is_selected,
+                        display_order,
+                        played_order
+                    )
+                
+                # Store the decision point ID
+                self.decision_point_id = decision_point_id
             
             # Close the dialog
             super().accept()
