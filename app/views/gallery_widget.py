@@ -7549,7 +7549,7 @@ class GalleryFilterDialog(QDialog):
                 }
                 
                 # Set tool tip to indicate right-click action
-                item.setToolTip("Right-click to add/exclude from filters")
+                # item.setToolTip("Right-click to add/exclude from filters")
                 
                 # Store the character data
                 item.setData(Qt.ItemDataRole.UserRole, character_data)
