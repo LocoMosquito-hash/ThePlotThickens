@@ -1582,26 +1582,26 @@ class ImageDetailDialog(QDialog):
         # Add button layout to main layout
         main_layout.addLayout(button_layout)
         
-        # Create scroll area for thumbnails
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # # Create scroll area for thumbnails
+        # self.scroll_area = QScrollArea()
+        # self.scroll_area.setWidgetResizable(True)
+        # self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
-        # Create container widget for thumbnails
-        self.thumbnails_container = QWidget()
-        self.thumbnails_layout = QGridLayout(self.thumbnails_container)
-        self.thumbnails_layout.setContentsMargins(10, 10, 10, 10)
-        self.thumbnails_layout.setSpacing(10)
+        # # Create container widget for thumbnails
+        # self.thumbnails_container = QWidget()
+        # self.thumbnails_layout = QGridLayout(self.thumbnails_container)
+        # self.thumbnails_layout.setContentsMargins(10, 10, 10, 10)
+        # self.thumbnails_layout.setSpacing(10)
         
-        # Set fixed column width for the grid layout (5 columns)
-        self.thumbnails_container.setMinimumWidth(5 * 200)  # 5 thumbnails of 170px + spacing
+        # # Set fixed column width for the grid layout (5 columns)
+        # self.thumbnails_container.setMinimumWidth(5 * 200)  # 5 thumbnails of 170px + spacing
         
-        # Add container to scroll area
-        self.scroll_area.setWidget(self.thumbnails_container)
+        # # Add container to scroll area
+        # self.scroll_area.setWidget(self.thumbnails_container)
         
-        # Add scroll area to main layout
-        main_layout.addWidget(self.scroll_area)
+        # # Add scroll area to main layout
+        # main_layout.addWidget(self.scroll_area)
         
         # Create status label
         self.status_label = QLabel("No story selected")
