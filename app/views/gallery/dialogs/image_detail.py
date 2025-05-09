@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QListWidget, QListWidgetItem, QMenu, QSplitter,
     QStatusBar, QToolTip, QDialogButtonBox, QTabWidget, QGroupBox,
-    QMessageBox
+    QMessageBox, QWidget
 )
 from PyQt6.QtCore import (
     Qt, pyqtSignal, QTimer, QPoint, QSize
