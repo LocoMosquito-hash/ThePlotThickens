@@ -73,8 +73,9 @@ class ImageDetailDialog(QDialog):
         self.setWindowTitle(f"Image Details - {image_data.get('title', 'Untitled')}")
         self.resize(900, 600)
         
-        # Create status bar
+        # Create status bar with fixed height
         self._status_bar = QStatusBar(self)
+        self._status_bar.setMaximumHeight(20)  # Set a fixed small height
         
         # Set up UI
         self.init_ui()
@@ -278,6 +279,7 @@ class ImageDetailDialog(QDialog):
     def init_ui(self):
         """Initialize the user interface."""
         main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(5)  # Reduce spacing between elements
         
         # Create a splitter for resizable panels
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -409,10 +411,10 @@ class ImageDetailDialog(QDialog):
         splitter.addWidget(right_panel)
         
         # Add the splitter to the main layout
-        main_layout.addWidget(splitter)
+        main_layout.addWidget(splitter, 1)  # Give the splitter a stretch factor of 1
         
-        # Add status bar
-        main_layout.addWidget(self._status_bar)
+        # Add status bar with stretch factor of 0
+        main_layout.addWidget(self._status_bar, 0)  # Add with stretch factor 0 so it doesn't resize
         
         # Set the splitter sizes to give more space to the image panel
         splitter.setSizes([600, 300])
