@@ -201,9 +201,11 @@ class GalleryWidget(QWidget):
         Args:
             state: Checkbox state
         """
-        self.show_nsfw = (state == Qt.CheckState.Checked.value)
+        print(f"NSFW toggle state changed to value: {state}")
+        self.show_nsfw = (state == 2)  # Qt.CheckState.Checked is 2
+        print(f"NSFW mode is now: {'ON' if self.show_nsfw else 'OFF'}")
         
-        # Update thumbnail visibility
+        # Update all thumbnails using the dedicated method
         self.update_thumbnail_visibility()
     
     def on_scene_grouping_toggle(self, state: int) -> None:
@@ -220,23 +222,19 @@ class GalleryWidget(QWidget):
     
     def update_thumbnail_visibility(self) -> None:
         """Update thumbnail visibility based on filters and settings."""
-        # First, show/hide nsfw images
+        print(f"Updating thumbnail visibility for {len(self.thumbnails)} thumbnails. NSFW mode: {self.show_nsfw}")
+        
         for image_id, thumbnail in self.thumbnails.items():
-            # Find the image data
-            image_data = next((img for img in self.images if img["id"] == image_id), None)
-            
-            if not image_data:
-                continue
-                
-            # Check if NSFW
-            is_nsfw = image_data.get("is_nsfw", False)
-            
-            if is_nsfw and not self.show_nsfw:
-                # If NSFW and not showing NSFW, set to placeholder
+            if self.show_nsfw:
+                # If NSFW mode is on, set all thumbnails to NSFW
                 self.set_thumbnail_nsfw(thumbnail)
             else:
-                # Otherwise, show normal thumbnail
+                # Otherwise, restore normal images
                 self.set_thumbnail_normal(thumbnail, image_id)
+            
+            # Make sure the widget is visible and properly redrawn
+            thumbnail.setVisible(True)
+            thumbnail.update()
     
     def set_thumbnail_nsfw(self, thumbnail: ThumbnailWidget) -> None:
         """Set a thumbnail to show the NSFW placeholder.
@@ -244,8 +242,20 @@ class GalleryWidget(QWidget):
         Args:
             thumbnail: Thumbnail widget to update
         """
-        # Set the placeholder pixmap
+        # Make sure we have a placeholder pixmap
+        if not hasattr(self, 'nsfw_placeholder') or self.nsfw_placeholder is None:
+            self.nsfw_placeholder = self._create_nsfw_placeholder()
+        
+        # Scale the placeholder pixmap
+        scaled_pixmap = self.nsfw_placeholder.scaled(
+            QSize(170, 150),  # Increased from 180, 150
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        
+        # Use the thumbnail's update_pixmap method
         thumbnail.update_pixmap(self.nsfw_placeholder)
+        print(f"Set thumbnail {thumbnail.image_id} to NSFW mode")
         
         # Mark as NSFW
         thumbnail.is_nsfw = True
@@ -260,110 +270,47 @@ class GalleryWidget(QWidget):
             thumbnail: Thumbnail widget to update
             image_id: ID of the image
         """
-        # Find the image data
+        # Get the original pixmap path from database
+        cursor = self.db_conn.cursor()
+        cursor.execute(
+            "SELECT filename, path FROM images WHERE id = ?",
+            (image_id,)
+        )
+        image = cursor.fetchone()
+        
+        if image:
+            thumbnails_folder = os.path.join(os.path.dirname(image['path']), "thumbnails")
+            thumbnail_path = os.path.join(thumbnails_folder, image['filename'])
+            
+            if os.path.exists(thumbnail_path):
+                # Load the original thumbnail
+                pixmap = QPixmap(thumbnail_path)
+                if not pixmap.isNull():
+                    # Update the thumbnail
+                    thumbnail.update_pixmap(pixmap)
+                    print(f"Restored thumbnail {image_id} to normal mode")
+                    
+                    # Mark as not NSFW
+                    thumbnail.is_nsfw = False
+                    
+                    # Set quick event text
+                    self._set_thumbnail_quick_event_text(thumbnail, image_id)
+                    return
+        
+        # If we got here, we couldn't restore the normal image
+        # Get the image from the images list
         image_data = next((img for img in self.images if img["id"] == image_id), None)
-        
-        if not image_data:
-            return
+        if image_data:
+            # Get a new pixmap (will handle errors internally)
+            pixmap = self._get_image_thumbnail_pixmap(image_data)
+            thumbnail.update_pixmap(pixmap)
             
-        # Get or create the pixmap
-        if image_id in self.pixmap_cache:
-            pixmap = self.pixmap_cache[image_id]
-        else:
-            # Get the image path from the data
-            file_path = image_data.get("path")
-            filename = image_data.get("filename")
+            # Mark as not NSFW
+            thumbnail.is_nsfw = False
             
-            if not file_path or not filename:
-                # Missing required data
-                logging.error(f"Missing path or filename for image {image_id}")
-                return self._create_placeholder_pixmap(image_data)
-            
-            # Get thumbnail path (in 'thumbnails' folder next to 'images' folder)
-            try:
-                # The path stored is the images folder path, we need to get:
-                # 1. The parent directory of the images folder
-                # 2. Then look for 'thumbnails' folder there
-                parent_dir = os.path.dirname(file_path)
-                thumbnails_folder = os.path.join(parent_dir, "thumbnails")
-                thumbnail_path = os.path.join(thumbnails_folder, filename)
-                
-                logging.debug(f"Looking for thumbnail at: {thumbnail_path}")
-                
-                # Check if thumbnail exists, if not, try to generate it from the original image
-                if not os.path.exists(thumbnail_path):
-                    logging.debug(f"Thumbnail not found, attempting to generate from original")
-                    
-                    # Full path to the original image
-                    original_path = os.path.join(file_path, filename)
-                    logging.debug(f"Looking for original image at: {original_path}")
-                    
-                    if os.path.exists(original_path):
-                        # Load the original image
-                        original_image = QImage(original_path)
-                        if not original_image.isNull():
-                            # Generate and save thumbnail
-                            thumbnail = self._generate_thumbnail(original_image)
-                            
-                            # Make sure thumbnails directory exists
-                            os.makedirs(thumbnails_folder, exist_ok=True)
-                            
-                            # Save the thumbnail
-                            thumbnail.save(thumbnail_path, "PNG")
-                            logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
-                            
-                            # Use the newly generated thumbnail
-                            pixmap = QPixmap.fromImage(thumbnail)
-                            self.pixmap_cache[image_id] = pixmap
-                            return pixmap
-                        else:
-                            logging.error(f"Failed to load original image: {original_path}")
-                    else:
-                        logging.error(f"Original image not found: {original_path}")
-                        
-                        # Try looking at the path directly (maybe path already includes the filename)
-                        if os.path.exists(file_path) and os.path.isfile(file_path):
-                            original_image = QImage(file_path)
-                            if not original_image.isNull():
-                                # Generate and save thumbnail
-                                thumbnail = self._generate_thumbnail(original_image)
-                                
-                                # Make sure thumbnails directory exists
-                                os.makedirs(thumbnails_folder, exist_ok=True)
-                                
-                                # Save the thumbnail
-                                thumbnail.save(thumbnail_path, "PNG")
-                                logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
-                                
-                                # Use the newly generated thumbnail
-                                pixmap = QPixmap.fromImage(thumbnail)
-                                self.pixmap_cache[image_id] = pixmap
-                                return pixmap
-                else:
-                    # Thumbnail exists, load it
-                    logging.debug(f"Found existing thumbnail at: {thumbnail_path}")
-                    pixmap = QPixmap(thumbnail_path)
-                    if not pixmap.isNull():
-                        self.pixmap_cache[image_id] = pixmap
-                        return pixmap
-                    else:
-                        logging.error(f"Failed to load thumbnail image: {thumbnail_path}")
-            
-            except Exception as e:
-                logging.exception(f"Error loading thumbnail for image {image_id}: {str(e)}")
-            
-            # If we get here, we couldn't load a thumbnail
-            return self._create_placeholder_pixmap(image_data)
-        
-        # Update the thumbnail
-        thumbnail.update_pixmap(pixmap)
-        
-        # Mark as not NSFW
-        thumbnail.is_nsfw = False
-        
-        # Set quick event text if any
-        self._set_thumbnail_quick_event_text(thumbnail, image_id)
-
+            # Set quick event text
+            self._set_thumbnail_quick_event_text(thumbnail, image_id)
+    
     def _set_thumbnail_quick_event_text(self, thumbnail: ThumbnailWidget, image_id: int) -> None:
         """Set quick event text on a thumbnail if any exists.
         
@@ -783,9 +730,14 @@ class GalleryWidget(QWidget):
         if image_id in self.pixmap_cache:
             return self.pixmap_cache[image_id]
         
-        # Choose pixmap based on NSFW mode
+        # Choose pixmap based on NSFW mode - in the original implementation, when nsfw_mode is True,
+        # ALL images are replaced with placeholders
         if self.show_nsfw:
-            placeholder = self._create_nsfw_placeholder()
+            # Make sure we have the placeholder
+            if not hasattr(self, 'nsfw_placeholder') or self.nsfw_placeholder is None:
+                self.nsfw_placeholder = self._create_nsfw_placeholder()
+            
+            placeholder = self.nsfw_placeholder
             self.pixmap_cache[image_id] = placeholder
             return placeholder
         
@@ -837,24 +789,24 @@ class GalleryWidget(QWidget):
                 else:
                     logging.error(f"Original image not found: {original_path}")
                     
-                    # Try looking at the path directly (maybe path itself is the full path to the image)
-                    if os.path.exists(file_path) and os.path.isfile(file_path):
-                        original_image = QImage(file_path)
-                        if not original_image.isNull():
-                            # Generate and save thumbnail
-                            thumbnail = self._generate_thumbnail(original_image)
-                            
-                            # Make sure thumbnails directory exists
-                            os.makedirs(thumbnails_folder, exist_ok=True)
-                            
-                            # Save the thumbnail
-                            thumbnail.save(thumbnail_path, "PNG")
-                            logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
-                            
-                            # Use the newly generated thumbnail
-                            pixmap = QPixmap.fromImage(thumbnail)
-                            self.pixmap_cache[image_id] = pixmap
-                            return pixmap
+                # Try looking at the path directly (maybe path itself is the full path to the image)
+                if os.path.exists(file_path) and os.path.isfile(file_path):
+                    original_image = QImage(file_path)
+                    if not original_image.isNull():
+                        # Generate and save thumbnail
+                        thumbnail = self._generate_thumbnail(original_image)
+                        
+                        # Make sure thumbnails directory exists
+                        os.makedirs(thumbnails_folder, exist_ok=True)
+                        
+                        # Save the thumbnail
+                        thumbnail.save(thumbnail_path, "PNG")
+                        logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
+                        
+                        # Use the newly generated thumbnail
+                        pixmap = QPixmap.fromImage(thumbnail)
+                        self.pixmap_cache[image_id] = pixmap
+                        return pixmap
             else:
                 # Thumbnail exists, load it
                 logging.debug(f"Found existing thumbnail at: {thumbnail_path}")
