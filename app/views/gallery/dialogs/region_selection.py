@@ -363,52 +363,48 @@ class RegionSelectionDialog(QDialog):
     
     def auto_recognize_characters(self) -> None:
         """Automatically recognize characters in the image."""
-        if not self.recognition_util.has_faces():
+        try:
+            # Show warning that this feature is in development
             QMessageBox.information(
                 self,
-                "No Recognition Data",
-                "No character recognition data available. Add character tags to build the database first."
+                "Auto Recognition",
+                "Automatic character recognition is currently in development.\n\n"
+                "In the future, this feature will analyze faces in the image and "
+                "suggest character matches based on your previously tagged characters."
             )
-            return
-        
-        # Show status message
-        self._status_bar.showMessage("Recognizing characters...")
-        
-        # Run recognition
-        results = self.recognition_util.recognize_faces(self.image)
-        
-        # Clear existing recognized characters
-        self.recognized_list.clear()
-        
-        if not results:
-            self._status_bar.showMessage("No characters recognized")
-            return
-        
-        # Add recognized characters to the list
-        for result in results:
-            character_id = result["id"]
-            name = result["name"]
-            confidence = result["confidence"]
-            region = result["region"]  # x, y, width, height as relative coordinates (0.0-1.0)
             
-            # Create item
-            item = QListWidgetItem(f"{name} ({confidence:.0%})")
-            item.setData(Qt.ItemDataRole.UserRole, character_id)
-            item.setCheckState(Qt.CheckState.Checked)
+            # Show status message
+            self._status_bar.showMessage("Character recognition is in development...")
             
-            # Add to list
-            self.recognized_list.addItem(item)
+            # For now, we'll just demonstrate the UI flow without actual recognition
+            # Add a placeholder result to show how it would work
+            self.recognized_list.clear()
             
-            # Add to tagged characters
-            self.tagged_characters.append({
-                'character_id': character_id,
-                'character_name': name,
-                'region': region,
-                'similarity': confidence,
-                'description': f"Auto-detected with {int(confidence * 100)}% confidence"
-            })
-        
-        self._status_bar.showMessage(f"Recognized {len(results)} characters")
+            # Get characters from the database to show as examples
+            characters = self.characters[:min(len(self.characters), 3)]
+            if characters:
+                for character in characters:
+                    confidence = 0.75  # Placeholder confidence value
+                    
+                    # Create item
+                    item = QListWidgetItem(f"{character['name']} ({int(confidence * 100)}% match)")
+                    item.setData(Qt.ItemDataRole.UserRole, character['id'])
+                    item.setCheckState(Qt.CheckState.Unchecked)
+                    
+                    # Add to list
+                    self.recognized_list.addItem(item)
+                
+                self._status_bar.showMessage(f"Found {len(characters)} potential character matches (demo)")
+            else:
+                self._status_bar.showMessage("No characters available for recognition")
+                
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Recognition Error",
+                f"An error occurred during character recognition:\n{str(e)}"
+            )
+            self._status_bar.showMessage("Character recognition failed")
     
     def create_new_quick_event(self) -> None:
         """Create a new quick event and associate it with the image."""
