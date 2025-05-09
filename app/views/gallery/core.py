@@ -1093,6 +1093,63 @@ class GalleryWidget(QWidget):
         
         self.images.insert(0, new_image)  # Add to start (newest)
         
+        # Run character recognition on the image
+        # Show a progress dialog for the longer operation
+        progress_dialog = QProgressDialog(
+            "Analyzing image for character recognition...",
+            "Cancel", 0, 100, self
+        )
+        progress_dialog.setWindowTitle("Character Recognition")
+        progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        progress_dialog.setMinimumDuration(500)  # Show after 500ms delay
+        progress_dialog.setValue(0)
+        
+        # Allow some processing before showing the dialog
+        QApplication.processEvents()
+        
+        # Open the RegionSelectionDialog for character recognition
+        from app.views.gallery.dialogs.region_selection import RegionSelectionDialog
+        region_dialog = RegionSelectionDialog(self.db_conn, image, self.story_id, self, image_id=image_id)
+        
+        progress_dialog.setValue(100)
+        progress_dialog.close()
+        
+        # Show the dialog - this will block until it's closed
+        if region_dialog.exec():
+            # Get selected character data and process it if needed
+            try:
+                # Get the data returned from the dialog
+                result_data = region_dialog.get_selected_character_data()
+                if result_data:
+                    # Process character tags and quick event information
+                    character_data = result_data.get('characters', [])
+                    quick_event_id = result_data.get('quick_event_id')
+                    
+                    # Process character tags
+                    if character_data:
+                        from app.db_sqlite import add_character_tag_to_image
+                        for character in character_data:
+                            character_id = character['character_id']
+                            region = character['region']
+                            
+                            # Add the character tag to the image with the region coordinates
+                            add_character_tag_to_image(
+                                self.db_conn,
+                                image_id,
+                                character_id,
+                                region['x'],  # Center X (normalized)
+                                region['y'],  # Center Y (normalized)
+                                region['width'],  # Width (normalized)
+                                region['height'],  # Height (normalized)
+                                f"Auto-detected with {int(character['similarity'] * 100)}% confidence"
+                            )
+                    
+                    # Associate quick event if one was selected
+                    if quick_event_id:
+                        self.associate_quick_event_with_image(image_id, quick_event_id)
+            except Exception as e:
+                self.show_error("Error", f"Failed to process character recognition data: {str(e)}")
+        
         # Reload images
         self.load_images()
     
