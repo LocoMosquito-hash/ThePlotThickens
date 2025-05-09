@@ -325,12 +325,12 @@ class GalleryWidget(QWidget):
             # Use the first quick event as the thumbnail text
             quick_event = quick_events[0]
             
-            # Get the tagged characters
-            tagged_characters = get_quick_event_tagged_characters(self.db_conn, quick_event["id"])
+            # Get all characters for this story to resolve references properly
+            characters = get_story_characters(self.db_conn, self.story_id)
             
             # Format the text
             from app.utils.character_references import convert_char_refs_to_mentions
-            display_text = convert_char_refs_to_mentions(quick_event["text"], tagged_characters)
+            display_text = convert_char_refs_to_mentions(quick_event["text"], characters)
             
             # Set on the thumbnail
             thumbnail.set_quick_event_text(display_text)
