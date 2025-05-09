@@ -1157,61 +1157,61 @@ class GalleryWidget(QWidget):
         Args:
             image_id: ID of the clicked image
         """
-        # Find the image data
-        image_data = next((img for img in self.images if img["id"] == image_id), None)
-        
-        if not image_data:
-            self.show_error("Error", f"Image data not found for ID {image_id}")
-            return
-        
-        # Check if it's an NSFW image and we're not showing NSFW
-        is_nsfw = image_data.get("is_nsfw", False)
-        
-        if is_nsfw and not self.show_nsfw:
-            # Ask for confirmation
-            confirmation = QMessageBox.question(
+        try:
+            # Get complete image data directly from the database
+            cursor = self.db_conn.cursor()
+            cursor.execute('SELECT * FROM images WHERE id = ?', (image_id,))
+            
+            image_data = cursor.fetchone()
+            
+            if not image_data:
+                self.show_error("Image Not Found", f"Image with ID {image_id} not found.")
+                return
+            
+            # Convert to a dictionary
+            image_data = dict(image_data)
+            
+            # Get the image path
+            image_path = os.path.join(image_data['path'], image_data['filename'])
+            
+            if not os.path.exists(image_path):
+                self.show_error("Image Not Found", f"Image file not found at {image_path}")
+                return
+            
+            # Load image
+            pixmap = QPixmap(image_path)
+            
+            if pixmap.isNull():
+                self.show_error("Image Load Failed", f"Failed to load image from {image_path}")
+                return
+            
+            # Get all image IDs in the gallery for navigation
+            gallery_images = [img["id"] for img in self.images]
+            
+            # Find the index of the current image
+            try:
+                current_index = gallery_images.index(image_id)
+            except ValueError:
+                current_index = -1
+            
+            # Create and show the dialog
+            dialog = ImageDetailDialog(
+                self.db_conn,
+                image_id,
+                image_data,
+                pixmap,
                 self,
-                "NSFW Content",
-                "This image contains NSFW content. Are you sure you want to view it?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
+                gallery_images,
+                current_index
             )
             
-            if confirmation != QMessageBox.StandardButton.Yes:
-                return
-        
-        # Get image pixmap
-        pixmap = self.get_image_pixmap(image_id)
-        
-        if pixmap.isNull():
-            self.show_error("Error", f"Could not load image for ID {image_id}")
-            return
-        
-        # Create image detail dialog
-        # Create a list of all image IDs for navigation
-        gallery_images = [img["id"] for img in self.images]
-        
-        # Find the index of the current image
-        try:
-            current_index = gallery_images.index(image_id)
-        except ValueError:
-            current_index = -1
-        
-        # Create and show the dialog
-        dialog = ImageDetailDialog(
-            self.db_conn,
-            image_id,
-            image_data,
-            pixmap,
-            self,
-            gallery_images,
-            current_index
-        )
-        
-        dialog.exec()
-        
-        # Reload the thumbnails to reflect any changes made in the dialog
-        self.load_images()
+            dialog.exec()
+            
+            # Reload the thumbnails to reflect any changes made in the dialog
+            self.load_images()
+            
+        except Exception as e:
+            self.show_error("Error", f"An error occurred: {str(e)}")
     
     def get_image_pixmap(self, image_id: int) -> QPixmap:
         """Get the full-size pixmap for an image.
@@ -1222,33 +1222,43 @@ class GalleryWidget(QWidget):
         Returns:
             QPixmap of the image
         """
-        # Find the image data
-        image_data = next((img for img in self.images if img["id"] == image_id), None)
-        
-        if not image_data:
-            # Return an empty pixmap
-            return QPixmap()
-        
-        # Get the file path
-        file_path = image_data.get("path")
-        
-        if not file_path or not os.path.exists(file_path):
-            # Try to get from database blob
+        try:
+            # Get image data directly from the database
             cursor = self.db_conn.cursor()
-            cursor.execute("SELECT image_data FROM images WHERE id = ?", (image_id,))
+            cursor.execute('SELECT path, filename FROM images WHERE id = ?', (image_id,))
+            
             result = cursor.fetchone()
             
-            if result and result[0]:
-                # Create pixmap from image data
-                pixmap = QPixmap()
-                pixmap.loadFromData(result[0])
-                return pixmap
-            else:
-                # No image data
+            if not result:
+                logging.error(f"Image with ID {image_id} not found in database")
                 return QPixmap()
-        
-        # Load the image from file
-        return QPixmap(file_path)
+            
+            # Get the image path
+            file_path = result[0]
+            filename = result[1]
+            
+            if not file_path or not filename:
+                logging.error(f"Image {image_id} has NULL path or filename in database")
+                return QPixmap()
+                
+            # Construct full path
+            full_path = os.path.join(file_path, filename)
+            
+            if not os.path.exists(full_path):
+                logging.error(f"Image file not found at {full_path}")
+                return QPixmap()
+            
+            # Load the image from file
+            pixmap = QPixmap(full_path)
+            
+            if pixmap.isNull():
+                logging.error(f"Failed to load image from {full_path}")
+                
+            return pixmap
+            
+        except Exception as e:
+            logging.exception(f"Error loading image pixmap: {str(e)}")
+            return QPixmap()
     
     def get_image_data(self, image_id: int) -> Dict[str, Any]:
         """Get image data for an image.

@@ -343,4 +343,227 @@ class GraphicsTagView(QGraphicsView):
     def __init__(self, parent=None):
         """Initialize the graphics tag view."""
         super().__init__(parent)
-        # Implementation will be moved here from gallery_widget.py 
+        
+        # Create scene
+        self.scene = QGraphicsScene(self)
+        self.setScene(self.scene)
+        
+        # Image item
+        self.pixmap_item = None
+        
+        # Tags
+        self.tags = []
+        self.tag_items = {}  # Map of tag_id -> (rect_item, text_item)
+        self.selected_tag_id = None
+        self.tag_mode = False
+        
+        # Store dimensions
+        self.image_width = 0
+        self.image_height = 0
+        self.orig_width = 0
+        self.orig_height = 0
+        
+        # Set rendering hints
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        
+        # Set drag mode
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        
+        # Enable mouse tracking
+        self.setMouseTracking(True)
+        
+        # Set minimum size
+        self.setMinimumSize(400, 300)
+        
+    def set_image(self, pixmap: QPixmap, orig_width=None, orig_height=None):
+        """Set the image for the view.
+        
+        Args:
+            pixmap: QPixmap to display
+            orig_width: Original image width (if scaled)
+            orig_height: Original image height (if scaled)
+        """
+        # Clear scene
+        self.scene.clear()
+        self.tag_items.clear()
+        
+        # Add pixmap item
+        self.pixmap_item = self.scene.addPixmap(pixmap)
+        
+        # Store dimensions
+        self.image_width = pixmap.width()
+        self.image_height = pixmap.height()
+        self.orig_width = orig_width if orig_width is not None else self.image_width
+        self.orig_height = orig_height if orig_height is not None else self.image_height
+        
+        # Set scene rect
+        self.scene.setSceneRect(0, 0, self.image_width, self.image_height)
+        
+        # Reset view
+        self.resetTransform()
+        self.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        
+        # Redraw tags if any
+        if self.tags:
+            self.set_tags(self.tags)
+    
+    def set_tags(self, tags):
+        """Set the character tags to display.
+        
+        Args:
+            tags: List of tag dictionaries
+        """
+        self.tags = tags
+        
+        # Clear existing tag items
+        for tag_id, items in self.tag_items.items():
+            rect_item, text_item, text_bg = items
+            self.scene.removeItem(rect_item)
+            self.scene.removeItem(text_item)
+            self.scene.removeItem(text_bg)
+        self.tag_items.clear()
+        
+        # Create tag items
+        for tag in tags:
+            tag_id = tag['id']
+            center_x = tag['x_position']
+            center_y = tag['y_position']
+            tag_width = tag['width']
+            tag_height = tag['height']
+            character_name = tag.get('character_name', 'Unknown')
+            
+            # Convert relative coordinates to absolute
+            abs_x = center_x * self.image_width
+            abs_y = center_y * self.image_height
+            abs_width = tag_width * self.image_width
+            abs_height = tag_height * self.image_height
+            
+            # Create rectangle item
+            rect_x = abs_x - (abs_width / 2)
+            rect_y = abs_y - (abs_height / 2)
+            rect_item = QGraphicsRectItem(rect_x, rect_y, abs_width, abs_height)
+            rect_item.setPen(QPen(QColor(0, 255, 0), 2))
+            rect_item.setData(0, tag_id)  # Store tag ID in item data
+            self.scene.addItem(rect_item)
+            
+            # Create text item
+            text_item = QGraphicsTextItem(character_name)
+            text_item.setDefaultTextColor(QColor(255, 255, 255))
+            text_item.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            text_item.setPos(rect_x, rect_y - 25)  # Position above the rectangle
+            
+            # Add background rect to text
+            # This is a simple approach - ideally we'd create a custom item that draws both
+            text_bg = QGraphicsRectItem(text_item.boundingRect())
+            text_bg.setBrush(QBrush(QColor(0, 0, 0, 180)))
+            text_bg.setPen(QPen(Qt.PenStyle.NoPen))
+            text_bg.setZValue(text_item.zValue() - 1)  # Place behind text
+            text_bg.setPos(text_item.pos())
+            self.scene.addItem(text_bg)
+            
+            self.scene.addItem(text_item)
+            
+            # Store items
+            self.tag_items[tag_id] = (rect_item, text_item, text_bg)
+    
+    def enable_tag_mode(self, enabled=True):
+        """Enable or disable tag adding mode.
+        
+        Args:
+            enabled: Whether to enable tag mode
+        """
+        self.tag_mode = enabled
+        if enabled:
+            self.setCursor(Qt.CursorShape.CrossCursor)
+            self.setDragMode(QGraphicsView.DragMode.NoDrag)
+        else:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+    
+    def mousePressEvent(self, event):
+        """Handle mouse press events.
+        
+        Args:
+            event: Mouse event
+        """
+        if self.tag_mode and self.pixmap_item:
+            if event.button() == Qt.MouseButton.LeftButton:
+                # Get scene position
+                scene_pos = self.mapToScene(event.pos())
+                
+                # Convert to relative coordinates
+                rel_x = scene_pos.x() / self.image_width
+                rel_y = scene_pos.y() / self.image_height
+                
+                # Check if within image bounds
+                if 0 <= rel_x <= 1 and 0 <= rel_y <= 1:
+                    # Emit signal with relative coordinates
+                    self.tag_added.emit(rel_x, rel_y)
+            else:
+                # Pass to super for handling
+                super().mousePressEvent(event)
+        else:
+            if event.button() == Qt.MouseButton.LeftButton:
+                # Get scene position
+                scene_pos = self.mapToScene(event.pos())
+                
+                # Check if clicked on a tag
+                items = self.scene.items(scene_pos)
+                for item in items:
+                    if isinstance(item, QGraphicsRectItem) and item.data(0):
+                        tag_id = item.data(0)
+                        self.selected_tag_id = tag_id
+                        self.highlight_tag(tag_id)
+                        self.tag_selected.emit(tag_id)
+                        return
+            
+            # Pass to super for handling
+            super().mousePressEvent(event)
+    
+    def highlight_tag(self, tag_id):
+        """Highlight a tag.
+        
+        Args:
+            tag_id: ID of the tag to highlight
+        """
+        # Reset all tags to normal style
+        for tid, (rect_item, text_item, text_bg) in self.tag_items.items():
+            if tid == tag_id:
+                # Highlight this tag
+                rect_item.setPen(QPen(QColor(255, 165, 0), 3))  # Orange for selected
+            else:
+                # Normal style
+                rect_item.setPen(QPen(QColor(0, 255, 0), 2))  # Green for normal
+        
+        # Store selected tag ID
+        self.selected_tag_id = tag_id
+    
+    def save_tag_crop(self, tag_id, tag_name):
+        """Save a cropped image for a tag.
+        
+        This is a stub method that would crop the image at the tag position
+        and save it to the recognition database.
+        
+        Args:
+            tag_id: ID of the tag
+            tag_name: Name of the character
+        """
+        # Stub implementation
+        print(f"Would save crop for tag {tag_id} ({tag_name})")
+        
+        # In a real implementation, this would:
+        # 1. Find the tag rect
+        # 2. Crop the image at that rect
+        # 3. Save to recognition database
+    
+    def resizeEvent(self, event):
+        """Handle resize events.
+        
+        Args:
+            event: Resize event
+        """
+        super().resizeEvent(event)
+        if self.pixmap_item:
+            # Fit the image in the view while preserving aspect ratio
+            self.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio) 
