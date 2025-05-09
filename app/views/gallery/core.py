@@ -559,129 +559,172 @@ class GalleryWidget(QWidget):
         # Clear existing thumbnails
         self.clear_thumbnails()
         
-        # Get all scenes for this story
+        if not images:
+            return
+        
+        # Convert images from sqlite3.Row objects to dictionaries
+        images_dict = []
+        for image in images:
+            image_dict = dict(image)
+            images_dict.append(image_dict)
+        
+        # Replace the original images list with our dictionary version
+        images = images_dict
+        
+        # Get all scenes in this story
         cursor = self.db_conn.cursor()
+        cursor.execute(
+            "SELECT id, title, sequence_number FROM events WHERE story_id = ? AND event_type = 'SCENE' ORDER BY sequence_number DESC",
+            (self.story_id,)
+        )
+        scenes = cursor.fetchall()
         
-        query = """
-            SELECT id, name, sequence_number
-            FROM scenes
-            WHERE story_id = ?
-            ORDER BY sequence_number
-        """
+        # First, obtain creation timestamps for all images
+        for image in images:
+            cursor.execute(
+                "SELECT created_at FROM images WHERE id = ?",
+                (image['id'],)
+            )
+            result = cursor.fetchone()
+            if result:
+                image['created_at'] = result['created_at']
+            else:
+                image['created_at'] = '1970-01-01 00:00:00'  # Default fallback
         
-        cursor.execute(query, (self.story_id,))
+        # Sort images by creation timestamp (newest first)
+        images.sort(key=lambda x: x['created_at'], reverse=True)
         
-        # Convert to list of dicts
-        scenes = []
-        for row in cursor.fetchall():
-            scenes.append({
-                "id": row[0],
-                "name": row[1],
-                "sequence_number": row[2]
-            })
+        # If we have no scenes defined, treat all images as orphans
+        if not scenes:
+            row = 0
+            separator = SeparatorWidget("Ungrouped")
+            self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
+            row += 1
+            
+            self._display_image_list(images, row)
+            return
         
-        # Create a dictionary to group images by scene
+        # Get all quick event associations for all images
+        image_ids = [image['id'] for image in images]
+        image_quick_events = {}
+        for image_id in image_ids:
+            quick_events = get_image_quick_events(self.db_conn, image_id)
+            if quick_events:
+                image_quick_events[image_id] = quick_events
+        
+        # Find scenes for each image through:
+        # 1. Quick events associated with the image that are in scenes
+        # 2. Direct image-scene associations
+        image_scenes = {}
+        
+        # First, process indirect associations via quick events
+        for image_id, quick_events in image_quick_events.items():
+            for quick_event in quick_events:
+                scenes_for_quick_event = get_quick_event_scenes(self.db_conn, quick_event['id'])
+                if scenes_for_quick_event:
+                    # Associate image with all scenes containing the quick event
+                    if image_id not in image_scenes:
+                        image_scenes[image_id] = set()
+                    for scene in scenes_for_quick_event:
+                        image_scenes[image_id].add((scene['id'], scene['title'], scene['sequence_number']))
+        
+        # Second, process direct image-scene associations
+        for image_id in image_ids:
+            direct_scenes = get_image_scenes(self.db_conn, image_id)
+            if direct_scenes:
+                if image_id not in image_scenes:
+                    image_scenes[image_id] = set()
+                for scene in direct_scenes:
+                    image_scenes[image_id].add((scene['id'], scene['title'], scene['sequence_number']))
+        
+        # Group images by scene
         scene_images = {}
+        orphan_images = []
         
-        # Initialize with empty lists for all scenes
-        for scene in scenes:
-            scene_images[scene["id"]] = []
+        for image in images:
+            image_id = image['id']
+            if image_id in image_scenes:
+                for scene_id, scene_title, sequence_number in image_scenes[image_id]:
+                    if scene_id not in scene_images:
+                        scene_images[scene_id] = {
+                            'title': scene_title,
+                            'sequence_number': sequence_number,
+                            'images': [],
+                            # Get the newest creation timestamp for any quick event in this scene
+                            'newest_timestamp': self._get_scene_newest_timestamp(scene_id)
+                        }
+                    scene_images[scene_id]['images'].append(image)
+            else:
+                # Image not associated with a scene
+                orphan_images.append(image)
         
-        # Add a special "Unassigned" pseudo-scene for images not in any scene
-        scene_images[None] = []
+        # If we have no images in any scenes, treat all images as orphans
+        if not scene_images:
+            row = 0
+            separator = SeparatorWidget("Ungrouped")
+            self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
+            row += 1
+            
+            self._display_image_list(orphan_images, row)
+            return
         
-        # Filter images based on character filters
-        if self.character_filters:
-            # We have filters, so we need to check each image
-            for image in images:
-                # Get character tags for this image
-                tags = get_image_character_tags(self.db_conn, image["id"])
-                character_ids = set(tag["character_id"] for tag in tags)
+        # Now create a chronological display order with scenes and ungrouped images interspersed
+        # Create a new display order with scenes only
+        display_order = []
+        
+        # Sort scenes by sequence number (highest first = newest scenes first)
+        sorted_scenes = sorted(
+            scene_images.items(),
+            key=lambda x: x[1]['sequence_number'],
+            reverse=True
+        )
+        
+        # Add all scenes in order of sequence number (highest first)
+        for scene_id, scene_data in sorted_scenes:
+            display_order.append(('scene', scene_id))
+        
+        # Now, place unassigned images in a separate group at the top
+        if orphan_images:
+            # Sort orphaned images by creation timestamp (newest first)
+            orphan_images.sort(key=lambda x: x['created_at'], reverse=True)
+            # Insert the ungrouped section at the beginning of display_order
+            display_order.insert(0, ('ungrouped', orphan_images))
+        
+        # Now display everything according to our calculated order
+        row = 0
+        for item_type, item_data in display_order:
+            if item_type == 'scene':
+                scene_id = item_data
+                scene_data = scene_images[scene_id]
                 
-                # Check if this image should be included
-                include_image = True
+                # Add a separator for this scene
+                separator = SeparatorWidget(scene_data['title'])
+                self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
+                row += 1
                 
-                for character_id, include in self.character_filters:
-                    if include:
-                        # If this filter is to include, then the image must have this character
-                        if character_id not in character_ids:
-                            include_image = False
-                            break
-                    else:
-                        # If this filter is to exclude, then the image must not have this character
-                        if character_id in character_ids:
-                            include_image = False
-                            break
+                # Display this scene's images
+                row = self._display_image_list(scene_data['images'], row)
                 
-                if include_image:
-                    # Get scenes for this image
-                    image_scenes = get_image_scenes(self.db_conn, image["id"])
+                # Add some spacing
+                row += 1
+            
+            elif item_type == 'ungrouped':
+                ungrouped_images = item_data
+                if ungrouped_images:
+                    # Add separator for ungrouped images
+                    separator = SeparatorWidget("Ungrouped")
+                    self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
+                    row += 1
                     
-                    if image_scenes:
-                        # Add to each scene the image is in
-                        for image_scene in image_scenes:
-                            scene_id = image_scene["scene_id"]
-                            if scene_id in scene_images:
-                                scene_images[scene_id].append(image)
-                    else:
-                        # Not in any scene
-                        scene_images[None].append(image)
-        else:
-            # No filters, process all images
-            for image in images:
-                # Get scenes for this image
-                image_scenes = get_image_scenes(self.db_conn, image["id"])
-                
-                if image_scenes:
-                    # Add to each scene the image is in
-                    for image_scene in image_scenes:
-                        scene_id = image_scene["scene_id"]
-                        if scene_id in scene_images:
-                            scene_images[scene_id].append(image)
-                else:
-                    # Not in any scene
-                    scene_images[None].append(image)
+                    # Display ungrouped images
+                    row = self._display_image_list(ungrouped_images, row)
+                    
+                    # Add some spacing
+                    row += 1
         
-        # Now display each scene's images
-        current_row = 0
-        
-        # First, display images from actual scenes in order
-        for scene in scenes:
-            scene_id = scene["id"]
-            scene_name = scene["name"]
-            
-            # Get images for this scene
-            scene_image_list = scene_images[scene_id]
-            
-            # Skip empty scenes
-            if not scene_image_list:
-                continue
-            
-            # Sort by timestamp
-            scene_image_list.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-            
-            # Add a separator for this scene
-            separator = SeparatorWidget(f"Scene: {scene_name} ({len(scene_image_list)} images)")
-            self.thumbnails_layout.addWidget(separator, current_row, 0, 1, 4)  # Span all columns
-            current_row += 1
-            
-            # Display the images for this scene
-            current_row = self._display_image_list(scene_image_list, current_row)
-        
-        # Finally, display unassigned images
-        unassigned_images = scene_images[None]
-        
-        if unassigned_images:
-            # Sort by timestamp
-            unassigned_images.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-            
-            # Add a separator
-            separator = SeparatorWidget(f"Unassigned Images ({len(unassigned_images)} images)")
-            self.thumbnails_layout.addWidget(separator, current_row, 0, 1, 4)  # Span all columns
-            current_row += 1
-            
-            # Display the unassigned images
-            self._display_image_list(unassigned_images, current_row)
+        # Ensure columns have equal width
+        for col in range(4):
+            self.thumbnails_layout.setColumnStretch(col, 1)
         
         # Update visibility based on nsfw setting
         self.update_thumbnail_visibility()
@@ -727,44 +770,43 @@ class GalleryWidget(QWidget):
         return current_row + ((len(images) - 1) // cols) + 1
         
     def _get_image_thumbnail_pixmap(self, image: Dict[str, Any]) -> QPixmap:
-        """Get a thumbnail pixmap for an image.
+        """Get the thumbnail pixmap for an image.
         
         Args:
             image: Image data dictionary
             
         Returns:
-            QPixmap for the thumbnail
+            QPixmap object of the thumbnail, possibly a placeholder if in NSFW mode
         """
-        image_id = image["id"]
-        
         # Check if we have a cached pixmap
+        image_id = image["id"]
         if image_id in self.pixmap_cache:
             return self.pixmap_cache[image_id]
-            
-        # No cached pixmap, load from file
-        file_path = image.get("path")
-        filename = image.get("filename")
         
-        # Debug log
-        logging.debug(f"Loading thumbnail for image {image_id}: path={file_path}, filename={filename}")
+        # Choose pixmap based on NSFW mode
+        if self.show_nsfw:
+            placeholder = self._create_nsfw_placeholder()
+            self.pixmap_cache[image_id] = placeholder
+            return placeholder
         
-        if not file_path or not filename:
-            # Missing required data
+        # Get thumbnail path
+        filename = image.get('filename')
+        file_path = image.get('path')
+        
+        if not filename or not file_path:
             logging.error(f"Missing path or filename for image {image_id}")
-            return self._create_placeholder_pixmap(image)
+            placeholder = self._create_placeholder_pixmap(image)
+            self.pixmap_cache[image_id] = placeholder
+            return placeholder
         
-        # Get thumbnail path (in 'thumbnails' folder next to 'images' folder)
+        # Get thumbnail path - thumbnails folder should be adjacent to images folder
         try:
-            # The path stored is the images folder path, we need to get:
-            # 1. The parent directory of the images folder
-            # 2. Then look for 'thumbnails' folder there
-            parent_dir = os.path.dirname(file_path)
-            thumbnails_folder = os.path.join(parent_dir, "thumbnails")
+            thumbnails_folder = os.path.join(os.path.dirname(file_path), "thumbnails")
             thumbnail_path = os.path.join(thumbnails_folder, filename)
             
             logging.debug(f"Looking for thumbnail at: {thumbnail_path}")
             
-            # Check if thumbnail exists, if not, try to generate it from the original image
+            # Check if thumbnail exists, if not, generate it from the original image
             if not os.path.exists(thumbnail_path):
                 logging.debug(f"Thumbnail not found, attempting to generate from original")
                 
@@ -795,7 +837,7 @@ class GalleryWidget(QWidget):
                 else:
                     logging.error(f"Original image not found: {original_path}")
                     
-                    # Try looking at the path directly (maybe path already includes the filename)
+                    # Try looking at the path directly (maybe path itself is the full path to the image)
                     if os.path.exists(file_path) and os.path.isfile(file_path):
                         original_image = QImage(file_path)
                         if not original_image.isNull():
@@ -827,7 +869,9 @@ class GalleryWidget(QWidget):
             logging.exception(f"Error loading thumbnail for image {image_id}: {str(e)}")
         
         # If we get here, we couldn't load a thumbnail
-        return self._create_placeholder_pixmap(image)
+        placeholder = self._create_placeholder_pixmap(image)
+        self.pixmap_cache[image_id] = placeholder
+        return placeholder
     
     def _create_placeholder_pixmap(self, image: Dict[str, Any]) -> QPixmap:
         """Create a placeholder pixmap for an image that couldn't be loaded.
@@ -1730,10 +1774,10 @@ class GalleryWidget(QWidget):
         cursor = self.db_conn.cursor()
         
         query = """
-            SELECT id, name, sequence_number
-            FROM scenes
-            WHERE story_id = ?
-            ORDER BY sequence_number
+            SELECT id, title, sequence_number
+            FROM events
+            WHERE story_id = ? AND event_type = 'SCENE'
+            ORDER BY sequence_number DESC
         """
         
         cursor.execute(query, (self.story_id,))
@@ -1743,7 +1787,7 @@ class GalleryWidget(QWidget):
         for row in cursor.fetchall():
             scenes.append({
                 "id": row[0],
-                "name": row[1],
+                "title": row[1],
                 "sequence_number": row[2]
             })
         
@@ -1875,33 +1919,35 @@ class GalleryWidget(QWidget):
                 self.set_thumbnail_normal(thumbnail, image_id)
 
     def _get_scene_newest_timestamp(self, scene_id: int) -> str:
-        """Get the newest timestamp from images in a scene.
+        """Get the newest timestamp for any quick event in a scene.
         
         Args:
             scene_id: ID of the scene
             
         Returns:
-            The newest timestamp as a string
+            Timestamp string of the newest quick event
         """
         cursor = self.db_conn.cursor()
+        cursor.execute("""
+            SELECT MAX(qe.created_at) as newest_timestamp
+            FROM quick_events qe
+            JOIN scene_quick_events sqe ON qe.id = sqe.quick_event_id
+            WHERE sqe.scene_event_id = ?
+        """, (scene_id,))
         
-        query = """
-            SELECT MAX(i.created_at)
-            FROM images i
-            JOIN image_scenes s ON i.id = s.image_id
-            WHERE s.scene_id = ?
-        """
-        
-        cursor.execute(query, (scene_id,))
         result = cursor.fetchone()
-        
         if result and result[0]:
-            # Try to parse the timestamp into a more readable format
-            try:
-                timestamp = datetime.fromisoformat(result[0])
-                return timestamp.strftime("%Y-%m-%d")
-            except ValueError:
-                # If parsing fails, return the raw timestamp
+            return result[0]
+        else:
+            # If no quick events found, use scene creation date
+            cursor.execute("""
+                SELECT created_at FROM events
+                WHERE id = ?
+            """, (scene_id,))
+            
+            result = cursor.fetchone()
+            if result and result[0]:
                 return result[0]
-        
-        return "" 
+            
+            # Last resort fallback
+            return '1970-01-01 00:00:00' 
