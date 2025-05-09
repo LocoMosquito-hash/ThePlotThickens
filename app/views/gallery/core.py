@@ -1,0 +1,1897 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Core Gallery Widget for The Plot Thickens application.
+
+This module contains the main GalleryWidget class that manages the gallery view.
+"""
+
+from typing import List, Dict, Any, Optional, Tuple, Set
+import os
+import re
+from datetime import datetime
+import time
+import logging
+from io import BytesIO
+import tempfile
+import random
+import string
+
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QScrollArea, QGridLayout, QFileDialog, QMessageBox,
+    QCheckBox, QSplitter, QTabWidget, QFrame, QMenu,
+    QApplication, QDialog, QProgressDialog
+)
+from PyQt6.QtCore import (
+    Qt, QSize, pyqtSignal, QBuffer, QIODevice, 
+    QUrl, QPoint, QRect, QTimer
+)
+from PyQt6.QtGui import (
+    QPixmap, QImage, QColor, QBrush, QPen, QPainter, 
+    QFont, QCursor, QAction, QKeySequence
+)
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+
+# Import gallery components
+from app.views.gallery.thumbnails import ThumbnailWidget, SeparatorWidget
+from app.views.gallery.tagging import TaggableImageLabel, GraphicsTagView
+from app.views.gallery.dialogs.image_detail import ImageDetailDialog
+from app.views.gallery.dialogs.region_selection import RegionSelectionDialog
+from app.views.gallery.dialogs.filter_dialog import GalleryFilterDialog
+from app.views.gallery.dialogs.quick_event_dialog import (
+    QuickEventSelectionDialog, QuickEventEditor
+)
+from app.views.gallery.character.widgets import (
+    CharacterListWidget, OnSceneCharacterListWidget
+)
+from app.views.gallery.character.completer import CharacterTagCompleter
+
+# Import database functions
+from app.db_sqlite import (
+    get_image_quick_events, get_character_quick_events,
+    associate_quick_event_with_image, remove_quick_event_image_association,
+    get_story_characters, get_character,
+    add_character_tag_to_image, remove_character_tag,
+    get_image_character_tags, create_quick_event, get_next_quick_event_sequence_number,
+    get_quick_event_tagged_characters,
+    process_quick_event_character_tags, get_quick_event_scenes,
+    add_image_to_scene, remove_image_from_scene, get_image_scenes,
+    update_character_last_tagged, get_characters_by_last_tagged
+)
+
+# Import image recognition utility
+from app.utils.image_recognition_util import ImageRecognitionUtil
+
+
+class GalleryWidget(QWidget):
+    """Widget for managing and displaying a story's image gallery."""
+    
+    def __init__(self, db_conn, parent=None) -> None:
+        """Initialize the gallery widget.
+        
+        Args:
+            db_conn: Database connection
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.db_conn = db_conn
+        
+        # Story data
+        self.story_id = None
+        self.story_data = None
+        
+        # Image and thumbnail data
+        self.thumbnails = {}  # Map of image_id -> ThumbnailWidget
+        self.images = []      # List of image data dicts
+        self.pixmap_cache = {}  # Cache of image_id -> QPixmap
+        
+        # Selection state
+        self.selected_images = set()  # Set of selected image IDs
+        
+        # Filters and display options
+        self.show_nsfw = False
+        self.scene_grouping = False
+        self.character_filters = []  # List of (character_id, include) tuples
+        
+        # Network manager for downloading images
+        self.network_manager = QNetworkAccessManager()
+        
+        # Image recognition utility for character recognition
+        self.recognition_util = ImageRecognitionUtil(self.db_conn)
+        
+        # Load nsfw placeholder
+        self.nsfw_placeholder = self._create_nsfw_placeholder()
+        
+        # Initialize UI
+        self.init_ui()
+    
+    def init_ui(self) -> None:
+        """Initialize the user interface."""
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Control buttons at the top
+        control_layout = QHBoxLayout()
+        
+        # Import image button
+        import_btn = QPushButton("Import Image")
+        import_btn.clicked.connect(self.import_image)
+        control_layout.addWidget(import_btn)
+        
+        # Paste image button
+        paste_btn = QPushButton("Paste from Clipboard")
+        paste_btn.clicked.connect(self.paste_image)
+        control_layout.addWidget(paste_btn)
+        
+        # Toggle NSFW button
+        self.nsfw_toggle = QCheckBox("Show NSFW Images")
+        self.nsfw_toggle.setChecked(self.show_nsfw)
+        self.nsfw_toggle.stateChanged.connect(self.on_nsfw_toggle)
+        control_layout.addWidget(self.nsfw_toggle)
+        
+        # Toggle scene grouping
+        self.scene_grouping_toggle = QCheckBox("Group by Scene")
+        self.scene_grouping_toggle.setChecked(self.scene_grouping)
+        self.scene_grouping_toggle.stateChanged.connect(self.on_scene_grouping_toggle)
+        control_layout.addWidget(self.scene_grouping_toggle)
+        
+        # Add filter button
+        filter_btn = QPushButton("Filters")
+        filter_btn.clicked.connect(self.show_filters_dialog)
+        control_layout.addWidget(filter_btn)
+        
+        # Add rebuild recognition database button
+        rebuild_db_btn = QPushButton("Rebuild Recognition DB")
+        rebuild_db_btn.clicked.connect(self.rebuild_recognition_database)
+        control_layout.addWidget(rebuild_db_btn)
+        
+        # Add control layout to main layout
+        main_layout.addLayout(control_layout)
+        
+        # Create scroll area for thumbnails
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        
+        # Create widget to hold all thumbnails
+        self.thumbnails_widget = QWidget()
+        
+        # Create grid layout for thumbnails
+        self.thumbnails_layout = QGridLayout(self.thumbnails_widget)
+        self.thumbnails_layout.setHorizontalSpacing(10)
+        self.thumbnails_layout.setVerticalSpacing(10)
+        
+        # Add thumbnails widget to scroll area
+        self.scroll_area.setWidget(self.thumbnails_widget)
+        
+        # Add scroll area to main layout
+        main_layout.addWidget(self.scroll_area)
+        
+        # Create status text to show filter information
+        self.status_label = QLabel()
+        main_layout.addWidget(self.status_label)
+        
+        # Set minimum size
+        self.setMinimumSize(800, 600)
+    
+    def _create_nsfw_placeholder(self) -> QPixmap:
+        """Create a placeholder pixmap for NSFW images.
+        
+        Returns:
+            Placeholder pixmap
+        """
+        # Create a solid color pixmap with text
+        pixmap = QPixmap(200, 180)
+        pixmap.fill(QColor(30, 30, 30))
+        
+        # Add text
+        painter = QPainter(pixmap)
+        painter.setPen(QColor(200, 200, 200))
+        painter.setFont(QFont("Arial", 14))
+        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "NSFW Content\nHidden")
+        painter.end()
+        
+        return pixmap
+    
+    def on_nsfw_toggle(self, state: int) -> None:
+        """Handle NSFW toggle state change.
+        
+        Args:
+            state: Checkbox state
+        """
+        self.show_nsfw = (state == Qt.CheckState.Checked.value)
+        
+        # Update thumbnail visibility
+        self.update_thumbnail_visibility()
+    
+    def on_scene_grouping_toggle(self, state: int) -> None:
+        """Handle scene grouping toggle state change.
+        
+        Args:
+            state: Checkbox state
+        """
+        self.scene_grouping = (state == Qt.CheckState.Checked.value)
+        
+        # Reload images with new grouping
+        if self.story_id:
+            self.load_images()
+    
+    def update_thumbnail_visibility(self) -> None:
+        """Update thumbnail visibility based on filters and settings."""
+        # First, show/hide nsfw images
+        for image_id, thumbnail in self.thumbnails.items():
+            # Find the image data
+            image_data = next((img for img in self.images if img["id"] == image_id), None)
+            
+            if not image_data:
+                continue
+                
+            # Check if NSFW
+            is_nsfw = image_data.get("is_nsfw", False)
+            
+            if is_nsfw and not self.show_nsfw:
+                # If NSFW and not showing NSFW, set to placeholder
+                self.set_thumbnail_nsfw(thumbnail)
+            else:
+                # Otherwise, show normal thumbnail
+                self.set_thumbnail_normal(thumbnail, image_id)
+    
+    def set_thumbnail_nsfw(self, thumbnail: ThumbnailWidget) -> None:
+        """Set a thumbnail to show the NSFW placeholder.
+        
+        Args:
+            thumbnail: Thumbnail widget to update
+        """
+        # Set the placeholder pixmap
+        thumbnail.update_pixmap(self.nsfw_placeholder)
+        
+        # Mark as NSFW
+        thumbnail.is_nsfw = True
+        
+        # Hide quick event text
+        thumbnail.quick_event_label.hide()
+    
+    def set_thumbnail_normal(self, thumbnail: ThumbnailWidget, image_id: int) -> None:
+        """Set a thumbnail back to its normal image.
+        
+        Args:
+            thumbnail: Thumbnail widget to update
+            image_id: ID of the image
+        """
+        # Find the image data
+        image_data = next((img for img in self.images if img["id"] == image_id), None)
+        
+        if not image_data:
+            return
+            
+        # Get or create the pixmap
+        if image_id in self.pixmap_cache:
+            pixmap = self.pixmap_cache[image_id]
+        else:
+            # Get the image path from the data
+            file_path = image_data.get("path")
+            filename = image_data.get("filename")
+            
+            if not file_path or not filename:
+                # Missing required data
+                logging.error(f"Missing path or filename for image {image_id}")
+                return self._create_placeholder_pixmap(image_data)
+            
+            # Get thumbnail path (in 'thumbnails' folder next to 'images' folder)
+            try:
+                # The path stored is the images folder path, we need to get:
+                # 1. The parent directory of the images folder
+                # 2. Then look for 'thumbnails' folder there
+                parent_dir = os.path.dirname(file_path)
+                thumbnails_folder = os.path.join(parent_dir, "thumbnails")
+                thumbnail_path = os.path.join(thumbnails_folder, filename)
+                
+                logging.debug(f"Looking for thumbnail at: {thumbnail_path}")
+                
+                # Check if thumbnail exists, if not, try to generate it from the original image
+                if not os.path.exists(thumbnail_path):
+                    logging.debug(f"Thumbnail not found, attempting to generate from original")
+                    
+                    # Full path to the original image
+                    original_path = os.path.join(file_path, filename)
+                    logging.debug(f"Looking for original image at: {original_path}")
+                    
+                    if os.path.exists(original_path):
+                        # Load the original image
+                        original_image = QImage(original_path)
+                        if not original_image.isNull():
+                            # Generate and save thumbnail
+                            thumbnail = self._generate_thumbnail(original_image)
+                            
+                            # Make sure thumbnails directory exists
+                            os.makedirs(thumbnails_folder, exist_ok=True)
+                            
+                            # Save the thumbnail
+                            thumbnail.save(thumbnail_path, "PNG")
+                            logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
+                            
+                            # Use the newly generated thumbnail
+                            pixmap = QPixmap.fromImage(thumbnail)
+                            self.pixmap_cache[image_id] = pixmap
+                            return pixmap
+                        else:
+                            logging.error(f"Failed to load original image: {original_path}")
+                    else:
+                        logging.error(f"Original image not found: {original_path}")
+                        
+                        # Try looking at the path directly (maybe path already includes the filename)
+                        if os.path.exists(file_path) and os.path.isfile(file_path):
+                            original_image = QImage(file_path)
+                            if not original_image.isNull():
+                                # Generate and save thumbnail
+                                thumbnail = self._generate_thumbnail(original_image)
+                                
+                                # Make sure thumbnails directory exists
+                                os.makedirs(thumbnails_folder, exist_ok=True)
+                                
+                                # Save the thumbnail
+                                thumbnail.save(thumbnail_path, "PNG")
+                                logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
+                                
+                                # Use the newly generated thumbnail
+                                pixmap = QPixmap.fromImage(thumbnail)
+                                self.pixmap_cache[image_id] = pixmap
+                                return pixmap
+                else:
+                    # Thumbnail exists, load it
+                    logging.debug(f"Found existing thumbnail at: {thumbnail_path}")
+                    pixmap = QPixmap(thumbnail_path)
+                    if not pixmap.isNull():
+                        self.pixmap_cache[image_id] = pixmap
+                        return pixmap
+                    else:
+                        logging.error(f"Failed to load thumbnail image: {thumbnail_path}")
+            
+            except Exception as e:
+                logging.exception(f"Error loading thumbnail for image {image_id}: {str(e)}")
+            
+            # If we get here, we couldn't load a thumbnail
+            return self._create_placeholder_pixmap(image_data)
+        
+        # Update the thumbnail
+        thumbnail.update_pixmap(pixmap)
+        
+        # Mark as not NSFW
+        thumbnail.is_nsfw = False
+        
+        # Set quick event text if any
+        self._set_thumbnail_quick_event_text(thumbnail, image_id)
+
+    def _set_thumbnail_quick_event_text(self, thumbnail: ThumbnailWidget, image_id: int) -> None:
+        """Set quick event text on a thumbnail if any exists.
+        
+        Args:
+            thumbnail: Thumbnail widget to update
+            image_id: ID of the image
+        """
+        # Get quick events for this image
+        quick_events = get_image_quick_events(self.db_conn, image_id)
+        
+        if quick_events:
+            # Use the first quick event as the thumbnail text
+            quick_event = quick_events[0]
+            
+            # Get the tagged characters
+            tagged_characters = get_quick_event_tagged_characters(self.db_conn, quick_event["id"])
+            
+            # Format the text
+            from app.utils.character_references import convert_char_refs_to_mentions
+            display_text = convert_char_refs_to_mentions(quick_event["text"], tagged_characters)
+            
+            # Set on the thumbnail
+            thumbnail.set_quick_event_text(display_text)
+        else:
+            # No quick events
+            thumbnail.set_quick_event_text("")
+    
+    def clear_thumbnails(self) -> None:
+        """Clear all thumbnails from the display."""
+        # First, delete all thumbnail widgets
+        for thumbnail in self.thumbnails.values():
+            # Remove from layout
+            self.thumbnails_layout.removeWidget(thumbnail)
+            # Delete the widget
+            thumbnail.deleteLater()
+        
+        # Clear the dictionary and pixmap cache
+        self.thumbnails.clear()
+        self.pixmap_cache.clear()
+        
+        # Clear selected images set
+        self.selected_images.clear()
+    
+    def set_story(self, story_id: int, story_data: Dict[str, Any]) -> None:
+        """Set the story to display in the gallery.
+        
+        Args:
+            story_id: ID of the story
+            story_data: Dictionary containing story data
+        """
+        # Store story data
+        self.story_id = story_id
+        self.story_data = story_data
+        
+        # Clear existing thumbnails
+        self.clear_thumbnails()
+        
+        # Update window title
+        if self.parent() and hasattr(self.parent(), 'setWindowTitle'):
+            title = f"Gallery - {story_data.get('title', 'Untitled Story')}"
+            self.parent().setWindowTitle(title)
+        
+        # Load images for this story
+        self.load_images()
+    
+    def load_images(self) -> None:
+        """Load and display images for the current story."""
+        if not self.story_id:
+            return
+        
+        # Get images from database
+        cursor = self.db_conn.cursor()
+        
+        query = """
+            SELECT id, title, path, filename, created_at, width, height, is_featured, story_id
+            FROM images
+            WHERE story_id = ?
+            ORDER BY created_at DESC
+        """
+        
+        cursor.execute(query, (self.story_id,))
+        
+        # Convert to list of dicts
+        images = []
+        for row in cursor.fetchall():
+            images.append({
+                "id": row[0],
+                "title": row[1],
+                "path": row[2],
+                "filename": row[3],  # Include the filename in the dictionary
+                "timestamp": row[4],  # We'll keep the name timestamp in our dict for compatibility
+                "width": row[5],
+                "height": row[6],
+                "is_nsfw": False,  # Using is_featured as is_nsfw is not available
+                "story_id": row[8]
+            })
+        
+        # Store images
+        self.images = images
+        
+        # Display images based on grouping option
+        if self.scene_grouping:
+            self._display_images_with_scene_grouping(images)
+        else:
+            self._display_images_classic_view(images)
+        
+        # Update filter status
+        self.update_filter_status()
+    
+    def _display_images_classic_view(self, images: List[Dict[str, Any]]) -> None:
+        """Display images in a standard grid layout without scene grouping.
+        
+        Args:
+            images: List of image data dictionaries
+        """
+        # Clear existing thumbnails
+        self.clear_thumbnails()
+        
+        # Filter images based on character filters
+        filtered_images = []
+        
+        if self.character_filters:
+            # We have filters, so we need to check each image
+            for image in images:
+                # Get character tags for this image
+                tags = get_image_character_tags(self.db_conn, image["id"])
+                character_ids = set(tag["character_id"] for tag in tags)
+                
+                # Check if this image should be included
+                include_image = True
+                
+                for character_id, include in self.character_filters:
+                    if include:
+                        # If this filter is to include, then the image must have this character
+                        if character_id not in character_ids:
+                            include_image = False
+                            break
+                    else:
+                        # If this filter is to exclude, then the image must not have this character
+                        if character_id in character_ids:
+                            include_image = False
+                            break
+                
+                if include_image:
+                    filtered_images.append(image)
+        else:
+            # No filters, show all images
+            filtered_images = images
+        
+        # Display all filtered images in a grid
+        current_row = 0
+        current_col = 0
+        columns = 4  # Number of columns in the grid
+        
+        for image in filtered_images:
+            # Get the pixmap for this image
+            pixmap = self._get_image_thumbnail_pixmap(image)
+            
+            # Create a thumbnail widget
+            thumbnail = ThumbnailWidget(image["id"], pixmap, image.get("title"))
+            
+            # Connect signals
+            thumbnail.clicked.connect(self.on_thumbnail_clicked)
+            thumbnail.delete_requested.connect(self.on_delete_image)
+            thumbnail.checkbox_toggled.connect(self.on_thumbnail_checkbox_toggled)
+            
+            # Add to layout
+            self.thumbnails_layout.addWidget(thumbnail, current_row, current_col)
+            
+            # Add to thumbnails dictionary
+            self.thumbnails[image["id"]] = thumbnail
+            
+            # Set quick event text
+            self._set_thumbnail_quick_event_text(thumbnail, image["id"])
+            
+            # Increment column
+            current_col += 1
+            
+            # Move to next row if we've filled a row
+            if current_col >= columns:
+                current_col = 0
+                current_row += 1
+        
+        # Update visibility based on nsfw setting
+        self.update_thumbnail_visibility()
+    
+    def _display_images_with_scene_grouping(self, images: List[Dict[str, Any]]) -> None:
+        """Display images grouped by scene.
+        
+        Args:
+            images: List of image data dictionaries
+        """
+        # Clear existing thumbnails
+        self.clear_thumbnails()
+        
+        # Get all scenes for this story
+        cursor = self.db_conn.cursor()
+        
+        query = """
+            SELECT id, name, sequence_number
+            FROM scenes
+            WHERE story_id = ?
+            ORDER BY sequence_number
+        """
+        
+        cursor.execute(query, (self.story_id,))
+        
+        # Convert to list of dicts
+        scenes = []
+        for row in cursor.fetchall():
+            scenes.append({
+                "id": row[0],
+                "name": row[1],
+                "sequence_number": row[2]
+            })
+        
+        # Create a dictionary to group images by scene
+        scene_images = {}
+        
+        # Initialize with empty lists for all scenes
+        for scene in scenes:
+            scene_images[scene["id"]] = []
+        
+        # Add a special "Unassigned" pseudo-scene for images not in any scene
+        scene_images[None] = []
+        
+        # Filter images based on character filters
+        if self.character_filters:
+            # We have filters, so we need to check each image
+            for image in images:
+                # Get character tags for this image
+                tags = get_image_character_tags(self.db_conn, image["id"])
+                character_ids = set(tag["character_id"] for tag in tags)
+                
+                # Check if this image should be included
+                include_image = True
+                
+                for character_id, include in self.character_filters:
+                    if include:
+                        # If this filter is to include, then the image must have this character
+                        if character_id not in character_ids:
+                            include_image = False
+                            break
+                    else:
+                        # If this filter is to exclude, then the image must not have this character
+                        if character_id in character_ids:
+                            include_image = False
+                            break
+                
+                if include_image:
+                    # Get scenes for this image
+                    image_scenes = get_image_scenes(self.db_conn, image["id"])
+                    
+                    if image_scenes:
+                        # Add to each scene the image is in
+                        for image_scene in image_scenes:
+                            scene_id = image_scene["scene_id"]
+                            if scene_id in scene_images:
+                                scene_images[scene_id].append(image)
+                    else:
+                        # Not in any scene
+                        scene_images[None].append(image)
+        else:
+            # No filters, process all images
+            for image in images:
+                # Get scenes for this image
+                image_scenes = get_image_scenes(self.db_conn, image["id"])
+                
+                if image_scenes:
+                    # Add to each scene the image is in
+                    for image_scene in image_scenes:
+                        scene_id = image_scene["scene_id"]
+                        if scene_id in scene_images:
+                            scene_images[scene_id].append(image)
+                else:
+                    # Not in any scene
+                    scene_images[None].append(image)
+        
+        # Now display each scene's images
+        current_row = 0
+        
+        # First, display images from actual scenes in order
+        for scene in scenes:
+            scene_id = scene["id"]
+            scene_name = scene["name"]
+            
+            # Get images for this scene
+            scene_image_list = scene_images[scene_id]
+            
+            # Skip empty scenes
+            if not scene_image_list:
+                continue
+            
+            # Sort by timestamp
+            scene_image_list.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+            
+            # Add a separator for this scene
+            separator = SeparatorWidget(f"Scene: {scene_name} ({len(scene_image_list)} images)")
+            self.thumbnails_layout.addWidget(separator, current_row, 0, 1, 4)  # Span all columns
+            current_row += 1
+            
+            # Display the images for this scene
+            current_row = self._display_image_list(scene_image_list, current_row)
+        
+        # Finally, display unassigned images
+        unassigned_images = scene_images[None]
+        
+        if unassigned_images:
+            # Sort by timestamp
+            unassigned_images.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+            
+            # Add a separator
+            separator = SeparatorWidget(f"Unassigned Images ({len(unassigned_images)} images)")
+            self.thumbnails_layout.addWidget(separator, current_row, 0, 1, 4)  # Span all columns
+            current_row += 1
+            
+            # Display the unassigned images
+            self._display_image_list(unassigned_images, current_row)
+        
+        # Update visibility based on nsfw setting
+        self.update_thumbnail_visibility()
+    
+    def _display_image_list(self, images: List[Dict[str, Any]], start_row: int) -> int:
+        """Display a list of images in the gallery.
+        
+        Args:
+            images: List of image data dictionaries
+            start_row: Row in the grid layout to start displaying from
+            
+        Returns:
+            Next row number after the displayed images
+        """
+        current_row = start_row
+        cols = 4  # Number of thumbnails per row
+        
+        for i, image in enumerate(images):
+            col = i % cols
+            row = current_row + (i // cols)
+            
+            image_id = image['id']
+            
+            # Get thumbnail pixmap
+            pixmap = self._get_image_thumbnail_pixmap(image)
+            
+            # Create thumbnail widget
+            thumbnail = ThumbnailWidget(image_id, pixmap)
+            thumbnail.clicked.connect(lambda tid=image_id: self.on_thumbnail_clicked(tid))
+            thumbnail.delete_requested.connect(lambda tid=image_id: self.on_delete_image(tid))
+            thumbnail.checkbox_toggled.connect(self.on_thumbnail_checkbox_toggled)
+            
+            # Add quick event text if any
+            self._set_thumbnail_quick_event_text(thumbnail, image_id)
+            
+            # Add to thumbnails dictionary
+            self.thumbnails[image_id] = thumbnail
+            
+            # Add to layout
+            self.thumbnails_layout.addWidget(thumbnail, row, col)
+        
+        # Return the next row after the last one we used
+        return current_row + ((len(images) - 1) // cols) + 1
+        
+    def _get_image_thumbnail_pixmap(self, image: Dict[str, Any]) -> QPixmap:
+        """Get a thumbnail pixmap for an image.
+        
+        Args:
+            image: Image data dictionary
+            
+        Returns:
+            QPixmap for the thumbnail
+        """
+        image_id = image["id"]
+        
+        # Check if we have a cached pixmap
+        if image_id in self.pixmap_cache:
+            return self.pixmap_cache[image_id]
+            
+        # No cached pixmap, load from file
+        file_path = image.get("path")
+        filename = image.get("filename")
+        
+        # Debug log
+        logging.debug(f"Loading thumbnail for image {image_id}: path={file_path}, filename={filename}")
+        
+        if not file_path or not filename:
+            # Missing required data
+            logging.error(f"Missing path or filename for image {image_id}")
+            return self._create_placeholder_pixmap(image)
+        
+        # Get thumbnail path (in 'thumbnails' folder next to 'images' folder)
+        try:
+            # The path stored is the images folder path, we need to get:
+            # 1. The parent directory of the images folder
+            # 2. Then look for 'thumbnails' folder there
+            parent_dir = os.path.dirname(file_path)
+            thumbnails_folder = os.path.join(parent_dir, "thumbnails")
+            thumbnail_path = os.path.join(thumbnails_folder, filename)
+            
+            logging.debug(f"Looking for thumbnail at: {thumbnail_path}")
+            
+            # Check if thumbnail exists, if not, try to generate it from the original image
+            if not os.path.exists(thumbnail_path):
+                logging.debug(f"Thumbnail not found, attempting to generate from original")
+                
+                # Full path to the original image
+                original_path = os.path.join(file_path, filename)
+                logging.debug(f"Looking for original image at: {original_path}")
+                
+                if os.path.exists(original_path):
+                    # Load the original image
+                    original_image = QImage(original_path)
+                    if not original_image.isNull():
+                        # Generate and save thumbnail
+                        thumbnail = self._generate_thumbnail(original_image)
+                        
+                        # Make sure thumbnails directory exists
+                        os.makedirs(thumbnails_folder, exist_ok=True)
+                        
+                        # Save the thumbnail
+                        thumbnail.save(thumbnail_path, "PNG")
+                        logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
+                        
+                        # Use the newly generated thumbnail
+                        pixmap = QPixmap.fromImage(thumbnail)
+                        self.pixmap_cache[image_id] = pixmap
+                        return pixmap
+                    else:
+                        logging.error(f"Failed to load original image: {original_path}")
+                else:
+                    logging.error(f"Original image not found: {original_path}")
+                    
+                    # Try looking at the path directly (maybe path already includes the filename)
+                    if os.path.exists(file_path) and os.path.isfile(file_path):
+                        original_image = QImage(file_path)
+                        if not original_image.isNull():
+                            # Generate and save thumbnail
+                            thumbnail = self._generate_thumbnail(original_image)
+                            
+                            # Make sure thumbnails directory exists
+                            os.makedirs(thumbnails_folder, exist_ok=True)
+                            
+                            # Save the thumbnail
+                            thumbnail.save(thumbnail_path, "PNG")
+                            logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
+                            
+                            # Use the newly generated thumbnail
+                            pixmap = QPixmap.fromImage(thumbnail)
+                            self.pixmap_cache[image_id] = pixmap
+                            return pixmap
+            else:
+                # Thumbnail exists, load it
+                logging.debug(f"Found existing thumbnail at: {thumbnail_path}")
+                pixmap = QPixmap(thumbnail_path)
+                if not pixmap.isNull():
+                    self.pixmap_cache[image_id] = pixmap
+                    return pixmap
+                else:
+                    logging.error(f"Failed to load thumbnail image: {thumbnail_path}")
+        
+        except Exception as e:
+            logging.exception(f"Error loading thumbnail for image {image_id}: {str(e)}")
+        
+        # If we get here, we couldn't load a thumbnail
+        return self._create_placeholder_pixmap(image)
+    
+    def _create_placeholder_pixmap(self, image: Dict[str, Any]) -> QPixmap:
+        """Create a placeholder pixmap for an image that couldn't be loaded.
+        
+        Args:
+            image: Image data dictionary
+            
+        Returns:
+            Placeholder pixmap
+        """
+        # Create a placeholder pixmap
+        pixmap = QPixmap(160, 120)
+        pixmap.fill(QColor(50, 50, 50))
+        
+        # Draw text on the pixmap if we have a title
+        if image.get("title"):
+            painter = QPainter(pixmap)
+            painter.setPen(Qt.GlobalColor.white)
+            painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, image["title"])
+            painter.end()
+        else:
+            # Or use the filename
+            painter = QPainter(pixmap)
+            painter.setPen(Qt.GlobalColor.white)
+            text = image.get("filename", "Unknown Image")
+            if len(text) > 20:
+                text = text[:17] + "..."
+            painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, text)
+            painter.end()
+        
+        # Cache the pixmap
+        self.pixmap_cache[image.get("id", 0)] = pixmap
+        
+        return pixmap
+    
+    def keyPressEvent(self, event) -> None:
+        """Handle key press events.
+        
+        Args:
+            event: Key event
+        """
+        # Handle Ctrl+V to paste an image
+        if event.key() == Qt.Key.Key_V and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self.paste_image()
+        else:
+            # Pass to parent
+            super().keyPressEvent(event)
+    
+    def paste_image(self) -> None:
+        """Paste an image from the clipboard."""
+        # Get the clipboard
+        clipboard = QApplication.clipboard()
+        
+        # Check if the clipboard has an image
+        mime_data = clipboard.mimeData()
+        
+        if mime_data.hasImage():
+            # Get the image from the clipboard
+            image = clipboard.image()
+            
+            if not image.isNull():
+                # Save the image to the story
+                self.save_image_to_story(image)
+            else:
+                self.show_error("Clipboard Error", "Could not get valid image from clipboard")
+        elif mime_data.hasUrls():
+            # Check if it's a local file URL
+            urls = mime_data.urls()
+            
+            if urls and urls[0].isLocalFile():
+                # Get the local file path
+                file_path = urls[0].toLocalFile()
+                
+                # Check if it's an image file
+                if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                    # Load the image
+                    image = QImage(file_path)
+                    
+                    if not image.isNull():
+                        # Save the image to the story
+                        self.save_image_to_story(image)
+                    else:
+                        self.show_error("Image Error", f"Could not load image from {file_path}")
+                else:
+                    self.show_error("File Type Error", "The file in the clipboard is not a supported image format")
+            else:
+                # It's a remote URL
+                for url in urls:
+                    # Check if it's an image URL
+                    url_str = url.toString()
+                    if any(url_str.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']):
+                        # Download the image
+                        self._download_image(url)
+                        break
+                else:
+                    # No valid image URLs
+                    self.debug_clipboard()
+        elif mime_data.hasHtml():
+            # Check the HTML for image tags
+            html = mime_data.html()
+            urls = self._extract_image_urls_from_html(html)
+            
+            if urls:
+                # Download the first image
+                url = QUrl(urls[0])
+                self._download_image(url)
+            else:
+                # No image URLs found
+                self.debug_clipboard()
+        else:
+            # No image in clipboard
+            self.debug_clipboard()
+    
+    def _download_image(self, url: QUrl) -> None:
+        """Download an image from a URL.
+        
+        Args:
+            url: URL to download
+        """
+        # Create a progress dialog
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setWindowTitle("Downloading Image")
+        msg_box.setText(f"Downloading image from {url.toString()}")
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Cancel)
+        msg_box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        
+        # Start the request
+        request = QNetworkRequest(url)
+        reply = self.network_manager.get(request)
+        
+        # Connect signals
+        reply.finished.connect(lambda: self._handle_network_reply(reply, msg_box))
+        
+        # Show the dialog
+        msg_box.exec()
+        
+        # If the dialog is closed, abort the request
+        if reply.isRunning():
+            reply.abort()
+    
+    def _handle_network_reply(self, reply, msg_box):
+        """Handle a completed network request.
+        
+        Args:
+            reply: Network reply
+            msg_box: Message box dialog
+        """
+        # Close the message box
+        msg_box.close()
+        
+        # Check for errors
+        if reply.error() != QNetworkReply.NetworkError.NoError:
+            self.show_error("Download Error", f"Failed to download image: {reply.errorString()}")
+            reply.deleteLater()
+            return
+        
+        # Read the image data
+        image_data = reply.readAll()
+        
+        # Create an image from the data
+        image = QImage.fromData(image_data)
+        
+        if image.isNull():
+            self.show_error("Image Error", "Could not create image from downloaded data")
+        else:
+            # Save the image to the story
+            self.save_image_to_story(image)
+        
+        # Clean up
+        reply.deleteLater()
+    
+    def import_image(self) -> None:
+        """Open a file dialog to import an image."""
+        # Get file path from dialog
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Image",
+            "",
+            "Images (*.png *.jpg *.jpeg *.gif *.bmp)"
+        )
+        
+        if not file_path:
+            return
+        
+        # Load the image
+        image = QImage(file_path)
+        
+        if image.isNull():
+            self.show_error("Image Error", f"Could not load image from {file_path}")
+            return
+        
+        # Save the image to the story
+        self.save_image_to_story(image)
+    
+    def save_image_to_story(self, image: QImage) -> None:
+        """Save an image to the current story.
+        
+        Args:
+            image: Image to save
+        """
+        if not self.story_id:
+            self.show_error("Error", "No story selected")
+            return
+        
+        # Generate a unique file name
+        timestamp = time.strftime("%Y%m%d%H%M%S")
+        random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        file_name = f"img_{timestamp}_{random_string}.png"
+        
+        # Get the story directory
+        story_dir = os.path.join("data", "stories", str(self.story_id), "images")
+        
+        # Create directory if it doesn't exist
+        os.makedirs(story_dir, exist_ok=True)
+        
+        # Save the image to a file
+        file_path = os.path.join(story_dir, file_name)
+        
+        if not image.save(file_path, "PNG"):
+            self.show_error("Save Error", "Could not save image to file")
+            return
+        
+        # Create timestamps
+        now = datetime.now().isoformat()
+        
+        # Insert into database with the columns we actually have
+        cursor = self.db_conn.cursor()
+        
+        query = """
+            INSERT INTO images (story_id, title, path, created_at, updated_at, width, height, is_featured, filename)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        
+        cursor.execute(
+            query,
+            (
+                self.story_id,
+                "Imported Image",  # title
+                file_path,         # path
+                now,               # created_at
+                now,               # updated_at
+                image.width(),     # width
+                image.height(),    # height
+                0,                 # is_featured (not NSFW)
+                file_name          # filename
+            )
+        )
+        
+        # Get the new image ID
+        image_id = cursor.lastrowid
+        
+        # Commit changes
+        self.db_conn.commit()
+        
+        # Add the new image to our list
+        new_image = {
+            "id": image_id,
+            "title": "Imported Image",
+            "path": file_path,
+            "timestamp": now,
+            "width": image.width(),
+            "height": image.height(),
+            "is_nsfw": False,
+            "story_id": self.story_id
+        }
+        
+        self.images.insert(0, new_image)  # Add to start (newest)
+        
+        # Reload images
+        self.load_images()
+    
+    def associate_quick_event_with_image(self, image_id: int, quick_event_id: int) -> None:
+        """Associate a quick event with an image.
+        
+        Args:
+            image_id: ID of the image
+            quick_event_id: ID of the quick event
+        """
+        associate_quick_event_with_image(self.db_conn, quick_event_id, image_id)
+        
+        # Update the thumbnail if it exists
+        if image_id in self.thumbnails:
+            self._set_thumbnail_quick_event_text(self.thumbnails[image_id], image_id)
+    
+    def _generate_thumbnail(self, image: QImage, max_dimension: int = 320) -> QImage:
+        """Generate a thumbnail from an image.
+        
+        Args:
+            image: Source image
+            max_dimension: Maximum dimension for the thumbnail
+            
+        Returns:
+            Thumbnail image
+        """
+        # Calculate scale factor to fit within max_dimension
+        width = image.width()
+        height = image.height()
+        
+        if width <= max_dimension and height <= max_dimension:
+            # Image is already small enough
+            return image.copy()
+        
+        # Scale to fit in max_dimension x max_dimension box while preserving aspect ratio
+        if width > height:
+            # Landscape orientation
+            scale_factor = max_dimension / width
+        else:
+            # Portrait orientation
+            scale_factor = max_dimension / height
+        
+        # Calculate new dimensions
+        new_width = int(width * scale_factor)
+        new_height = int(height * scale_factor)
+        
+        # Create the thumbnail (use smooth transformation for better quality)
+        return image.scaled(
+            new_width,
+            new_height,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+    
+    def on_thumbnail_clicked(self, image_id: int) -> None:
+        """Handle thumbnail click event.
+        
+        Args:
+            image_id: ID of the clicked image
+        """
+        # Find the image data
+        image_data = next((img for img in self.images if img["id"] == image_id), None)
+        
+        if not image_data:
+            self.show_error("Error", f"Image data not found for ID {image_id}")
+            return
+        
+        # Check if it's an NSFW image and we're not showing NSFW
+        is_nsfw = image_data.get("is_nsfw", False)
+        
+        if is_nsfw and not self.show_nsfw:
+            # Ask for confirmation
+            confirmation = QMessageBox.question(
+                self,
+                "NSFW Content",
+                "This image contains NSFW content. Are you sure you want to view it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if confirmation != QMessageBox.StandardButton.Yes:
+                return
+        
+        # Get image pixmap
+        pixmap = self.get_image_pixmap(image_id)
+        
+        if pixmap.isNull():
+            self.show_error("Error", f"Could not load image for ID {image_id}")
+            return
+        
+        # Create image detail dialog
+        # Create a list of all image IDs for navigation
+        gallery_images = [img["id"] for img in self.images]
+        
+        # Find the index of the current image
+        try:
+            current_index = gallery_images.index(image_id)
+        except ValueError:
+            current_index = -1
+        
+        # Create and show the dialog
+        dialog = ImageDetailDialog(
+            self.db_conn,
+            image_id,
+            image_data,
+            pixmap,
+            self,
+            gallery_images,
+            current_index
+        )
+        
+        dialog.exec()
+        
+        # Reload the thumbnails to reflect any changes made in the dialog
+        self.load_images()
+    
+    def get_image_pixmap(self, image_id: int) -> QPixmap:
+        """Get the full-size pixmap for an image.
+        
+        Args:
+            image_id: ID of the image
+            
+        Returns:
+            QPixmap of the image
+        """
+        # Find the image data
+        image_data = next((img for img in self.images if img["id"] == image_id), None)
+        
+        if not image_data:
+            # Return an empty pixmap
+            return QPixmap()
+        
+        # Get the file path
+        file_path = image_data.get("path")
+        
+        if not file_path or not os.path.exists(file_path):
+            # Try to get from database blob
+            cursor = self.db_conn.cursor()
+            cursor.execute("SELECT image_data FROM images WHERE id = ?", (image_id,))
+            result = cursor.fetchone()
+            
+            if result and result[0]:
+                # Create pixmap from image data
+                pixmap = QPixmap()
+                pixmap.loadFromData(result[0])
+                return pixmap
+            else:
+                # No image data
+                return QPixmap()
+        
+        # Load the image from file
+        return QPixmap(file_path)
+    
+    def get_image_data(self, image_id: int) -> Dict[str, Any]:
+        """Get image data for an image.
+        
+        Args:
+            image_id: ID of the image
+            
+        Returns:
+            Dictionary with image data, or None if not found
+        """
+        return next((img for img in self.images if img["id"] == image_id), None)
+    
+    def on_thumbnail_context_menu(self, position: QPoint, thumbnail: ThumbnailWidget) -> None:
+        """Show context menu for a thumbnail.
+        
+        Args:
+            position: Position where to show the menu
+            thumbnail: Thumbnail widget
+        """
+        image_id = thumbnail.image_id
+        
+        # Find the image data
+        image_data = next((img for img in self.images if img["id"] == image_id), None)
+        
+        if not image_data:
+            return
+        
+        # Create the menu
+        menu = QMenu(self)
+        
+        # View action
+        view_action = QAction("View Image", self)
+        view_action.triggered.connect(lambda: self.on_thumbnail_clicked(image_id))
+        menu.addAction(view_action)
+        
+        # Toggle NSFW action
+        is_nsfw = image_data.get("is_nsfw", False)
+        nsfw_action = QAction("Mark as Safe" if is_nsfw else "Mark as NSFW", self)
+        nsfw_action.triggered.connect(lambda: self.toggle_image_nsfw(image_id))
+        menu.addAction(nsfw_action)
+        
+        # Quick events submenu
+        quick_events_menu = QMenu("Quick Events", self)
+        
+        add_quick_event_action = QAction("Add Quick Event", self)
+        add_quick_event_action.triggered.connect(lambda: self.open_quick_event_dialog(image_id))
+        quick_events_menu.addAction(add_quick_event_action)
+        
+        menu.addMenu(quick_events_menu)
+        
+        # Move to scene action
+        scene_action = QAction("Move to Scene", self)
+        scene_action.triggered.connect(self.on_move_to_scene)
+        menu.addAction(scene_action)
+        
+        # Character recognition action
+        recognition_action = QAction("Character Recognition", self)
+        recognition_action.triggered.connect(lambda: self.on_recognize_characters(image_id))
+        menu.addAction(recognition_action)
+        
+        # Delete action
+        delete_action = QAction("Delete Image", self)
+        delete_action.triggered.connect(lambda: self.on_delete_image(image_id))
+        menu.addAction(delete_action)
+        
+        # Show the menu
+        menu.exec(thumbnail.mapToGlobal(position))
+    
+    def open_quick_event_dialog(self, image_id: int) -> None:
+        """Open the quick event dialog for an image.
+        
+        Args:
+            image_id: ID of the image
+        """
+        # Find the image data
+        image_data = next((img for img in self.images if img["id"] == image_id), None)
+        
+        if not image_data:
+            self.show_error("Error", f"Image data not found for ID {image_id}")
+            return
+        
+        # Get current quick events
+        current_events = get_image_quick_events(self.db_conn, image_id)
+        current_event_ids = [event["id"] for event in current_events]
+        
+        # Create and show the dialog
+        dialog = QuickEventSelectionDialog(
+            self.db_conn,
+            self.story_id,
+            image_id,
+            current_event_ids,
+            self
+        )
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Get selected quick events
+            selected_ids = dialog.get_selected_quick_event_ids()
+            
+            # Update associations in the database
+            # First, remove all existing associations
+            for event_id in current_event_ids:
+                if event_id not in selected_ids:
+                    remove_quick_event_image_association(self.db_conn, event_id, image_id)
+            
+            # Then add new associations
+            for event_id in selected_ids:
+                if event_id not in current_event_ids:
+                    associate_quick_event_with_image(self.db_conn, event_id, image_id)
+            
+            # Update the thumbnail
+            if image_id in self.thumbnails:
+                self._set_thumbnail_quick_event_text(self.thumbnails[image_id], image_id)
+    
+    def on_delete_image(self, image_id: int) -> None:
+        """Handle delete image action.
+        
+        Args:
+            image_id: ID of the image to delete
+        """
+        # Find the image data
+        image_data = next((img for img in self.images if img["id"] == image_id), None)
+        
+        if not image_data:
+            self.show_error("Error", f"Image data not found for ID {image_id}")
+            return
+        
+        # Ask for confirmation
+        confirmation = QMessageBox.question(
+            self,
+            "Delete Image",
+            "Are you sure you want to delete this image? This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if confirmation != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Delete the image file if it exists
+        file_path = image_data.get("path")
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError as e:
+                # Log the error but continue with database deletion
+                print(f"Error deleting image file: {e}")
+        
+        # Delete from database
+        cursor = self.db_conn.cursor()
+        
+        # Delete related data first
+        cursor.execute("DELETE FROM image_character_tags WHERE image_id = ?", (image_id,))
+        cursor.execute("DELETE FROM image_quick_events WHERE image_id = ?", (image_id,))
+        cursor.execute("DELETE FROM image_scenes WHERE image_id = ?", (image_id,))
+        
+        # Then delete the image
+        cursor.execute("DELETE FROM images WHERE id = ?", (image_id,))
+        
+        # Commit changes
+        self.db_conn.commit()
+        
+        # Remove from our list
+        self.images = [img for img in self.images if img["id"] != image_id]
+        
+        # Remove the thumbnail widget
+        if image_id in self.thumbnails:
+            # Remove from layout
+            thumbnail = self.thumbnails[image_id]
+            self.thumbnails_layout.removeWidget(thumbnail)
+            
+            # Delete the widget
+            thumbnail.deleteLater()
+            
+            # Remove from dictionary
+            del self.thumbnails[image_id]
+        
+        # Remove from pixmap cache
+        if image_id in self.pixmap_cache:
+            del self.pixmap_cache[image_id]
+        
+        # Remove from selected images
+        if image_id in self.selected_images:
+            self.selected_images.remove(image_id)
+    
+    def show_error(self, title: str, message: str) -> None:
+        """Show an error message.
+        
+        Args:
+            title: Error title
+            message: Error message
+        """
+        QMessageBox.critical(self, title, message)
+    
+    def debug_clipboard(self) -> None:
+        """Debug clipboard contents."""
+        # Get the clipboard
+        clipboard = QApplication.clipboard()
+        mime_data = clipboard.mimeData()
+        
+        # Build a debug message
+        formats = mime_data.formats()
+        debug_text = "Clipboard content types:\n"
+        
+        for fmt in formats:
+            debug_text += f"- {fmt}\n"
+        
+        if mime_data.hasText():
+            text = mime_data.text()
+            if len(text) > 100:
+                text = text[:100] + "..."
+            debug_text += f"\nText: {text}\n"
+        
+        if mime_data.hasHtml():
+            html = mime_data.html()
+            if len(html) > 100:
+                html = html[:100] + "..."
+            debug_text += f"\nHTML: {html}\n"
+        
+        if mime_data.hasUrls():
+            urls = mime_data.urls()
+            debug_text += "\nURLs:\n"
+            for url in urls:
+                debug_text += f"- {url.toString()}\n"
+        
+        # Show debug message
+        QMessageBox.information(self, "Clipboard Debug", debug_text)
+    
+    def _extract_image_urls_from_html(self, html: str) -> List[str]:
+        """Extract image URLs from HTML.
+        
+        Args:
+            html: HTML string
+            
+        Returns:
+            List of image URLs
+        """
+        # Use regex to find image tags and extract src attribute
+        img_pattern = r'<img[^>]+src="([^"]+)"'
+        matches = re.findall(img_pattern, html)
+        
+        # Filter to only keep URLs that look like images
+        return [url for url in matches if any(url.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp'])] 
+
+    def rebuild_recognition_database(self) -> None:
+        """Rebuild the character recognition database from all tagged images."""
+        # First, check if there are any images
+        if not self.images:
+            self.show_error("Error", "No images available to process")
+            return
+        
+        # Create a progress dialog
+        progress = QProgressDialog("Rebuilding recognition database...", "Cancel", 0, len(self.images), self)
+        progress.setWindowTitle("Recognition Database")
+        progress.setMinimumDuration(0)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        
+        # Initialize the recognition util if needed
+        if not hasattr(self, 'recognition_util') or not self.recognition_util:
+            self.recognition_util = ImageRecognitionUtil(self.db_conn)
+        
+        # Clear the existing database
+        self.recognition_util.clear_database()
+        
+        # Process each image
+        for i, image_data in enumerate(self.images):
+            if progress.wasCanceled():
+                break
+            
+            image_id = image_data["id"]
+            
+            # Update progress
+            progress.setValue(i)
+            progress.setLabelText(f"Processing image {i+1} of {len(self.images)}...")
+            
+            # Get character tags for this image
+            tags = get_image_character_tags(self.db_conn, image_id)
+            
+            if not tags:
+                continue
+            
+            # Get the full image
+            file_path = image_data.get("path")
+            if not file_path or not os.path.exists(file_path):
+                continue
+            
+            # Load the image
+            image = QImage(file_path)
+            
+            if image.isNull():
+                continue
+            
+            # Process each tag
+            for tag in tags:
+                character_id = tag.get("character_id")
+                character_name = tag.get("character_name")
+                x_position = tag.get("x_position")
+                y_position = tag.get("y_position")
+                width = tag.get("width", 0.1)
+                height = tag.get("height", 0.1)
+                
+                if not character_id or not character_name:
+                    continue
+                
+                # Create region for the tag
+                region = {
+                    "x": x_position - (width / 2),
+                    "y": y_position - (height / 2),
+                    "width": width,
+                    "height": height
+                }
+                
+                # Add to recognition database
+                self.add_region_to_recognition_database(image, character_id, character_name, region)
+        
+        # Close the progress dialog
+        progress.setValue(len(self.images))
+        
+        # Show completion message
+        QMessageBox.information(self, "Recognition Database", "Recognition database has been rebuilt successfully.")
+    
+    def add_region_to_recognition_database(self, image: QImage, character_id: int, 
+                                          character_name: str, region: Dict[str, float]) -> None:
+        """Add a region to the character recognition database.
+        
+        Args:
+            image: Source image
+            character_id: ID of the character
+            character_name: Name of the character
+            region: Region dictionary with x, y, width, height as relative coordinates (0.0-1.0)
+        """
+        # Convert relative coordinates to absolute
+        img_width = image.width()
+        img_height = image.height()
+        
+        x = int(region["x"] * img_width)
+        y = int(region["y"] * img_height)
+        width = int(region["width"] * img_width)
+        height = int(region["height"] * img_height)
+        
+        # Ensure coordinates are valid
+        x = max(0, min(x, img_width - 1))
+        y = max(0, min(y, img_height - 1))
+        width = max(1, min(width, img_width - x))
+        height = max(1, min(height, img_height - y))
+        
+        # Extract the region as a QImage
+        region_image = image.copy(x, y, width, height)
+        
+        # Add to recognition database
+        self.recognition_util.add_face(character_id, character_name, region_image)
+    
+    def on_recognize_characters(self, image_id: int) -> None:
+        """Open the character recognition dialog for an image.
+        
+        Args:
+            image_id: ID of the image
+        """
+        # Find the image data
+        image_data = next((img for img in self.images if img["id"] == image_id), None)
+        
+        if not image_data:
+            self.show_error("Error", f"Image data not found for ID {image_id}")
+            return
+        
+        # Get the file path
+        file_path = image_data.get("path")
+        
+        if not file_path or not os.path.exists(file_path):
+            self.show_error("Error", f"Image file not found at {file_path}")
+            return
+        
+        # Load the image
+        image = QImage(file_path)
+        
+        if image.isNull():
+            self.show_error("Error", "Could not load image")
+            return
+        
+        # Create and show the region selection dialog
+        dialog = RegionSelectionDialog(
+            self.db_conn,
+            image,
+            self.story_id,
+            self,
+            image_id
+        )
+        
+        dialog.exec()
+        
+        # Reload images to reflect any changes
+        self.load_images()
+    
+    def on_suggest_character_tags(self, image: QImage):
+        """Suggest character tags based on face recognition.
+        
+        Args:
+            image: Image to analyze
+        """
+        # Check if we have a recognition database
+        if not self.recognition_util.has_faces():
+            self.show_error(
+                "Recognition Database Empty", 
+                "The character recognition database is empty. Please add character tags to images first, " +
+                "then rebuild the recognition database."
+            )
+            return []
+        
+        # Find faces in the image
+        results = self.recognition_util.recognize_faces(image)
+        
+        if not results:
+            self.show_error("No Characters Found", "No recognizable characters were found in this image.")
+            return []
+        
+        # Format results as a list of dictionaries
+        character_suggestions = []
+        
+        for result in results:
+            character_id = result["id"]
+            name = result["name"]
+            confidence = result["confidence"]
+            region = result["region"]  # x, y, width, height as relative coordinates (0.0-1.0)
+            
+            character_suggestions.append({
+                "id": character_id,
+                "name": name,
+                "confidence": confidence,
+                "region": region
+            })
+        
+        # Sort by confidence (descending)
+        character_suggestions.sort(key=lambda x: x["confidence"], reverse=True)
+        
+        return character_suggestions
+    
+    def on_thumbnail_checkbox_toggled(self, image_id: int, checked: bool) -> None:
+        """Handle thumbnail checkbox toggle.
+        
+        Args:
+            image_id: ID of the image
+            checked: Whether the checkbox is checked
+        """
+        if checked:
+            self.selected_images.add(image_id)
+        else:
+            self.selected_images.discard(image_id)
+        
+        # Update UI based on selection state
+        self.update_selection_ui()
+    
+    def update_selection_ui(self) -> None:
+        """Update UI based on selection state."""
+        # This method would update any UI elements that depend on the selection state
+        # For example, enabling/disabling batch operation buttons
+        
+        # For now, just print the selection status (would be removed in production)
+        selection_count = len(self.selected_images)
+        if selection_count > 0:
+            print(f"Selected {selection_count} images: {self.selected_images}")
+    
+    def on_move_to_scene(self) -> None:
+        """Handle move to scene action."""
+        # Check if any images are selected
+        if not self.selected_images:
+            self.show_error("No Images Selected", "Please select images to move to a scene")
+            return
+        
+        # Get all scenes for this story
+        cursor = self.db_conn.cursor()
+        
+        query = """
+            SELECT id, name, sequence_number
+            FROM scenes
+            WHERE story_id = ?
+            ORDER BY sequence_number
+        """
+        
+        cursor.execute(query, (self.story_id,))
+        
+        # Convert to list of dicts
+        scenes = []
+        for row in cursor.fetchall():
+            scenes.append({
+                "id": row[0],
+                "name": row[1],
+                "sequence_number": row[2]
+            })
+        
+        if not scenes:
+            self.show_error("No Scenes", "This story has no scenes. Please create a scene first.")
+            return
+        
+        # Create a dialog to select the scene
+        from app.views.gallery.dialogs.scene_selection import SceneSelectionDialog
+        dialog = SceneSelectionDialog(self.db_conn, self.story_id, self)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Get the selected scene ID
+            scene_id = dialog.get_selected_scene_id()
+            
+            if scene_id is None:
+                return
+            
+            # Update each selected image
+            for image_id in self.selected_images:
+                # Add to scene - this function handles checking if it's already in the scene
+                add_image_to_scene(self.db_conn, image_id, scene_id)
+            
+            # Reload images to reflect the changes
+            self.load_images()
+    
+    def get_on_scene_characters(self) -> List[Dict[str, Any]]:
+        """Get a list of characters that appear in the active scene.
+        
+        Returns:
+            List of character dictionaries
+        """
+        # This is a stub for now
+        # In a real implementation, this would return characters that are "on scene"
+        # based on the active scene or other context
+        
+        # For now, just return some recently tagged characters
+        return get_characters_by_last_tagged(self.db_conn, self.story_id, limit=5)
+    
+    def show_filters_dialog(self):
+        """Show the gallery filter dialog."""
+        dialog = GalleryFilterDialog(self.db_conn, self.story_id, self)
+        
+        # Set current filters
+        dialog.character_filters = self.character_filters.copy()
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Get updated filters
+            self.character_filters = dialog.get_character_filters()
+            
+            # Apply filters
+            self.apply_filters()
+    
+    def apply_filters(self):
+        """Apply filters to the gallery view."""
+        # Reload images with current filters
+        self.load_images()
+        
+        # Update filter status
+        self.update_filter_status()
+    
+    def update_filter_status(self) -> None:
+        """Update the filter status label."""
+        # Build a status message
+        status_text = ""
+        
+        # Character filters
+        if self.character_filters:
+            # Get character names
+            character_names = []
+            
+            for character_id, include in self.character_filters:
+                # Get character name
+                cursor = self.db_conn.cursor()
+                cursor.execute("SELECT name FROM characters WHERE id = ?", (character_id,))
+                result = cursor.fetchone()
+                
+                if result:
+                    character_name = result[0]
+                    if include:
+                        character_names.append(f"Include: {character_name}")
+                    else:
+                        character_names.append(f"Exclude: {character_name}")
+            
+            if character_names:
+                status_text += "Filters: " + ", ".join(character_names)
+        
+        # NSFW setting
+        if self.show_nsfw:
+            if status_text:
+                status_text += " | "
+            status_text += "Showing NSFW content"
+        
+        # Set the label text
+        self.status_label.setText(status_text)
+    
+    def toggle_image_nsfw(self, image_id: int) -> None:
+        """Toggle NSFW status for an image.
+        
+        Args:
+            image_id: ID of the image
+        """
+        # Find the image data
+        image_data = next((img for img in self.images if img["id"] == image_id), None)
+        
+        if not image_data:
+            return
+        
+        # Toggle NSFW status
+        is_nsfw = not image_data.get("is_nsfw", False)
+        
+        # Update database
+        cursor = self.db_conn.cursor()
+        cursor.execute("UPDATE images SET is_nsfw = ? WHERE id = ?", (is_nsfw, image_id))
+        self.db_conn.commit()
+        
+        # Update image data
+        image_data["is_nsfw"] = is_nsfw
+        
+        # Update thumbnail if it exists
+        if image_id in self.thumbnails:
+            thumbnail = self.thumbnails[image_id]
+            
+            if is_nsfw and not self.show_nsfw:
+                # If now NSFW and not showing NSFW, set to placeholder
+                self.set_thumbnail_nsfw(thumbnail)
+            else:
+                # Otherwise, show normal thumbnail
+                self.set_thumbnail_normal(thumbnail, image_id)
+
+    def _get_scene_newest_timestamp(self, scene_id: int) -> str:
+        """Get the newest timestamp from images in a scene.
+        
+        Args:
+            scene_id: ID of the scene
+            
+        Returns:
+            The newest timestamp as a string
+        """
+        cursor = self.db_conn.cursor()
+        
+        query = """
+            SELECT MAX(i.created_at)
+            FROM images i
+            JOIN image_scenes s ON i.id = s.image_id
+            WHERE s.scene_id = ?
+        """
+        
+        cursor.execute(query, (scene_id,))
+        result = cursor.fetchone()
+        
+        if result and result[0]:
+            # Try to parse the timestamp into a more readable format
+            try:
+                timestamp = datetime.fromisoformat(result[0])
+                return timestamp.strftime("%Y-%m-%d")
+            except ValueError:
+                # If parsing fails, return the raw timestamp
+                return result[0]
+        
+        return "" 

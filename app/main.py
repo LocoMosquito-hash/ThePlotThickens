@@ -9,6 +9,7 @@ This module initializes the application and starts the GUI.
 
 import sys
 import os
+import logging
 from typing import Optional
 
 from PyQt6.QtWidgets import QApplication
@@ -18,6 +19,41 @@ from app.db_sqlite import initialize_database
 from app.views.main_window import MainWindow
 from app.utils.image_recognition_util import ImageRecognitionUtil
 from app.utils.theme_manager import ThemeManager
+
+
+def _setup_logging() -> None:
+    """Set up logging configuration for the application.
+    
+    Configures logging to output to both console and a log file.
+    """
+    # Create logs directory if it doesn't exist
+    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Configure logging
+    log_file = os.path.join(log_dir, "the_plot_thickens.log")
+    
+    # Set up root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)  # Set to DEBUG to capture all logs
+    
+    # File handler for all logs
+    file_handler = logging.FileHandler(log_file, mode='a')
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_formatter)
+    
+    # Console handler for info and above
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)  # Less verbose for console
+    console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+    console_handler.setFormatter(console_formatter)
+    
+    # Add handlers to root logger
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    
+    logging.info("Logging initialized")
 
 
 def _create_dark_palette() -> QPalette:
@@ -54,30 +90,33 @@ def _create_dark_palette() -> QPalette:
 
 def main() -> None:
     """Main entry point for the application."""
-    print("Starting The Plot Thickens application...")
+    # Set up logging first
+    _setup_logging()
+    
+    logging.info("Starting The Plot Thickens application...")
     
     # Get the application directory
     app_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Initialize the database
     db_path = os.path.join(app_dir, "..", "the_plot_thickens.db")
-    print(f"Database path: {db_path}")
+    logging.info(f"Database path: {db_path}")
     try:
         db_conn = initialize_database(db_path)
-        print("Database initialized successfully")
+        logging.info("Database initialized successfully")
         
         # Initialize image recognition
         try:
             image_recognition = ImageRecognitionUtil(db_conn)
         except Exception as e:
-            print(f"Warning: Could not initialize image recognition: {e}")
+            logging.warning(f"Could not initialize image recognition: {e}")
             
     except Exception as e:
-        print(f"Error initializing database: {e}")
+        logging.error(f"Error initializing database: {e}", exc_info=True)
         return
     
     # Start the application
-    print("Creating QApplication instance...")
+    logging.info("Creating QApplication instance...")
     app = QApplication(sys.argv)
     
     # Initialize and apply the theme
@@ -85,19 +124,19 @@ def main() -> None:
     theme_manager.apply_theme()
     
     # Create and show the main window
-    print("Creating main window...")
+    logging.info("Creating main window...")
     try:
         window = MainWindow(db_conn)
         # Pass the theme manager to the main window
         window.theme_manager = theme_manager
-        print("Showing main window...")
+        logging.info("Showing main window...")
         window.show()
     except Exception as e:
-        print(f"Error creating or showing main window: {e}")
+        logging.error(f"Error creating or showing main window: {e}", exc_info=True)
         return
     
     # Run the application
-    print("Starting application event loop...")
+    logging.info("Starting application event loop...")
     sys.exit(app.exec())
 
 
