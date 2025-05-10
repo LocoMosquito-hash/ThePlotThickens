@@ -11,14 +11,16 @@ from typing import List, Dict, Any, Optional
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QMessageBox
+    QListWidget, QListWidgetItem, QMessageBox, QMenu, QDialog
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 
 from app.db_sqlite import (
     get_story_decision_points,
-    get_decision_options
+    get_decision_options,
+    delete_decision_point
 )
+from app.views.decision_point_dialog import DecisionPointDialog
 
 
 class DecisionPointItem(QListWidgetItem):
@@ -46,6 +48,9 @@ class DecisionPointItem(QListWidgetItem):
 
 class DecisionPointsTab(QWidget):
     """Tab for viewing and managing decision points in a story."""
+    
+    # Signal emitted when decision points are modified
+    decision_points_changed = pyqtSignal()
     
     def __init__(self, conn, story_id: int, parent=None):
         """Initialize the decision points tab.
@@ -75,8 +80,7 @@ class DecisionPointsTab(QWidget):
         
         # Add decision point button
         self.add_button = QPushButton("Add Decision Point")
-        # We'll implement this functionality later
-        # self.add_button.clicked.connect(self.add_decision_point)
+        self.add_button.clicked.connect(self.add_decision_point)
         header_layout.addWidget(self.add_button)
         
         header_layout.addStretch()
@@ -86,11 +90,10 @@ class DecisionPointsTab(QWidget):
         self.list_widget = QListWidget()
         self.list_widget.setDragDropMode(QListWidget.DragDropMode.InternalMove)
         self.list_widget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-        # We'll implement these functionalities later
-        # self.list_widget.itemDoubleClicked.connect(self.edit_decision_point)
-        # self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        # self.list_widget.customContextMenuRequested.connect(self.show_context_menu)
-        # self.list_widget.model().rowsMoved.connect(self.on_items_reordered)
+        self.list_widget.itemDoubleClicked.connect(self.edit_decision_point)
+        self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list_widget.customContextMenuRequested.connect(self.show_context_menu)
+        self.list_widget.model().rowsMoved.connect(self.on_items_reordered)
         
         main_layout.addWidget(self.list_widget)
     
@@ -115,6 +118,119 @@ class DecisionPointsTab(QWidget):
         for dp in self.decision_points:
             item = DecisionPointItem(dp)
             self.list_widget.addItem(item)
+    
+    def add_decision_point(self):
+        """Open dialog to add a new decision point."""
+        dialog = DecisionPointDialog(self.conn, self.story_id, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Refresh the list
+            self.load_decision_points()
+            # Emit signal that decision points changed
+            self.decision_points_changed.emit()
+    
+    def edit_decision_point(self, item: Optional[DecisionPointItem] = None):
+        """Open dialog to edit an existing decision point.
+        
+        Args:
+            item: The decision point item to edit (optional, will use selected item if None)
+        """
+        # Get the item to edit
+        if not item:
+            current_item = self.list_widget.currentItem()
+            if not current_item:
+                return
+            item = current_item
+        
+        # Ensure item is a DecisionPointItem
+        if not isinstance(item, DecisionPointItem):
+            return
+        
+        # Open the dialog for editing
+        dialog = DecisionPointDialog(self.conn, self.story_id, self, item.decision_point_id)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Refresh the list
+            self.load_decision_points()
+            # Emit signal that decision points changed
+            self.decision_points_changed.emit()
+    
+    def delete_decision_point(self, item: Optional[DecisionPointItem] = None):
+        """Delete a decision point.
+        
+        Args:
+            item: The decision point item to delete (optional, will use selected item if None)
+        """
+        # Get the item to delete
+        if not item:
+            current_item = self.list_widget.currentItem()
+            if not current_item:
+                return
+            item = current_item
+        
+        # Ensure item is a DecisionPointItem
+        if not isinstance(item, DecisionPointItem):
+            return
+        
+        # Confirm deletion
+        reply = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            f"Are you sure you want to delete the decision point '{item.title}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Delete from database
+        success = delete_decision_point(self.conn, item.decision_point_id)
+        
+        if success:
+            # Remove from UI
+            row = self.list_widget.row(item)
+            self.list_widget.takeItem(row)
+            
+            # Refresh the list
+            self.load_decision_points()
+            
+            # Emit signal that decision points changed
+            self.decision_points_changed.emit()
+        else:
+            QMessageBox.critical(
+                self,
+                "Error",
+                "Failed to delete decision point.",
+                QMessageBox.StandardButton.Ok
+            )
+    
+    def show_context_menu(self, position):
+        """Show context menu for decision points list.
+        
+        Args:
+            position: Position where to show the menu
+        """
+        item = self.list_widget.itemAt(position)
+        if not item:
+            return
+            
+        # Create menu
+        menu = QMenu(self)
+        
+        # Add actions
+        edit_action = menu.addAction("Edit")
+        edit_action.triggered.connect(lambda: self.edit_decision_point(item))
+        
+        delete_action = menu.addAction("Delete")
+        delete_action.triggered.connect(lambda: self.delete_decision_point(item))
+        
+        # Show menu at cursor position
+        menu.exec(self.list_widget.mapToGlobal(position))
+    
+    def on_items_reordered(self):
+        """Handle items being reordered through drag-and-drop."""
+        # TODO: Implement reordering in database if needed
+        # For now, just refresh the list
+        self.load_decision_points()
     
     def set_story_id(self, story_id: int):
         """Change the current story.
