@@ -432,21 +432,75 @@ class DecisionPointDialog(QDialog):
         
         # Validate ordered list inputs if needed
         if self.is_ordered_list:
+            option_count = len(self.options_list)
+            order_values = []
+            
             for option in self.options_list:
                 if not option.order_input:
                     continue
-                    
+                
                 order_text = option.order_input.text().strip()
-                if order_text:
-                    try:
-                        int(order_text)
-                    except ValueError:
+                
+                # Check for empty textboxes
+                if not order_text:
+                    QMessageBox.warning(
+                        self, 
+                        "Invalid Input", 
+                        f"Order number for option '{option.text}' cannot be empty."
+                    )
+                    return
+                
+                # Check for valid integers
+                try:
+                    order_value = int(order_text)
+                    
+                    # Check for positive integers
+                    if order_value <= 0:
                         QMessageBox.warning(
                             self, 
                             "Invalid Input", 
-                            f"Invalid order number for option '{option.text}'. Please enter a valid number."
+                            f"Order number for option '{option.text}' must be a positive integer."
                         )
                         return
+                    
+                    # Check for values within range (1 to n)
+                    if order_value > option_count:
+                        QMessageBox.warning(
+                            self, 
+                            "Invalid Input", 
+                            f"Order number for option '{option.text}' must be between 1 and {option_count}."
+                        )
+                        return
+                    
+                    # Add to list for checking duplicates
+                    order_values.append(order_value)
+                    
+                except ValueError:
+                    QMessageBox.warning(
+                        self, 
+                        "Invalid Input", 
+                        f"Invalid order number for option '{option.text}'. Please enter a valid number."
+                    )
+                    return
+            
+            # Check for duplicate values
+            if len(order_values) != len(set(order_values)):
+                QMessageBox.warning(
+                    self, 
+                    "Invalid Input", 
+                    "Duplicate order numbers detected. Each option must have a unique order number."
+                )
+                return
+                
+            # Check that all values from 1 to n are present
+            expected_values = set(range(1, option_count + 1))
+            if set(order_values) != expected_values:
+                QMessageBox.warning(
+                    self, 
+                    "Invalid Input", 
+                    f"Order numbers must include all values from 1 to {option_count} exactly once."
+                )
+                return
         
         try:
             # Create or update decision point
