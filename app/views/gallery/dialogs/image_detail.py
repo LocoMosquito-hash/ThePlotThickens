@@ -7,8 +7,9 @@ Image Detail Dialog for The Plot Thickens application.
 This module contains the dialog for viewing image details and managing character tags.
 """
 
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
 import os
+from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -195,11 +196,12 @@ class ImageDetailDialog(QDialog):
             width = self.image_data.get("width", 0)
             height = self.image_data.get("height", 0)
             creation_date = self.image_data.get("created_at", "Unknown")
-            quick_events_count = len(get_image_quick_events(self.db_conn, self.image_id))
+            formatted_date = self.format_timestamp(creation_date)
+            quick_event_text = self.get_most_recent_quick_event_text()
             
-            self.date_label.setText(f"Created: {creation_date}")
+            self.date_label.setText(f"Created: {formatted_date}")
             self.dimensions_label.setText(f"Dimensions: {width} × {height}")
-            self.events_label.setText(f"Quick Events: {quick_events_count}")
+            self.events_label.setText(f"Quick Event: {quick_event_text}")
             self.id_label.setText(f"Image ID: {self.image_id}")
         
         # Update tag mode
@@ -295,6 +297,11 @@ class ImageDetailDialog(QDialog):
             character_id = context.get("character_id")
             if character_id:
                 update_character_last_tagged(self.db_conn, character_id)
+        
+        # Update the image details panel if it exists
+        if hasattr(self, "events_label") and self.events_label:
+            quick_event_text = self.get_most_recent_quick_event_text()
+            self.events_label.setText(f"Quick Event: {quick_event_text}")
     
     def init_ui(self):
         """Initialize the user interface."""
@@ -353,24 +360,26 @@ class ImageDetailDialog(QDialog):
             width = self.image_data.get("width", 0)
             height = self.image_data.get("height", 0)
             
-            # Get creation date
+            # Get creation date and format it
             creation_date = self.image_data.get("created_at", "Unknown")
+            formatted_date = self.format_timestamp(creation_date)
             
-            # Get quick events count
-            quick_events_count = len(get_image_quick_events(self.db_conn, self.image_id))
+            # Get quick event text
+            quick_event_text = self.get_most_recent_quick_event_text()
             
             # Create labels for each detail
             self.path_label = QLabel(f"Path: {full_path}")
             self.path_label.setWordWrap(True)
             self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             
-            self.date_label = QLabel(f"Created: {creation_date}")
+            self.date_label = QLabel(f"Created: {formatted_date}")
             self.date_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             
             self.dimensions_label = QLabel(f"Dimensions: {width} × {height}")
             self.dimensions_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             
-            self.events_label = QLabel(f"Quick Events: {quick_events_count}")
+            self.events_label = QLabel(f"Quick Event: {quick_event_text}")
+            self.events_label.setWordWrap(True)
             self.events_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             
             self.id_label = QLabel(f"Image ID: {self.image_id}")
@@ -693,6 +702,11 @@ class ImageDetailDialog(QDialog):
         
         # Update the quick events list
         self.update_quick_events_list()
+        
+        # Update the image details panel if it exists
+        if hasattr(self, "events_label") and self.events_label:
+            quick_event_text = self.get_most_recent_quick_event_text()
+            self.events_label.setText(f"Quick Event: {quick_event_text}")
     
     def update_quick_events_list(self):
         """Update the quick events list widget."""
@@ -833,3 +847,65 @@ class ImageDetailDialog(QDialog):
             
             # Reload quick events
             self.load_quick_events()
+    
+    def format_timestamp(self, timestamp_str: str) -> str:
+        """Format a timestamp string into a human-readable format.
+        
+        Args:
+            timestamp_str: ISO format timestamp string
+            
+        Returns:
+            Human-readable timestamp string
+        """
+        try:
+            # Parse the timestamp string to a datetime object
+            dt = datetime.fromisoformat(timestamp_str)
+            
+            # Format it in a human-readable format
+            return dt.strftime("%B %d, %Y, %I:%M:%S %p")
+        except (ValueError, TypeError):
+            # Return the original string if parsing fails
+            return timestamp_str
+    
+    def get_most_recent_quick_event_text(self) -> str:
+        """Get the text of the most recent quick event with resolved character names.
+        
+        Returns:
+            Formatted quick event text or a message if no events exist
+        """
+        # Get quick events for this image
+        quick_events = get_image_quick_events(self.db_conn, self.image_id)
+        
+        if not quick_events:
+            return "No quick events associated with this image"
+        
+        # Sort by sequence number (highest is most recent)
+        quick_events.sort(key=lambda x: x.get("sequence_number", 0), reverse=True)
+        
+        # Get the most recent event
+        event = quick_events[0]
+        
+        # Get all characters for this story - this ensures we have all characters that might be referenced
+        story_characters = get_story_characters(self.db_conn, self.story_id)
+        
+        # Extract character IDs from the event text using regex
+        import re
+        char_ids = set()
+        matches = re.findall(r'\[char:(\d+)\]', event["text"])
+        for char_id_str in matches:
+            try:
+                char_ids.add(int(char_id_str))
+            except ValueError:
+                pass
+                
+        # Create a list of character dictionaries that should be present based on the text
+        formatted_characters = []
+        for char in story_characters:
+            if char["id"] in char_ids:
+                formatted_characters.append(char)
+        
+        # Format the display text
+        from app.utils.character_references import convert_char_refs_to_mentions
+        display_text = convert_char_refs_to_mentions(event["text"], formatted_characters)
+        
+        return display_text
