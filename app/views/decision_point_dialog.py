@@ -15,12 +15,14 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QMessageBox, QInputDialog, QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QKeySequence, QShortcut
 
 from app.db_sqlite import (
     create_decision_point, update_decision_point, get_decision_point,
     get_decision_options, add_decision_option, update_decision_option,
     delete_decision_option
 )
+from app.utils.ocr_widget import OCRWidget
 
 
 class OptionItem:
@@ -74,6 +76,20 @@ class DecisionPointDialog(QDialog):
         # Load data if editing existing decision point
         if decision_point_id:
             self.load_decision_point_data()
+        
+        # Setup keyboard shortcuts
+        self.setup_shortcuts()
+    
+    def setup_shortcuts(self) -> None:
+        """Setup keyboard shortcuts for the dialog."""
+        # Create OCR shortcut (Ctrl+O)
+        self.ocr_shortcut = QShortcut(QKeySequence("Ctrl+O"), self)
+        self.ocr_shortcut.activated.connect(self.activate_ocr)
+    
+    def activate_ocr(self) -> None:
+        """Activate the OCR tab and focus it."""
+        # Switch to OCR tab
+        self.tab_widget.setCurrentIndex(1)  # Index 1 is the OCR tab
     
     def init_ui(self) -> None:
         """Initialize the user interface."""
@@ -135,10 +151,19 @@ class DecisionPointDialog(QDialog):
         ocr_tab = QWidget()
         ocr_layout = QVBoxLayout(ocr_tab)
         
-        # Add placeholder for OCR Tool functionality
-        ocr_label = QLabel("OCR Tool will be implemented later")
-        ocr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ocr_layout.addWidget(ocr_label)
+        # Create OCR widget
+        self.ocr_widget = OCRWidget(parent=ocr_tab)
+        self.ocr_widget.set_on_text_extracted_callback(self.on_text_extracted)
+        
+        # Add usage instructions
+        instructions_label = QLabel(
+            "Use Ctrl+O to quickly access OCR. Extract text to add as a new option."
+        )
+        instructions_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ocr_layout.addWidget(instructions_label)
+        
+        # Add OCR widget to layout
+        ocr_layout.addWidget(self.ocr_widget)
         
         # Add OCR tab to tab widget
         self.tab_widget.addTab(ocr_tab, "OCR Tool")
@@ -160,6 +185,26 @@ class DecisionPointDialog(QDialog):
         
         # Add button layout to main layout
         main_layout.addLayout(button_layout)
+    
+    def on_text_extracted(self, text: str) -> None:
+        """Handle text extracted from OCR.
+        
+        Args:
+            text: The extracted text to add as a new option
+        """
+        if text.strip():
+            # Add the extracted text as a new option
+            self.add_option(text.strip())
+            
+            # Switch back to the Decision Point tab
+            self.tab_widget.setCurrentIndex(0)
+            
+            # Show confirmation
+            QMessageBox.information(
+                self,
+                "Option Added",
+                f"Added new option from OCR text"
+            )
     
     def on_add_option(self) -> None:
         """Handle add option button click."""
