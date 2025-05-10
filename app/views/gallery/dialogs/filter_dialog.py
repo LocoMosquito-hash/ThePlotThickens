@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional, Tuple
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QTabWidget, QGroupBox
+    QListWidget, QListWidgetItem, QTabWidget, QGroupBox, QWidget
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPixmap, QIcon
@@ -222,3 +222,16 @@ class GalleryFilterDialog(QDialog):
             List of tuples (character_id, include)
         """
         return self.character_filters
+        
+    def populate_filter_list(self) -> None:
+        """Populate the filter list with current filters.
+        
+        This is mainly for backward compatibility.
+        """
+        # This method is automatically called during load_characters
+        pass
+        
+    def clear_all_filters(self) -> None:
+        """Clear all filters."""
+        self.filter_list.clear()
+        self.character_filters.clear()

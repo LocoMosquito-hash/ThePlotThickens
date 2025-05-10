@@ -26,6 +26,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QApplication
 
 from app.views.gallery.character.widgets import OnSceneCharacterListWidget
+from app.views.gallery.character.widgets import RecognitionResultsListWidget
 from app.views.gallery.dialogs.quick_event_dialog import QuickEventEditor
 from app.views.gallery.character.completer import CharacterTagCompleter
 
@@ -205,7 +206,7 @@ class RegionSelectionDialog(QDialog):
         results_layout = QVBoxLayout(results_group)
         
         # Create recognized characters list
-        self.recognized_list = QListWidget()
+        self.recognized_list = RecognitionResultsListWidget(self.db_conn, self)
         self.recognized_list.itemClicked.connect(self.on_recognized_character_clicked)
         results_layout.addWidget(self.recognized_list)
         
