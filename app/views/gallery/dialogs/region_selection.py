@@ -32,7 +32,7 @@ from app.db_sqlite import (
     get_story_characters, update_character_last_tagged,
     create_quick_event, get_next_quick_event_sequence_number,
     process_quick_event_character_tags, get_image_quick_events,
-    get_characters_by_last_tagged
+    get_characters_by_last_tagged, get_story_folder_paths, ensure_story_folders_exist
 )
 
 # Import image recognition utility
@@ -699,3 +699,16 @@ class RegionSelectionDialog(QDialog):
         
         # Set status message
         self._status_bar.showMessage("Ready. Right-click and drag to select face regions.")
+
+    # Add utility functions for story path handling
+    def get_story_folder_paths(self) -> Dict[str, str]:
+        """Get the folder paths for the current story.
+        
+        Returns:
+            Dictionary with folder paths
+        """
+        return get_story_folder_paths(self.db_conn.cursor().execute("SELECT * FROM stories WHERE id = ?", (self.story_id,)).fetchone())
+    
+    def ensure_story_folders_exist(self) -> None:
+        """Ensure all story folders exist."""
+        ensure_story_folders_exist(self.db_conn.cursor().execute("SELECT * FROM stories WHERE id = ?", (self.story_id,)).fetchone())

@@ -58,7 +58,8 @@ from app.db_sqlite import (
     get_quick_event_tagged_characters,
     process_quick_event_character_tags, get_quick_event_scenes,
     add_image_to_scene, remove_image_from_scene, get_image_scenes,
-    update_character_last_tagged, get_characters_by_last_tagged
+    update_character_last_tagged, get_characters_by_last_tagged,
+    get_story_folder_paths, ensure_story_folders_exist
 )
 
 # Import image recognition utility
@@ -730,41 +731,50 @@ class GalleryWidget(QWidget):
         if image_id in self.pixmap_cache:
             return self.pixmap_cache[image_id]
         
-        # Choose pixmap based on NSFW mode - in the original implementation, when nsfw_mode is True,
-        # ALL images are replaced with placeholders
-        if self.show_nsfw:
-            # Make sure we have the placeholder
+        # Handle NSFW mode
+        if image.get("is_nsfw", False) and not self.show_nsfw:
+            # Use NSFW placeholder for NSFW images when not showing NSFW content
             if not hasattr(self, 'nsfw_placeholder') or self.nsfw_placeholder is None:
                 self.nsfw_placeholder = self._create_nsfw_placeholder()
-            
             placeholder = self.nsfw_placeholder
             self.pixmap_cache[image_id] = placeholder
             return placeholder
         
-        # Get thumbnail path
+        # Get image details
         filename = image.get('filename')
-        file_path = image.get('path')
+        img_folder = image.get('path')
         
-        if not filename or not file_path:
+        if not filename or not img_folder:
             logging.error(f"Missing path or filename for image {image_id}")
             placeholder = self._create_placeholder_pixmap(image)
             self.pixmap_cache[image_id] = placeholder
             return placeholder
         
-        # Get thumbnail path - thumbnails folder should be adjacent to images folder
         try:
-            thumbnails_folder = os.path.join(os.path.dirname(file_path), "thumbnails")
-            thumbnail_path = os.path.join(thumbnails_folder, filename)
+            # Get story data from database to determine the proper folder structure
+            cursor = self.db_conn.cursor()
+            cursor.execute("SELECT * FROM stories WHERE id = ?", (image.get('story_id'),))
+            story_data = cursor.fetchone()
+            
+            if not story_data:
+                logging.error(f"Story data not found for image {image_id}")
+                placeholder = self._create_placeholder_pixmap(image)
+                self.pixmap_cache[image_id] = placeholder
+                return placeholder
+            
+            # Get folder paths
+            from app.db_sqlite import get_story_folder_paths
+            folder_paths = get_story_folder_paths(dict(story_data))
+            
+            # Get paths to original image and thumbnail
+            original_path = os.path.join(folder_paths['images_folder'], filename)
+            thumbnail_path = os.path.join(folder_paths['thumbnails_folder'], filename)
             
             logging.debug(f"Looking for thumbnail at: {thumbnail_path}")
             
             # Check if thumbnail exists, if not, generate it from the original image
             if not os.path.exists(thumbnail_path):
                 logging.debug(f"Thumbnail not found, attempting to generate from original")
-                
-                # Full path to the original image
-                original_path = os.path.join(file_path, filename)
-                logging.debug(f"Looking for original image at: {original_path}")
                 
                 if os.path.exists(original_path):
                     # Load the original image
@@ -774,7 +784,7 @@ class GalleryWidget(QWidget):
                         thumbnail = self._generate_thumbnail(original_image)
                         
                         # Make sure thumbnails directory exists
-                        os.makedirs(thumbnails_folder, exist_ok=True)
+                        os.makedirs(folder_paths['thumbnails_folder'], exist_ok=True)
                         
                         # Save the thumbnail
                         thumbnail.save(thumbnail_path, "PNG")
@@ -789,24 +799,45 @@ class GalleryWidget(QWidget):
                 else:
                     logging.error(f"Original image not found: {original_path}")
                     
-                # Try looking at the path directly (maybe path itself is the full path to the image)
-                if os.path.exists(file_path) and os.path.isfile(file_path):
-                    original_image = QImage(file_path)
-                    if not original_image.isNull():
-                        # Generate and save thumbnail
-                        thumbnail = self._generate_thumbnail(original_image)
-                        
-                        # Make sure thumbnails directory exists
-                        os.makedirs(thumbnails_folder, exist_ok=True)
-                        
-                        # Save the thumbnail
-                        thumbnail.save(thumbnail_path, "PNG")
-                        logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
-                        
-                        # Use the newly generated thumbnail
-                        pixmap = QPixmap.fromImage(thumbnail)
-                        self.pixmap_cache[image_id] = pixmap
-                        return pixmap
+                    # Try alternative paths (legacy support)
+                    if os.path.exists(img_folder) and os.path.isfile(img_folder):
+                        # Path itself might be the full path to the image (old format)
+                        original_image = QImage(img_folder)
+                        if not original_image.isNull():
+                            # Generate and save thumbnail
+                            thumbnail = self._generate_thumbnail(original_image)
+                            
+                            # Make sure thumbnails directory exists
+                            os.makedirs(folder_paths['thumbnails_folder'], exist_ok=True)
+                            
+                            # Save the thumbnail
+                            thumbnail.save(thumbnail_path, "PNG")
+                            logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
+                            
+                            # Use the newly generated thumbnail
+                            pixmap = QPixmap.fromImage(thumbnail)
+                            self.pixmap_cache[image_id] = pixmap
+                            return pixmap
+                    elif os.path.join(img_folder, filename) != original_path:
+                        # Try the old path format where path might include the directory
+                        alt_path = os.path.join(img_folder, filename)
+                        if os.path.exists(alt_path):
+                            original_image = QImage(alt_path)
+                            if not original_image.isNull():
+                                # Generate and save thumbnail
+                                thumbnail = self._generate_thumbnail(original_image)
+                                
+                                # Make sure thumbnails directory exists
+                                os.makedirs(folder_paths['thumbnails_folder'], exist_ok=True)
+                                
+                                # Save the thumbnail
+                                thumbnail.save(thumbnail_path, "PNG")
+                                logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
+                                
+                                # Use the newly generated thumbnail
+                                pixmap = QPixmap.fromImage(thumbnail)
+                                self.pixmap_cache[image_id] = pixmap
+                                return pixmap
             else:
                 # Thumbnail exists, load it
                 logging.debug(f"Found existing thumbnail at: {thumbnail_path}")
@@ -816,7 +847,6 @@ class GalleryWidget(QWidget):
                     return pixmap
                 else:
                     logging.error(f"Failed to load thumbnail image: {thumbnail_path}")
-        
         except Exception as e:
             logging.exception(f"Error loading thumbnail for image {image_id}: {str(e)}")
         
@@ -1029,30 +1059,50 @@ class GalleryWidget(QWidget):
             self.show_error("Error", "No story selected")
             return
         
+        # Get the story data
+        cursor = self.db_conn.cursor()
+        cursor.execute("SELECT * FROM stories WHERE id = ?", (self.story_id,))
+        story_data = dict(cursor.fetchone())
+        
+        if not story_data:
+            self.show_error("Error", "Story data not found")
+            return
+        
+        # Get folder paths using the utility function
+        from app.db_sqlite import get_story_folder_paths, ensure_story_folders_exist
+        
+        # Ensure all story folders exist
+        ensure_story_folders_exist(story_data)
+        
+        # Get paths
+        folder_paths = get_story_folder_paths(story_data)
+        images_folder = folder_paths['images_folder']
+        thumbnails_folder = folder_paths['thumbnails_folder']
+        
         # Generate a unique file name
         timestamp = time.strftime("%Y%m%d%H%M%S")
         random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         file_name = f"img_{timestamp}_{random_string}.png"
         
-        # Get the story directory
-        story_dir = os.path.join("data", "stories", str(self.story_id), "images")
+        # Define full file paths
+        image_path = os.path.join(images_folder, file_name)
+        thumbnail_path = os.path.join(thumbnails_folder, file_name)
         
-        # Create directory if it doesn't exist
-        os.makedirs(story_dir, exist_ok=True)
+        # Generate thumbnail
+        thumbnail_image = self._generate_thumbnail(image)
         
-        # Save the image to a file
-        file_path = os.path.join(story_dir, file_name)
-        
-        if not image.save(file_path, "PNG"):
+        # Save the full image
+        if not image.save(image_path, "PNG"):
             self.show_error("Save Error", "Could not save image to file")
             return
+        
+        # Save the thumbnail
+        thumbnail_image.save(thumbnail_path, "PNG")
         
         # Create timestamps
         now = datetime.now().isoformat()
         
         # Insert into database with the columns we actually have
-        cursor = self.db_conn.cursor()
-        
         query = """
             INSERT INTO images (story_id, title, path, created_at, updated_at, width, height, is_featured, filename)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1062,14 +1112,14 @@ class GalleryWidget(QWidget):
             query,
             (
                 self.story_id,
-                "Imported Image",  # title
-                file_path,         # path
-                now,               # created_at
-                now,               # updated_at
-                image.width(),     # width
-                image.height(),    # height
-                0,                 # is_featured (not NSFW)
-                file_name          # filename
+                "Imported Image",    # title
+                images_folder,       # path (store folder path only)
+                now,                 # created_at
+                now,                 # updated_at
+                image.width(),       # width
+                image.height(),      # height
+                0,                   # is_featured (not NSFW)
+                file_name            # filename
             )
         )
         
@@ -1083,12 +1133,13 @@ class GalleryWidget(QWidget):
         new_image = {
             "id": image_id,
             "title": "Imported Image",
-            "path": file_path,
+            "path": images_folder,
             "timestamp": now,
             "width": image.width(),
             "height": image.height(),
             "is_nsfw": False,
-            "story_id": self.story_id
+            "story_id": self.story_id,
+            "filename": file_name
         }
         
         self.images.insert(0, new_image)  # Add to start (newest)
