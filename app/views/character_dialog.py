@@ -766,13 +766,6 @@ class CharacterDetailsTab(QWidget):
         """Update the details tree with current details."""
         self.details_tree.clear()
         
-        if not self.details:
-            empty_item = QTreeWidgetItem(["No details added yet."])
-            # Make it non-selectable
-            empty_item.setFlags(Qt.ItemFlag.NoItemFlags)
-            self.details_tree.addTopLevelItem(empty_item)
-            return
-        
         # Create a dictionary to store category items
         category_items = {}
         
@@ -806,36 +799,37 @@ class CharacterDetailsTab(QWidget):
                     self.details_tree.addTopLevelItem(category_item)
                     break
         
-        # Add details to their respective categories
-        for detail in self.details:
-            detail_type = detail['detail_type']
-            
-            # Skip if filtering and not matching
-            if selected_type is not None and detail_type != selected_type:
-                continue
+        # Add details to their respective categories if details exist
+        if self.details:
+            for detail in self.details:
+                detail_type = detail['detail_type']
                 
-            # If the category doesn't exist yet, create an "Other" category
-            if detail_type not in category_items:
-                category_item = QTreeWidgetItem(["Other"])
-                category_item.setData(0, Qt.ItemDataRole.UserRole, "OTHER")
-                # Add folder icon
-                category_item.setIcon(0, folder_icon)
-                category_items[detail_type] = category_item
-                self.details_tree.addTopLevelItem(category_item)
-            
-            # Create the detail item
-            detail_item = QTreeWidgetItem([detail['detail_text']])
-            detail_item.setData(0, Qt.ItemDataRole.UserRole, detail['id'])
-            detail_item.setToolTip(0, detail['detail_text'])
-            
-            # Store the detail data for later use
-            detail_item.detail_id = detail['id']
-            detail_item.detail_text = detail['detail_text']
-            detail_item.detail_type = detail['detail_type']
-            detail_item.sequence_number = detail['sequence_number']
-            
-            # Add to the appropriate category
-            category_items[detail_type].addChild(detail_item)
+                # Skip if filtering and not matching
+                if selected_type is not None and detail_type != selected_type:
+                    continue
+                    
+                # If the category doesn't exist yet, create an "Other" category
+                if detail_type not in category_items:
+                    category_item = QTreeWidgetItem(["Other"])
+                    category_item.setData(0, Qt.ItemDataRole.UserRole, "OTHER")
+                    # Add folder icon
+                    category_item.setIcon(0, folder_icon)
+                    category_items[detail_type] = category_item
+                    self.details_tree.addTopLevelItem(category_item)
+                
+                # Create the detail item
+                detail_item = QTreeWidgetItem([detail['detail_text']])
+                detail_item.setData(0, Qt.ItemDataRole.UserRole, detail['id'])
+                detail_item.setToolTip(0, detail['detail_text'])
+                
+                # Store the detail data for later use
+                detail_item.detail_id = detail['id']
+                detail_item.detail_text = detail['detail_text']
+                detail_item.detail_type = detail['detail_type']
+                detail_item.sequence_number = detail['sequence_number']
+                
+                # Add to the appropriate category
+                category_items[detail_type].addChild(detail_item)
         
         # Expand all categories
         self.details_tree.expandAll()
@@ -990,7 +984,7 @@ class CharacterDetailsTab(QWidget):
             QMessageBox.warning(self, "Error", f"Failed to update sequence numbers: {str(e)}")
             
     def show_context_menu(self, position: QPoint):
-        """Show context menu for a detail.
+        """Show context menu for a detail or category.
         
         Args:
             position: Position where the menu should be displayed
@@ -999,23 +993,75 @@ class CharacterDetailsTab(QWidget):
         
         if not item:
             return
-            
-        # Only show edit/delete options for detail items, not categories
-        if not hasattr(item, 'detail_id'):
-            return
-            
+        
         menu = QMenu(self)
         
-        edit_action = QAction("Edit", self)
-        edit_action.triggered.connect(lambda: self.edit_detail(item))
-        menu.addAction(edit_action)
-        
-        delete_action = QAction("Delete", self)
-        delete_action.triggered.connect(lambda: self.delete_detail(item))
-        menu.addAction(delete_action)
+        # Check if this is a category item (no detail_id attribute)
+        if not hasattr(item, 'detail_id'):
+            # This is a category item
+            category_code = item.data(0, Qt.ItemDataRole.UserRole)
+            if category_code:
+                add_action = QAction("Add Detail", self)
+                add_action.triggered.connect(lambda: self.add_detail_to_category(category_code))
+                menu.addAction(add_action)
+        else:
+            # This is a detail item
+            edit_action = QAction("Edit", self)
+            edit_action.triggered.connect(lambda: self.edit_detail(item))
+            menu.addAction(edit_action)
+            
+            delete_action = QAction("Delete", self)
+            delete_action.triggered.connect(lambda: self.delete_detail(item))
+            menu.addAction(delete_action)
         
         # Show the menu
         menu.exec(self.details_tree.mapToGlobal(position))
+    
+    def add_detail_to_category(self, category_code: str):
+        """Add a new detail to a specific category.
+        
+        Args:
+            category_code: Category code to add the detail to
+        """
+        # Find the category name for the given code
+        category_name = "Other"
+        for name, code in self.global_categories:
+            if code == category_code:
+                category_name = name
+                break
+        
+        # Show add detail dialog with the category pre-selected
+        dialog = AddDetailDialog(self.global_categories, detail_type=category_code, parent=self)
+        dialog.setWindowTitle(f"Add Detail to {category_name}")
+        
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        
+        # Get the entered data
+        detail_text = dialog.get_detail_text()
+        detail_type = dialog.get_detail_type()
+        
+        if not detail_text:
+            return
+            
+        try:
+            # Add the detail to the database
+            from app.db_sqlite import add_character_detail
+            
+            # Add to database - let the function handle the sequence
+            detail_id = add_character_detail(
+                self.db_conn,
+                self.character_id,
+                detail_text,
+                detail_type
+            )
+            
+            # Reload details
+            self.load_details()
+            
+        except Exception as e:
+            print(f"Error adding detail: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to add detail: {str(e)}")
 
 
 class AddDetailDialog(QDialog):
