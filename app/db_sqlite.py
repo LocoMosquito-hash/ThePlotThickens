@@ -2906,3 +2906,49 @@ def create_character_last_tagged_table(conn: sqlite3.Connection) -> None:
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_character_last_tagged_character_id ON character_last_tagged(character_id)')
     
     conn.commit()
+
+def get_character_image_count(conn: sqlite3.Connection, character_id: int) -> int:
+    """Get the number of images containing a specific character.
+    
+    Args:
+        conn: Database connection
+        character_id: ID of the character
+        
+    Returns:
+        Number of images containing the character
+    """
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT COUNT(DISTINCT i.id) as image_count
+        FROM images i
+        JOIN image_character_tags t ON i.id = t.image_id
+        WHERE t.character_id = ?
+        """,
+        (character_id,))
+    result = cursor.fetchone()
+    return result["image_count"] if result else 0
+
+def get_character_image_counts_by_story(conn: sqlite3.Connection, story_id: int) -> Dict[int, int]:
+    """Get the count of images for all characters in a story.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        
+    Returns:
+        Dictionary mapping character IDs to image counts
+    """
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT t.character_id, COUNT(DISTINCT t.image_id) as image_count
+        FROM image_character_tags t
+        JOIN images i ON t.image_id = i.id
+        JOIN characters c ON t.character_id = c.id
+        WHERE c.story_id = ?
+        GROUP BY t.character_id
+        """,
+        (story_id,))
+    
+    return {row["character_id"]: row["image_count"] for row in cursor.fetchall()}
