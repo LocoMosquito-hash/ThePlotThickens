@@ -107,6 +107,9 @@ class GalleryWidget(QWidget):
         
         # Initialize UI
         self.init_ui()
+        
+        # Hide batch operations panel initially
+        self.batch_operations_panel.setVisible(False)
     
     def init_ui(self) -> None:
         """Initialize the user interface."""
@@ -180,6 +183,33 @@ class GalleryWidget(QWidget):
         
         # Add control layout to main layout
         main_layout.addLayout(control_layout)
+        
+        # Create batch operations panel
+        self.batch_operations_panel = QWidget()
+        batch_layout = QVBoxLayout(self.batch_operations_panel)
+        
+        # Batch operations header
+        batch_header = QLabel("Batch Operations")
+        batch_header.setStyleSheet("font-weight: bold; font-size: 14px;")
+        batch_layout.addWidget(batch_header)
+        
+        # Instructions label
+        instructions_label = QLabel("Select images using checkboxes")
+        batch_layout.addWidget(instructions_label)
+        
+        # Batch operations buttons
+        batch_buttons_layout = QHBoxLayout()
+        
+        # Move to scene button
+        move_to_scene_btn = QPushButton("Move to Scene...")
+        move_to_scene_btn.clicked.connect(self.on_move_to_scene)
+        batch_buttons_layout.addWidget(move_to_scene_btn)
+        
+        batch_buttons_layout.addStretch()
+        batch_layout.addLayout(batch_buttons_layout)
+        
+        # Add batch operations panel to main layout
+        main_layout.addWidget(self.batch_operations_panel)
         
         # Create scroll area for thumbnails
         self.scroll_area = QScrollArea()
@@ -1839,11 +1869,11 @@ class GalleryWidget(QWidget):
     
     def update_selection_ui(self) -> None:
         """Update UI based on selection state."""
-        # This method would update any UI elements that depend on the selection state
-        # For example, enabling/disabling batch operation buttons
-        
-        # For now, just print the selection status (would be removed in production)
+        # Show or hide the batch operations panel based on selection
         selection_count = len(self.selected_images)
+        self.batch_operations_panel.setVisible(selection_count > 0)
+        
+        # For debugging
         if selection_count > 0:
             print(f"Selected {selection_count} images: {self.selected_images}")
     
@@ -1893,7 +1923,7 @@ class GalleryWidget(QWidget):
             # Update each selected image
             for image_id in self.selected_images:
                 # Add to scene - this function handles checking if it's already in the scene
-                add_image_to_scene(self.db_conn, image_id, scene_id)
+                add_image_to_scene(self.db_conn, scene_id, image_id)
             
             # Reload images to reflect the changes
             self.load_images()

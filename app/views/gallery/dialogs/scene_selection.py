@@ -79,18 +79,19 @@ class SceneSelectionDialog(QDialog):
         """Load the scenes from the database."""
         cursor = self.db_conn.cursor()
         
-        # Get all scenes in this story
+        # Get all scenes in this story (scenes are stored as events with event_type = 'SCENE')
         cursor.execute("""
-            SELECT id, name FROM scenes 
-            WHERE story_id = ? 
-            ORDER BY name
+            SELECT id, title, sequence_number FROM events 
+            WHERE story_id = ? AND event_type = 'SCENE'
+            ORDER BY sequence_number DESC
         """, (self.story_id,))
         
         scenes = cursor.fetchall()
         
         for scene in scenes:
-            scene_id, name = scene
-            item = QListWidgetItem(name)
+            scene_id = scene['id']
+            title = scene['title']
+            item = QListWidgetItem(title)
             item.setData(Qt.ItemDataRole.UserRole, scene_id)
             self.scene_list.addItem(item)
     
@@ -101,6 +102,13 @@ class SceneSelectionDialog(QDialog):
         has_new_scene = bool(self.new_scene_input.text().strip())
         
         self.move_button.setEnabled(has_selection or has_new_scene)
+        
+        # Update the selected scene ID
+        selected_items = self.scene_list.selectedItems()
+        if selected_items:
+            self.selected_scene_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
+        else:
+            self.selected_scene_id = None
     
     def get_selected_scene_id(self) -> Optional[int]:
         """Get the ID of the selected scene.
@@ -117,23 +125,33 @@ class SceneSelectionDialog(QDialog):
             self.new_scene_name = self.new_scene_input.text().strip()
             cursor = self.db_conn.cursor()
             
+            # Get the next sequence number for scenes
             cursor.execute("""
-                INSERT INTO scenes (story_id, name)
-                VALUES (?, ?)
-            """, (self.story_id, self.new_scene_name))
+                SELECT MAX(sequence_number) as max_seq FROM events
+                WHERE story_id = ? AND event_type = 'SCENE'
+            """, (self.story_id,))
+            
+            result = cursor.fetchone()
+            next_seq = (result['max_seq'] + 1) if result and result['max_seq'] is not None else 0
+            
+            # Insert the new scene as an event
+            cursor.execute("""
+                INSERT INTO events (story_id, title, event_type, sequence_number, created_at, updated_at)
+                VALUES (?, ?, 'SCENE', ?, datetime('now'), datetime('now'))
+            """, (self.story_id, self.new_scene_name, next_seq))
             
             self.db_conn.commit()
             
             # Get the ID of the newly created scene
             cursor.execute("""
-                SELECT id FROM scenes 
-                WHERE story_id = ? AND name = ?
+                SELECT id FROM events 
+                WHERE story_id = ? AND event_type = 'SCENE' AND title = ?
                 ORDER BY id DESC LIMIT 1
             """, (self.story_id, self.new_scene_name))
             
             result = cursor.fetchone()
             if result:
-                self.selected_scene_id = result[0]
+                self.selected_scene_id = result['id']
         else:
             # Use selected scene
             selected_items = self.scene_list.selectedItems()
