@@ -61,6 +61,7 @@ class DecisionPointDialog(QDialog):
         self.decision_point_id = decision_point_id
         self.is_ordered_list = False
         self.options_list = []  # List of OptionItem objects
+        self.radio_button_group = []  # For exclusive radio button behavior
         
         # Set window title based on mode
         if decision_point_id:
@@ -204,7 +205,18 @@ class DecisionPointDialog(QDialog):
         else:
             # For single choice, create radio button
             radio_button = QRadioButton(option_text)
+            
+            # Add to radio button group for exclusive behavior
+            if is_selected and self.radio_button_group:
+                # If this one should be selected, deselect others
+                for rb in self.radio_button_group:
+                    rb.setChecked(False)
+            
             radio_button.setChecked(is_selected)
+            
+            # Connect radio button toggle to handle exclusive selection
+            radio_button.toggled.connect(lambda checked: self.handle_radio_toggle(radio_button, checked))
+            self.radio_button_group.append(radio_button)
             
             # Add to layout
             option_layout.addWidget(radio_button)
@@ -227,6 +239,19 @@ class DecisionPointDialog(QDialog):
         # Add to UI
         self.options_layout.addWidget(option_container)
     
+    def handle_radio_toggle(self, clicked_button: QRadioButton, checked: bool) -> None:
+        """Handle radio button toggling to ensure exclusive selection.
+        
+        Args:
+            clicked_button: The radio button that was toggled
+            checked: Whether the button was checked or unchecked
+        """
+        if checked:
+            # When a button is checked, uncheck all others
+            for radio_button in self.radio_button_group:
+                if radio_button != clicked_button:
+                    radio_button.setChecked(False)
+    
     def remove_option(self, option_item: OptionItem) -> None:
         """Remove an option from the decision point.
         
@@ -239,6 +264,10 @@ class DecisionPointDialog(QDialog):
         
         # Remove from list
         self.options_list.remove(option_item)
+        
+        # Remove from radio button group if applicable
+        if option_item.radio_button in self.radio_button_group:
+            self.radio_button_group.remove(option_item.radio_button)
     
     def toggle_ordered_list(self) -> None:
         """Toggle between single choice and ordered list modes."""
@@ -296,6 +325,9 @@ class DecisionPointDialog(QDialog):
             any_selected = any(opt.radio_button.isChecked() for opt in self.options_list if opt.radio_button)
             if not any_selected and self.options_list[0].radio_button:
                 self.options_list[0].radio_button.setChecked(True)
+        
+        # Reset radio button group when changing modes
+        self.radio_button_group = []
     
     def load_decision_point_data(self) -> None:
         """Load data for an existing decision point."""
@@ -336,12 +368,22 @@ class DecisionPointDialog(QDialog):
         # Validate input
         title = self.title_edit.text().strip()
         if not title:
-            QMessageBox.warning(self, "Invalid Input", "Please enter a title for the decision point.")
+            # Auto-generate title if none provided
+            existing_count = self.get_existing_decision_points_count()
+            title = f"Decision Point {existing_count + 1}"
+            self.title_edit.setText(title)
+        
+        # Validate number of options
+        if len(self.options_list) < 2:
+            QMessageBox.warning(self, "Invalid Input", "Please add at least two options.")
             return
         
-        if not self.options_list:
-            QMessageBox.warning(self, "Invalid Input", "Please add at least one option.")
-            return
+        # Validate one option selected in single choice mode
+        if not self.is_ordered_list:
+            selected_count = sum(1 for opt in self.options_list if opt.radio_button and opt.radio_button.isChecked())
+            if selected_count != 1:
+                QMessageBox.warning(self, "Invalid Input", "Please select exactly one option.")
+                return
         
         # Validate ordered list inputs if needed
         if self.is_ordered_list:
@@ -449,4 +491,22 @@ class DecisionPointDialog(QDialog):
             super().accept()
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error saving decision point: {str(e)}") 
+            QMessageBox.critical(self, "Error", f"Error saving decision point: {str(e)}")
+    
+    def get_existing_decision_points_count(self) -> int:
+        """Get the count of existing decision points for auto-numbering.
+        
+        Returns:
+            Count of existing decision points
+        """
+        try:
+            cursor = self.db_conn.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) as count FROM decision_points WHERE story_id = ?", 
+                (self.story_id,)
+            )
+            result = cursor.fetchone()
+            return result["count"] if result else 0
+        except Exception as e:
+            print(f"Error getting decision points count: {e}")
+            return 0 

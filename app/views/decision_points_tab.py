@@ -26,24 +26,83 @@ from app.views.decision_point_dialog import DecisionPointDialog
 class DecisionPointItem(QListWidgetItem):
     """A list widget item representing a decision point."""
     
-    def __init__(self, decision_point_data: Dict[str, Any]):
+    def __init__(self, decision_point_data: Dict[str, Any], db_conn=None):
         """Initialize the decision point item.
         
         Args:
             decision_point_data: Dictionary with decision point data
+            db_conn: Database connection (optional)
         """
         super().__init__()
         self.decision_point_data = decision_point_data
         self.decision_point_id = decision_point_data['id']
         self.title = decision_point_data['title']
         self.description = decision_point_data.get('description', '')
+        self.is_ordered_list = bool(decision_point_data.get('is_ordered_list', 0))
+        self.db_conn = db_conn
         
-        # Set the item text
-        self.setText(self.title)
-        self.setToolTip(self.description if self.description else self.title)
+        # Get options data for display
+        self.options = self.get_options()
+        
+        # Set the item text with a summary
+        item_text = self.title
+        if self.options:
+            # Add a count of options to the display text
+            type_indicator = "📋" if self.is_ordered_list else "🔘"
+            item_text += f" {type_indicator} ({len(self.options)})"
+        self.setText(item_text)
+        
+        # Set tooltip with more details
+        tooltip_text = f"{self.title}"
+        if self.description:
+            tooltip_text += f"\n\n{self.description}"
+            
+        tooltip_text += f"\n\nType: {'Ordered List' if self.is_ordered_list else 'Single Choice'}"
+        
+        # Add options to tooltip
+        if self.options:
+            tooltip_text += "\n\nOptions:"
+            for i, option in enumerate(self.options):
+                option_text = option.get('text', '')
+                
+                # Add indicator for selected option in single choice mode
+                if not self.is_ordered_list and option.get('is_selected'):
+                    tooltip_text += f"\n✓ {option_text}"
+                # Add order number for ordered lists
+                elif self.is_ordered_list and option.get('played_order') is not None:
+                    tooltip_text += f"\n{option.get('played_order')}. {option_text}"
+                else:
+                    tooltip_text += f"\n• {option_text}"
+                    
+        self.setToolTip(tooltip_text)
         
         # Make the item draggable
         self.setFlags(self.flags() | Qt.ItemFlag.ItemIsDragEnabled)
+    
+    def get_options(self) -> List[Dict[str, Any]]:
+        """Get all options for this decision point.
+        
+        Returns:
+            List of option dictionaries
+        """
+        if not self.db_conn:
+            return []
+            
+        from app.db_sqlite import get_decision_options
+        
+        try:
+            return get_decision_options(self.db_conn, self.decision_point_id)
+        except Exception as e:
+            print(f"Error getting options: {e}")
+            return []
+    
+    def get_options_count(self) -> int:
+        """Get the number of options for this decision point.
+        
+        Returns:
+            Count of options
+        """
+        return len(self.options)
 
 
 class DecisionPointsTab(QWidget):
@@ -95,6 +154,18 @@ class DecisionPointsTab(QWidget):
         self.list_widget.customContextMenuRequested.connect(self.show_context_menu)
         self.list_widget.model().rowsMoved.connect(self.on_items_reordered)
         
+        # Make the list more compact
+        self.list_widget.setSpacing(1)  # Reduce spacing between items
+        self.list_widget.setStyleSheet("""
+            QListWidget {
+                font-size: 11pt;
+            }
+            QListWidget::item {
+                padding: 2px 4px;
+                border-bottom: 1px solid #e0e0e0;
+            }
+        """)
+        
         main_layout.addWidget(self.list_widget)
     
     def load_decision_points(self):
@@ -116,7 +187,7 @@ class DecisionPointsTab(QWidget):
         self.list_widget.clear()
         
         for dp in self.decision_points:
-            item = DecisionPointItem(dp)
+            item = DecisionPointItem(dp, self.conn)
             self.list_widget.addItem(item)
     
     def add_decision_point(self):
