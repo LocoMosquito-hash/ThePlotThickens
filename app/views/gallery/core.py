@@ -127,6 +127,30 @@ class GalleryWidget(QWidget):
         paste_btn.clicked.connect(self.paste_image)
         control_layout.addWidget(paste_btn)
         
+        # Add a separator
+        separator1 = QFrame()
+        separator1.setFrameShape(QFrame.Shape.VLine)
+        separator1.setFrameShadow(QFrame.Shadow.Sunken)
+        control_layout.addWidget(separator1)
+        
+        # Add create decision point button
+        create_decision_btn = QPushButton("Create Decision Point")
+        create_decision_btn.clicked.connect(self.create_decision_point)
+        create_decision_btn.setToolTip("Create a new decision point")
+        control_layout.addWidget(create_decision_btn)
+        
+        # Add create scene button
+        create_scene_btn = QPushButton("Create Scene")
+        create_scene_btn.clicked.connect(self.create_scene)
+        create_scene_btn.setToolTip("Create a new scene")
+        control_layout.addWidget(create_scene_btn)
+        
+        # Add a separator
+        separator2 = QFrame()
+        separator2.setFrameShape(QFrame.Shape.VLine)
+        separator2.setFrameShadow(QFrame.Shadow.Sunken)
+        control_layout.addWidget(separator2)
+        
         # Toggle NSFW button
         self.nsfw_toggle = QCheckBox("Show NSFW Images")
         self.nsfw_toggle.setChecked(self.show_nsfw)
@@ -1993,7 +2017,7 @@ class GalleryWidget(QWidget):
             else:
                 # Otherwise, show normal thumbnail
                 self.set_thumbnail_normal(thumbnail, image_id)
-
+    
     def _get_scene_newest_timestamp(self, scene_id: int) -> str:
         """Get the newest timestamp for any quick event in a scene.
         
@@ -2026,4 +2050,44 @@ class GalleryWidget(QWidget):
                 return result[0]
             
             # Last resort fallback
-            return '1970-01-01 00:00:00' 
+            return '1970-01-01 00:00:00'
+    
+    def create_decision_point(self) -> None:
+        """Open the decision point dialog to create a new decision point."""
+        if not self.story_id:
+            QMessageBox.warning(self, "Error", "No story selected.")
+            return
+            
+        try:
+            # Import here to avoid circular imports
+            from app.views.decision_point_dialog import DecisionPointDialog
+            
+            # Create and show the dialog
+            dialog = DecisionPointDialog(self.db_conn, self.story_id, parent=self)
+            
+            # If the dialog is accepted (user clicked Save), show a success message
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                QMessageBox.information(self, "Success", "Decision point created successfully.")
+        except Exception as e:
+            print(f"Error creating decision point: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to create decision point: {str(e)}")
+    
+    def create_scene(self) -> None:
+        """Open the scene dialog to create a new scene."""
+        if not self.story_id:
+            QMessageBox.warning(self, "Error", "No story selected.")
+            return
+            
+        try:
+            # Import SceneDialog from timeline_widget to avoid circular imports
+            from app.views.timeline_widget import SceneDialog
+            
+            # Create and show the dialog
+            dialog = SceneDialog(self.db_conn, self.story_id, parent=self)
+            
+            # If the dialog is accepted (user clicked Save), show a success message
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                QMessageBox.information(self, "Success", "Scene created successfully.")
+        except Exception as e:
+            print(f"Error creating scene: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to create scene: {str(e)}") 
