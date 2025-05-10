@@ -8,6 +8,7 @@ This module contains the dialog for viewing image details and managing character
 """
 
 from typing import List, Dict, Any, Optional, Tuple
+import os
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -182,6 +183,25 @@ class ImageDetailDialog(QDialog):
         self.load_character_tags()
         self.load_quick_events()
         
+        # Update image details display
+        if hasattr(self, "path_label") and self.path_label:
+            # Determine full image path
+            full_path = ""
+            if self.image_data.get("path") and self.image_data.get("filename"):
+                full_path = os.path.join(self.image_data.get("path", ""), self.image_data.get("filename", ""))
+            self.path_label.setText(f"Path: {full_path}")
+            
+            # Update other details
+            width = self.image_data.get("width", 0)
+            height = self.image_data.get("height", 0)
+            creation_date = self.image_data.get("created_at", "Unknown")
+            quick_events_count = len(get_image_quick_events(self.db_conn, self.image_id))
+            
+            self.date_label.setText(f"Created: {creation_date}")
+            self.dimensions_label.setText(f"Dimensions: {width} × {height}")
+            self.events_label.setText(f"Quick Events: {quick_events_count}")
+            self.id_label.setText(f"Image ID: {self.image_id}")
+        
         # Update tag mode
         self.toggle_tag_mode(self.tag_mode_enabled)
         
@@ -320,6 +340,53 @@ class ImageDetailDialog(QDialog):
         
         # Navigation buttons (if we have gallery images)
         if self.gallery_images:
+            # Add image details panel before navigation controls
+            details_panel = QGroupBox("Image Details")
+            details_layout = QVBoxLayout(details_panel)
+            
+            # Determine full image path
+            full_path = ""
+            if self.image_data.get("path") and self.image_data.get("filename"):
+                full_path = os.path.join(self.image_data.get("path", ""), self.image_data.get("filename", ""))
+            
+            # Get dimensions
+            width = self.image_data.get("width", 0)
+            height = self.image_data.get("height", 0)
+            
+            # Get creation date
+            creation_date = self.image_data.get("created_at", "Unknown")
+            
+            # Get quick events count
+            quick_events_count = len(get_image_quick_events(self.db_conn, self.image_id))
+            
+            # Create labels for each detail
+            self.path_label = QLabel(f"Path: {full_path}")
+            self.path_label.setWordWrap(True)
+            self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            
+            self.date_label = QLabel(f"Created: {creation_date}")
+            self.date_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            
+            self.dimensions_label = QLabel(f"Dimensions: {width} × {height}")
+            self.dimensions_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            
+            self.events_label = QLabel(f"Quick Events: {quick_events_count}")
+            self.events_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            
+            self.id_label = QLabel(f"Image ID: {self.image_id}")
+            self.id_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            
+            # Add to layout
+            details_layout.addWidget(self.path_label)
+            details_layout.addWidget(self.date_label)
+            details_layout.addWidget(self.dimensions_label)
+            details_layout.addWidget(self.events_label)
+            details_layout.addWidget(self.id_label)
+            
+            # Add details panel to image panel
+            image_panel.addWidget(details_panel)
+            
+            # Navigation controls
             nav_controls = QHBoxLayout()
             
             if self.can_navigate_previous():

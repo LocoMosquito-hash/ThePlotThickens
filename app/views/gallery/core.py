@@ -1884,6 +1884,9 @@ class GalleryWidget(QWidget):
     
     def show_filters_dialog(self):
         """Show the gallery filter dialog."""
+        if not self.story_id:
+            return
+            
         dialog = GalleryFilterDialog(self.db_conn, self.story_id, self)
         
         # Set current filters
@@ -1902,6 +1905,16 @@ class GalleryWidget(QWidget):
         self.load_images()
         
         # Update filter status
+        self.update_filter_status()
+    
+    def clear_filters(self) -> None:
+        """Clear all active filters and refresh the gallery."""
+        self.character_filters = []
+        
+        # Reload all images
+        self.load_images()
+        
+        # Update status
         self.update_filter_status()
     
     def update_filter_status(self) -> None:
