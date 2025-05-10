@@ -136,14 +136,22 @@ class GalleryFilterDialog(QDialog):
         # Set characters in the list widget with image counts
         self.character_list.load_characters(characters, image_counts)
         
-        # Restore any existing filters
+        # Create a map of characters by ID for quick lookup
+        self.characters_by_id = {character["id"]: character for character in characters}
+        
+        # Populate the filter list with existing filters
+        self.populate_filter_list()
+    
+    def populate_filter_list(self) -> None:
+        """Populate the filter list with current filters."""
+        # Clear the filter list first
         self.filter_list.clear()
+        
+        # Add each active filter to the list
         for character_id, include in self.character_filters:
-            # Find the character in the list
-            for character in characters:
-                if character["id"] == character_id:
-                    self.add_character_filter(character, include)
-                    break
+            character = self.characters_by_id.get(character_id)
+            if character:
+                self.add_character_filter(character, include)
     
     def add_character_filter(self, character: Dict[str, Any], include: bool):
         """Add a character filter.
@@ -236,14 +244,6 @@ class GalleryFilterDialog(QDialog):
             List of tuples (character_id, include)
         """
         return self.character_filters
-        
-    def populate_filter_list(self) -> None:
-        """Populate the filter list with current filters.
-        
-        This is mainly for backward compatibility.
-        """
-        # This method is automatically called during load_characters
-        pass
         
     def clear_all_filters(self) -> None:
         """Clear all filters."""

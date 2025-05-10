@@ -1897,6 +1897,9 @@ class GalleryWidget(QWidget):
         # Set current filters
         dialog.character_filters = self.character_filters.copy()
         
+        # Explicitly populate the filter list with current filters
+        dialog.populate_filter_list()
+        
         if dialog.exec() == QDialog.DialogCode.Accepted:
             # Get updated filters
             self.character_filters = dialog.get_character_filters()
