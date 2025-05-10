@@ -418,62 +418,134 @@ class ImageRecognitionUtil:
             return False
     
     def build_character_image_database(self) -> None:
-        """Build/rebuild the image features database from character avatars."""
+        """Build/rebuild the character image database from all character avatars and tagged images."""
         cursor = self.db_conn.cursor()
         
-        # Get all characters with avatars
+        # First, clear existing image features
+        cursor.execute("DELETE FROM image_features")
+        
+        # Get all characters
+        cursor.execute("SELECT id, name FROM characters")
+        characters = cursor.fetchall()
+        
+        # For each character, extract features from avatar if available
+        for character in characters:
+            character_id = character[0]
+            character_name = character[1]
+            
+            # Get avatar
+            cursor.execute(
+                "SELECT avatar_path FROM character_details WHERE character_id = ?",
+                (character_id,)
+            )
+            result = cursor.fetchone()
+            
+            if result and result[0]:
+                avatar_path = result[0]
+                try:
+                    self.extract_features_from_avatar(character_id, avatar_path)
+                    print(f"Extracted features from avatar for {character_name}")
+                except Exception as e:
+                    print(f"Error extracting features from avatar for {character_name}: {e}")
+        
+        # Get all tagged character regions
         cursor.execute('''
-        SELECT id, avatar_path, name
-        FROM characters
-        WHERE avatar_path IS NOT NULL AND avatar_path != ''
+        SELECT ct.character_id, c.name, i.id AS image_id, i.path, i.filename,
+               ct.x_position, ct.y_position, ct.width, ct.height
+        FROM character_tags ct
+        JOIN characters c ON ct.character_id = c.id
+        JOIN images i ON ct.image_id = i.id
+        WHERE ct.width > 0 AND ct.height > 0
         ''')
         
-        characters = cursor.fetchall()
-        print(f"Building recognition database - found {len(characters)} characters with avatars")
+        regions = cursor.fetchall()
         
-        # Count before
-        cursor.execute('SELECT COUNT(*) FROM image_features')
-        count_before = cursor.fetchone()[0]
-        
-        # Clear existing features if they exist
-        cursor.execute('DELETE FROM image_features WHERE is_avatar = 1')
-        self.db_conn.commit()
-        
-        # Extract features from avatars
-        success_count = 0
-        error_count = 0
-        
-        for character in characters:
-            character_dict = dict(character)
-            character_id = character_dict['id']
-            avatar_path = character_dict['avatar_path']
-            character_name = character_dict['name']
+        # For each tagged region, extract features
+        for region in regions:
+            character_id = region[0]
+            character_name = region[1]
+            image_id = region[2]
+            image_path = region[3]
+            image_filename = region[4]
+            x = region[5]
+            y = region[6]
+            width = region[7]
+            height = region[8]
             
-            if os.path.exists(avatar_path):
-                try:
-                    print(f"Processing character: {character_name} (ID: {character_id})")
-                    result = self.extract_features_from_avatar(character_id, avatar_path)
-                    if result:
-                        success_count += 1
+            try:
+                # Get story folder paths
+                cursor.execute("SELECT story_id FROM images WHERE id = ?", (image_id,))
+                result = cursor.fetchone()
+                
+                if result:
+                    story_id = result[0]
+                    cursor.execute("SELECT * FROM stories WHERE id = ?", (story_id,))
+                    story_data = cursor.fetchone()
+                    
+                    if story_data:
+                        from app.db_sqlite import get_story_folder_paths
+                        folder_paths = get_story_folder_paths(dict(story_data))
+                        
+                        # Get full image path
+                        full_path = os.path.join(folder_paths['images_folder'], image_filename)
+                        
+                        # Load the image
+                        image = QImage(full_path)
+                        
+                        if not image.isNull():
+                            # Convert normalized coordinates to pixels
+                            img_width = image.width()
+                            img_height = image.height()
+                            
+                            x_pixel = int(x * img_width - (width * img_width / 2))
+                            y_pixel = int(y * img_height - (height * img_height / 2))
+                            width_pixel = int(width * img_width)
+                            height_pixel = int(height * img_height)
+                            
+                            # Extract the region
+                            region_rect = QRect(x_pixel, y_pixel, width_pixel, height_pixel)
+                            region_image = image.copy(region_rect)
+                            
+                            # Extract features and save
+                            features = self.extract_features_from_qimage(region_image)
+                            self.save_character_image_features(character_id, features, False, image_id)
+                            
+                            print(f"Extracted features from region for {character_name} in image {image_id}")
+                        else:
+                            print(f"Error loading image for region extraction: {full_path}")
                     else:
-                        error_count += 1
-                        print(f"Failed to extract features for character: {character_name}")
-                except Exception as e:
-                    error_count += 1
-                    print(f"Error processing character {character_name}: {str(e)}")
-            else:
-                print(f"Avatar path does not exist: {avatar_path} for character: {character_name}")
-                error_count += 1
+                        print(f"Story data not found for image {image_id}")
+                else:
+                    print(f"Story ID not found for image {image_id}")
+            except Exception as e:
+                print(f"Error extracting features from region for {character_name} in image {image_id}: {e}")
         
-        # Count after
-        cursor.execute('SELECT COUNT(*) FROM image_features WHERE is_avatar = 1')
-        count_after = cursor.fetchone()[0]
+        self.db_conn.commit()
+        print("Character image database build complete")
+
+    def recognize_faces(self, image: QImage, threshold: float = 0.5, story_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Recognize characters in the given image region.
         
-        print(f"Character recognition database build complete:")
-        print(f"- Found {len(characters)} characters with avatars")
-        print(f"- Successfully processed: {success_count}")
-        print(f"- Errors: {error_count}")
-        print(f"- Features before: {count_before}, after: {count_after}")
-        
-        # Commit any pending changes
-        self.db_conn.commit() 
+        Args:
+            image: QImage of the region to recognize
+            threshold: Minimum similarity threshold (0-1)
+            story_id: Optional story ID to limit results to characters in that story
+            
+        Returns:
+            List of dictionaries with character recognition results
+        """
+        # Extract features from the image
+        try:
+            image_features = self.extract_features_from_qimage(image)
+            
+            # Use the existing identify_characters_in_image method
+            recognition_results = self.identify_characters_in_image(
+                image_features, 
+                threshold=threshold,
+                story_id=story_id
+            )
+            
+            return recognition_results
+        except Exception as e:
+            print(f"Error in recognize_faces: {e}")
+            return [] 

@@ -14,15 +14,16 @@ from PyQt6.QtWidgets import (
     QScrollArea, QListWidget, QListWidgetItem, QSplitter,
     QStatusBar, QTabWidget, QGroupBox, QCheckBox, QMessageBox,
     QComboBox, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
-    QGraphicsRectItem, QWidget, QDialogButtonBox
+    QGraphicsRectItem, QWidget, QDialogButtonBox, QProgressDialog
 )
 from PyQt6.QtCore import (
-    Qt, pyqtSignal, QTimer, QPoint, QSize, QRectF, QPointF, QSizeF
+    Qt, pyqtSignal, QTimer, QPoint, QSize, QRectF, QPointF, QSizeF, QRect
 )
 from PyQt6.QtGui import (
     QPixmap, QImage, QAction, QKeySequence, QShortcut, QCursor,
     QBrush, QColor, QPen, QPainter
 )
+from PyQt6.QtWidgets import QApplication
 
 from app.views.gallery.character.widgets import OnSceneCharacterListWidget
 from app.views.gallery.dialogs.quick_event_dialog import QuickEventEditor
@@ -76,8 +77,10 @@ class RegionSelectionDialog(QDialog):
         self.selection_start = QPointF(0, 0)
         self.selection_rect = QRectF(0, 0, 0, 0)
         
-        # Regions list
-        self.regions = []
+        # Regions data
+        self.regions = []         # List of region dictionaries
+        self.region_rects = {}    # Dictionary of region index -> QGraphicsRectItem
+        self.selected_region_idx = -1  # Currently selected region index
         
         # Character data
         self.characters = []
@@ -177,6 +180,7 @@ class RegionSelectionDialog(QDialog):
         regions_group = QGroupBox("Selected Regions")
         regions_layout = QVBoxLayout(regions_group)
         self.regions_list = QListWidget()
+        self.regions_list.currentRowChanged.connect(self.on_region_selected)
         regions_layout.addWidget(self.regions_list)
         
         # Add region management buttons
@@ -202,11 +206,8 @@ class RegionSelectionDialog(QDialog):
         
         # Create recognized characters list
         self.recognized_list = QListWidget()
+        self.recognized_list.itemClicked.connect(self.on_recognized_character_clicked)
         results_layout.addWidget(self.recognized_list)
-        
-        # Add label for other characters in story
-        self.other_chars_label = QLabel("Other characters in this story:")
-        results_layout.addWidget(self.other_chars_label)
         
         # Add rebuild recognition database button
         self.rebuild_db_btn = QPushButton("Rebuild Recognition Database")
@@ -362,42 +363,71 @@ class RegionSelectionDialog(QDialog):
         cancel_shortcut.activated.connect(self.reject)
     
     def auto_recognize_characters(self) -> None:
-        """Automatically recognize characters in the image."""
-        try:
-            # Show warning that this feature is in development
+        """Automatically recognize characters in all regions."""
+        # Check if we have regions to process
+        if not self.regions:
             QMessageBox.information(
                 self,
-                "Auto Recognition",
-                "Automatic character recognition is currently in development.\n\n"
-                "In the future, this feature will analyze faces in the image and "
-                "suggest character matches based on your previously tagged characters."
+                "No Regions",
+                "No regions have been selected. Please draw regions around the faces you want to recognize."
             )
+            return
             
-            # Show status message
-            self._status_bar.showMessage("Character recognition is in development...")
+        try:
+            # Show a progress dialog for longer operations
+            progress_dialog = QProgressDialog(
+                "Analyzing regions for character recognition...",
+                "Cancel", 0, len(self.regions), self
+            )
+            progress_dialog.setWindowTitle("Character Recognition")
+            progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+            progress_dialog.setMinimumDuration(500)  # Show after 500ms delay
+            progress_dialog.setValue(0)
             
-            # For now, we'll just demonstrate the UI flow without actual recognition
-            # Add a placeholder result to show how it would work
-            self.recognized_list.clear()
-            
-            # Get characters from the database to show as examples
-            characters = self.characters[:min(len(self.characters), 3)]
-            if characters:
-                for character in characters:
-                    confidence = 0.75  # Placeholder confidence value
+            # Process each region
+            for i, region in enumerate(self.regions):
+                # Check if the user canceled
+                if progress_dialog.wasCanceled():
+                    break
                     
-                    # Create item
-                    item = QListWidgetItem(f"{character['name']} ({int(confidence * 100)}% match)")
-                    item.setData(Qt.ItemDataRole.UserRole, character['id'])
-                    item.setCheckState(Qt.CheckState.Unchecked)
-                    
-                    # Add to list
-                    self.recognized_list.addItem(item)
+                # Update progress
+                progress_dialog.setValue(i)
+                progress_dialog.setLabelText(f"Analyzing region {i+1} of {len(self.regions)}...")
                 
-                self._status_bar.showMessage(f"Found {len(characters)} potential character matches (demo)")
-            else:
-                self._status_bar.showMessage("No characters available for recognition")
+                # Extract the region from the image
+                region_rect = QRect(
+                    region["x"], 
+                    region["y"], 
+                    region["width"], 
+                    region["height"]
+                )
+                region_image = self.image.copy(region_rect)
                 
+                # Run recognition with the story_id to limit results to this story's characters
+                results = self.recognition_util.recognize_faces(region_image, story_id=self.story_id)
+                
+                # Store the results in the correct format for the region
+                region["characters"] = []
+                for result in results:
+                    region["characters"].append({
+                        "id": result["character_id"],
+                        "name": result["character_name"],
+                        "confidence": result["similarity"]
+                    })
+                
+                # Update progress
+                QApplication.processEvents()
+                
+            # Complete progress
+            progress_dialog.setValue(len(self.regions))
+            progress_dialog.close()
+            
+            # Select the first region to show recognition results
+            if self.regions and len(self.regions) > 0:
+                self.regions_list.setCurrentRow(0)
+                
+            self._status_bar.showMessage(f"Character recognition completed for {len(self.regions)} regions")
+            
         except Exception as e:
             QMessageBox.warning(
                 self,
@@ -498,7 +528,7 @@ class RegionSelectionDialog(QDialog):
                 self.create_regionless_tag(character_id, character_name)
                 
                 # Update the last tagged timestamp for this character
-                update_character_last_tagged(self.db_conn, character_id)
+                update_character_last_tagged(self.db_conn, self.story_id, character_id)
     
     def create_regionless_tag(self, character_id: int, character_name: str) -> None:
         """Create a tag without a specific region for an on-scene character.
@@ -528,18 +558,28 @@ class RegionSelectionDialog(QDialog):
     # Add these new methods for region management
     def remove_selected_region(self) -> None:
         """Remove the selected region from the list."""
-        current_item = self.regions_list.currentItem()
-        if current_item:
-            row = self.regions_list.row(current_item)
-            self.regions_list.takeItem(row)
+        current_row = self.regions_list.currentRow()
+        if current_row >= 0 and current_row < len(self.regions):
+            # Remove visual rectangle from scene
+            if current_row in self.region_rects:
+                rect_item = self.region_rects[current_row]
+                self.scene.removeItem(rect_item)
+                del self.region_rects[current_row]
             
-            # Remove the region from our data and from the scene
-            if row < len(self.regions):
-                # Remove from data
-                self.regions.pop(row)
-                
-                # Update the UI to reflect the change
-                self._status_bar.showMessage(f"Region {row + 1} removed")
+            # Remove from data
+            self.regions.pop(current_row)
+            
+            # Remove from list widget
+            self.regions_list.takeItem(current_row)
+            
+            # Update the UI to reflect the change
+            self._status_bar.showMessage(f"Region {current_row + 1} removed")
+            
+            # Renumber remaining regions in the UI
+            for i in range(current_row, self.regions_list.count()):
+                region = self.regions[i]
+                item_text = f"Region {i + 1}: {region['width']}x{region['height']}"
+                self.regions_list.item(i).setText(item_text)
     
     def add_region_to_recognition_db(self) -> None:
         """Add the selected region to the character recognition database."""
@@ -557,12 +597,22 @@ class RegionSelectionDialog(QDialog):
     
     def clear_all_regions(self) -> None:
         """Clear all regions from the list."""
-        self.regions_list.clear()
+        # Remove all visual rectangles from the scene
+        for rect_item in self.region_rects.values():
+            self.scene.removeItem(rect_item)
+        
+        # Clear dictionaries and lists
+        self.region_rects.clear()
         self.regions.clear()
+        self.regions_list.clear()
         
-        # Clear any region rectangles from the scene
-        # (You'll need to implement the actual graphics rect management)
+        # Reset selected region
+        self.selected_region_idx = -1
         
+        # Clear recognition results
+        self.recognized_list.clear()
+        
+        # Update status
         self._status_bar.showMessage("All regions cleared")
     
     def rebuild_recognition_database(self) -> None:
@@ -613,7 +663,7 @@ class RegionSelectionDialog(QDialog):
         self.scene.mouseReleaseEvent = self.scene_mouse_release
         
         # Initialize variables for region selection
-        self.selection_rect = None
+        self.current_rect = None
         self.start_pos = None
         self.selecting = False
     
@@ -623,10 +673,12 @@ class RegionSelectionDialog(QDialog):
         if event.button() == Qt.MouseButton.RightButton:
             self.start_pos = event.scenePos()
             self.selecting = True
-            self.selection_rect = self.scene.addRect(
+            
+            # Create temporary selection rectangle
+            self.current_rect = self.scene.addRect(
                 QRectF(self.start_pos, QSizeF(0, 0)),
-                QPen(QColor(255, 165, 0), 2),  # Orange pen
-                QBrush(QColor(255, 255, 0, 70))  # Semi-transparent yellow
+                QPen(QColor(0, 255, 0, 200), 2),  # Green pen for drawing
+                QBrush(QColor(0, 255, 0, 50))     # Semi-transparent green brush
             )
         
         # Call the original event handler if it exists
@@ -635,13 +687,13 @@ class RegionSelectionDialog(QDialog):
     
     def scene_mouse_move(self, event) -> None:
         """Handle mouse move event for region selection."""
-        if self.selecting and self.selection_rect:
+        if self.selecting and self.current_rect:
             current_pos = event.scenePos()
             rect = QRectF(
                 self.start_pos,
                 current_pos
             ).normalized()
-            self.selection_rect.setRect(rect)
+            self.current_rect.setRect(rect)
         
         # Call the original event handler if it exists
         if hasattr(self, 'original_mouse_move') and self.original_mouse_move:
@@ -650,28 +702,296 @@ class RegionSelectionDialog(QDialog):
     def scene_mouse_release(self, event) -> None:
         """Handle mouse release event for region selection."""
         # Only process right mouse button
-        if event.button() == Qt.MouseButton.RightButton and self.selecting and self.selection_rect:
+        if event.button() == Qt.MouseButton.RightButton and self.selecting and self.current_rect:
             # Get the final rectangle dimensions
-            rect = self.selection_rect.rect()
+            rect = self.current_rect.rect()
             
-            # Only add if the region has a significant size
-            if rect.width() > 10 and rect.height() > 10:
-                self.add_region(
-                    int(rect.x()), int(rect.y()),
-                    int(rect.width()), int(rect.height())
-                )
-            
-            # Remove the selection rectangle from the scene
-            if self.selection_rect in self.scene.items():
-                self.scene.removeItem(self.selection_rect)
+            # Only add if the region has a significant size (20x20 pixels minimum)
+            if rect.width() > 20 and rect.height() > 20:
+                # Create region data
+                region_idx = len(self.regions)
+                region_data = {
+                    "x": int(rect.x()),
+                    "y": int(rect.y()),
+                    "width": int(rect.width()),
+                    "height": int(rect.height()),
+                    "characters": []  # Will hold recognition results
+                }
+                self.regions.append(region_data)
+                
+                # Keep the current rectangle and store it
+                self.region_rects[region_idx] = self.current_rect
+                
+                # Style it as a non-selected region (green border)
+                self.current_rect.setPen(QPen(QColor(0, 255, 0, 200), 2))
+                self.current_rect.setBrush(QBrush(QColor(0, 255, 0, 50)))
+                
+                # Add to UI list
+                item_text = f"Region {region_idx + 1}: {int(rect.width())}x{int(rect.height())}"
+                self.regions_list.addItem(item_text)
+                
+                # Update the UI to reflect the change
+                self._status_bar.showMessage(f"Region {region_idx + 1} added")
+                
+                # Reset the current rectangle reference but keep the visual rectangle in the scene
+                self.current_rect = None
+                
+                # Auto-select this region
+                self.regions_list.setCurrentRow(region_idx)
+                
+                # Run character recognition on this region
+                self.recognize_characters_in_region(region_idx)
+            else:
+                # Remove the temporary rectangle if it's too small
+                if self.current_rect in self.scene.items():
+                    self.scene.removeItem(self.current_rect)
+                self.current_rect = None
             
             # Reset selection state
             self.selecting = False
-            self.selection_rect = None
         
         # Call the original event handler if it exists
         if hasattr(self, 'original_mouse_release') and self.original_mouse_release:
             self.original_mouse_release(event)
+
+    def on_region_selected(self, row: int) -> None:
+        """Handle region selection from the list.
+        
+        Args:
+            row: Selected row index
+        """
+        # Validate row
+        if row < 0 or row >= len(self.regions):
+            return
+        
+        # Update selected region index
+        self.selected_region_idx = row
+        
+        # Update all region rectangles to show selection state
+        for idx, rect_item in self.region_rects.items():
+            if idx == row:
+                # Highlight selected region with orange border and fill
+                rect_item.setPen(QPen(QColor(255, 165, 0, 200), 2))  # Orange
+                rect_item.setBrush(QBrush(QColor(255, 165, 0, 50)))  # Semi-transparent orange
+            else:
+                # Non-selected regions get green border and fill
+                rect_item.setPen(QPen(QColor(0, 255, 0, 200), 2))    # Green
+                rect_item.setBrush(QBrush(QColor(0, 255, 0, 50)))    # Semi-transparent green
+        
+        # Run recognition if needed
+        self.recognize_characters_in_region(row)
+    
+    def recognize_characters_in_region(self, region_idx: int) -> None:
+        """Run character recognition on a specific region.
+        
+        Args:
+            region_idx: Index of the region to analyze
+        """
+        # Validate index
+        if region_idx < 0 or region_idx >= len(self.regions):
+            return
+            
+        # Get the region data
+        region = self.regions[region_idx]
+        
+        # Check if we've already analyzed this region
+        if region.get("characters"):
+            self.display_recognition_results(region_idx)
+            return
+        
+        # Extract the region from the image
+        region_rect = QRect(
+            region["x"], 
+            region["y"], 
+            region["width"], 
+            region["height"]
+        )
+        region_image = self.image.copy(region_rect)
+        
+        try:
+            # Run recognition
+            recognition_results = self.recognition_util.recognize_faces(region_image, story_id=self.story_id)
+            
+            # Store results
+            region["characters"] = []
+            
+            if recognition_results:
+                for result in recognition_results:
+                    region["characters"].append({
+                        "id": result["character_id"],
+                        "name": result["character_name"],
+                        "confidence": result["similarity"]
+                    })
+            
+            # Display results
+            self.display_recognition_results(region_idx)
+        except Exception as e:
+            self._status_bar.showMessage(f"Error recognizing characters: {str(e)}")
+    
+    def display_recognition_results(self, region_idx: int) -> None:
+        """Display recognition results for a region.
+        
+        Args:
+            region_idx: Index of the region
+        """
+        # Clear the recognition results list
+        self.recognized_list.clear()
+        
+        if region_idx < 0 or region_idx >= len(self.regions):
+            return
+        
+        region = self.regions[region_idx]
+        recognized_chars = region.get("characters", [])
+        
+        # Add header item
+        header_item = QListWidgetItem(f"Characters found in Region {region_idx + 1}:")
+        header_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
+        self.recognized_list.addItem(header_item)
+        
+        # Sort by confidence (highest first)
+        recognized_chars.sort(key=lambda x: x.get("confidence", 0), reverse=True)
+        
+        # Add recognized characters
+        matched_character_ids = set()
+        for char in recognized_chars:
+            confidence = char.get("confidence", 0)
+            if confidence > 0:
+                character_id = char.get("id")
+                matched_character_ids.add(character_id)
+                item_text = f"{char.get('name')} ({int(confidence * 100)}% match)"
+                item = QListWidgetItem(item_text)
+                item.setData(Qt.ItemDataRole.UserRole, character_id)
+                self.recognized_list.addItem(item)
+        
+        # Add a separator
+        separator_item = QListWidgetItem("_______________________________")
+        separator_item.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
+        self.recognized_list.addItem(separator_item)
+        
+        # Add "Other characters in this story" header
+        other_header = QListWidgetItem("Other characters in this story:")
+        other_header.setFlags(Qt.ItemFlag.NoItemFlags)  # Make non-selectable
+        self.recognized_list.addItem(other_header)
+        
+        # Add other characters not recognized
+        for char in self.characters:
+            if char["id"] not in matched_character_ids:
+                item_text = f"{char['name']} (0% match)"
+                item = QListWidgetItem(item_text)
+                item.setData(Qt.ItemDataRole.UserRole, char["id"])
+                self.recognized_list.addItem(item)
+                
+        # Connect to selection change if not already connected
+        self.recognized_list.itemClicked.connect(self.on_recognized_character_clicked)
+    
+    def on_recognized_character_clicked(self, item: QListWidgetItem) -> None:
+        """Handle recognition result item click to tag a character.
+        
+        Args:
+            item: Selected list item
+        """
+        # Check if this is a header or separator
+        if not item.flags() & Qt.ItemFlag.ItemIsSelectable:
+            return
+            
+        character_id = item.data(Qt.ItemDataRole.UserRole)
+        if not character_id:
+            return
+            
+        # Get character name from item text (parse out the match percentage)
+        text = item.text()
+        name = text.split(" (")[0] if " (" in text else text
+        
+        # Get region data
+        if self.selected_region_idx < 0 or self.selected_region_idx >= len(self.regions):
+            self._status_bar.showMessage("No region selected. Please select a region first.")
+            return
+            
+        region = self.regions[self.selected_region_idx]
+        
+        # Get confidence from the matching character if available
+        confidence = 0
+        for char in region.get("characters", []):
+            if char.get("id") == character_id:
+                confidence = char.get("confidence", 0)
+                break
+        
+        # Create normalized region coordinates for the tag
+        img_width = self.image.width()
+        img_height = self.image.height()
+        
+        if img_width == 0 or img_height == 0:
+            self._status_bar.showMessage("Invalid image dimensions")
+            return
+            
+        x = region["x"] / img_width
+        y = region["y"] / img_height
+        width = region["width"] / img_width
+        height = region["height"] / img_height
+        
+        # Add to tagged characters
+        tag = {
+            'character_id': character_id,
+            'character_name': name,
+            'region_index': self.selected_region_idx,
+            'region': {
+                'x': x + (width / 2),  # Center X
+                'y': y + (height / 2),  # Center Y
+                'width': width,
+                'height': height
+            },
+            'similarity': confidence,
+            'description': f"Tagged with {int(confidence * 100)}% confidence"
+        }
+        
+        # Check if we already have this character tagged for this region
+        existing_tag_index = -1
+        for i, existing_tag in enumerate(self.tagged_characters):
+            if (existing_tag.get('character_id') == character_id and 
+                existing_tag.get('region_index') == self.selected_region_idx):
+                existing_tag_index = i
+                break
+                
+        if existing_tag_index >= 0:
+            # Replace the existing tag
+            self.tagged_characters[existing_tag_index] = tag
+        else:
+            # Add as a new tag
+            self.tagged_characters.append(tag)
+        
+        # Update the region list item to show the character
+        self.update_region_list_item(self.selected_region_idx, name)
+        
+        # Update last tagged timestamp for this character
+        update_character_last_tagged(self.db_conn, self.story_id, character_id)
+        
+        # Show confirmation message
+        self._status_bar.showMessage(f"Tagged character: {name} for Region {self.selected_region_idx + 1}")
+        
+        # Add the tagged character to the tagged characters list (if it's not already there)
+        self.update_tagged_list()
+    
+    def update_region_list_item(self, region_idx: int, character_name: Optional[str] = None) -> None:
+        """Update the text for a region list item.
+        
+        Args:
+            region_idx: Index of the region
+            character_name: Name of the tagged character (optional)
+        """
+        if region_idx < 0 or region_idx >= len(self.regions):
+            return
+            
+        region = self.regions[region_idx]
+        
+        # Base text with dimensions
+        item_text = f"Region {region_idx + 1}: {region['width']}x{region['height']}"
+        
+        # Add character name if provided
+        if character_name:
+            item_text += f" - {character_name}"
+            
+        # Update the list item
+        self.regions_list.item(region_idx).setText(item_text)
 
     def on_graphics_view_resize(self, event) -> None:
         """Handle resize event for the graphics view."""
@@ -712,3 +1032,47 @@ class RegionSelectionDialog(QDialog):
     def ensure_story_folders_exist(self) -> None:
         """Ensure all story folders exist."""
         ensure_story_folders_exist(self.db_conn.cursor().execute("SELECT * FROM stories WHERE id = ?", (self.story_id,)).fetchone())
+
+    def update_tagged_list(self) -> None:
+        """Update the tagged characters list display."""
+        if not hasattr(self, 'tagged_list'):
+            return
+            
+        # Clear the current list
+        self.tagged_list.clear()
+        
+        # Group tags by character
+        character_tags = {}
+        for tag in self.tagged_characters:
+            character_id = tag.get('character_id')
+            character_name = tag.get('character_name', 'Unknown')
+            region_index = tag.get('region_index', -1)
+            
+            if character_id not in character_tags:
+                character_tags[character_id] = {
+                    'name': character_name,
+                    'regions': []
+                }
+                
+            # Only add region if it's a valid region (not -1 for regionless tags)
+            if region_index >= 0:
+                character_tags[character_id]['regions'].append(region_index)
+        
+        # Add entries to the list
+        for character_id, data in character_tags.items():
+            if data['regions']:
+                # Character with regions
+                region_text = ", ".join([f"Region {r+1}" for r in data['regions']])
+                item_text = f"{data['name']} - Found in {region_text}"
+            else:
+                # Character without specific regions (scene presence only)
+                item_text = f"{data['name']} - Present in scene"
+                
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.ItemDataRole.UserRole, character_id)
+            self.tagged_list.addItem(item)
+            
+        # Update the tab name to show the count
+        if hasattr(self, 'tabs'):
+            tagged_count = len(character_tags)
+            self.tabs.setTabText(1, f"Tagged Characters ({tagged_count})")
