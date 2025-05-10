@@ -743,9 +743,10 @@ class GalleryWidget(QWidget):
         # Get image details
         filename = image.get('filename')
         img_folder = image.get('path')
+        story_id = image.get('story_id')
         
-        if not filename or not img_folder:
-            logging.error(f"Missing path or filename for image {image_id}")
+        if not filename or not img_folder or not story_id:
+            logging.error(f"Missing path, filename, or story_id for image {image_id}")
             placeholder = self._create_placeholder_pixmap(image)
             self.pixmap_cache[image_id] = placeholder
             return placeholder
@@ -753,7 +754,7 @@ class GalleryWidget(QWidget):
         try:
             # Get story data from database to determine the proper folder structure
             cursor = self.db_conn.cursor()
-            cursor.execute("SELECT * FROM stories WHERE id = ?", (image.get('story_id'),))
+            cursor.execute("SELECT * FROM stories WHERE id = ?", (story_id,))
             story_data = cursor.fetchone()
             
             if not story_data:
@@ -772,9 +773,12 @@ class GalleryWidget(QWidget):
             
             logging.debug(f"Looking for thumbnail at: {thumbnail_path}")
             
-            # Check if thumbnail exists, if not, generate it from the original image
+            # Check if thumbnail exists, if not, create the directories and generate it
             if not os.path.exists(thumbnail_path):
                 logging.debug(f"Thumbnail not found, attempting to generate from original")
+                
+                # Ensure thumbnails directory exists
+                os.makedirs(folder_paths['thumbnails_folder'], exist_ok=True)
                 
                 if os.path.exists(original_path):
                     # Load the original image
@@ -783,61 +787,42 @@ class GalleryWidget(QWidget):
                         # Generate and save thumbnail
                         thumbnail = self._generate_thumbnail(original_image)
                         
-                        # Make sure thumbnails directory exists
-                        os.makedirs(folder_paths['thumbnails_folder'], exist_ok=True)
-                        
                         # Save the thumbnail
-                        thumbnail.save(thumbnail_path, "PNG")
-                        logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
-                        
-                        # Use the newly generated thumbnail
-                        pixmap = QPixmap.fromImage(thumbnail)
-                        self.pixmap_cache[image_id] = pixmap
-                        return pixmap
-                    else:
-                        logging.error(f"Failed to load original image: {original_path}")
-                else:
-                    logging.error(f"Original image not found: {original_path}")
-                    
-                    # Try alternative paths (legacy support)
-                    if os.path.exists(img_folder) and os.path.isfile(img_folder):
-                        # Path itself might be the full path to the image (old format)
-                        original_image = QImage(img_folder)
-                        if not original_image.isNull():
-                            # Generate and save thumbnail
-                            thumbnail = self._generate_thumbnail(original_image)
-                            
-                            # Make sure thumbnails directory exists
-                            os.makedirs(folder_paths['thumbnails_folder'], exist_ok=True)
-                            
-                            # Save the thumbnail
-                            thumbnail.save(thumbnail_path, "PNG")
+                        if thumbnail.save(thumbnail_path, "PNG"):
                             logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
                             
                             # Use the newly generated thumbnail
                             pixmap = QPixmap.fromImage(thumbnail)
                             self.pixmap_cache[image_id] = pixmap
                             return pixmap
-                    elif os.path.join(img_folder, filename) != original_path:
-                        # Try the old path format where path might include the directory
-                        alt_path = os.path.join(img_folder, filename)
-                        if os.path.exists(alt_path):
-                            original_image = QImage(alt_path)
-                            if not original_image.isNull():
-                                # Generate and save thumbnail
-                                thumbnail = self._generate_thumbnail(original_image)
-                                
-                                # Make sure thumbnails directory exists
-                                os.makedirs(folder_paths['thumbnails_folder'], exist_ok=True)
-                                
-                                # Save the thumbnail
-                                thumbnail.save(thumbnail_path, "PNG")
+                        else:
+                            logging.error(f"Failed to save thumbnail to: {thumbnail_path}")
+                    else:
+                        logging.error(f"Failed to load original image: {original_path}")
+                else:
+                    logging.error(f"Original image not found: {original_path}")
+                    
+                    # Try alternative paths (legacy support)
+                    alt_path = os.path.join(img_folder, filename)
+                    if os.path.exists(alt_path) and alt_path != original_path:
+                        logging.debug(f"Trying alternative path: {alt_path}")
+                        original_image = QImage(alt_path)
+                        if not original_image.isNull():
+                            # Generate and save thumbnail
+                            thumbnail = self._generate_thumbnail(original_image)
+                            
+                            # Save the thumbnail
+                            if thumbnail.save(thumbnail_path, "PNG"):
                                 logging.debug(f"Generated and saved new thumbnail to: {thumbnail_path}")
                                 
                                 # Use the newly generated thumbnail
                                 pixmap = QPixmap.fromImage(thumbnail)
                                 self.pixmap_cache[image_id] = pixmap
                                 return pixmap
+                            else:
+                                logging.error(f"Failed to save thumbnail to: {thumbnail_path}")
+                        else:
+                            logging.error(f"Failed to load image from alternative path: {alt_path}")
             else:
                 # Thumbnail exists, load it
                 logging.debug(f"Found existing thumbnail at: {thumbnail_path}")
@@ -1059,150 +1044,160 @@ class GalleryWidget(QWidget):
             self.show_error("Error", "No story selected")
             return
         
-        # Get the story data
-        cursor = self.db_conn.cursor()
-        cursor.execute("SELECT * FROM stories WHERE id = ?", (self.story_id,))
-        story_data = dict(cursor.fetchone())
-        
-        if not story_data:
-            self.show_error("Error", "Story data not found")
-            return
-        
-        # Get folder paths using the utility function
-        from app.db_sqlite import get_story_folder_paths, ensure_story_folders_exist
-        
-        # Ensure all story folders exist
-        ensure_story_folders_exist(story_data)
-        
-        # Get paths
-        folder_paths = get_story_folder_paths(story_data)
-        images_folder = folder_paths['images_folder']
-        thumbnails_folder = folder_paths['thumbnails_folder']
-        
-        # Generate a unique file name
-        timestamp = time.strftime("%Y%m%d%H%M%S")
-        random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-        file_name = f"img_{timestamp}_{random_string}.png"
-        
-        # Define full file paths
-        image_path = os.path.join(images_folder, file_name)
-        thumbnail_path = os.path.join(thumbnails_folder, file_name)
-        
-        # Generate thumbnail
-        thumbnail_image = self._generate_thumbnail(image)
-        
-        # Save the full image
-        if not image.save(image_path, "PNG"):
-            self.show_error("Save Error", "Could not save image to file")
-            return
-        
-        # Save the thumbnail
-        thumbnail_image.save(thumbnail_path, "PNG")
-        
-        # Create timestamps
-        now = datetime.now().isoformat()
-        
-        # Insert into database with the columns we actually have
-        query = """
-            INSERT INTO images (story_id, title, path, created_at, updated_at, width, height, is_featured, filename)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        
-        cursor.execute(
-            query,
-            (
-                self.story_id,
-                "Imported Image",    # title
-                images_folder,       # path (store folder path only)
-                now,                 # created_at
-                now,                 # updated_at
-                image.width(),       # width
-                image.height(),      # height
-                0,                   # is_featured (not NSFW)
-                file_name            # filename
+        try:
+            # Get the story data
+            cursor = self.db_conn.cursor()
+            cursor.execute("SELECT * FROM stories WHERE id = ?", (self.story_id,))
+            story_data = dict(cursor.fetchone())
+            
+            if not story_data:
+                self.show_error("Error", "Story data not found")
+                return
+            
+            # Get folder paths using the utility function
+            from app.db_sqlite import get_story_folder_paths, ensure_story_folders_exist
+            
+            # Ensure all story folders exist
+            ensure_story_folders_exist(story_data)
+            
+            # Get paths
+            folder_paths = get_story_folder_paths(story_data)
+            images_folder = folder_paths['images_folder']
+            thumbnails_folder = folder_paths['thumbnails_folder']
+            
+            # Create folders if they don't exist
+            os.makedirs(images_folder, exist_ok=True)
+            os.makedirs(thumbnails_folder, exist_ok=True)
+            
+            # Generate a unique file name
+            timestamp = time.strftime("%Y%m%d%H%M%S")
+            random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+            file_name = f"img_{timestamp}_{random_string}.png"
+            
+            # Define full file paths
+            image_path = os.path.join(images_folder, file_name)
+            thumbnail_path = os.path.join(thumbnails_folder, file_name)
+            
+            # Generate thumbnail
+            thumbnail_image = self._generate_thumbnail(image)
+            
+            # Save the full image
+            if not image.save(image_path, "PNG"):
+                self.show_error("Save Error", "Could not save image to file")
+                return
+            
+            # Save the thumbnail
+            if not thumbnail_image.save(thumbnail_path, "PNG"):
+                logging.warning(f"Could not save thumbnail to {thumbnail_path}")
+            
+            # Create timestamps
+            now = datetime.now().isoformat()
+            
+            # Insert into database with the columns we actually have
+            query = """
+                INSERT INTO images (story_id, title, path, created_at, updated_at, width, height, is_featured, filename)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            
+            cursor.execute(
+                query,
+                (
+                    self.story_id,
+                    "Imported Image",    # title
+                    images_folder,       # path (store folder path)
+                    now,                 # created_at
+                    now,                 # updated_at
+                    image.width(),       # width
+                    image.height(),      # height
+                    0,                   # is_featured (not NSFW)
+                    file_name            # filename
+                )
             )
-        )
-        
-        # Get the new image ID
-        image_id = cursor.lastrowid
-        
-        # Commit changes
-        self.db_conn.commit()
-        
-        # Add the new image to our list
-        new_image = {
-            "id": image_id,
-            "title": "Imported Image",
-            "path": images_folder,
-            "timestamp": now,
-            "width": image.width(),
-            "height": image.height(),
-            "is_nsfw": False,
-            "story_id": self.story_id,
-            "filename": file_name
-        }
-        
-        self.images.insert(0, new_image)  # Add to start (newest)
-        
-        # Run character recognition on the image
-        # Show a progress dialog for the longer operation
-        progress_dialog = QProgressDialog(
-            "Analyzing image for character recognition...",
-            "Cancel", 0, 100, self
-        )
-        progress_dialog.setWindowTitle("Character Recognition")
-        progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        progress_dialog.setMinimumDuration(500)  # Show after 500ms delay
-        progress_dialog.setValue(0)
-        
-        # Allow some processing before showing the dialog
-        QApplication.processEvents()
-        
-        # Open the RegionSelectionDialog for character recognition
-        from app.views.gallery.dialogs.region_selection import RegionSelectionDialog
-        region_dialog = RegionSelectionDialog(self.db_conn, image, self.story_id, self, image_id=image_id)
-        
-        progress_dialog.setValue(100)
-        progress_dialog.close()
-        
-        # Show the dialog - this will block until it's closed
-        if region_dialog.exec():
-            # Get selected character data and process it if needed
-            try:
-                # Get the data returned from the dialog
-                result_data = region_dialog.get_selected_character_data()
-                if result_data:
-                    # Process character tags and quick event information
-                    character_data = result_data.get('characters', [])
-                    quick_event_id = result_data.get('quick_event_id')
-                    
-                    # Process character tags
-                    if character_data:
-                        from app.db_sqlite import add_character_tag_to_image
-                        for character in character_data:
-                            character_id = character['character_id']
-                            region = character['region']
-                            
-                            # Add the character tag to the image with the region coordinates
-                            add_character_tag_to_image(
-                                self.db_conn,
-                                image_id,
-                                character_id,
-                                region['x'],  # Center X (normalized)
-                                region['y'],  # Center Y (normalized)
-                                region['width'],  # Width (normalized)
-                                region['height'],  # Height (normalized)
-                                f"Auto-detected with {int(character['similarity'] * 100)}% confidence"
-                            )
-                    
-                    # Associate quick event if one was selected
-                    if quick_event_id:
-                        self.associate_quick_event_with_image(image_id, quick_event_id)
-            except Exception as e:
-                self.show_error("Error", f"Failed to process character recognition data: {str(e)}")
-        
-        # Reload images
-        self.load_images()
+            
+            # Get the new image ID
+            image_id = cursor.lastrowid
+            
+            # Commit changes
+            self.db_conn.commit()
+            
+            # Add the new image to our list
+            new_image = {
+                "id": image_id,
+                "title": "Imported Image",
+                "path": images_folder,
+                "timestamp": now,
+                "width": image.width(),
+                "height": image.height(),
+                "is_nsfw": False,
+                "story_id": self.story_id,
+                "filename": file_name
+            }
+            
+            self.images.insert(0, new_image)  # Add to start (newest)
+            
+            # Run character recognition on the image
+            # Show a progress dialog for the longer operation
+            progress_dialog = QProgressDialog(
+                "Analyzing image for character recognition...",
+                "Cancel", 0, 100, self
+            )
+            progress_dialog.setWindowTitle("Character Recognition")
+            progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+            progress_dialog.setMinimumDuration(500)  # Show after 500ms delay
+            progress_dialog.setValue(0)
+            
+            # Allow some processing before showing the dialog
+            QApplication.processEvents()
+            
+            # Open the RegionSelectionDialog for character recognition
+            from app.views.gallery.dialogs.region_selection import RegionSelectionDialog
+            region_dialog = RegionSelectionDialog(self.db_conn, image, self.story_id, self, image_id=image_id)
+            
+            progress_dialog.setValue(100)
+            progress_dialog.close()
+            
+            # Show the dialog - this will block until it's closed
+            if region_dialog.exec():
+                # Get selected character data and process it if needed
+                try:
+                    # Get the data returned from the dialog
+                    result_data = region_dialog.get_selected_character_data()
+                    if result_data:
+                        # Process character tags and quick event information
+                        character_data = result_data.get('characters', [])
+                        quick_event_id = result_data.get('quick_event_id')
+                        
+                        # Process character tags
+                        if character_data:
+                            from app.db_sqlite import add_character_tag_to_image
+                            for character in character_data:
+                                character_id = character['character_id']
+                                region = character['region']
+                                
+                                # Add the character tag to the image with the region coordinates
+                                add_character_tag_to_image(
+                                    self.db_conn,
+                                    image_id,
+                                    character_id,
+                                    region['x'],  # Center X (normalized)
+                                    region['y'],  # Center Y (normalized)
+                                    region['width'],  # Width (normalized)
+                                    region['height'],  # Height (normalized),
+                                    character.get('description', "Character tag added")
+                                )
+                        
+                        # Associate quick event if one was selected
+                        if quick_event_id:
+                            self.associate_quick_event_with_image(image_id, quick_event_id)
+                except Exception as e:
+                    self.show_error("Error", f"Failed to process character recognition data: {str(e)}")
+                    logging.exception(f"Error processing character recognition data: {e}")
+            
+            # Reload images
+            self.load_images()
+        except Exception as e:
+            self.show_error("Save Error", f"Could not save image: {str(e)}")
+            logging.exception(f"Error saving image to story: {e}")
     
     def associate_quick_event_with_image(self, image_id: int, quick_event_id: int) -> None:
         """Associate a quick event with an image.
