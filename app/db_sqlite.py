@@ -3004,51 +3004,289 @@ def get_story_decision_points(conn: sqlite3.Connection, story_id: int) -> List[D
     cursor = conn.cursor()
     
     cursor.execute('''
-    SELECT * FROM decision_points 
+    SELECT id, created_at, updated_at, title, description, story_id, is_ordered_list
+    FROM decision_points
     WHERE story_id = ?
-    ORDER BY created_at DESC
+    ORDER BY created_at
     ''', (story_id,))
     
     return [dict(row) for row in cursor.fetchall()]
 
-def get_decision_point(conn: sqlite3.Connection, decision_point_id: int) -> Dict[str, Any]:
-    """Get a decision point by ID.
+def get_decision_point(conn: sqlite3.Connection, decision_point_id: int) -> Optional[Dict[str, Any]]:
+    """Get a specific decision point.
     
     Args:
         conn: Database connection
         decision_point_id: ID of the decision point
         
     Returns:
-        Decision point data
+        Decision point data or None if not found
     """
     cursor = conn.cursor()
     
     cursor.execute('''
-    SELECT * FROM decision_points 
+    SELECT id, created_at, updated_at, title, description, story_id, is_ordered_list
+    FROM decision_points
     WHERE id = ?
     ''', (decision_point_id,))
     
     result = cursor.fetchone()
-    if result:
-        return dict(result)
-    return {}
+    return dict(result) if result else None
 
 def get_decision_options(conn: sqlite3.Connection, decision_point_id: int) -> List[Dict[str, Any]]:
-    """Get options for a decision point.
+    """Get all options for a decision point.
     
     Args:
         conn: Database connection
         decision_point_id: ID of the decision point
         
     Returns:
-        List of decision options
+        List of options
     """
     cursor = conn.cursor()
     
     cursor.execute('''
-    SELECT * FROM decision_options 
+    SELECT id, created_at, updated_at, text, is_selected, display_order, played_order
+    FROM decision_options
     WHERE decision_point_id = ?
     ORDER BY display_order
     ''', (decision_point_id,))
     
     return [dict(row) for row in cursor.fetchall()]
+
+def create_decision_point(conn: sqlite3.Connection, title: str, story_id: int, 
+                        description: Optional[str] = None, 
+                        is_ordered_list: bool = False) -> int:
+    """Create a new decision point.
+    
+    Args:
+        conn: Database connection
+        title: Title of the decision point
+        story_id: ID of the story
+        description: Optional description
+        is_ordered_list: Whether the options are an ordered list
+        
+    Returns:
+        ID of the created decision point
+    """
+    cursor = conn.cursor()
+    
+    # Get current timestamp
+    now = datetime.now().isoformat()
+    
+    cursor.execute('''
+    INSERT INTO decision_points (
+        created_at, updated_at, title, description, story_id, is_ordered_list
+    ) VALUES (?, ?, ?, ?, ?, ?)
+    ''', (now, now, title, description, story_id, 1 if is_ordered_list else 0))
+    
+    conn.commit()
+    return cursor.lastrowid
+
+def update_decision_point(conn: sqlite3.Connection, decision_point_id: int, 
+                        title: Optional[str] = None,
+                        description: Optional[str] = None,
+                        is_ordered_list: Optional[bool] = None) -> bool:
+    """Update a decision point.
+    
+    Args:
+        conn: Database connection
+        decision_point_id: ID of the decision point
+        title: New title (optional)
+        description: New description (optional)
+        is_ordered_list: New ordered list flag (optional)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    cursor = conn.cursor()
+    
+    # Get current timestamp
+    now = datetime.now().isoformat()
+    
+    # Build query based on provided parameters
+    update_parts = ["updated_at = ?"]
+    params = [now]
+    
+    if title is not None:
+        update_parts.append("title = ?")
+        params.append(title)
+    
+    if description is not None:
+        update_parts.append("description = ?")
+        params.append(description)
+    
+    if is_ordered_list is not None:
+        update_parts.append("is_ordered_list = ?")
+        params.append(1 if is_ordered_list else 0)
+    
+    # Add decision point ID to params
+    params.append(decision_point_id)
+    
+    # Execute update
+    query = f'''
+    UPDATE decision_points
+    SET {', '.join(update_parts)}
+    WHERE id = ?
+    '''
+    
+    cursor.execute(query, tuple(params))
+    conn.commit()
+    
+    return cursor.rowcount > 0
+
+def delete_decision_point(conn: sqlite3.Connection, decision_point_id: int) -> bool:
+    """Delete a decision point and its options.
+    
+    Args:
+        conn: Database connection
+        decision_point_id: ID of the decision point
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    cursor = conn.cursor()
+    
+    try:
+        # Delete options first (foreign key constraint)
+        cursor.execute('''
+        DELETE FROM decision_options
+        WHERE decision_point_id = ?
+        ''', (decision_point_id,))
+        
+        # Delete the decision point
+        cursor.execute('''
+        DELETE FROM decision_points
+        WHERE id = ?
+        ''', (decision_point_id,))
+        
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Error deleting decision point: {e}")
+        conn.rollback()
+        return False
+
+def add_decision_option(conn: sqlite3.Connection, decision_point_id: int, 
+                      text: str, is_selected: bool = False,
+                      display_order: Optional[int] = None,
+                      played_order: Optional[int] = None) -> int:
+    """Add an option to a decision point.
+    
+    Args:
+        conn: Database connection
+        decision_point_id: ID of the decision point
+        text: Text of the option
+        is_selected: Whether the option is selected
+        display_order: Order for display in UI
+        played_order: Order value for ordered lists
+        
+    Returns:
+        ID of the created option
+    """
+    cursor = conn.cursor()
+    
+    # Get current timestamp
+    now = datetime.now().isoformat()
+    
+    # Get the next display_order if not provided
+    if display_order is None:
+        cursor.execute('''
+        SELECT MAX(display_order) as max_order
+        FROM decision_options
+        WHERE decision_point_id = ?
+        ''', (decision_point_id,))
+        
+        result = cursor.fetchone()
+        if result and result["max_order"] is not None:
+            display_order = result["max_order"] + 1
+        else:
+            display_order = 0
+    
+    cursor.execute('''
+    INSERT INTO decision_options (
+        created_at, updated_at, text, is_selected, display_order, 
+        played_order, decision_point_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (now, now, text, 1 if is_selected else 0, display_order, played_order, decision_point_id))
+    
+    conn.commit()
+    return cursor.lastrowid
+
+def update_decision_option(conn: sqlite3.Connection, option_id: int,
+                         text: Optional[str] = None,
+                         is_selected: Optional[bool] = None,
+                         display_order: Optional[int] = None,
+                         played_order: Optional[int] = None) -> bool:
+    """Update a decision option.
+    
+    Args:
+        conn: Database connection
+        option_id: ID of the option
+        text: New text (optional)
+        is_selected: New selection state (optional)
+        display_order: New display order (optional)
+        played_order: New played order (optional)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    cursor = conn.cursor()
+    
+    # Get current timestamp
+    now = datetime.now().isoformat()
+    
+    # Build query based on provided parameters
+    update_parts = ["updated_at = ?"]
+    params = [now]
+    
+    if text is not None:
+        update_parts.append("text = ?")
+        params.append(text)
+    
+    if is_selected is not None:
+        update_parts.append("is_selected = ?")
+        params.append(1 if is_selected else 0)
+    
+    if display_order is not None:
+        update_parts.append("display_order = ?")
+        params.append(display_order)
+    
+    if played_order is not None:
+        update_parts.append("played_order = ?")
+        params.append(played_order)
+    
+    # Add option ID to params
+    params.append(option_id)
+    
+    # Execute update
+    query = f'''
+    UPDATE decision_options
+    SET {', '.join(update_parts)}
+    WHERE id = ?
+    '''
+    
+    cursor.execute(query, tuple(params))
+    conn.commit()
+    
+    return cursor.rowcount > 0
+
+def delete_decision_option(conn: sqlite3.Connection, option_id: int) -> bool:
+    """Delete a decision option.
+    
+    Args:
+        conn: Database connection
+        option_id: ID of the option
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    DELETE FROM decision_options
+    WHERE id = ?
+    ''', (option_id,))
+    
+    conn.commit()
+    return cursor.rowcount > 0

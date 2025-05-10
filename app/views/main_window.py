@@ -27,6 +27,7 @@ from app.views.gallery_widget import GalleryWidget
 from app.views.timeline_widget import TimelineWidget
 from app.views.recognition_viewer import RecognitionDatabaseViewer
 from app.views.decision_points_tab import DecisionPointsTab
+from app.views.decision_point_dialog import DecisionPointDialog
 from app.db_sqlite import (
     get_story_characters, create_quick_event, get_next_quick_event_sequence_number,
     get_character, search_quick_events
