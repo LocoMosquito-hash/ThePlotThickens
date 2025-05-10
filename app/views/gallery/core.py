@@ -144,6 +144,11 @@ class GalleryWidget(QWidget):
         filter_btn.clicked.connect(self.show_filters_dialog)
         control_layout.addWidget(filter_btn)
         
+        # Add clear filters button
+        clear_filters_btn = QPushButton("Clear Filters")
+        clear_filters_btn.clicked.connect(self.clear_filters)
+        control_layout.addWidget(clear_filters_btn)
+        
         # Add rebuild recognition database button
         rebuild_db_btn = QPushButton("Rebuild Recognition DB")
         rebuild_db_btn.clicked.connect(self.rebuild_recognition_database)
