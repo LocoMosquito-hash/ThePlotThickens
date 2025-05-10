@@ -362,6 +362,75 @@ class RegionSelectionDialog(QDialog):
         # Shortcut to cancel
         cancel_shortcut = QShortcut(QKeySequence.StandardKey.Cancel, self)
         cancel_shortcut.activated.connect(self.reject)
+        
+        # Add CTRL+Q shortcut for quick event
+        quick_event_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
+        quick_event_shortcut.activated.connect(self.quick_event_shortcut_triggered)
+    
+    def quick_event_shortcut_triggered(self) -> None:
+        """Handle CTRL+Q shortcut key press - create a quick event with special rules."""
+        try:
+            # Import the needed utilities
+            from app.utils.quick_event_utils import show_quick_event_dialog
+            
+            # Create context for character recognition dialog
+            context = {
+                "source": "recognition_dialog_shortcut",
+                "image_id": self.image_id,
+                "tagged_characters": [char.get('character_id') for char in self.tagged_characters],
+                "allow_extra_options": True,
+                "show_associate_checkbox": True,
+                "shortcut": "CTRL+Q"
+            }
+            
+            # Show the dialog with specific options for this context
+            show_quick_event_dialog(
+                db_conn=self.db_conn,
+                story_id=self.story_id,
+                parent=self,
+                callback=self.on_quick_event_created,
+                context=context,
+                character_id=None,  # Force anonymous event (no character_id)
+                options={
+                    "show_recent_events": True,
+                    "show_character_tags": True,
+                    "show_optional_note": True,
+                    "title": "Quick Event - Character Recognition",
+                    "force_anonymous": True  # Special flag to enforce anonymous events
+                }
+            )
+        except Exception as e:
+            import traceback
+            print(f"Error creating quick event from shortcut: {e}")
+            print(traceback.format_exc())
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Error creating quick event: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+    
+    def on_quick_event_created(self, event_id: int, text: str, context: Dict[str, Any]) -> None:
+        """Handle the quick event created signal."""
+        if not event_id:
+            return
+            
+        # Store the new quick event ID
+        self.new_quick_event_id = event_id
+        self.associated_quick_event_id = event_id
+        
+        # Get the image ID from context or from current instance
+        image_id = context.get("image_id", None) or self.image_id
+        
+        print(f"[DEBUG] Using image_id for association: {image_id}")
+        
+        # Update the quick events list if it exists
+        if hasattr(self, 'events_list') and self.events_list:
+            # Get quick events data
+            self.load_quick_events_data()
+            
+        # Show a success message
+        self._status_bar.showMessage(f"Quick event created: {text[:50]}...")
     
     def auto_recognize_characters(self) -> None:
         """Automatically recognize characters in all regions."""
