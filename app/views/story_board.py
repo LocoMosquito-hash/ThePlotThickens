@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
     QGraphicsItemGroup, QToolBar, QSizePolicy, QGraphicsEllipseItem, QFrame,
     QDialog, QDialogButtonBox, QStyleOptionGraphicsItem, QCheckBox, QLineEdit
 )
-from PyQt6.QtCore import Qt, QSize, QPointF, QRectF, QLineF, pyqtSignal, QTimer, QObject
+from PyQt6.QtCore import Qt, QSize, QPointF, QRectF, QLineF, pyqtSignal, QTimer, QObject, QSettings
 from PyQt6.QtGui import (
     QPixmap, QImage, QColor, QPen, QBrush, QFont, QPainter, QPainterPath,
     QTransform, QCursor, QDrag, QMouseEvent, QWheelEvent, QKeyEvent
@@ -1386,6 +1386,9 @@ class StoryBoardWidget(QWidget):
         self.current_story_data = None
         self.current_view_id = None
         
+        # Initialize QSettings
+        self.settings = QSettings("ThePlotThickens", "ThePlotThickens")
+        
         self.init_ui()
     
     def init_ui(self) -> None:
@@ -1439,12 +1442,12 @@ class StoryBoardWidget(QWidget):
         
         # Add grid snapping controls
         self.grid_snap_checkbox = QCheckBox("Snap to Grid")
-        self.grid_snap_checkbox.setChecked(False)
+        self.grid_snap_checkbox.setChecked(self.settings.value("storyboard/grid_snap", False, type=bool))
         self.grid_snap_checkbox.stateChanged.connect(self.on_grid_snap_changed)
         toolbar.addWidget(self.grid_snap_checkbox)
         
         self.grid_visible_checkbox = QCheckBox("Show Grid")
-        self.grid_visible_checkbox.setChecked(False)
+        self.grid_visible_checkbox.setChecked(self.settings.value("storyboard/grid_visible", False, type=bool))
         self.grid_visible_checkbox.stateChanged.connect(self.on_grid_visible_changed)
         toolbar.addWidget(self.grid_visible_checkbox)
         
@@ -1453,7 +1456,9 @@ class StoryBoardWidget(QWidget):
         
         self.grid_size_combo = QComboBox()
         self.grid_size_combo.addItems(["25", "50", "75", "100"])
-        self.grid_size_combo.setCurrentIndex(1)  # Default to 50
+        saved_grid_size = self.settings.value("storyboard/grid_size", "50", type=str)
+        index = self.grid_size_combo.findText(saved_grid_size)
+        self.grid_size_combo.setCurrentIndex(index if index != -1 else 1)  # Default to 50 if not found
         self.grid_size_combo.currentIndexChanged.connect(self.on_grid_size_changed)
         toolbar.addWidget(self.grid_size_combo)
         
@@ -1528,6 +1533,9 @@ class StoryBoardWidget(QWidget):
         self.grid_snap_checkbox.setEnabled(True)
         self.grid_visible_checkbox.setEnabled(True)
         self.grid_size_combo.setEnabled(True)
+        
+        # Apply saved grid settings to the scene
+        self.apply_grid_settings()
         
         # Load views
         self.load_views()
@@ -1935,6 +1943,19 @@ class StoryBoardWidget(QWidget):
         # Force the view to update
         self.view.viewport().update()
     
+    def apply_grid_settings(self) -> None:
+        """Apply the saved grid settings to the scene."""
+        if self.scene:
+            # Apply grid snap
+            self.scene.set_grid_snap(self.grid_snap_checkbox.isChecked())
+            
+            # Apply grid visibility
+            self.scene.set_grid_visible(self.grid_visible_checkbox.isChecked())
+            
+            # Apply grid size
+            grid_size = int(self.grid_size_combo.currentText())
+            self.scene.set_grid_size(grid_size)
+    
     def on_grid_snap_changed(self, state: int) -> None:
         """Handle grid snap checkbox state change.
         
@@ -1942,7 +1963,10 @@ class StoryBoardWidget(QWidget):
             state: Checkbox state
         """
         if self.scene:
-            self.scene.set_grid_snap(state == Qt.CheckState.Checked.value)
+            is_checked = state == Qt.CheckState.Checked.value
+            self.scene.set_grid_snap(is_checked)
+            # Save setting
+            self.settings.setValue("storyboard/grid_snap", is_checked)
     
     def on_grid_visible_changed(self, state: int) -> None:
         """Handle grid visibility checkbox state change.
@@ -1951,7 +1975,10 @@ class StoryBoardWidget(QWidget):
             state: Checkbox state
         """
         if self.scene:
-            self.scene.set_grid_visible(state == Qt.CheckState.Checked.value)
+            is_checked = state == Qt.CheckState.Checked.value
+            self.scene.set_grid_visible(is_checked)
+            # Save setting
+            self.settings.setValue("storyboard/grid_visible", is_checked)
     
     def on_grid_size_changed(self, index: int) -> None:
         """Handle grid size combo box change.
@@ -1962,6 +1989,8 @@ class StoryBoardWidget(QWidget):
         if self.scene:
             grid_size = int(self.grid_size_combo.currentText())
             self.scene.set_grid_size(grid_size)
+            # Save setting
+            self.settings.setValue("storyboard/grid_size", self.grid_size_combo.currentText())
     
     def position_cards(self) -> None:
         """Position cards according to saved layout and show debug info."""
