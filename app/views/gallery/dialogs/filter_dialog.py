@@ -21,7 +21,10 @@ from app.views.gallery.character.widgets import (
     FilterCharacterListWidget
 )
 
-from app.db_sqlite import get_story_characters
+from app.db_sqlite import (
+    get_story_characters,
+    get_character_image_counts_by_story
+)
 
 
 class GalleryFilterDialog(QDialog):
@@ -59,6 +62,9 @@ class GalleryFilterDialog(QDialog):
         character_tab = QWidget()
         character_layout = QVBoxLayout(character_tab)
         
+        # Create a horizontal layout for the two groups
+        side_by_side_layout = QHBoxLayout()
+        
         # Character selection group
         character_group = QGroupBox("Characters")
         character_group_layout = QVBoxLayout(character_group)
@@ -80,7 +86,8 @@ class GalleryFilterDialog(QDialog):
         
         character_group_layout.addLayout(button_layout)
         
-        character_layout.addWidget(character_group)
+        # Add character group to side-by-side layout
+        side_by_side_layout.addWidget(character_group)
         
         # Active filters group
         filters_group = QGroupBox("Active Filters")
@@ -95,7 +102,11 @@ class GalleryFilterDialog(QDialog):
         remove_btn.clicked.connect(self.remove_selected_filters)
         filters_group_layout.addWidget(remove_btn)
         
-        character_layout.addWidget(filters_group)
+        # Add filters group to side-by-side layout
+        side_by_side_layout.addWidget(filters_group)
+        
+        # Add the side-by-side layout to the character layout
+        character_layout.addLayout(side_by_side_layout)
         
         tabs.addTab(character_tab, "Character Filters")
         
@@ -119,8 +130,11 @@ class GalleryFilterDialog(QDialog):
         # Get characters from database
         characters = get_story_characters(self.db_conn, self.story_id)
         
-        # Set characters in the list widget
-        self.character_list.load_characters(characters)
+        # Get image counts for each character
+        image_counts = get_character_image_counts_by_story(self.db_conn, self.story_id)
+        
+        # Set characters in the list widget with image counts
+        self.character_list.load_characters(characters, image_counts)
         
         # Restore any existing filters
         self.filter_list.clear()

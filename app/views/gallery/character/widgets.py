@@ -271,15 +271,23 @@ class GalleryFilterCharacterListWidget(CharacterListWidget):
         super().__init__(db_conn, parent)
         self.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         
-    def load_characters(self, characters: List[Dict[str, Any]]) -> None:
-        """Load characters into the list widget.
+    def load_characters(self, characters: List[Dict[str, Any]], image_counts: Dict[int, int] = None) -> None:
+        """Load characters into the list widget with image counts.
         
         Args:
             characters: List of character dictionaries
+            image_counts: Optional dictionary mapping character IDs to image counts
         """
         self.clear()
         for character in characters:
-            item = QListWidgetItem(character["name"])
+            # Get image count for this character
+            char_id = character["id"]
+            count = image_counts.get(char_id, 0) if image_counts else 0
+            
+            # Create display text with image count
+            display_text = f"{character['name']} ({count})"
+            
+            item = QListWidgetItem(display_text)
             item.setData(Qt.ItemDataRole.UserRole, character)
             self.addItem(item)
             
