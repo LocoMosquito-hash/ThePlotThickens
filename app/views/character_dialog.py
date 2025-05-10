@@ -688,6 +688,7 @@ class CharacterDetailsTab(QWidget):
             ("Relationship Status", "RELATIONSHIP"),
             ("Housing", "HOUSING"),
             ("Family", "FAMILY"),
+            ("Quotes", "QUOTES"),
             # Keep existing categories
             ("General", "GENERAL"),
             ("Background", "BACKGROUND"),
