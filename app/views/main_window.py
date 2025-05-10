@@ -26,6 +26,7 @@ from app.views.settings_dialog import SettingsDialog
 from app.views.gallery_widget import GalleryWidget
 from app.views.timeline_widget import TimelineWidget
 from app.views.recognition_viewer import RecognitionDatabaseViewer
+from app.views.decision_points_tab import DecisionPointsTab
 from app.db_sqlite import (
     get_story_characters, create_quick_event, get_next_quick_event_sequence_number,
     get_character, search_quick_events
@@ -293,6 +294,7 @@ class MainWindow(QMainWindow):
         
         # Create tab widget
         self.tab_widget = QTabWidget()
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
         main_layout.addWidget(self.tab_widget)
         
         # Create story manager tab
@@ -314,6 +316,11 @@ class MainWindow(QMainWindow):
         self.timeline = TimelineWidget(self.db_conn, 0)
         self.timeline_tab_index = self.tab_widget.addTab(self.timeline, "Timeline")
         self.tab_widget.setTabEnabled(self.timeline_tab_index, False)
+        
+        # Create decision points tab (initially disabled)
+        self.decision_points = DecisionPointsTab(self.db_conn, 0)
+        self.decision_points_tab_index = self.tab_widget.addTab(self.decision_points, "Decision Points")
+        self.tab_widget.setTabEnabled(self.decision_points_tab_index, False)
         
         # Create status bar
         self.status_bar = QStatusBar()
@@ -400,9 +407,11 @@ class MainWindow(QMainWindow):
         self.timeline.story_id = story_id
         self.timeline.load_events()
         self.timeline.load_timeline_views()
+        self.decision_points.set_story_id(story_id)
         self.tab_widget.setTabEnabled(self.story_board_tab_index, True)
         self.tab_widget.setTabEnabled(self.gallery_tab_index, True)
         self.tab_widget.setTabEnabled(self.timeline_tab_index, True)
+        self.tab_widget.setTabEnabled(self.decision_points_tab_index, True)
         self.tab_widget.setCurrentIndex(self.story_board_tab_index)
         self.status_bar.showMessage(f"Loaded story: {story_data['title']}")
     
@@ -549,4 +558,15 @@ class MainWindow(QMainWindow):
             self.add_quick_event()
         else:
             # Pass the event to the parent class
-            super().keyPressEvent(event) 
+            super().keyPressEvent(event)
+
+    def on_tab_changed(self, index: int) -> None:
+        """Handle tab change events.
+        
+        Args:
+            index: Index of the selected tab
+        """
+        # Check if the selected tab is the Decision Points tab
+        if hasattr(self, 'decision_points_tab_index') and index == self.decision_points_tab_index and self.current_story_id:
+            # Refresh decision points
+            self.decision_points.load_decision_points() 

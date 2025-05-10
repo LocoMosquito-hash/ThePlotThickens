@@ -719,7 +719,7 @@ def update_story_board_view_layout(conn: sqlite3.Connection, view_id: int, layou
 
 # Initialize the database
 def initialize_database(db_path: str) -> sqlite3.Connection:
-    """Initialize the database and create the necessary tables.
+    """Initialize the database and create tables.
     
     Args:
         db_path: Path to the database file
@@ -727,20 +727,22 @@ def initialize_database(db_path: str) -> sqlite3.Connection:
     Returns:
         Database connection
     """
-    # Create the directory if it doesn't exist
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    # Create database directory if it doesn't exist
+    db_dir = os.path.dirname(db_path)
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir)
     
-    # Create or open the database connection
+    # Create connection
     conn = create_connection(db_path)
     
     # Create tables
     create_tables(conn)
     
-    # Make sure the image_character_tags table is created
+    # Create additional tables
     create_image_character_tags_table(conn)
-    
-    # Make sure the character_last_tagged table is created
+    create_character_details_table(conn)
     create_character_last_tagged_table(conn)
+    create_tables_for_decision_points(conn)  # Create decision points tables
     
     return conn
 
@@ -2952,3 +2954,101 @@ def get_character_image_counts_by_story(conn: sqlite3.Connection, story_id: int)
         (story_id,))
     
     return {row["character_id"]: row["image_count"] for row in cursor.fetchall()}
+
+# Decision Points functions
+def create_tables_for_decision_points(conn: sqlite3.Connection) -> None:
+    """Create the decision points and options tables if they don't exist."""
+    cursor = conn.cursor()
+    
+    # Create decision_points table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS decision_points (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        title TEXT NOT NULL,
+        description TEXT,
+        story_id INTEGER NOT NULL,
+        is_ordered_list INTEGER DEFAULT 0,
+        FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    # Create decision_options table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS decision_options (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        text TEXT NOT NULL,
+        is_selected INTEGER DEFAULT 0,
+        display_order INTEGER DEFAULT 0,
+        played_order INTEGER DEFAULT NULL,
+        decision_point_id INTEGER NOT NULL,
+        FOREIGN KEY (decision_point_id) REFERENCES decision_points (id) ON DELETE CASCADE
+    )
+    ''')
+    
+    conn.commit()
+
+def get_story_decision_points(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
+    """Get all decision points for a story.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        
+    Returns:
+        List of decision points
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    SELECT * FROM decision_points 
+    WHERE story_id = ?
+    ORDER BY created_at DESC
+    ''', (story_id,))
+    
+    return [dict(row) for row in cursor.fetchall()]
+
+def get_decision_point(conn: sqlite3.Connection, decision_point_id: int) -> Dict[str, Any]:
+    """Get a decision point by ID.
+    
+    Args:
+        conn: Database connection
+        decision_point_id: ID of the decision point
+        
+    Returns:
+        Decision point data
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    SELECT * FROM decision_points 
+    WHERE id = ?
+    ''', (decision_point_id,))
+    
+    result = cursor.fetchone()
+    if result:
+        return dict(result)
+    return {}
+
+def get_decision_options(conn: sqlite3.Connection, decision_point_id: int) -> List[Dict[str, Any]]:
+    """Get options for a decision point.
+    
+    Args:
+        conn: Database connection
+        decision_point_id: ID of the decision point
+        
+    Returns:
+        List of decision options
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    SELECT * FROM decision_options 
+    WHERE decision_point_id = ?
+    ORDER BY display_order
+    ''', (decision_point_id,))
+    
+    return [dict(row) for row in cursor.fetchall()]
