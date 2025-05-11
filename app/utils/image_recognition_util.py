@@ -13,6 +13,7 @@ from datetime import datetime
 from PyQt6.QtGui import QImage, QPixmap, qRgb, qRed, qGreen, qBlue
 from PyQt6.QtCore import QRect, QBuffer, QByteArray, QIODevice
 import numpy as np
+import traceback
 
 
 class ImageRecognitionUtil:
@@ -62,6 +63,17 @@ class ImageRecognitionUtil:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_image_features_character_id ON image_features(character_id)')
         
         self.db_conn.commit()
+    
+    def clear_database(self) -> None:
+        """Clear all entries from the image_features table."""
+        try:
+            cursor = self.db_conn.cursor()
+            cursor.execute('DELETE FROM image_features')
+            self.db_conn.commit()
+            print("Character recognition database cleared successfully")
+        except sqlite3.Error as e:
+            print(f"Error clearing recognition database: {e}")
+            self.db_conn.rollback()
     
     def _calculate_color_histogram(self, image: QImage) -> List[int]:
         """Calculate color histogram for an image.
@@ -391,74 +403,101 @@ class ImageRecognitionUtil:
         
         return results
     
-    def extract_features_from_avatar(self, character_id: int, avatar_path: str) -> bool:
-        """Extract and save image features from a character's avatar.
+    def extract_features_from_avatar(self, character_id: int, avatar_path: str) -> None:
+        """Extract features from a character's avatar image.
         
         Args:
-            character_id: Character ID
+            character_id: ID of the character
             avatar_path: Path to the avatar image
-            
-        Returns:
-            True if successful, False otherwise
         """
+        if not os.path.exists(avatar_path):
+            print(f"Avatar path does not exist: {avatar_path}")
+            return
+            
         try:
+            # Load the image
+            image = QImage(avatar_path)
+            
+            if image.isNull():
+                print(f"Failed to load avatar image: {avatar_path}")
+                return
+                
             # Extract features
-            features = self.extract_features_from_path(avatar_path)
+            features = self.extract_features_from_qimage(image)
             
-            # Save features
-            self.save_character_image_features(
-                character_id=character_id,
-                features=features,
-                is_avatar=True
-            )
-            
-            return True
+            # Save the features
+            self.save_character_image_features(character_id, features, True)
         except Exception as e:
             print(f"Error extracting features from avatar: {e}")
-            return False
+            traceback.print_exc()
     
-    def build_character_image_database(self) -> None:
-        """Build/rebuild the character image database from all character avatars and tagged images."""
+    def build_character_image_database(self, story_id: Optional[int] = None) -> None:
+        """Build/rebuild the character image database from all character avatars and tagged images.
+        
+        Args:
+            story_id: Optional story ID to only rebuild for that specific story
+        """
         cursor = self.db_conn.cursor()
         
-        # First, clear existing image features
-        cursor.execute("DELETE FROM image_features")
+        # Clear either all image features or just for the specified story
+        if story_id is None:
+            cursor.execute("DELETE FROM image_features")
+            print("Cleared all image features from database")
+        else:
+            # First, get all characters in this story
+            cursor.execute("SELECT id FROM characters WHERE story_id = ?", (story_id,))
+            character_ids = [row[0] for row in cursor.fetchall()]
+            
+            if character_ids:
+                # Format for SQL IN clause
+                char_ids_str = ','.join('?' for _ in character_ids)
+                cursor.execute(f"DELETE FROM image_features WHERE character_id IN ({char_ids_str})", character_ids)
+                print(f"Cleared image features for story {story_id} ({len(character_ids)} characters)")
+            else:
+                print(f"No characters found for story {story_id}")
         
-        # Get all characters
-        cursor.execute("SELECT id, name FROM characters")
+        # Get characters based on story_id filter
+        if story_id is None:
+            cursor.execute("SELECT id, name, avatar_path FROM characters")
+        else:
+            cursor.execute("SELECT id, name, avatar_path FROM characters WHERE story_id = ?", (story_id,))
+        
         characters = cursor.fetchall()
+        print(f"Processing {len(characters)} characters")
         
         # For each character, extract features from avatar if available
         for character in characters:
             character_id = character[0]
             character_name = character[1]
+            avatar_path = character[2]
             
-            # Get avatar
-            cursor.execute(
-                "SELECT avatar_path FROM character_details WHERE character_id = ?",
-                (character_id,)
-            )
-            result = cursor.fetchone()
-            
-            if result and result[0]:
-                avatar_path = result[0]
+            if avatar_path and os.path.exists(avatar_path):
                 try:
                     self.extract_features_from_avatar(character_id, avatar_path)
                     print(f"Extracted features from avatar for {character_name}")
                 except Exception as e:
                     print(f"Error extracting features from avatar for {character_name}: {e}")
+            elif avatar_path:
+                print(f"Avatar path not found for {character_name}: {avatar_path}")
         
-        # Get all tagged character regions
-        cursor.execute('''
+        # Build query for tagged regions based on story filter
+        region_query = '''
         SELECT ct.character_id, c.name, i.id AS image_id, i.path, i.filename,
                ct.x_position, ct.y_position, ct.width, ct.height
-        FROM character_tags ct
+        FROM image_character_tags ct
         JOIN characters c ON ct.character_id = c.id
         JOIN images i ON ct.image_id = i.id
         WHERE ct.width > 0 AND ct.height > 0
-        ''')
+        '''
+        
+        if story_id is not None:
+            region_query += " AND c.story_id = ?"
+            cursor.execute(region_query, (story_id,))
+        else:
+            cursor.execute(region_query)
         
         regions = cursor.fetchall()
+        print(f"Processing {len(regions)} tagged regions")
         
         # For each tagged region, extract features
         for region in regions:
@@ -478,8 +517,8 @@ class ImageRecognitionUtil:
                 result = cursor.fetchone()
                 
                 if result:
-                    story_id = result[0]
-                    cursor.execute("SELECT * FROM stories WHERE id = ?", (story_id,))
+                    image_story_id = result[0]
+                    cursor.execute("SELECT * FROM stories WHERE id = ?", (image_story_id,))
                     story_data = cursor.fetchone()
                     
                     if story_data:
@@ -502,6 +541,12 @@ class ImageRecognitionUtil:
                             width_pixel = int(width * img_width)
                             height_pixel = int(height * img_height)
                             
+                            # Ensure coordinates are valid
+                            x_pixel = max(0, min(x_pixel, img_width - 1))
+                            y_pixel = max(0, min(y_pixel, img_height - 1))
+                            width_pixel = max(1, min(width_pixel, img_width - x_pixel))
+                            height_pixel = max(1, min(height_pixel, img_height - y_pixel))
+                            
                             # Extract the region
                             region_rect = QRect(x_pixel, y_pixel, width_pixel, height_pixel)
                             region_image = image.copy(region_rect)
@@ -521,7 +566,23 @@ class ImageRecognitionUtil:
                 print(f"Error extracting features from region for {character_name} in image {image_id}: {e}")
         
         self.db_conn.commit()
-        print("Character image database build complete")
+        
+        # Count features
+        if story_id is None:
+            cursor.execute("SELECT COUNT(*) FROM image_features")
+            feature_count = cursor.fetchone()[0]
+            print(f"Character image database build complete. Total features: {feature_count}")
+        else:
+            # First, get all characters in this story
+            cursor.execute("SELECT id FROM characters WHERE story_id = ?", (story_id,))
+            character_ids = [row[0] for row in cursor.fetchall()]
+            
+            if character_ids:
+                # Format for SQL IN clause
+                char_ids_str = ','.join('?' for _ in character_ids)
+                cursor.execute(f"SELECT COUNT(*) FROM image_features WHERE character_id IN ({char_ids_str})", character_ids)
+                feature_count = cursor.fetchone()[0]
+                print(f"Character image database build complete for story {story_id}. Features: {feature_count}")
 
     def recognize_faces(self, image: QImage, threshold: float = 0.5, story_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Recognize characters in the given image region.
@@ -548,4 +609,43 @@ class ImageRecognitionUtil:
             return recognition_results
         except Exception as e:
             print(f"Error in recognize_faces: {e}")
-            return [] 
+            return []
+
+    def has_faces(self) -> bool:
+        """Check if the database contains any face data.
+        
+        Returns:
+            True if face data exists, False otherwise
+        """
+        cursor = self.db_conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM image_features')
+        count = cursor.fetchone()[0]
+        return count > 0
+    
+    def add_face(self, character_id: int, character_name: str, region_image: QImage) -> bool:
+        """Add a face region to the recognition database.
+        
+        Args:
+            character_id: ID of the character
+            character_name: Name of the character
+            region_image: QImage containing the face region
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Extract features from the region image
+            features = self.extract_features_from_qimage(region_image)
+            
+            # Save features to database
+            self.save_character_image_features(
+                character_id=character_id,
+                features=features,
+                is_avatar=False
+            )
+            
+            print(f"Added face features for character: {character_name} (ID: {character_id})")
+            return True
+        except Exception as e:
+            print(f"Error adding face for character {character_name}: {str(e)}")
+            return False 
