@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import (
     Qt, QSize, pyqtSignal, QBuffer, QIODevice, 
-    QUrl, QPoint, QRect, QTimer
+    QUrl, QPoint, QRect, QTimer, QSettings
 )
 from PyQt6.QtGui import (
     QPixmap, QImage, QColor, QBrush, QPen, QPainter, 
@@ -79,6 +79,9 @@ class GalleryWidget(QWidget):
         super().__init__(parent)
         self.db_conn = db_conn
         
+        # Settings
+        self.settings = QSettings("ThePlotThickens", "ThePlotThickens")
+        
         # Story data
         self.story_id = None
         self.story_data = None
@@ -92,8 +95,8 @@ class GalleryWidget(QWidget):
         self.selected_images = set()  # Set of selected image IDs
         
         # Filters and display options
-        self.show_nsfw = False
-        self.scene_grouping = False
+        self.show_nsfw = self.settings.value("gallery/show_nsfw", False, type=bool)
+        self.scene_grouping = self.settings.value("gallery/scene_grouping", False, type=bool)
         self.character_filters = []  # List of (character_id, include) tuples
         
         # Network manager for downloading images
@@ -265,6 +268,9 @@ class GalleryWidget(QWidget):
         self.show_nsfw = (state == 2)  # Qt.CheckState.Checked is 2
         print(f"NSFW mode is now: {'ON' if self.show_nsfw else 'OFF'}")
         
+        # Save the state to settings
+        self.settings.setValue("gallery/show_nsfw", self.show_nsfw)
+        
         # Update all thumbnails using the dedicated method
         self.update_thumbnail_visibility()
     
@@ -275,6 +281,9 @@ class GalleryWidget(QWidget):
             state: Checkbox state
         """
         self.scene_grouping = (state == Qt.CheckState.Checked.value)
+        
+        # Save the state to settings
+        self.settings.setValue("gallery/scene_grouping", self.scene_grouping)
         
         # Reload images with new grouping
         if self.story_id:
