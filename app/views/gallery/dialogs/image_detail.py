@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QWidget
 )
 from PyQt6.QtCore import (
-    Qt, pyqtSignal, QTimer, QPoint, QSize
+    Qt, pyqtSignal, QTimer, QPoint, QSize, QSettings
 )
 from PyQt6.QtGui import (
     QPixmap, QAction, QKeySequence, QShortcut, QCursor
@@ -60,6 +60,9 @@ class ImageDetailDialog(QDialog):
         self.story_id = image_data.get("story_id")
         self.tag_mode_enabled = False
         
+        # Settings for persistent window properties
+        self.settings = QSettings("ThePlotThickens", "ThePlotThickens")
+        
         # For navigation between images
         self.gallery_images = gallery_images or []
         self.current_index = current_index if current_index is not None else -1
@@ -73,7 +76,6 @@ class ImageDetailDialog(QDialog):
         
         # Set up window
         self.setWindowTitle(f"Image Details - {image_data.get('title', 'Untitled')}")
-        self.resize(900, 600)
         
         # Create status bar with fixed height
         self._status_bar = QStatusBar(self)
@@ -88,6 +90,9 @@ class ImageDetailDialog(QDialog):
         
         # Set up keyboard shortcuts
         self.setup_shortcuts()
+        
+        # Restore window dimensions and position
+        self.restoreWindowGeometry()
     
     def statusBar(self):
         """Get the status bar.
@@ -310,6 +315,7 @@ class ImageDetailDialog(QDialog):
         
         # Create a splitter for resizable panels
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter = splitter  # Store as instance variable
         splitter.setChildrenCollapsible(False)
         
         # Left panel: Image display
@@ -909,3 +915,71 @@ class ImageDetailDialog(QDialog):
         display_text = convert_char_refs_to_mentions(event["text"], formatted_characters)
         
         return display_text
+    
+    def accept(self):
+        """Override accept to save settings before accepting."""
+        # Save window geometry
+        self.saveWindowGeometry()
+        
+        # Call the parent accept method
+        super().accept()
+        
+    def reject(self):
+        """Override reject to save settings before rejecting."""
+        # Save window geometry
+        self.saveWindowGeometry()
+        
+        # Call the parent reject method
+        super().reject()
+    
+    def closeEvent(self, event):
+        """Save window state when closing.
+        
+        Args:
+            event: Close event
+        """
+        # Save window geometry
+        self.saveWindowGeometry()
+        
+        # Continue with normal close event
+        super().closeEvent(event)
+        
+    def restoreWindowGeometry(self) -> None:
+        """Restore window geometry (size and position) from settings."""
+        # Default size if no saved settings
+        default_size = QSize(900, 600)
+        
+        # Get saved size with fallback to default
+        saved_size = self.settings.value("image_detail_dialog/size", default_size, type=QSize)
+        if saved_size.isValid():
+            self.resize(saved_size)
+        else:
+            self.resize(default_size)
+        
+        # Get saved position - only use if valid
+        if self.settings.contains("image_detail_dialog/pos"):
+            pos = self.settings.value("image_detail_dialog/pos")
+            # Check if position is on screen (prevent window appearing off-screen)
+            from PyQt6.QtWidgets import QApplication
+            if QApplication.instance() and QApplication.instance().primaryScreen():
+                available_geometry = QApplication.instance().primaryScreen().availableGeometry()
+                if (pos.x() >= 0 and pos.x() < available_geometry.width() and
+                    pos.y() >= 0 and pos.y() < available_geometry.height()):
+                    self.move(pos)
+        
+        # Restore splitter state if available
+        if hasattr(self, 'splitter') and self.settings.contains("image_detail_dialog/splitter_state"):
+            splitter_state = self.settings.value("image_detail_dialog/splitter_state")
+            self.splitter.restoreState(splitter_state)
+    
+    def saveWindowGeometry(self) -> None:
+        """Save window geometry (size and position) to settings."""
+        self.settings.setValue("image_detail_dialog/size", self.size())
+        self.settings.setValue("image_detail_dialog/pos", self.pos())
+        
+        # Save splitter state
+        if hasattr(self, 'splitter'):
+            self.settings.setValue("image_detail_dialog/splitter_state", self.splitter.saveState())
+            
+        # Ensure settings are written to disk
+        self.settings.sync()
