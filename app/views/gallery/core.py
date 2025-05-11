@@ -324,7 +324,6 @@ class GalleryWidget(QWidget):
         
         # Use the thumbnail's update_pixmap method
         thumbnail.update_pixmap(self.nsfw_placeholder)
-        print(f"Set thumbnail {thumbnail.image_id} to NSFW mode")
         
         # Mark as NSFW
         thumbnail.is_nsfw = True
@@ -357,7 +356,6 @@ class GalleryWidget(QWidget):
                 if not pixmap.isNull():
                     # Update the thumbnail
                     thumbnail.update_pixmap(pixmap)
-                    print(f"Restored thumbnail {image_id} to normal mode")
                     
                     # Mark as not NSFW
                     thumbnail.is_nsfw = False
@@ -1577,9 +1575,9 @@ class GalleryWidget(QWidget):
         cursor = self.db_conn.cursor()
         
         # Delete related data first
-        cursor.execute("DELETE FROM image_character_tags WHERE image_id = ?", (image_id,))
-        cursor.execute("DELETE FROM image_quick_events WHERE image_id = ?", (image_id,))
-        cursor.execute("DELETE FROM image_scenes WHERE image_id = ?", (image_id,))
+        cursor.execute("DELETE FROM image_tags WHERE image_id = ?", (image_id,))
+        cursor.execute("DELETE FROM quick_event_images WHERE image_id = ?", (image_id,))
+        cursor.execute("DELETE FROM scene_images WHERE image_id = ?", (image_id,))
         
         # Then delete the image
         cursor.execute("DELETE FROM images WHERE id = ?", (image_id,))
