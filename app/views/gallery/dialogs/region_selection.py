@@ -14,7 +14,8 @@ from PyQt6.QtWidgets import (
     QScrollArea, QListWidget, QListWidgetItem, QSplitter,
     QStatusBar, QTabWidget, QGroupBox, QCheckBox, QMessageBox,
     QComboBox, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem,
-    QGraphicsRectItem, QWidget, QDialogButtonBox, QProgressDialog
+    QGraphicsRectItem, QWidget, QDialogButtonBox, QProgressDialog,
+    QSizePolicy
 )
 from PyQt6.QtCore import (
     Qt, pyqtSignal, QTimer, QPoint, QSize, QRectF, QPointF, QSizeF, QRect, QSettings
@@ -130,6 +131,7 @@ class RegionSelectionDialog(QDialog):
         
         # Create splitter for main layout sections
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter = splitter  # Store as instance variable
         
         # Create image view panel
         image_panel = QWidget()
@@ -230,6 +232,12 @@ class RegionSelectionDialog(QDialog):
         onscene_group = QGroupBox("On-scene Characters")
         onscene_layout = QVBoxLayout(onscene_group)
         self.onscene_list = OnSceneCharacterListWidget(self.db_conn, self)
+        
+        # Set fixed width for the on-scene characters list
+        self.onscene_list.setFixedWidth(250)
+        self.onscene_list.setMinimumWidth(250)
+        self.onscene_list.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        
         onscene_layout.addWidget(self.onscene_list)
         right_column.addWidget(onscene_group)
         
@@ -1196,10 +1204,20 @@ class RegionSelectionDialog(QDialog):
             if (pos.x() >= 0 and pos.x() < available_geometry.width() and
                 pos.y() >= 0 and pos.y() < available_geometry.height()):
                 self.move(pos)
+        
+        # Restore splitter state if available
+        if hasattr(self, 'splitter') and self.settings.contains("recognition_dialog/splitter_state"):
+            splitter_state = self.settings.value("recognition_dialog/splitter_state")
+            self.splitter.restoreState(splitter_state)
     
     def saveWindowGeometry(self) -> None:
         """Save window geometry (size and position) to settings."""
         self.settings.setValue("recognition_dialog/size", self.size())
         self.settings.setValue("recognition_dialog/pos", self.pos())
+        
+        # Save splitter state
+        if hasattr(self, 'splitter'):
+            self.settings.setValue("recognition_dialog/splitter_state", self.splitter.saveState())
+            
         # Ensure settings are written to disk
         self.settings.sync()
