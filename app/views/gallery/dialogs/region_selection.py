@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QGraphicsRectItem, QWidget, QDialogButtonBox, QProgressDialog
 )
 from PyQt6.QtCore import (
-    Qt, pyqtSignal, QTimer, QPoint, QSize, QRectF, QPointF, QSizeF, QRect
+    Qt, pyqtSignal, QTimer, QPoint, QSize, QRectF, QPointF, QSizeF, QRect, QSettings
 )
 from PyQt6.QtGui import (
     QPixmap, QImage, QAction, QKeySequence, QShortcut, QCursor,
@@ -63,6 +63,9 @@ class RegionSelectionDialog(QDialog):
         self.story_id = story_id
         self.image_id = image_id
         
+        # Settings for persistent window properties
+        self.settings = QSettings("ThePlotThickens", "ThePlotThickens")
+        
         # Create a pixmap from the image for display
         self.pixmap = QPixmap.fromImage(self.image)
         
@@ -100,7 +103,6 @@ class RegionSelectionDialog(QDialog):
         
         # Set up window
         self.setWindowTitle("Character Recognition - Region Selection")
-        self.resize(1000, 700)
         
         # Create status bar
         self._status_bar = QStatusBar(self)
@@ -117,6 +119,9 @@ class RegionSelectionDialog(QDialog):
         
         # Set up mouse events for region selection
         self.initialize_mouse_events()
+        
+        # Restore window dimensions and position (moved after UI setup)
+        self.restoreWindowGeometry()
     
     def init_ui(self) -> None:
         """Initialize the user interface."""
@@ -228,9 +233,10 @@ class RegionSelectionDialog(QDialog):
         onscene_layout.addWidget(self.onscene_list)
         right_column.addWidget(onscene_group)
         
-        # Set stretch factors for the columns
-        lists_layout.setStretch(0, 3)  # Left column gets more width
-        lists_layout.setStretch(1, 2)  # Right column gets less width
+        # Set stretch factors for the columns - Modified to make regions/results narrower and on-scene wider
+        # Original was 3:2, now using 24:26 (20% narrower left, 30% wider right)
+        lists_layout.setStretch(0, 40)  # Left column (20% narrower than 50/50 split)
+        lists_layout.setStretch(1, 60)  # Right column (30% wider than 50/50 split)
         
         # Add region tab to tabs (first position)
         tabs.addTab(region_tab, "Region Selection")
@@ -563,7 +569,10 @@ class RegionSelectionDialog(QDialog):
         }
     
     def accept(self):
-        """Override accept to save the selected quick event association and process checked characters."""
+        """Override accept to save settings before accepting."""
+        # Save window geometry
+        self.saveWindowGeometry()
+        
         # Get the selected quick event ID if a quick event is selected
         if hasattr(self, 'events_list') and self.events_list.currentItem():
             current_item = self.events_list.currentItem()
@@ -579,7 +588,15 @@ class RegionSelectionDialog(QDialog):
         
         # Call the parent accept method
         super().accept()
+    
+    def reject(self):
+        """Override reject to save settings before rejecting."""
+        # Save window geometry
+        self.saveWindowGeometry()
         
+        # Call the parent reject method
+        super().reject()
+    
     def tag_checked_onscene_characters(self) -> None:
         """Tag all checked characters in the on-scene list as being present without regions."""
         if not hasattr(self, 'onscene_list'):
@@ -1146,3 +1163,43 @@ class RegionSelectionDialog(QDialog):
         if hasattr(self, 'tabs'):
             tagged_count = len(character_tags)
             self.tabs.setTabText(1, f"Tagged Characters ({tagged_count})")
+
+    def closeEvent(self, event):
+        """Save window state when closing.
+        
+        Args:
+            event: Close event
+        """
+        # Save window geometry
+        self.saveWindowGeometry()
+        
+        # Continue with normal close event
+        super().closeEvent(event)
+
+    def restoreWindowGeometry(self) -> None:
+        """Restore window geometry (size and position) from settings."""
+        # Default size if no saved settings
+        default_size = QSize(1000, 700)
+        
+        # Get saved size with fallback to default
+        saved_size = self.settings.value("recognition_dialog/size", default_size, type=QSize)
+        if saved_size.isValid():
+            self.resize(saved_size)
+        else:
+            self.resize(default_size)
+        
+        # Get saved position - only use if valid
+        if self.settings.contains("recognition_dialog/pos"):
+            pos = self.settings.value("recognition_dialog/pos")
+            # Check if position is on screen (prevent window appearing off-screen)
+            available_geometry = QApplication.primaryScreen().availableGeometry()
+            if (pos.x() >= 0 and pos.x() < available_geometry.width() and
+                pos.y() >= 0 and pos.y() < available_geometry.height()):
+                self.move(pos)
+    
+    def saveWindowGeometry(self) -> None:
+        """Save window geometry (size and position) to settings."""
+        self.settings.setValue("recognition_dialog/size", self.size())
+        self.settings.setValue("recognition_dialog/pos", self.pos())
+        # Ensure settings are written to disk
+        self.settings.sync()
