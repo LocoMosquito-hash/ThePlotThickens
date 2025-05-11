@@ -1668,74 +1668,44 @@ class GalleryWidget(QWidget):
             return
         
         # Create a progress dialog
-        progress = QProgressDialog("Rebuilding recognition database...", "Cancel", 0, len(self.images), self)
+        progress = QProgressDialog("Rebuilding recognition database...", "Cancel", 0, 100, self)
         progress.setWindowTitle("Recognition Database")
         progress.setMinimumDuration(0)
         progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setValue(0)
+        progress.show()
+        QApplication.processEvents()
         
         # Initialize the recognition util if needed
         if not hasattr(self, 'recognition_util') or not self.recognition_util:
             self.recognition_util = ImageRecognitionUtil(self.db_conn)
         
-        # Clear the existing database
-        self.recognition_util.clear_database()
-        
-        # Process each image
-        for i, image_data in enumerate(self.images):
-            if progress.wasCanceled():
-                break
+        try:
+            # Update progress
+            progress.setValue(10)
+            progress.setLabelText(f"Clearing existing database for story {self.story_id}...")
+            QApplication.processEvents()
             
-            image_id = image_data["id"]
+            # Rebuild the database with the complete method, but only for this story
+            self.recognition_util.build_character_image_database(story_id=self.story_id)
             
             # Update progress
-            progress.setValue(i)
-            progress.setLabelText(f"Processing image {i+1} of {len(self.images)}...")
+            progress.setValue(90)
+            QApplication.processEvents()
             
-            # Get character tags for this image
-            tags = get_image_character_tags(self.db_conn, image_id)
+            # Complete the progress
+            progress.setValue(100)
+            QApplication.processEvents()
             
-            if not tags:
-                continue
-            
-            # Get the full image
-            file_path = image_data.get("path")
-            if not file_path or not os.path.exists(file_path):
-                continue
-            
-            # Load the image
-            image = QImage(file_path)
-            
-            if image.isNull():
-                continue
-            
-            # Process each tag
-            for tag in tags:
-                character_id = tag.get("character_id")
-                character_name = tag.get("character_name")
-                x_position = tag.get("x_position")
-                y_position = tag.get("y_position")
-                width = tag.get("width", 0.1)
-                height = tag.get("height", 0.1)
-                
-                if not character_id or not character_name:
-                    continue
-                
-                # Create region for the tag
-                region = {
-                    "x": x_position - (width / 2),
-                    "y": y_position - (height / 2),
-                    "width": width,
-                    "height": height
-                }
-                
-                # Add to recognition database
-                self.add_region_to_recognition_database(image, character_id, character_name, region)
-        
-        # Close the progress dialog
-        progress.setValue(len(self.images))
-        
-        # Show completion message
-        QMessageBox.information(self, "Recognition Database", "Recognition database has been rebuilt successfully.")
+            # Show completion message
+            QMessageBox.information(self, "Recognition Database", 
+                                   f"Character recognition database has been rebuilt successfully for the current story.")
+        except Exception as e:
+            print(f"Error rebuilding recognition database: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to rebuild recognition database: {str(e)}")
+        finally:
+            # Close the progress dialog
+            progress.close()
     
     def add_region_to_recognition_database(self, image: QImage, character_id: int, 
                                           character_name: str, region: Dict[str, float]) -> None:

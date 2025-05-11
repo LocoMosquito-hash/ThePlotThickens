@@ -402,10 +402,20 @@ class RecognitionDatabaseViewer(QDialog):
     
     def on_rebuild_database(self) -> None:
         """Handle rebuild database button click."""
+        # Get the selected story ID (None for All Stories)
+        selected_story_id = self.story_combo.currentData()
+        
+        # Prepare a message based on whether we're rebuilding for all stories or just one
+        if selected_story_id is None:
+            message = "Are you sure you want to rebuild the ENTIRE recognition database? This will regenerate all image features from character avatars and tagged regions for ALL stories."
+        else:
+            story_name = self.story_combo.currentText()
+            message = f"Are you sure you want to rebuild the recognition database for \"{story_name}\"? This will regenerate image features only for this story."
+        
         reply = QMessageBox.question(
             self,
             "Rebuild Recognition Database",
-            "Are you sure you want to rebuild the recognition database? This will regenerate all image features from character avatars.",
+            message,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
@@ -415,15 +425,25 @@ class RecognitionDatabaseViewer(QDialog):
             self.progress_bar.setVisible(True)
             self.progress_bar.setValue(20)
             
-            # Rebuild database
-            self.image_recognition.build_character_image_database()
-            
-            # Update UI
-            self.progress_bar.setValue(100)
-            self.load_characters(self.story_combo.currentData())
-            
-            # Hide progress after a moment
-            self.progress_bar.setVisible(False)
+            # Rebuild database for the selected story or all stories
+            try:
+                self.image_recognition.build_character_image_database(story_id=selected_story_id)
+                
+                # Update UI
+                self.progress_bar.setValue(100)
+                self.load_characters(self.story_combo.currentData())
+                
+                # Show success message
+                if selected_story_id is None:
+                    QMessageBox.information(self, "Database Rebuilt", "The complete recognition database has been successfully rebuilt.")
+                else:
+                    story_name = self.story_combo.currentText()
+                    QMessageBox.information(self, "Database Rebuilt", f"The recognition database for \"{story_name}\" has been successfully rebuilt.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to rebuild recognition database: {str(e)}")
+            finally:
+                # Hide progress bar
+                self.progress_bar.setVisible(False)
     
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         """Handle drag enter event.
