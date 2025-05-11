@@ -693,9 +693,15 @@ class GalleryWidget(QWidget):
             reverse=True
         )
         
+        # Track scene IDs to prevent duplicates
+        added_scene_ids = set()
+        
         # Add all scenes in order of sequence number (highest first)
         for scene_id, scene_data in sorted_scenes:
-            display_order.append(('scene', scene_id))
+            # Only add each scene ID once to prevent duplicates
+            if scene_id not in added_scene_ids:
+                display_order.append(('scene', scene_id))
+                added_scene_ids.add(scene_id)
         
         # Now, place unassigned images in a separate group at the top
         if orphan_images:
@@ -706,6 +712,13 @@ class GalleryWidget(QWidget):
         
         # Now display everything according to our calculated order
         row = 0
+        
+        # Clear any lingering layout spacers or empty cells
+        while self.thumbnails_layout.count() > 0:
+            item = self.thumbnails_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
         for item_type, item_data in display_order:
             if item_type == 'scene':
                 scene_id = item_data
@@ -716,11 +729,15 @@ class GalleryWidget(QWidget):
                 self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
                 row += 1
                 
-                # Display this scene's images
-                row = self._display_image_list(scene_data['images'], row)
+                # Only proceed if there are images to display
+                if scene_data['images']:
+                    # Display this scene's images and get the next row
+                    next_row = self._display_image_list(scene_data['images'], row)
+                    
+                    # Update row to the row after the last image
+                    row = next_row
                 
-                # Add some spacing
-                row += 1
+                # No need for extra spacing here - _display_image_list already returns the correct next row
             
             elif item_type == 'ungrouped':
                 ungrouped_images = item_data
@@ -730,11 +747,13 @@ class GalleryWidget(QWidget):
                     self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
                     row += 1
                     
-                    # Display ungrouped images
-                    row = self._display_image_list(ungrouped_images, row)
+                    # Display ungrouped images and get the next row
+                    next_row = self._display_image_list(ungrouped_images, row)
                     
-                    # Add some spacing
-                    row += 1
+                    # Update row to the row after the last image 
+                    row = next_row
+                
+                # No need for extra spacing here - _display_image_list already returns the correct next row
         
         # Ensure columns have equal width
         for col in range(4):
