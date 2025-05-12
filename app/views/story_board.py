@@ -1065,8 +1065,8 @@ class RelationshipLine(QGraphicsLineItem):
         
         # Create and configure a text document to control letter-spacing
         doc = QTextDocument()
-        # Increase font size from 9 to 11 (approximately 25% larger)
-        doc.setDefaultFont(QFont("Courier New", 14, QFont.Weight.Bold))
+        # Increase font size by 50% (from 14 to 21)
+        doc.setDefaultFont(QFont("Courier New", 21, QFont.Weight.Bold))
         
         # Apply CSS-like styling to the text document
         # We need to escape the text content for HTML
@@ -1119,8 +1119,8 @@ class RelationshipLine(QGraphicsLineItem):
         # Change label appearance - apply hover enhancements
         # Update the document with larger font and letter spacing
         doc = self.label.document()
-        # Increase hover font size from 10 to 12 (20% larger)
-        doc.setDefaultFont(QFont("Courier New", 14, QFont.Weight.Bold))
+        # Increase hover font size to match the new larger base size
+        doc.setDefaultFont(QFont("Courier New", 21, QFont.Weight.Bold))
         
         # Apply bright version of hover color for better visibility
         bright_hover_color = QColor(self.hover_color)
@@ -1155,8 +1155,8 @@ class RelationshipLine(QGraphicsLineItem):
         
         # Restore label appearance to match the CSS styling
         doc = self.label.document()
-        # Restore to larger base font size (11 instead of 9)
-        doc.setDefaultFont(QFont("Courier New", 14, QFont.Weight.Bold))
+        # Restore to larger base font size
+        doc.setDefaultFont(QFont("Courier New", 21, QFont.Weight.Bold))
         
         # Restore original text color to match the line color but brighter
         bright_text_color = QColor(self.normal_color)
@@ -1475,7 +1475,7 @@ class StoryBoardScene(QGraphicsScene):
                 
                 # Ensure proper font
                 doc = line.label.document()
-                doc.setDefaultFont(QFont("Courier New", 14, QFont.Weight.Bold))
+                doc.setDefaultFont(QFont("Courier New", 21, QFont.Weight.Bold))
     
     def set_grid_snap(self, enabled: bool) -> None:
         """Enable or disable grid snapping.
