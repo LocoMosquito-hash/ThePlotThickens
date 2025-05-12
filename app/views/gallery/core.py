@@ -856,7 +856,7 @@ class GalleryWidget(QWidget):
             original_path = os.path.join(folder_paths['images_folder'], filename)
             thumbnail_path = os.path.join(folder_paths['thumbnails_folder'], filename)
             
-            logging.debug(f"Looking for thumbnail at: {thumbnail_path}")
+            # logging.debug(f"Looking for thumbnail at: {thumbnail_path}")
             
             # Check if thumbnail exists, if not, create the directories and generate it
             if not os.path.exists(thumbnail_path):
