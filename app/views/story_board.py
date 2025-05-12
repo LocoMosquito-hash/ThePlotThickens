@@ -1714,12 +1714,11 @@ class StoryBoardScene(QGraphicsScene):
         # Check if we clicked on an item
         clicked_item = self.itemAt(pos, QTransform())
         
-        # Track whether we've handled the event ourselves
-        handled = False
-        
         # If clicked on background, clear selection
         if not clicked_item:
             self.clearSelection()
+            super().mousePressEvent(event)
+            return
         elif isinstance(clicked_item, CharacterCard) or (clicked_item.parentItem() and isinstance(clicked_item.parentItem(), CharacterCard)):
             # If clicked on a character card or its child item, handle selection
             if isinstance(clicked_item, CharacterCard):
@@ -1734,9 +1733,6 @@ class StoryBoardScene(QGraphicsScene):
             
             # Only proceed if the click is within the actual card boundaries
             if card_rect.contains(local_pos):
-                # We'll handle the selection ourselves
-                handled = True
-                
                 # Get current selection state before selecting
                 was_selected = character_card.isSelected()
                 
@@ -1762,23 +1758,21 @@ class StoryBoardScene(QGraphicsScene):
                         if card and not card.isSelected():
                             card.setSelected(True)
                 else:
-                    # Clear all selections first
-                    for card in self.character_cards.values():
-                        card.setSelected(False)
-                    
-                    # Select just this card
-                    character_card.setSelected(True)
+                    # If the card wasn't selected before, clear other selections
+                    if not was_selected:
+                        # Clear all selections first
+                        for card in self.character_cards.values():
+                            if card != character_card:
+                                card.setSelected(False)
+                        
+                        # Select just this card
+                        character_card.setSelected(True)
                 
                 # Force our on_selection_changed handler to run
-                # We use QTimer.singleShot to ensure this runs after Qt's internal selection handling
                 QTimer.singleShot(0, self.on_selection_changed)
         
-        # Only pass event to parent if we didn't handle it ourselves
-        if not handled:
-            super().mousePressEvent(event)
-        else:
-            # Mark the event as accepted to prevent further processing
-            event.accept()
+        # Always call the parent implementation to allow dragging to work
+        super().mousePressEvent(event)
     
     def on_character_position_changed(self, character_id: int) -> None:
         """Handle character position change.
