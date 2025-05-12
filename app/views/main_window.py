@@ -308,19 +308,70 @@ class MainWindow(QMainWindow):
         self.story_board_tab_index = self.tab_widget.addTab(self.story_board, "Story Board")
         self.tab_widget.setTabEnabled(self.story_board_tab_index, False)
         
-        # Create gallery tab (initially disabled)
+        # Create gallery tab with refresh button (initially disabled)
+        gallery_container = QWidget()
+        gallery_layout = QVBoxLayout(gallery_container)
+        gallery_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Add refresh button for gallery tab
+        gallery_button_layout = QHBoxLayout()
+        gallery_button_layout.setContentsMargins(5, 5, 5, 0)
+        gallery_refresh_btn = QPushButton("Refresh Gallery")
+        gallery_refresh_btn.setToolTip("Refresh gallery contents")
+        gallery_refresh_btn.clicked.connect(self.refresh_gallery)
+        gallery_button_layout.addWidget(gallery_refresh_btn)
+        gallery_button_layout.addStretch()
+        gallery_layout.addLayout(gallery_button_layout)
+        
+        # Add gallery widget
         self.gallery = GalleryWidget(self.db_conn)
-        self.gallery_tab_index = self.tab_widget.addTab(self.gallery, "Gallery")
+        gallery_layout.addWidget(self.gallery)
+        
+        self.gallery_tab_index = self.tab_widget.addTab(gallery_container, "Gallery")
         self.tab_widget.setTabEnabled(self.gallery_tab_index, False)
         
-        # Create timeline tab (initially disabled)
+        # Create timeline tab with refresh button (initially disabled)
+        timeline_container = QWidget()
+        timeline_layout = QVBoxLayout(timeline_container)
+        timeline_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Add refresh button for timeline tab
+        timeline_button_layout = QHBoxLayout()
+        timeline_button_layout.setContentsMargins(5, 5, 5, 0)
+        timeline_refresh_btn = QPushButton("Refresh Timeline")
+        timeline_refresh_btn.setToolTip("Refresh timeline contents")
+        timeline_refresh_btn.clicked.connect(self.refresh_timeline)
+        timeline_button_layout.addWidget(timeline_refresh_btn)
+        timeline_button_layout.addStretch()
+        timeline_layout.addLayout(timeline_button_layout)
+        
+        # Add timeline widget
         self.timeline = TimelineWidget(self.db_conn, 0)
-        self.timeline_tab_index = self.tab_widget.addTab(self.timeline, "Timeline")
+        timeline_layout.addWidget(self.timeline)
+        
+        self.timeline_tab_index = self.tab_widget.addTab(timeline_container, "Timeline")
         self.tab_widget.setTabEnabled(self.timeline_tab_index, False)
         
-        # Create decision points tab (initially disabled)
+        # Create decision points tab with refresh button (initially disabled)
+        decision_points_container = QWidget()
+        decision_points_layout = QVBoxLayout(decision_points_container)
+        decision_points_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Add refresh button for decision points tab
+        decision_points_button_layout = QHBoxLayout()
+        decision_points_button_layout.setContentsMargins(5, 5, 5, 0)
+        decision_points_refresh_btn = QPushButton("Refresh Decision Points")
+        decision_points_refresh_btn.setToolTip("Refresh decision points list")
+        decision_points_refresh_btn.clicked.connect(self.refresh_decision_points)
+        decision_points_button_layout.addWidget(decision_points_refresh_btn)
+        decision_points_button_layout.addStretch()
+        decision_points_layout.addLayout(decision_points_button_layout)
+        
+        # Add decision points widget
         self.decision_points = DecisionPointsTab(self.db_conn, 0)
-        self.decision_points_tab_index = self.tab_widget.addTab(self.decision_points, "Decision Points")
+        decision_points_layout.addWidget(self.decision_points)
+        
+        self.decision_points_tab_index = self.tab_widget.addTab(decision_points_container, "Decision Points")
         self.tab_widget.setTabEnabled(self.decision_points_tab_index, False)
         
         # Create status bar
@@ -570,4 +621,24 @@ class MainWindow(QMainWindow):
         # Check if the selected tab is the Decision Points tab
         if hasattr(self, 'decision_points_tab_index') and index == self.decision_points_tab_index and self.current_story_id:
             # Refresh decision points
-            self.decision_points.load_decision_points() 
+            self.decision_points.load_decision_points()
+
+    # Add refresh methods for each tab
+    def refresh_gallery(self) -> None:
+        """Refresh the gallery tab contents."""
+        if hasattr(self, 'gallery') and self.gallery:
+            self.gallery.load_images()
+            self.status_bar.showMessage("Gallery refreshed", 3000)
+    
+    def refresh_timeline(self) -> None:
+        """Refresh the timeline tab contents."""
+        if hasattr(self, 'timeline') and self.timeline:
+            self.timeline.load_events()
+            self.timeline.load_timeline_views()
+            self.status_bar.showMessage("Timeline refreshed", 3000)
+    
+    def refresh_decision_points(self) -> None:
+        """Refresh the decision points tab contents."""
+        if hasattr(self, 'decision_points') and self.decision_points:
+            self.decision_points.load_decision_points()
+            self.status_bar.showMessage("Decision points refreshed", 3000) 
