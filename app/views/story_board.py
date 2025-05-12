@@ -20,12 +20,14 @@ from PyQt6.QtWidgets import (
     QColorDialog, QMessageBox, QGraphicsSceneMouseEvent, QGraphicsSceneContextMenuEvent,
     QGraphicsSceneHoverEvent, QGraphicsSceneDragDropEvent, QGraphicsSceneWheelEvent,
     QGraphicsItemGroup, QToolBar, QSizePolicy, QGraphicsEllipseItem, QFrame,
-    QDialog, QDialogButtonBox, QStyleOptionGraphicsItem, QCheckBox, QLineEdit
+    QDialog, QDialogButtonBox, QStyleOptionGraphicsItem, QCheckBox, QLineEdit,
+    QGraphicsPathItem
 )
 from PyQt6.QtCore import Qt, QSize, QPointF, QRectF, QLineF, pyqtSignal, QTimer, QObject, QSettings
 from PyQt6.QtGui import (
     QPixmap, QImage, QColor, QPen, QBrush, QFont, QPainter, QPainterPath,
-    QTransform, QCursor, QDrag, QMouseEvent, QWheelEvent, QKeyEvent
+    QTransform, QCursor, QDrag, QMouseEvent, QWheelEvent, QKeyEvent,
+    QTextDocument, QTextOption
 )
 
 from app.db_sqlite import (
@@ -255,6 +257,16 @@ class CharacterCard(QGraphicsItemGroup):
             # Position has changed, emit signal only if not suppressing updates
             if not self.suppress_position_updates:
                 self.is_moving = False
+                
+                # When a character is moved, update all relationship lines in the scene to preserve styling
+                scene = self.scene()
+                if scene and hasattr(scene, 'relationship_lines'):
+                    for relationship_id, relationship_line in scene.relationship_lines.items():
+                        # Only update positions of lines not connected to this card (connected ones were already updated)
+                        if relationship_line.source_card != self and relationship_line.target_card != self:
+                            # Force a styling refresh for all relationship lines
+                            relationship_line.update_position()
+                
                 # Use QTimer to emit the signal after a short delay to avoid excessive updates
                 QTimer.singleShot(100, lambda: self.signals.position_changed.emit(self._character_id))
         
@@ -723,6 +735,80 @@ class CharacterCard(QGraphicsItemGroup):
                     scene.removeItem(mc_text)
 
 
+class RoundedRectItem(QGraphicsPathItem):
+    """A graphics item that draws a rounded rectangle."""
+    
+    def __init__(self, rect: QRectF, radius: float = 4.0, parent=None) -> None:
+        """Initialize the rounded rectangle.
+        
+        Args:
+            rect: Rectangle to draw
+            radius: Corner radius
+            parent: Parent item
+        """
+        super().__init__(parent)
+        
+        self._rect = rect
+        self._radius = radius
+        self._brush = QBrush()
+        self._pen = QPen()
+        
+        self.update_path()
+    
+    def update_path(self) -> None:
+        """Update the path to match the current rectangle and radius."""
+        path = QPainterPath()
+        path.addRoundedRect(self._rect, self._radius, self._radius)
+        self.setPath(path)
+    
+    def setRect(self, rect: QRectF) -> None:
+        """Set the rectangle.
+        
+        Args:
+            rect: New rectangle
+        """
+        self._rect = rect
+        self.update_path()
+    
+    def rect(self) -> QRectF:
+        """Get the rectangle.
+        
+        Returns:
+            Current rectangle
+        """
+        return self._rect
+    
+    def setBrush(self, brush: QBrush) -> None:
+        """Set the brush.
+        
+        Args:
+            brush: New brush
+        """
+        self._brush = brush
+        self.update()
+    
+    def setPen(self, pen: QPen) -> None:
+        """Set the pen.
+        
+        Args:
+            pen: New pen
+        """
+        self._pen = pen
+        self.update()
+    
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None) -> None:
+        """Paint the item.
+        
+        Args:
+            painter: Painter to use
+            option: Style options
+            widget: Widget being painted on
+        """
+        painter.setPen(self._pen)
+        painter.setBrush(self._brush)
+        painter.drawPath(self.path())
+
+
 class RelationshipLine(QGraphicsLineItem):
     """A graphical item representing a relationship between characters on the story board."""
     
@@ -760,22 +846,41 @@ class RelationshipLine(QGraphicsLineItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setAcceptHoverEvents(True)
         
-        # Create label
+        # Create label using QGraphicsTextItem with a QTextDocument for letter spacing
         self.label = QGraphicsTextItem(self)  # Make the label a child of the line
-        self.label.setPlainText(relationship_data['relationship_type'])
-        self.label.setFont(QFont("Arial", 9, QFont.Weight.Bold))  # Increased font size
         
-        # Ensure text color has good contrast with background
-        # Use white text for better readability against dark background
-        self.label.setDefaultTextColor(QColor(255, 255, 255))
+        # Create and configure a text document to control letter-spacing
+        doc = QTextDocument()
+        # Increase font size from 9 to 11 (approximately 25% larger)
+        doc.setDefaultFont(QFont("Courier New", 14, QFont.Weight.Bold))
         
-        # Create a background for the label to make it more readable
-        self.label_background = QGraphicsRectItem(self)
-        self.label_background.setBrush(QBrush(QColor(40, 40, 40, 230)))  # More opaque dark background
+        # Apply CSS-like styling to the text document
+        # We need to escape the text content for HTML
+        escaped_text = relationship_data['relationship_type'].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        html_text = f'<span style="letter-spacing: 0.5px;">{escaped_text}</span>'
+        doc.setHtml(html_text)
         
-        # Add a thin border with the relationship color for better visibility
-        border_pen = QPen(self.normal_color, 1)  # Use integer for width
+        # Set the document and color - use the same red color as the line but brighter for better visibility
+        self.label.setDocument(doc)
+        # Use a brighter version of the line color to ensure visibility
+        bright_text_color = QColor(self.normal_color)
+        bright_text_color.setRed(min(bright_text_color.red() + 50, 255))
+        self.label.setDefaultTextColor(bright_text_color)
+        
+        # Create a background for the label to make it more readable - using RoundedRectItem
+        # Using our custom RoundedRectItem instead of QGraphicsRectItem to get rounded corners
+        self.label_background = RoundedRectItem(QRectF(), 4.0, self)  # 4.0 is the border radius
+        
+        # Make the background slightly more transparent to improve text visibility
+        self.label_background.setBrush(QBrush(QColor(30, 30, 30, 200)))
+        
+        # border: 1px solid matching the relationship color
+        border_pen = QPen(self.normal_color, 1)
         self.label_background.setPen(border_pen)
+        
+        # Ensure proper z-ordering - background below, text above
+        self.label_background.setZValue(-1)
+        self.label.setZValue(1)
         
         # Track hover state
         self.is_hovered = False
@@ -797,12 +902,19 @@ class RelationshipLine(QGraphicsLineItem):
         pen.setWidth(int(self.hover_width))  # Convert to int
         self.setPen(pen)
         
-        # Change label appearance
-        self.label.setFont(QFont("Arial", 10, QFont.Weight.Bold))  # Slightly larger font
-        # Keep white text for readability, but update the border color
-        border_pen = self.label_background.pen()
-        border_pen.setColor(self.hover_color)
-        border_pen.setWidth(2)  # Slightly thicker border on hover (integer value)
+        # Change label appearance - apply hover enhancements
+        # Update the document with larger font and letter spacing
+        doc = self.label.document()
+        # Increase hover font size from 10 to 12 (20% larger)
+        doc.setDefaultFont(QFont("Courier New", 14, QFont.Weight.Bold))
+        
+        # Apply bright version of hover color for better visibility
+        bright_hover_color = QColor(self.hover_color)
+        bright_hover_color.setRed(min(bright_hover_color.red() + 50, 255))
+        self.label.setDefaultTextColor(bright_hover_color)
+        
+        # Update border with hover color and thicker border
+        border_pen = QPen(self.hover_color, 2)
         self.label_background.setPen(border_pen)
         
         # Update the background to match the new label size
@@ -827,12 +939,18 @@ class RelationshipLine(QGraphicsLineItem):
         pen.setWidth(int(self.normal_width))  # Convert to int
         self.setPen(pen)
         
-        # Restore label appearance
-        self.label.setFont(QFont("Arial", 9, QFont.Weight.Bold))  # Original font size
-        # Keep white text for readability, but restore the border color and width
-        border_pen = self.label_background.pen()
-        border_pen.setColor(self.normal_color)
-        border_pen.setWidth(1)  # Restore original border width (integer value)
+        # Restore label appearance to match the CSS styling
+        doc = self.label.document()
+        # Restore to larger base font size (11 instead of 9)
+        doc.setDefaultFont(QFont("Courier New", 14, QFont.Weight.Bold))
+        
+        # Restore original text color to match the line color but brighter
+        bright_text_color = QColor(self.normal_color)
+        bright_text_color.setRed(min(bright_text_color.red() + 50, 255))
+        self.label.setDefaultTextColor(bright_text_color)
+        
+        # Restore original border to match the line color
+        border_pen = QPen(self.normal_color, 1)
         self.label_background.setPen(border_pen)
         
         # Update the background to match the new label size
@@ -845,6 +963,10 @@ class RelationshipLine(QGraphicsLineItem):
     
     def update_position(self) -> None:
         """Update the position of the line and label."""
+        # Save current styling before repositioning
+        current_text_color = self.label.defaultTextColor()
+        current_font = self.label.document().defaultFont()
+        
         # Get the bounding rectangles of the character cards
         source_rect = self.source_card.sceneBoundingRect()
         target_rect = self.target_card.sceneBoundingRect()
@@ -891,18 +1013,35 @@ class RelationshipLine(QGraphicsLineItem):
             local_midpoint.y() - label_height / 2
         )
         
-        # Set the background rectangle to match the label size with increased padding
-        padding = 6  # Increased padding for better readability
-        self.label_background.setRect(
-            label_pos.x() - padding,
-            label_pos.y() - padding,
-            label_width + padding * 2,
-            label_height + padding * 2
+        # Set the background rectangle to match the label size with padding
+        # Using horizontal padding of 6px and vertical padding of 2px as per CSS
+        h_padding = 6
+        v_padding = 2
+        
+        bg_rect = QRectF(
+            label_pos.x() - h_padding,
+            label_pos.y() - v_padding,
+            label_width + h_padding * 2,
+            label_height + v_padding * 2
         )
         
+        # Update the rounded rectangle
+        self.label_background.setRect(bg_rect)
+        
         # Set the positions
-        self.label_background.setPos(0, 0)  # Already positioned by its rect
+        self.label_background.setPos(0, 0)
         self.label.setPos(label_pos)
+        
+        # Restore z-ordering to ensure proper layering
+        self.label_background.setZValue(-1)
+        self.label.setZValue(1)
+        
+        # Restore text color and font that might have been lost during repositioning
+        self.label.setDefaultTextColor(current_text_color)
+        
+        # Restore the font
+        doc = self.label.document()
+        doc.setDefaultFont(current_font)
     
     def contextMenuEvent(self, event: QGraphicsSceneContextMenuEvent) -> None:
         """Handle context menu events.
@@ -981,6 +1120,50 @@ class StoryBoardScene(QGraphicsScene):
         
         # Connect signals
         self.selectionChanged.connect(self.on_selection_changed)
+        
+        # Connect to scene changes to preserve relationship styling
+        self.changed.connect(self.on_scene_changed)
+    
+    def on_scene_changed(self, changed_items) -> None:
+        """Handle scene changes to ensure relationship styling is preserved.
+        
+        Args:
+            changed_items: List of changed items
+        """
+        # Only proceed if we have relationship lines
+        if not self.relationship_lines:
+            return
+            
+        # Check if we need to refresh relationship line styling
+        need_refresh = False
+        for item in changed_items:
+            # If any character card moved or any relationship line changed
+            if isinstance(item, CharacterCard) or isinstance(item, RelationshipLine):
+                need_refresh = True
+                break
+        
+        # If needed, refresh all relationship lines
+        if need_refresh:
+            self.refresh_relationship_styling()
+    
+    def refresh_relationship_styling(self) -> None:
+        """Refresh the styling of all relationship lines in the scene."""
+        for relationship_id, line in self.relationship_lines.items():
+            # Just ensure the z-ordering and styling are preserved
+            # No need to update positions as that's handled elsewhere
+            line.label_background.setZValue(-1)
+            line.label.setZValue(1)
+            
+            # If line is not hovered, ensure proper color
+            if not line.is_hovered:
+                # Apply bright text color
+                bright_text_color = QColor(line.normal_color)
+                bright_text_color.setRed(min(bright_text_color.red() + 50, 255))
+                line.label.setDefaultTextColor(bright_text_color)
+                
+                # Ensure proper font
+                doc = line.label.document()
+                doc.setDefaultFont(QFont("Courier New", 14, QFont.Weight.Bold))
     
     def set_grid_snap(self, enabled: bool) -> None:
         """Enable or disable grid snapping.
@@ -1042,6 +1225,9 @@ class StoryBoardScene(QGraphicsScene):
             
             # Restore the painter state
             painter.restore()
+            
+        # Ensure relationship styling is preserved when the scene is redrawn
+        self.refresh_relationship_styling()
     
     def on_selection_changed(self) -> None:
         """Handle selection changes."""
@@ -1145,6 +1331,9 @@ class StoryBoardScene(QGraphicsScene):
         Args:
             character_id: ID of the character that moved
         """
+        # Refresh relationship styling
+        self.refresh_relationship_styling()
+        
         # Emit layout changed signal
         self.layout_changed.emit()
     
