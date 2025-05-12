@@ -657,7 +657,7 @@ class CharacterCard(QGraphicsItemGroup):
         relationship_data = {
             'relationship_type': relationship_type['name'],
             'color': "#FF0000",  # Default color
-            'width': 1.0  # Default width
+            'width': 4.0  # 4x the original width
         }
         
         relationship_id = create_relationship(
@@ -698,7 +698,7 @@ class CharacterCard(QGraphicsItemGroup):
             inverse_data = {
                 'relationship_type': inverse_name,
                 'color': "#FF0000",  # Default color
-                'width': 1.0  # Default width
+                'width': 4.0  # 4x the original width
             }
             
             # Ask user if they want to create the inverse relationship
@@ -1050,8 +1050,8 @@ class RelationshipLine(QGraphicsLineItem):
         # Set line properties
         self.normal_color = QColor(relationship_data['color']) if relationship_data['color'] else QColor("#FF0000")
         self.hover_color = self.normal_color.lighter(130)  # Lighter version for hover
-        self.normal_width = float(relationship_data['width']) if relationship_data['width'] else 1.0
-        self.hover_width = self.normal_width * 2  # Thicker on hover
+        self.normal_width = float(relationship_data['width']) if relationship_data['width'] else 4.0  # 4x the original width
+        self.hover_width = self.normal_width * 1.5  # Thicker on hover (reduced multiplier since lines are already thick)
         
         # Set initial pen
         self.setPen(QPen(self.normal_color, int(self.normal_width), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
@@ -1175,6 +1175,41 @@ class RelationshipLine(QGraphicsLineItem):
         
         super().hoverLeaveEvent(event)
     
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None) -> None:
+        """Override the paint method to draw a more visible line with glow effect.
+        
+        Args:
+            painter: The painter to use
+            option: Style options for the item
+            widget: The widget being painted on
+        """
+        # Save the painter state
+        painter.save()
+        
+        # Enable antialiasing for smoother lines
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Get the line
+        line = self.line()
+        
+        # Draw a glow effect first (larger, semi-transparent line)
+        glow_pen = QPen(self.pen())
+        glow_color = QColor(self.pen().color())
+        glow_color.setAlpha(80)  # Semi-transparent
+        glow_pen.setColor(glow_color)
+        glow_pen.setWidth(int(self.pen().width() * 2))  # Double width for glow
+        painter.setPen(glow_pen)
+        painter.drawLine(line)
+        
+        # Now draw the actual line
+        painter.setPen(self.pen())
+        painter.drawLine(line)
+        
+        # Restore the painter state
+        painter.restore()
+        
+        # Don't call the parent implementation as we're completely replacing it
+    
     def update_position(self) -> None:
         """Update the position of the line and label."""
         # Save current styling before repositioning
@@ -1202,6 +1237,15 @@ class RelationshipLine(QGraphicsLineItem):
         
         # Set the line to connect the pins
         self.setLine(QLineF(source_pin, target_pin))
+        
+        # FORCE a much thicker line width regardless of stored value
+        force_width = 8.0  # Set to a very visible value
+        if self.is_hovered:
+            force_width = 12.0  # Even thicker on hover
+            
+        pen = self.pen()
+        pen.setWidth(int(force_width))
+        self.setPen(pen)
         
         # Calculate midpoint of the line
         midpoint = QPointF(
