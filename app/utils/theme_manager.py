@@ -13,6 +13,9 @@ from typing import Literal, Optional
 import qdarktheme
 from PyQt6.QtWidgets import QApplication
 
+# Import our icon manager reference
+from app.utils.icons.icon_manager import icon_manager
+
 
 class ThemeManager:
     """Manages application themes using PyQtDarkTheme."""
@@ -69,6 +72,14 @@ class ThemeManager:
         
         # Apply the theme using PyQtDarkTheme
         qdarktheme.setup_theme(self.current_theme)
+        
+        # Update icons to match the current theme
+        if self.current_theme == "auto":
+            # For auto theme, we need to determine if it's currently dark or light
+            # This would depend on system settings, but for simplicity we'll default to dark
+            icon_manager.set_theme("dark")
+        else:
+            icon_manager.set_theme(self.current_theme)
     
     def toggle_theme(self) -> None:
         """Toggle between light and dark themes."""

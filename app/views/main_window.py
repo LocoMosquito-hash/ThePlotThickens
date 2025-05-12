@@ -35,6 +35,7 @@ from app.db_sqlite import (
 from app.utils.character_completer import CharacterCompleter
 from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
 from app.utils.quick_event_utils import show_quick_event_dialog
+from app.utils.icons import icon_manager
 
 
 class QuickEventDialog(QDialog):
@@ -303,10 +304,17 @@ class MainWindow(QMainWindow):
         self.story_manager.story_selected.connect(self.on_story_selected)
         self.tab_widget.addTab(self.story_manager, "Story Manager")
         
+        # Add "book" icon to the Story Manager tab
+        story_manager_index = 0  # First tab
+        self.tab_widget.setTabIcon(story_manager_index, icon_manager.get_icon("book"))
+        
         # Create story board tab (initially disabled)
         self.story_board = StoryBoardWidget(self.db_conn)
         self.story_board_tab_index = self.tab_widget.addTab(self.story_board, "Story Board")
         self.tab_widget.setTabEnabled(self.story_board_tab_index, False)
+        
+        # Add "layout-board" icon to Story Board tab
+        self.tab_widget.setTabIcon(self.story_board_tab_index, icon_manager.get_icon("layout_board"))
         
         # Create gallery tab with refresh button (initially disabled)
         gallery_container = QWidget()
@@ -330,6 +338,9 @@ class MainWindow(QMainWindow):
         self.gallery_tab_index = self.tab_widget.addTab(gallery_container, "Gallery")
         self.tab_widget.setTabEnabled(self.gallery_tab_index, False)
         
+        # Add "photo" icon to Gallery tab
+        self.tab_widget.setTabIcon(self.gallery_tab_index, icon_manager.get_icon("photo"))
+        
         # Create timeline tab with refresh button (initially disabled)
         timeline_container = QWidget()
         timeline_layout = QVBoxLayout(timeline_container)
@@ -352,6 +363,9 @@ class MainWindow(QMainWindow):
         self.timeline_tab_index = self.tab_widget.addTab(timeline_container, "Timeline")
         self.tab_widget.setTabEnabled(self.timeline_tab_index, False)
         
+        # Add "timeline" icon to Timeline tab
+        self.tab_widget.setTabIcon(self.timeline_tab_index, icon_manager.get_icon("timeline"))
+        
         # Create decision points tab with refresh button (initially disabled)
         decision_points_container = QWidget()
         decision_points_layout = QVBoxLayout(decision_points_container)
@@ -373,6 +387,9 @@ class MainWindow(QMainWindow):
         
         self.decision_points_tab_index = self.tab_widget.addTab(decision_points_container, "Decision Points")
         self.tab_widget.setTabEnabled(self.decision_points_tab_index, False)
+        
+        # Add "git-fork" icon to Decision Points tab
+        self.tab_widget.setTabIcon(self.decision_points_tab_index, icon_manager.get_icon("git_fork"))
         
         # Create status bar
         self.status_bar = QStatusBar()
@@ -420,10 +437,16 @@ class MainWindow(QMainWindow):
         preferences_action.triggered.connect(self.on_open_settings)
         settings_menu.addAction(preferences_action)
         
-        # Add Theme toggle action
+        # Add Theme toggle action with icon
         self.theme_action = QAction("Toggle &Theme (Dark/Light)", self)
         self.theme_action.setShortcut("Ctrl+T")
         self.theme_action.setStatusTip("Toggle between dark and light themes")
+        # Add icon based on current theme
+        current_theme = self.theme_manager.get_current_theme() if self.theme_manager else "dark"
+        if current_theme == "dark":
+            self.theme_action.setIcon(icon_manager.get_icon("moon"))
+        else:
+            self.theme_action.setIcon(icon_manager.get_icon("sun"))
         self.theme_action.triggered.connect(self.on_toggle_theme)
         settings_menu.addAction(self.theme_action)
     
@@ -443,8 +466,13 @@ class MainWindow(QMainWindow):
         """Toggle between dark and light themes."""
         if self.theme_manager:
             self.theme_manager.toggle_theme()
+            
+            # Update the theme action icon based on the new theme
             current_theme = self.theme_manager.get_current_theme()
-            self.status_bar.showMessage(f"Theme changed to {current_theme}", 3000)
+            if current_theme == "dark":
+                self.theme_action.setIcon(icon_manager.get_icon("moon"))
+            else:
+                self.theme_action.setIcon(icon_manager.get_icon("sun"))
     
     def on_story_selected(self, story_id: int, story_data: Dict[str, Any]) -> None:
         """Handle story selection.
