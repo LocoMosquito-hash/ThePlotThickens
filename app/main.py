@@ -19,6 +19,7 @@ from app.db_sqlite import initialize_database
 from app.views.main_window import MainWindow
 from app.utils.image_recognition_util import ImageRecognitionUtil
 from app.utils.theme_manager import ThemeManager
+from app.utils.icons import icon_manager
 
 
 def _setup_logging() -> None:
@@ -122,6 +123,22 @@ def main() -> None:
     # Initialize and apply the theme
     theme_manager = ThemeManager(app_dir)
     theme_manager.apply_theme()
+    
+    # Preload commonly used icons
+    logging.info("Preloading common icons...")
+    common_icons = [
+        "home", "settings", "user", "file", "folder", "trash",
+        "edit", "check", "x", "plus", "minus", "refresh",
+        "calendar", "info_circle", "alert_triangle", "sun", "moon"
+    ]
+    
+    for icon_name in common_icons:
+        try:
+            icon_manager.get_icon(icon_name)
+        except Exception as e:
+            logging.warning(f"Could not preload icon '{icon_name}': {str(e)}")
+    
+    logging.info("Icon initialization completed")
     
     # Create and show the main window
     logging.info("Creating main window...")

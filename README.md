@@ -85,3 +85,112 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Inspired by the need to keep track of complex narratives across multiple media
 - Built with PyQt6 for a native desktop experience
+
+# The Plot Thickens - Icon System
+
+This document describes the icon system used in The Plot Thickens application.
+
+## Overview
+
+The icon system is built on top of the [Tabler Icons](https://tabler-icons.io/) library, which provides a comprehensive set of high-quality SVG icons. The application supports two different implementations:
+
+1. **pytablericons** (preferred) - Uses Pillow for rendering icons
+2. **tabler-qicon** (alternative) - Direct QIcon implementation
+
+If neither of these packages is available, the system falls back to using Qt's built-in standard icons.
+
+## Features
+
+- **Multiple Icon Implementations**: Support for both pytablericons and tabler-qicon packages
+- **Consistent Icon Styling**: All icons follow the application's theme (light or dark)
+- **Theme-aware**: Icons automatically adjust when the application theme changes
+- **Fallback Mechanism**: If no Tabler Icons package is available, the system falls back to Qt's built-in standard icons
+- **Icon Caching**: Frequently used icons are cached for performance
+- **Centralized Management**: All icons are accessed through a single manager class
+
+## Usage
+
+### Basic Usage
+
+To use an icon in your PyQt6 component, import the icon manager and call the `get_icon` method:
+
+```python
+from app.utils.icons import icon_manager
+
+# In your UI setup code:
+button = QPushButton()
+button.setIcon(icon_manager.get_icon("settings"))
+```
+
+### Available Icons
+
+Tabler Icons provides over 5,000 icons. You can browse the available icons at [tabler-icons.io](https://tabler-icons.io/).
+
+When using an icon, convert the name to lowercase and replace hyphens with underscores:
+
+- `arrow-down` → `arrow_down`
+- `circle-check` → `circle_check`
+
+### Commonly Used Icons
+
+Some commonly used icons in the application:
+
+- `home` - Home navigation
+- `settings` - Application settings
+- `edit` - Edit content
+- `trash` - Delete items
+- `plus` - Add new items
+- `check` - Confirm or complete
+- `x` - Cancel or close
+- `info_circle` - Information
+- `alert_triangle` - Warning
+- `refresh` - Refresh content
+- `sun`/`moon` - Light/dark theme toggle
+
+### Theme-Aware Icons
+
+Icons automatically adjust to the current application theme. The default colors are:
+
+- Dark theme: White icons (#FFFFFF)
+- Light theme: Black icons (#000000)
+
+## Implementation Details
+
+The icon system is implemented in the `app/utils/icons` package:
+
+- `icon_manager.py` - The main manager class that provides access to icons
+- `__init__.py` - Exposes the icon_manager singleton instance
+- `icon_example.py` - An example application showing available icons
+
+The `IconManager` class provides these key methods:
+
+- `get_icon(icon_name)` - Get an icon by name
+- `set_theme(theme)` - Set the theme for icons ("dark" or "light")
+- `get_all_icon_names()` - Get a list of all available icon names
+
+## Testing the Icon System
+
+You can run the icon example to see available icons and test the theme toggle:
+
+```
+python -m app.utils.icons.icon_example
+```
+
+## Icon Library Selection
+
+The application will use the available icon libraries in the following priority order:
+
+1. **pytablericons** - If available, this is the preferred option
+2. **tabler-qicon** - Used if pytablericons is not available
+3. **Qt Standard Icons** - Fallback if neither of the above is available
+
+## Requirements
+
+The icon system requires:
+
+- PyQt6
+- At least one of:
+  - pytablericons package (preferred)
+  - tabler-qicon package (alternative)
+
+If neither package is available, the system will fall back to using Qt's built-in standard icons.
