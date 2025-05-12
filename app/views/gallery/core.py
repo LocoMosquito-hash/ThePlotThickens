@@ -910,7 +910,7 @@ class GalleryWidget(QWidget):
                             logging.error(f"Failed to load image from alternative path: {alt_path}")
             else:
                 # Thumbnail exists, load it
-                logging.debug(f"Found existing thumbnail at: {thumbnail_path}")
+                # logging.debug(f"Found existing thumbnail at: {thumbnail_path}")
                 pixmap = QPixmap(thumbnail_path)
                 if not pixmap.isNull():
                     self.pixmap_cache[image_id] = pixmap
