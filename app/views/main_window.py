@@ -13,13 +13,14 @@ from typing import Optional, List, Dict, Any
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
-    QPushButton, QLabel, QStatusBar, QMessageBox, QFileDialog,
+    QPushButton, QLabel, QMessageBox, QFileDialog,
     QMenuBar, QMenu, QDialog, QComboBox, QTextEdit, QListWidget, 
     QListWidgetItem, QFrame
 )
 from PyQt6.QtCore import Qt, QSize, QSettings, pyqtSignal, QEvent
 from PyQt6.QtGui import QAction, QIcon, QTextCursor, QKeyEvent
 
+from app.widgets.enhanced_status_bar import EnhancedStatusBar
 from app.views.story_manager import StoryManagerWidget
 from app.views.story_board import StoryBoardWidget
 from app.views.settings_dialog import SettingsDialog
@@ -391,10 +392,10 @@ class MainWindow(QMainWindow):
         # Add "git-fork" icon to Decision Points tab
         self.tab_widget.setTabIcon(self.decision_points_tab_index, icon_manager.get_icon("git_fork"))
         
-        # Create status bar
-        self.status_bar = QStatusBar()
+        # Status bar
+        self.status_bar = EnhancedStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready")
+        self.status_bar.showPermanentMessage("Ready")
     
     def create_menus(self) -> None:
         """Create the application menus."""
@@ -454,13 +455,13 @@ class MainWindow(QMainWindow):
         """Open the recognition database viewer dialog."""
         recognition_viewer = RecognitionDatabaseViewer(self.db_conn, self)
         recognition_viewer.exec()
-        self.status_bar.showMessage("Recognition database viewer closed", 3000)
+        self.status_bar.showPermanentMessage("Recognition database viewer closed")
     
     def on_open_settings(self) -> None:
         """Open the settings dialog."""
         settings_dialog = SettingsDialog(self)
         if settings_dialog.exec():
-            self.status_bar.showMessage("Settings saved", 3000)
+            self.status_bar.showPermanentMessage("Settings saved")
     
     def on_toggle_theme(self) -> None:
         """Toggle between dark and light themes."""
@@ -493,7 +494,7 @@ class MainWindow(QMainWindow):
         self.tab_widget.setTabEnabled(self.timeline_tab_index, True)
         self.tab_widget.setTabEnabled(self.decision_points_tab_index, True)
         self.tab_widget.setCurrentIndex(self.story_board_tab_index)
-        self.status_bar.showMessage(f"Loaded story: {story_data['title']}")
+        self.status_bar.showPermanentMessage(f"Loaded story: {story_data['title']}")
     
     def restore_window_state(self) -> None:
         """Restore the window state from settings."""
@@ -656,17 +657,17 @@ class MainWindow(QMainWindow):
         """Refresh the gallery tab contents."""
         if hasattr(self, 'gallery') and self.gallery:
             self.gallery.load_images()
-            self.status_bar.showMessage("Gallery refreshed", 3000)
+            self.status_bar.showPermanentMessage("Gallery refreshed")
     
     def refresh_timeline(self) -> None:
         """Refresh the timeline tab contents."""
         if hasattr(self, 'timeline') and self.timeline:
             self.timeline.load_events()
             self.timeline.load_timeline_views()
-            self.status_bar.showMessage("Timeline refreshed", 3000)
+            self.status_bar.showPermanentMessage("Timeline refreshed")
     
     def refresh_decision_points(self) -> None:
         """Refresh the decision points tab contents."""
         if hasattr(self, 'decision_points') and self.decision_points:
             self.decision_points.load_decision_points()
-            self.status_bar.showMessage("Decision points refreshed", 3000) 
+            self.status_bar.showPermanentMessage("Decision points refreshed") 

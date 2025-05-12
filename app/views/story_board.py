@@ -1929,7 +1929,7 @@ class StoryBoardScene(QGraphicsScene):
             # Display a status message
             main_window = self.window()
             if hasattr(main_window, 'status_bar'):
-                main_window.status_bar.showMessage(f"Selected character: {character_data['name']}", 2000)
+                main_window.status_bar.showPermanentMessage(f"Selected character: {character_data['name']}")
     
     def on_selection_changed(self, selected_ids: List[int]) -> None:
         """Handle multiple character selection.
@@ -1952,9 +1952,9 @@ class StoryBoardScene(QGraphicsScene):
         main_window = self.window()
         if hasattr(main_window, 'status_bar'):
             if len(selected_ids) > 1:
-                main_window.status_bar.showMessage(f"Selected {len(selected_ids)} characters", 2000)
+                main_window.status_bar.showPermanentMessage(f"Selected {len(selected_ids)} characters")
             elif len(selected_ids) == 0:
-                main_window.status_bar.showMessage("No characters selected", 2000)
+                main_window.status_bar.showPermanentMessage("No characters selected")
     
     def get_selected_characters(self) -> List[Dict[str, Any]]:
         """Get data for all selected characters.
@@ -2591,7 +2591,7 @@ class StoryBoardWidget(QWidget):
         # Show a brief status message
         main_window = self.window()
         if hasattr(main_window, 'status_bar'):
-            main_window.status_bar.showMessage("View layout saved", 2000)
+            main_window.status_bar.showPermanentMessage("View layout saved")
 
     def on_character_updated(self, character_id: int, character_data: Dict[str, Any]) -> None:
         """Handle character update in the scene.
@@ -2827,7 +2827,7 @@ class StoryBoardWidget(QWidget):
             # Display a status message
             main_window = self.window()
             if hasattr(main_window, 'status_bar'):
-                main_window.status_bar.showMessage(f"Selected character: {character_data['name']}", 2000)
+                main_window.status_bar.showPermanentMessage(f"Selected character: {character_data['name']}")
     
     def on_selection_changed(self, selected_ids: List[int]) -> None:
         """Handle multiple character selection.
@@ -2850,9 +2850,9 @@ class StoryBoardWidget(QWidget):
         main_window = self.window()
         if hasattr(main_window, 'status_bar'):
             if len(selected_ids) > 1:
-                main_window.status_bar.showMessage(f"Selected {len(selected_ids)} characters", 2000)
+                main_window.status_bar.showPermanentMessage(f"Selected {len(selected_ids)} characters")
             elif len(selected_ids) == 0:
-                main_window.status_bar.showMessage("No characters selected", 2000)
+                main_window.status_bar.showPermanentMessage("No characters selected")
     
     def get_selected_characters(self) -> List[Dict[str, Any]]:
         """Get data for all selected characters.
