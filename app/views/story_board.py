@@ -73,6 +73,9 @@ class CharacterCard(QGraphicsItemGroup):
         """
         super().__init__()
         
+        # Set clip behavior to ensure nothing draws outside card boundaries
+        self.setFlags(self.flags() | QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape)
+        
         # Create signals object
         self.signals = CharacterCardSignals()
         self.position_changed = self.signals.position_changed
@@ -96,8 +99,93 @@ class CharacterCard(QGraphicsItemGroup):
         # Track connected relationships
         self.relationships: List[RelationshipLine] = []
         
+        # Create folded corner indicator for selection (initially hidden)
+        self.folded_corner = self.create_folded_corner()
+        self.folded_corner.setVisible(False)
+        self.addToGroup(self.folded_corner)
+        
         # Set position after everything else is set up
         self.setPos(x, y)
+        
+        # Keep track of selection shadow as a separate item outside the group
+        self.shadow_rect = None
+    
+    def __del__(self) -> None:
+        """Clean up when the object is deleted."""
+        # Remove shadow from scene if it exists
+        if hasattr(self, 'shadow_rect') and self.shadow_rect and self.scene():
+            self.scene().removeItem(self.shadow_rect)
+            self.shadow_rect = None
+    
+    def contains(self, point: QPointF) -> bool:
+        """Override contains to only accept clicks on the actual card area.
+        
+        Args:
+            point: The point to test
+            
+        Returns:
+            True if the point is within the card's visual area
+        """
+        # Only accept points within the card's rectangular area
+        card_rect = QRectF(0, 0, 180, 240)
+        return card_rect.contains(point)
+    
+    def shape(self) -> QPainterPath:
+        """Override shape to provide a more accurate hit testing area.
+        
+        Returns:
+            A QPainterPath representing the shape for hit testing
+        """
+        # Create a path that matches the card's rectangular shape
+        path = QPainterPath()
+        path.addRect(0, 0, 180, 240)
+        return path
+    
+    def create_folded_corner(self) -> QGraphicsItemGroup:
+        """Create a folded corner indicator for selection.
+        
+        Returns:
+            A QGraphicsItemGroup representing a folded corner
+        """
+        # Card dimensions
+        card_width = 180
+        card_height = 240
+        
+        # Size of the folded corner
+        fold_size = 30
+        
+        # Create a path for the folded corner (top-right of the card)
+        path = QPainterPath()
+        path.moveTo(card_width - fold_size, 0)  # Start at top right minus fold size
+        path.lineTo(card_width, 0)              # Line to top right corner
+        path.lineTo(card_width, fold_size)      # Line down fold size
+        path.lineTo(card_width - fold_size, 0)  # Line back to start to close the triangle
+        
+        # Create shadow effect path for depth
+        shadow_path = QPainterPath()
+        shadow_path.moveTo(card_width - fold_size, 0)
+        shadow_path.lineTo(card_width - fold_size, fold_size)
+        shadow_path.lineTo(card_width, fold_size)
+        shadow_path.lineTo(card_width - fold_size, 0)
+        
+        # Create a group for both paths
+        corner_group = QGraphicsItemGroup()
+        
+        # Create shadow path item with darker color
+        shadow_item = QGraphicsPathItem(shadow_path)
+        shadow_item.setBrush(QBrush(QColor("#888888")))  # Dark gray for shadow
+        shadow_item.setPen(QPen(QColor("#888888"), 1))
+        shadow_item.setZValue(2.0)  # Above card, below the fold
+        corner_group.addToGroup(shadow_item)
+        
+        # Create fold path item
+        fold_item = QGraphicsPathItem(path)
+        fold_item.setBrush(QBrush(QColor("#dddddd")))  # Light gray for fold
+        fold_item.setPen(QPen(QColor("#999999"), 1))
+        fold_item.setZValue(2.1)  # Above shadow
+        corner_group.addToGroup(fold_item)
+        
+        return corner_group
     
     @property
     def character_id(self) -> int:
@@ -201,6 +289,9 @@ class CharacterCard(QGraphicsItemGroup):
             visible: Whether the bounding rect should be visible
         """
         self._show_bounding_rect = visible
+        
+        # Never actually show any bounding rect
+        visible = False
     
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None) -> None:
         """Paint the item.
@@ -210,14 +301,15 @@ class CharacterCard(QGraphicsItemGroup):
             option: Style options
             widget: Widget being painted on
         """
+        # Set up clipping to ensure nothing draws outside card boundaries
+        painter.save()
+        painter.setClipRect(QRectF(0, 0, 180, 240))
+        
         # Call the parent class paint method
         super().paint(painter, option, widget)
         
-        # Draw the bounding rect if enabled - removed to eliminate dashed line
-        # if hasattr(self, '_show_bounding_rect') and self._show_bounding_rect:
-        #     # Draw a dashed red border around the bounding rect
-        #     painter.setPen(QPen(QColor("#ff0000"), 2, Qt.PenStyle.DashLine))
-        #     painter.drawRect(self.boundingRect())
+        # Restore painter state
+        painter.restore()
     
     def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value) -> Any:
         """Handle item changes.
@@ -229,7 +321,59 @@ class CharacterCard(QGraphicsItemGroup):
         Returns:
             Modified value
         """
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene():
+        # Define shadow_offset at the method level so it's available to all code paths
+        shadow_offset = 4  # Shadow offset in pixels
+        
+        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedChange:
+            # Show/hide folded corner based on selection state
+            if value:
+                # Show folded corner when selected
+                self.folded_corner.setVisible(True)
+                
+                # Visual enhancements for selected state
+                # Bring selected card to front
+                self.setZValue(5)
+                
+                # Add a subtle shadow effect by creating a shadow rectangle
+                # (as a separate scene item, not part of the group)
+                if not self.shadow_rect and self.scene():
+                    card_width = 180
+                    card_height = 240
+                    # shadow_offset already defined at method level
+                    
+                    # Create shadow rectangle as a separate scene item
+                    self.shadow_rect = QGraphicsRectItem()
+                    self.shadow_rect.setRect(0, 0, card_width, card_height)
+                    self.shadow_rect.setBrush(QBrush(QColor(0, 0, 0, 50)))  # Translucent black
+                    self.shadow_rect.setPen(QPen(Qt.PenStyle.NoPen))  # No pen/border
+                    self.shadow_rect.setZValue(-1)  # Below the card
+                    
+                    # Add to scene (not to group)
+                    self.scene().addItem(self.shadow_rect)
+                
+                # Position and show the shadow
+                if self.shadow_rect:
+                    # Position shadow based on card's position
+                    self.shadow_rect.setPos(self.pos() + QPointF(shadow_offset/2, shadow_offset/2))
+                    self.shadow_rect.setVisible(True)
+            else:
+                # Hide folded corner when not selected
+                self.folded_corner.setVisible(False)
+                
+                # Reset visual enhancements
+                self.setZValue(0)
+                
+                # Hide shadow
+                if self.shadow_rect:
+                    self.shadow_rect.setVisible(False)
+        
+        elif change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene():
+            # If shadow exists, update its position too
+            if self.shadow_rect and self.shadow_rect.isVisible():
+                # shadow_offset is now accessible here
+                new_pos = value
+                self.shadow_rect.setPos(new_pos + QPointF(shadow_offset/2, shadow_offset/2))
+            
             # Check if grid snapping is enabled in the scene
             if hasattr(self.scene(), 'grid_snap_enabled') and self.scene().grid_snap_enabled:
                 # Get the new position
@@ -339,6 +483,11 @@ class CharacterCard(QGraphicsItemGroup):
                     del scene.relationship_lines[relationship.relationship_id]
             
             # Remove the character card from the scene
+            # First remove the shadow if it exists
+            if self.shadow_rect:
+                scene.removeItem(self.shadow_rect)
+                self.shadow_rect = None
+                
             scene.removeItem(self)
             # Remove from scene's character tracking
             if self._character_id in scene.character_cards:
@@ -734,6 +883,16 @@ class CharacterCard(QGraphicsItemGroup):
                 if mc_text:
                     scene.removeItem(mc_text)
 
+    def boundingRect(self) -> QRectF:
+        """Override boundingRect to constrain it to the actual card size.
+        
+        Returns:
+            The bounding rectangle of the card
+        """
+        # Return a fixed bounding rect for the character card, matching its intended dimensions
+        # This prevents the card from having an unnecessarily large interactive area
+        return QRectF(0, 0, 180, 240)
+
 
 class RoundedRectItem(QGraphicsPathItem):
     """A graphics item that draws a rounded rectangle."""
@@ -1093,6 +1252,7 @@ class StoryBoardScene(QGraphicsScene):
     """Custom graphics scene for the story board."""
     
     layout_changed = pyqtSignal()  # Signal emitted when layout changes
+    character_selected = pyqtSignal(int)  # Signal emitted when a character is selected, with character ID
     
     def __init__(self, parent=None, db_conn=None) -> None:
         """Initialize the scene.
@@ -1109,6 +1269,9 @@ class StoryBoardScene(QGraphicsScene):
         # Track character cards and relationship lines
         self.character_cards: Dict[int, CharacterCard] = {}
         self.relationship_lines: Dict[int, RelationshipLine] = {}
+        
+        # Track shadow rectangles to clean them up on scene clear
+        self.shadow_rects: List[QGraphicsRectItem] = []
         
         # Grid snapping settings
         self.grid_snap_enabled = False
@@ -1298,6 +1461,11 @@ class StoryBoardScene(QGraphicsScene):
     
     def clear_board(self) -> None:
         """Clear all items from the scene."""
+        # Make sure to remove any shadow rectangles
+        for card in self.character_cards.values():
+            if hasattr(card, 'shadow_rect') and card.shadow_rect is not None:
+                self.removeItem(card.shadow_rect)
+        
         self.character_cards.clear()
         self.relationship_lines.clear()
         self.clear()
@@ -1323,6 +1491,41 @@ class StoryBoardScene(QGraphicsScene):
         Args:
             event: Mouse press event
         """
+        # Get the clicked position
+        pos = event.scenePos()
+        
+        # Check if we clicked on an item
+        clicked_item = self.itemAt(pos, QTransform())
+        
+        # If clicked on background, clear selection
+        if not clicked_item:
+            self.clearSelection()
+        elif isinstance(clicked_item, CharacterCard) or (clicked_item.parentItem() and isinstance(clicked_item.parentItem(), CharacterCard)):
+            # If clicked on a character card or its child item, handle selection
+            if isinstance(clicked_item, CharacterCard):
+                character_card = clicked_item
+            else:
+                character_card = clicked_item.parentItem()
+            
+            # First, verify the click is within the actual card bounds
+            # Convert scene position to item coordinates
+            local_pos = character_card.mapFromScene(pos)
+            card_rect = QRectF(0, 0, 180, 240)
+            
+            # Only proceed if the click is within the actual card boundaries
+            if card_rect.contains(local_pos):
+                # If holding Ctrl/Cmd, add to selection; otherwise, clear and select only this card
+                if not (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+                    self.clearSelection()
+                
+                # Select the card
+                character_card.setSelected(True)
+                
+                # Emit the character selected signal
+                if character_card.isSelected():
+                    self.character_selected.emit(character_card.character_id)
+        
+        # Pass event to parent for default handling
         super().mousePressEvent(event)
     
     def on_character_position_changed(self, character_id: int) -> None:
@@ -1562,6 +1765,8 @@ class StoryBoardView(QGraphicsView):
 class StoryBoardWidget(QWidget):
     """Widget for the story board visualization."""
     
+    character_selected = pyqtSignal(int, dict)  # Signal emitted when a character is selected with ID and data
+    
     def __init__(self, db_conn) -> None:
         """Initialize the story board widget.
         
@@ -1574,6 +1779,7 @@ class StoryBoardWidget(QWidget):
         self.current_story_id = None
         self.current_story_data = None
         self.current_view_id = None
+        self.currently_selected_character_id = None
         
         # Initialize QSettings
         self.settings = QSettings("ThePlotThickens", "ThePlotThickens")
@@ -1676,6 +1882,7 @@ class StoryBoardWidget(QWidget):
         
         # Connect signals
         self.scene.layout_changed.connect(self.on_layout_changed)
+        self.scene.character_selected.connect(self.on_character_selected)
         
         # Disable controls initially
         self.view_selector.setEnabled(False)
@@ -2237,3 +2444,25 @@ class StoryBoardWidget(QWidget):
         
         # Force the view to update
         self.view.viewport().update() 
+    
+    def on_character_selected(self, character_id: int) -> None:
+        """Handle character selection.
+        
+        Args:
+            character_id: ID of the selected character
+        """
+        self.currently_selected_character_id = character_id
+        
+        # Get character data
+        character_data = None
+        if character_id in self.scene.character_cards:
+            character_data = self.scene.character_cards[character_id].character_data
+        
+        # Emit the character selected signal with ID and data
+        if character_data:
+            self.character_selected.emit(character_id, character_data)
+            
+            # Display a status message
+            main_window = self.window()
+            if hasattr(main_window, 'status_bar'):
+                main_window.status_bar.showMessage(f"Selected character: {character_data['name']}", 2000)
