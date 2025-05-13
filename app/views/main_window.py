@@ -29,6 +29,7 @@ from app.views.timeline_widget import TimelineWidget
 from app.views.recognition_viewer import RecognitionDatabaseViewer
 from app.views.decision_points_tab import DecisionPointsTab
 from app.views.decision_point_dialog import DecisionPointDialog
+from app.views.relationship_editor import RelationshipEditorDialog
 from app.db_sqlite import (
     get_story_characters, create_quick_event, get_next_quick_event_sequence_number,
     get_character, search_quick_events
@@ -637,6 +638,9 @@ class MainWindow(QMainWindow):
         # Check for Ctrl+Q shortcut for adding quick events
         if event.key() == Qt.Key.Key_Q and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             self.add_quick_event()
+        # Check for Ctrl+R shortcut for editing relationships
+        elif event.key() == Qt.Key.Key_R and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self.open_relationship_editor()
         else:
             # Pass the event to the parent class
             super().keyPressEvent(event)
@@ -670,4 +674,31 @@ class MainWindow(QMainWindow):
         """Refresh the decision points tab contents."""
         if hasattr(self, 'decision_points') and self.decision_points:
             self.decision_points.load_decision_points()
-            self.status_bar.showPermanentMessage("Decision points refreshed") 
+            self.status_bar.showPermanentMessage("Decision points refreshed")
+    
+    def open_relationship_editor(self) -> None:
+        """Open the relationship editor dialog."""
+        if not hasattr(self, 'current_story_id') or not self.current_story_id:
+            QMessageBox.warning(self, "No Story Selected", "Please select a story first.")
+            return
+        
+        try:
+            # Create and show the relationship editor dialog
+            dialog = RelationshipEditorDialog(
+                db_conn=self.db_conn,
+                story_id=self.current_story_id,
+                parent=self
+            )
+            
+            # Show the dialog
+            if dialog.exec():
+                # TODO: Handle relationship creation/editing after dialog is implemented fully
+                pass
+                
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Error opening relationship editor: {str(e)}",
+                QMessageBox.StandardButton.Ok
+            ) 
