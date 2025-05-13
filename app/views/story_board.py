@@ -1826,7 +1826,7 @@ class StoryBoardScene(QGraphicsScene):
         # Connect to position changed signal
         card.position_changed.connect(self.on_character_position_changed)
         
-        print(f"ADD CARD: Character {character_id} added successfully. Total cards: {len(self.character_cards)}")
+        # print(f"ADD CARD: Character {character_id} added successfully. Total cards: {len(self.character_cards)}")
         
         return card
     
