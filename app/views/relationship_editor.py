@@ -480,10 +480,12 @@ class RelationshipEditorDialog(QDialog):
             list_widget = self.left_characters_list
             is_left_list = True
             source_list = "left"
+            target_list = self.right_characters_list
         else:
             list_widget = self.right_characters_list
             is_left_list = False
             source_list = "right"
+            target_list = self.left_characters_list
         
         # Get the item at the click position
         click_pos = event.position().toPoint()
@@ -497,6 +499,9 @@ class RelationshipEditorDialog(QDialog):
             self.is_drawing = True
             self.source_item = item
             self.source_list = source_list
+            
+            # Disable the same character in the target list to prevent self-relationships
+            self.disable_matching_character(item.character_id, target_list)
             
             # Get the edge point for this item
             local_point, global_point = self.get_edge_point(list_widget, item, is_left_list)
@@ -521,6 +526,40 @@ class RelationshipEditorDialog(QDialog):
             print("DEBUG: No item clicked")
         
         return False
+    
+    def disable_matching_character(self, character_id: int, target_list: QListWidget) -> None:
+        """Disable the matching character in the target list to prevent self-relationships.
+        
+        Args:
+            character_id: ID of the character to disable
+            target_list: The target list widget
+        """
+        # Find and disable the matching character
+        for i in range(target_list.count()):
+            item = target_list.item(i)
+            if item.character_id == character_id:
+                # Make the item non-selectable and visually disabled
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+                # Apply a disabled visual style to the item widget
+                widget = target_list.itemWidget(item)
+                if widget:
+                    widget.setStyleSheet("background-color: #333333; opacity: 0.5;")
+                    widget.setEnabled(False)
+                break
+    
+    def enable_all_characters(self) -> None:
+        """Re-enable all characters in both lists."""
+        # Re-enable all items in both lists
+        for list_widget in [self.left_characters_list, self.right_characters_list]:
+            for i in range(list_widget.count()):
+                item = list_widget.item(i)
+                # Restore the item's flags
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEnabled)
+                # Restore the item widget's style
+                widget = list_widget.itemWidget(item)
+                if widget:
+                    widget.setStyleSheet("")
+                    widget.setEnabled(True)
     
     def handle_mouse_move(self, event: QMouseEvent) -> bool:
         """Handle mouse move events to update the temporary arrow.
@@ -607,6 +646,9 @@ class RelationshipEditorDialog(QDialog):
         else:
             print("DEBUG: No target item found at release position")
         
+        # Re-enable all characters
+        self.enable_all_characters()
+        
         # Clear the temporary arrow and reset state
         self.arrow_canvas.clear_temp_arrow()
         self.is_drawing = False
@@ -620,6 +662,9 @@ class RelationshipEditorDialog(QDialog):
         if self.is_drawing:
             # Release mouse grab if we were drawing
             self.releaseMouse()
+            
+            # Re-enable all characters
+            self.enable_all_characters()
             
             self.arrow_canvas.clear_temp_arrow()
             self.is_drawing = False
