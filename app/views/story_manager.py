@@ -17,15 +17,17 @@ from typing import Optional, List, Dict, Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QLabel, QLineEdit, QTextEdit, QComboBox, QFormLayout,
-    QGroupBox, QFileDialog, QMessageBox, QSplitter, QApplication, QStyledItemDelegate, QStyle
+    QGroupBox, QFileDialog, QMessageBox, QSplitter, QApplication, QStyledItemDelegate, QStyle,
+    QMenu
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QSettings, QRect
-from PyQt6.QtGui import QFont, QPixmap, QImage, QClipboard, QPainter, QColor, QBrush, QPen
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QSettings, QRect, QPoint
+from PyQt6.QtGui import QFont, QPixmap, QImage, QClipboard, QPainter, QColor, QBrush, QPen, QAction
 
 from app.db_sqlite import (
     StoryType, create_story, update_story, get_all_stories, get_story, update_story_folder_path
 )
 from app.views.settings_dialog import SettingsDialog
+from app.utils.icons import icon_manager
 
 
 class StoryItemDelegate(QStyledItemDelegate):
@@ -161,7 +163,12 @@ class StoryManagerWidget(QWidget):
         # Create story list
         self.story_list = QListWidget()
         self.story_list.setMinimumWidth(300)
+        # Set up click behavior
         self.story_list.currentItemChanged.connect(self.on_story_selected)
+        self.story_list.itemDoubleClicked.connect(self.on_story_double_clicked)
+        # Set up right-click context menu
+        self.story_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.story_list.customContextMenuRequested.connect(self.show_context_menu)
         # Set the custom delegate for story items
         self.story_list.setItemDelegate(StoryItemDelegate())
         self.story_list.setSpacing(2)  # Add some space between items
@@ -295,7 +302,7 @@ class StoryManagerWidget(QWidget):
             self.story_list.addItem(item)
     
     def on_story_selected(self, current: QListWidgetItem, previous: QListWidgetItem) -> None:
-        """Handle story selection.
+        """Handle story selection - updates the Story Details pane only.
         
         Args:
             current: Currently selected item
@@ -363,8 +370,110 @@ class StoryManagerWidget(QWidget):
         # Enable the load button
         self.load_story_button.setEnabled(True)
         
+        # No longer emit the story_selected signal here - only on double-click or explicit load
+    
+    def on_story_double_clicked(self, item: QListWidgetItem) -> None:
+        """Handle story double-click - opens the story.
+        
+        Args:
+            item: The clicked item
+        """
+        if not item:
+            return
+        
+        # Get the story ID
+        story_id = item.data(Qt.ItemDataRole.UserRole)
+        
+        # Get the story data
+        story_data = None
+        for story in self.stories:
+            if story["id"] == story_id:
+                story_data = story
+                break
+        
+        if not story_data:
+            return
+        
+        # Emit the story selected signal to open the story
+        self.story_selected.emit(story_id, story_data)
+    
+    def show_context_menu(self, position: QPoint) -> None:
+        """Show context menu for story list items.
+        
+        Args:
+            position: Position where the menu should be displayed
+        """
+        item = self.story_list.itemAt(position)
+        if not item:
+            return
+        
+        # Get the story ID and data
+        story_id = item.data(Qt.ItemDataRole.UserRole)
+        story_data = None
+        for story in self.stories:
+            if story["id"] == story_id:
+                story_data = story
+                break
+        
+        if not story_data:
+            return
+        
+        # Create context menu
+        menu = QMenu(self)
+        
+        # Add actions with icons
+        load_action = QAction(icon_manager.get_icon("arrow-right"), "Load", self)
+        load_action.triggered.connect(lambda: self.on_load_story_from_menu(story_id, story_data))
+        menu.addAction(load_action)
+        
+        duplicate_action = QAction(icon_manager.get_icon("copy"), "Duplicate", self)
+        duplicate_action.triggered.connect(lambda: self.on_duplicate_story(story_id))
+        menu.addAction(duplicate_action)
+        
+        menu.addSeparator()
+        
+        delete_action = QAction(icon_manager.get_icon("trash"), "Delete", self)
+        delete_action.triggered.connect(lambda: self.on_delete_story(story_id))
+        menu.addAction(delete_action)
+        
+        # Show the menu
+        menu.exec(self.story_list.mapToGlobal(position))
+    
+    def on_load_story_from_menu(self, story_id: int, story_data: Dict[str, Any]) -> None:
+        """Handle loading a story from the context menu.
+        
+        Args:
+            story_id: ID of the story to load
+            story_data: Data of the story to load
+        """
         # Emit the story selected signal
         self.story_selected.emit(story_id, story_data)
+    
+    def on_duplicate_story(self, story_id: int) -> None:
+        """Handle duplicating a story.
+        
+        Args:
+            story_id: ID of the story to duplicate
+        """
+        # Show message as placeholder for now
+        QMessageBox.information(
+            self,
+            "Feature Coming Soon",
+            "Story duplication will be implemented in a future update."
+        )
+    
+    def on_delete_story(self, story_id: int) -> None:
+        """Handle deleting a story.
+        
+        Args:
+            story_id: ID of the story to delete
+        """
+        # Show message as placeholder for now
+        QMessageBox.information(
+            self,
+            "Feature Coming Soon",
+            "Story deletion will be implemented in a future update."
+        )
     
     def generate_random_id(self, length: int = 6) -> str:
         """Generate a random alphanumeric ID.
@@ -726,7 +835,7 @@ class StoryManagerWidget(QWidget):
         if not story_data:
             return
         
-        # Emit the story selected signal
+        # Emit the story selected signal to open the story
         self.story_selected.emit(story_id, story_data)
     
     def on_series_changed(self, index: int) -> None:
