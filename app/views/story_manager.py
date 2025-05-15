@@ -794,6 +794,119 @@ class StoryManagerWidget(QWidget):
                             tag.get("note")
                         )
             
+            # Step 3.5.1: Copy image_tags (front-end visible tags)
+            progress_dialog.setValue(72)
+            progress_dialog.setLabelText("Copying image tags...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            cursor = self.db_conn.cursor()
+            cursor.execute('''
+                SELECT * FROM image_tags
+                WHERE image_id IN (
+                    SELECT id FROM images WHERE story_id = ?
+                )
+            ''', (story_id,))
+            image_tags = cursor.fetchall()
+            
+            for tag in image_tags:
+                if tag["image_id"] in image_id_map and tag["character_id"] in new_character_id_map:
+                    cursor.execute('''
+                        INSERT INTO image_tags (
+                            created_at, updated_at, x, y, width, height, 
+                            image_id, character_id
+                        ) VALUES (
+                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?, ?,
+                            ?, ?
+                        )
+                    ''', (
+                        tag["x"], tag["y"], tag["width"], tag["height"],
+                        image_id_map[tag["image_id"]], new_character_id_map[tag["character_id"]]
+                    ))
+            self.db_conn.commit()
+            
+            # Step 3.5.2: Copy image_features (for character recognition)
+            progress_dialog.setValue(73)
+            progress_dialog.setLabelText("Copying image features...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            cursor.execute('''
+                SELECT * FROM image_features
+                WHERE character_id IN (
+                    SELECT id FROM characters WHERE story_id = ?
+                )
+            ''', (story_id,))
+            image_features = cursor.fetchall()
+            
+            for feature in image_features:
+                new_image_id = None
+                if feature["image_id"] is not None and feature["image_id"] in image_id_map:
+                    new_image_id = image_id_map[feature["image_id"]]
+                    
+                if feature["character_id"] in new_character_id_map:
+                    cursor.execute('''
+                        INSERT INTO image_features (
+                            character_id, image_id, is_avatar, feature_data,
+                            color_histogram, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ''', (
+                        new_character_id_map[feature["character_id"]],
+                        new_image_id,
+                        feature["is_avatar"],
+                        feature["feature_data"],
+                        feature["color_histogram"]
+                    ))
+            self.db_conn.commit()
+            
+            # Step 3.5.3: Copy face_encodings
+            progress_dialog.setValue(74)
+            progress_dialog.setLabelText("Copying face encodings...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            cursor.execute('''
+                SELECT * FROM face_encodings
+                WHERE character_id IN (
+                    SELECT id FROM characters WHERE story_id = ?
+                )
+            ''', (story_id,))
+            face_encodings = cursor.fetchall()
+            
+            for encoding in face_encodings:
+                new_image_id = None
+                if encoding["image_id"] is not None and encoding["image_id"] in image_id_map:
+                    new_image_id = image_id_map[encoding["image_id"]]
+                
+                if encoding["character_id"] in new_character_id_map:
+                    # Update encoding path to new story folder
+                    encoding_path = encoding["encoding_path"]
+                    if encoding_path and original_story_data["folder_path"] in encoding_path:
+                        encoding_path = encoding_path.replace(
+                            original_story_data["folder_path"], new_folder_path
+                        )
+                    
+                    cursor.execute('''
+                        INSERT INTO face_encodings (
+                            character_id, encoding_path, confidence, is_avatar,
+                            image_id, x, y, width, height, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ''', (
+                        new_character_id_map[encoding["character_id"]],
+                        encoding_path,
+                        encoding["confidence"],
+                        encoding["is_avatar"],
+                        new_image_id,
+                        encoding["x"],
+                        encoding["y"],
+                        encoding["width"],
+                        encoding["height"]
+                    ))
+            self.db_conn.commit()
+            
             # Step 3.6: Copy scene_images associations
             progress_dialog.setValue(75)
             progress_dialog.setLabelText("Copying scene associations...")
@@ -829,14 +942,253 @@ class StoryManagerWidget(QWidget):
                     image_id=image_id_map[old_image_id]
                 )
             
-            # Update progress
+            # Step 3.7: Copy character_details
+            progress_dialog.setValue(76)
+            progress_dialog.setLabelText("Copying character details...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            cursor.execute('''
+                SELECT cd.*
+                FROM character_details cd
+                JOIN characters c ON cd.character_id = c.id
+                WHERE c.story_id = ?
+            ''', (story_id,))
+            character_details = cursor.fetchall()
+            
+            for detail in character_details:
+                if detail["character_id"] in new_character_id_map:
+                    cursor.execute('''
+                        INSERT INTO character_details (
+                            created_at, updated_at, character_id, detail_text,
+                            detail_type, sequence_number
+                        ) VALUES (
+                            ?, ?, ?, ?, ?, ?
+                        )
+                    ''', (
+                        detail["created_at"],
+                        detail["updated_at"],
+                        new_character_id_map[detail["character_id"]],
+                        detail["detail_text"],
+                        detail["detail_type"],
+                        detail["sequence_number"]
+                    ))
+            self.db_conn.commit()
+            
+            # Step 3.8: Copy character_last_tagged
+            progress_dialog.setValue(77)
+            progress_dialog.setLabelText("Copying character tagging data...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            cursor.execute('''
+                SELECT * FROM character_last_tagged
+                WHERE story_id = ?
+            ''', (story_id,))
+            last_tagged = cursor.fetchall()
+            
+            for tag in last_tagged:
+                if tag["character_id"] in new_character_id_map:
+                    cursor.execute('''
+                        INSERT INTO character_last_tagged (
+                            created_at, updated_at, character_id, story_id, last_tagged_at
+                        ) VALUES (
+                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?
+                        )
+                    ''', (
+                        new_character_id_map[tag["character_id"]],
+                        new_story_id,
+                        tag["last_tagged_at"]
+                    ))
+            self.db_conn.commit()
+            
+            # Step 3.9: Copy quick_events
+            progress_dialog.setValue(78)
+            progress_dialog.setLabelText("Copying quick events...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            # First get all quick events linked to this story's characters
+            cursor.execute('''
+                SELECT * FROM quick_events
+                WHERE character_id IN (
+                    SELECT id FROM characters WHERE story_id = ?
+                )
+            ''', (story_id,))
+            quick_events = cursor.fetchall()
+            quick_event_id_map = {}  # Maps original quick event IDs to new quick event IDs
+            
+            for qe in quick_events:
+                new_character_id = None
+                if qe["character_id"] is not None and qe["character_id"] in new_character_id_map:
+                    new_character_id = new_character_id_map[qe["character_id"]]
+                
+                cursor.execute('''
+                    INSERT INTO quick_events (
+                        created_at, updated_at, text, sequence_number, character_id
+                    ) VALUES (
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?
+                    )
+                ''', (
+                    qe["text"],
+                    qe["sequence_number"],
+                    new_character_id
+                ))
+                new_quick_event_id = cursor.lastrowid
+                quick_event_id_map[qe["id"]] = new_quick_event_id
+            self.db_conn.commit()
+            
+            # Step 3.10: Copy quick_event_characters
+            progress_dialog.setValue(79)
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            cursor.execute('''
+                SELECT qec.*
+                FROM quick_event_characters qec
+                JOIN quick_events qe ON qec.quick_event_id = qe.id
+                JOIN characters c ON qec.character_id = c.id
+                WHERE c.story_id = ? AND qe.id IN (SELECT id FROM quick_events WHERE character_id IN (SELECT id FROM characters WHERE story_id = ?))
+            ''', (story_id, story_id))
+            quick_event_characters = cursor.fetchall()
+            
+            for qec in quick_event_characters:
+                if (qec["quick_event_id"] in quick_event_id_map and 
+                    qec["character_id"] in new_character_id_map):
+                    cursor.execute('''
+                        INSERT INTO quick_event_characters (
+                            created_at, updated_at, quick_event_id, character_id
+                        ) VALUES (
+                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?
+                        )
+                    ''', (
+                        quick_event_id_map[qec["quick_event_id"]],
+                        new_character_id_map[qec["character_id"]]
+                    ))
+            self.db_conn.commit()
+            
+            # Step 3.11: Copy quick_event_images
             progress_dialog.setValue(80)
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            cursor.execute('''
+                SELECT qei.*
+                FROM quick_event_images qei
+                JOIN quick_events qe ON qei.quick_event_id = qe.id
+                JOIN images i ON qei.image_id = i.id
+                WHERE i.story_id = ? AND qe.id IN (SELECT id FROM quick_events WHERE character_id IN (SELECT id FROM characters WHERE story_id = ?))
+            ''', (story_id, story_id))
+            quick_event_images = cursor.fetchall()
+            
+            for qei in quick_event_images:
+                if (qei["quick_event_id"] in quick_event_id_map and 
+                    qei["image_id"] in image_id_map):
+                    cursor.execute('''
+                        INSERT INTO quick_event_images (
+                            created_at, updated_at, quick_event_id, image_id, note
+                        ) VALUES (
+                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?
+                        )
+                    ''', (
+                        quick_event_id_map[qei["quick_event_id"]],
+                        image_id_map[qei["image_id"]],
+                        qei["note"]
+                    ))
+            self.db_conn.commit()
+            
+            # Step 3.12: Copy scene_quick_events
+            progress_dialog.setValue(81)
+            progress_dialog.setLabelText("Copying scene to quick event associations...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            cursor.execute('''
+                SELECT sqe.*
+                FROM scene_quick_events sqe
+                JOIN events e ON sqe.scene_event_id = e.id
+                JOIN quick_events qe ON sqe.quick_event_id = qe.id
+                WHERE e.story_id = ? AND qe.id IN (SELECT id FROM quick_events WHERE character_id IN (SELECT id FROM characters WHERE story_id = ?))
+            ''', (story_id, story_id))
+            scene_quick_events = cursor.fetchall()
+            
+            for sqe in scene_quick_events:
+                if (sqe["scene_event_id"] in event_id_map and 
+                    sqe["quick_event_id"] in quick_event_id_map):
+                    cursor.execute('''
+                        INSERT INTO scene_quick_events (
+                            created_at, updated_at, scene_event_id, quick_event_id, sequence_number
+                        ) VALUES (
+                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?
+                        )
+                    ''', (
+                        event_id_map[sqe["scene_event_id"]],
+                        quick_event_id_map[sqe["quick_event_id"]],
+                        sqe["sequence_number"]
+                    ))
+            self.db_conn.commit()
+            
+            # Step 3.13: Copy timeline_views
+            progress_dialog.setValue(82)
+            progress_dialog.setLabelText("Copying timeline views...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            cursor.execute('''
+                SELECT * FROM timeline_views
+                WHERE story_id = ?
+            ''', (story_id,))
+            timeline_views = cursor.fetchall()
+            
+            for view in timeline_views:
+                # Parse and update the layout data if it exists
+                layout_data = view["layout_data"]
+                if layout_data:
+                    try:
+                        layout_json = json.loads(layout_data)
+                        # Update any event IDs in the layout data
+                        # This depends on the structure of your layout data
+                        # This is a simplified example - you may need to adapt
+                        if "events" in layout_json:
+                            updated_events = {}
+                            for event_id, event_data in layout_json["events"].items():
+                                if int(event_id) in event_id_map:
+                                    updated_events[str(event_id_map[int(event_id)])] = event_data
+                            layout_json["events"] = updated_events
+                        layout_data = json.dumps(layout_json)
+                    except (json.JSONDecodeError, TypeError):
+                        # If we can't parse it, leave it as is
+                        pass
+                
+                cursor.execute('''
+                    INSERT INTO timeline_views (
+                        created_at, updated_at, name, description, view_type, layout_data, story_id
+                    ) VALUES (
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?
+                    )
+                ''', (
+                    view["name"],
+                    view["description"],
+                    view["view_type"],
+                    layout_data,
+                    new_story_id
+                ))
+            self.db_conn.commit()
+            
+            # Step 4: Copy all files from the original story folder to the new story folder
+            progress_dialog.setValue(85)
             progress_dialog.setLabelText("Copying files...")
             if progress_dialog.wasCanceled():
                 return
             QApplication.processEvents()
             
-            # Step 4: Copy all files from the original story folder to the new story folder
             original_folder = original_story_data["folder_path"]
             if os.path.exists(original_folder):
                 # Ensure the new folder exists
@@ -856,6 +1208,7 @@ class StoryManagerWidget(QWidget):
             
             # Step 5: Update avatar paths for the copied characters
             progress_dialog.setValue(90)
+            progress_dialog.setLabelText("Updating character avatars...")
             if progress_dialog.wasCanceled():
                 return
             QApplication.processEvents()
@@ -874,7 +1227,7 @@ class StoryManagerWidget(QWidget):
                         name=old_character["name"],  # Need to include all required fields
                         avatar_path=new_avatar_path
                     )
-                    
+            
             # Step 6: Copy decision points and their options
             progress_dialog.setValue(95)
             progress_dialog.setLabelText("Copying decision points...")
