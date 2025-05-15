@@ -1328,7 +1328,7 @@ class StoryManagerWidget(QWidget):
                 return
             
             # Create a progress dialog
-            progress_dialog = QProgressDialog("Deleting story data...", "Cancel", 0, 100, self)
+            progress_dialog = QProgressDialog("Preparing to delete story...", "Cancel", 0, 100, self)
             progress_dialog.setWindowTitle("Deleting Story")
             progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
             progress_dialog.setAutoClose(True)
@@ -1339,34 +1339,159 @@ class StoryManagerWidget(QWidget):
             # Step 1: Get the story folder path
             folder_path = story_data["folder_path"]
             
-            # Step 2: Delete the story from the database
-            # The database has ON DELETE CASCADE for related entries
-            progress_dialog.setValue(20)
+            # Validate that this is a legitimate story path before deleting
+            if not folder_path or not os.path.exists(folder_path):
+                QMessageBox.warning(
+                    self,
+                    "Warning",
+                    f"The story folder doesn't exist at {folder_path}. Will only delete database records."
+                )
+            else:
+                # Extra safety check: verify the folder belongs only to this story
+                # Check if any other stories use this folder or a subfolder of it
+                cursor = self.db_conn.cursor()
+                cursor.execute(
+                    "SELECT id, title FROM stories WHERE folder_path LIKE ? AND id != ?", 
+                    (folder_path + "%", story_id)
+                )
+                conflicts = cursor.fetchall()
+                
+                if conflicts:
+                    conflict_titles = ", ".join([f"'{c['title']}'" for c in conflicts])
+                    QMessageBox.critical(
+                        self,
+                        "Error",
+                        f"Cannot delete the story folder because it contains or is used by other stories: {conflict_titles}. "
+                        "Only database records will be deleted."
+                    )
+                    # Set folder_path to None to skip file deletion
+                    folder_path = None
+            
+            progress_dialog.setValue(10)
+            progress_dialog.setLabelText("Collecting records to delete...")
             QApplication.processEvents()
             
+            # Collect counts of related records for progress reporting
             cursor = self.db_conn.cursor()
-            cursor.execute("DELETE FROM stories WHERE id = ?", (story_id,))
-            self.db_conn.commit()
             
-            # Step A: Delete from the local stories list
-            self.stories = [story for story in self.stories if story["id"] != story_id]
+            # Count characters
+            cursor.execute("SELECT COUNT(*) as count FROM characters WHERE story_id = ?", (story_id,))
+            char_count = cursor.fetchone()["count"]
             
-            # Step B: Delete from the UI
-            for i in range(self.story_list.count()):
-                item = self.story_list.item(i)
-                if item.data(Qt.ItemDataRole.UserRole) == story_id:
-                    self.story_list.takeItem(i)
-                    break
+            # Count events
+            cursor.execute("SELECT COUNT(*) as count FROM events WHERE story_id = ?", (story_id,))
+            event_count = cursor.fetchone()["count"]
             
-            # Step 3: Delete the story folder and all its contents
-            progress_dialog.setValue(50)
-            progress_dialog.setLabelText("Removing story files...")
+            # Count images
+            cursor.execute("SELECT COUNT(*) as count FROM images WHERE story_id = ?", (story_id,))
+            image_count = cursor.fetchone()["count"]
+            
+            progress_dialog.setValue(15)
+            progress_dialog.setLabelText(f"Deleting story data ({char_count} characters, {event_count} events, {image_count} images)...")
             QApplication.processEvents()
             
-            if os.path.exists(folder_path):
+            # Step 2: Begin transaction to ensure all deletions are atomic
+            self.db_conn.execute("BEGIN TRANSACTION")
+            
+            try:
+                # Step
+                progress_dialog.setValue(20)
+                QApplication.processEvents()
+                
+                # Delete in order of dependency to avoid constraint issues
+                # Note: The database has ON DELETE CASCADE for related entries,
+                # but we'll delete in a logical order for clarity and progress reporting
+                
+                # Step 3.1: Delete image-related records first
+                progress_dialog.setValue(30)
+                progress_dialog.setLabelText("Deleting image data...")
+                QApplication.processEvents()
+                
+                # Image tags will be automatically deleted by CASCADE
+                # Face encodings will be automatically deleted by CASCADE
+                # Image features will be automatically deleted by CASCADE
+                
+                # Step 3.2: Delete character-related records
+                progress_dialog.setValue(40)
+                progress_dialog.setLabelText("Deleting character data...")
+                QApplication.processEvents()
+                
+                # Character details will be automatically deleted by CASCADE
+                # Relationships will be automatically deleted by CASCADE
+                
+                # Step 3.3: Delete event-related records
+                progress_dialog.setValue(50)
+                progress_dialog.setLabelText("Deleting event data...")
+                QApplication.processEvents()
+                
+                # Scene_images will be automatically deleted by CASCADE
+                # Event_characters will be automatically deleted by CASCADE
+                
+                # Step 3.4: Delete decision points and options
+                progress_dialog.setValue(60)
+                progress_dialog.setLabelText("Deleting decision data...")
+                QApplication.processEvents()
+                
+                # Decision options will be automatically deleted by CASCADE
+                
+                # Step 3.5: Delete story views
+                progress_dialog.setValue(70)
+                progress_dialog.setLabelText("Deleting story views...")
+                QApplication.processEvents()
+                
+                # Story board views will be automatically deleted by CASCADE
+                # Timeline views will be automatically deleted by CASCADE
+                
+                # Step 3.6: Finally delete the story itself
+                progress_dialog.setValue(80)
+                progress_dialog.setLabelText("Removing story record...")
+                QApplication.processEvents()
+                
+                cursor = self.db_conn.cursor()
+                cursor.execute("DELETE FROM stories WHERE id = ?", (story_id,))
+                
+                # Commit all database changes
+                self.db_conn.commit()
+                
+                # Step 4: Delete from the local stories list
+                self.stories = [story for story in self.stories if story["id"] != story_id]
+                
+                # Step 5: Delete from the UI
+                for i in range(self.story_list.count()):
+                    item = self.story_list.item(i)
+                    if item.data(Qt.ItemDataRole.UserRole) == story_id:
+                        self.story_list.takeItem(i)
+                        break
+                
+            except Exception as e:
+                # If anything goes wrong, roll back the transaction
+                self.db_conn.rollback()
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    f"Failed to delete story database records: {str(e)}"
+                )
+                progress_dialog.close()
+                return
+            
+            # Step 6: Delete the story folder and all its contents if it exists and is safe
+            if folder_path and os.path.exists(folder_path):
+                progress_dialog.setValue(85)
+                progress_dialog.setLabelText("Removing story files...")
+                QApplication.processEvents()
+                
                 try:
-                    # Use shutil to remove the directory and all its contents
-                    shutil.rmtree(folder_path)
+                    # Do one more check to ensure we're deleting the right folder
+                    if os.path.basename(folder_path).startswith(title.replace(' ', '_')) or title in folder_path:
+                        # Use shutil to remove the directory and all its contents
+                        shutil.rmtree(folder_path)
+                    else:
+                        QMessageBox.warning(
+                            self,
+                            "Warning",
+                            f"Skipped deletion of folder {folder_path} as a safety precaution. "
+                            "The folder name doesn't match the story title."
+                        )
                 except Exception as e:
                     QMessageBox.warning(
                         self,
@@ -1374,8 +1499,8 @@ class StoryManagerWidget(QWidget):
                         f"The story was removed from the database, but there was an error deleting the story folder: {str(e)}"
                     )
             
-            # Step 4: Clear the form if the deleted story was currently selected
-            progress_dialog.setValue(80)
+            # Step 7: Clear the form if the deleted story was currently selected
+            progress_dialog.setValue(95)
             QApplication.processEvents()
             
             selected_items = self.story_list.selectedItems()
