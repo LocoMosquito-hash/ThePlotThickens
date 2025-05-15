@@ -33,5 +33,7 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3 
+*.sql
+*.7z
 
 data/
