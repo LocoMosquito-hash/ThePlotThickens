@@ -12,19 +12,26 @@ import sys
 import uuid
 import random
 import string
+import re
+import json
+import shutil
 from typing import Optional, List, Dict, Any
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QLabel, QLineEdit, QTextEdit, QComboBox, QFormLayout,
     QGroupBox, QFileDialog, QMessageBox, QSplitter, QApplication, QStyledItemDelegate, QStyle,
-    QMenu
+    QMenu, QProgressDialog
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QSettings, QRect, QPoint
 from PyQt6.QtGui import QFont, QPixmap, QImage, QClipboard, QPainter, QColor, QBrush, QPen, QAction
 
 from app.db_sqlite import (
-    StoryType, create_story, update_story, get_all_stories, get_story, update_story_folder_path
+    StoryType, create_story, update_story, get_all_stories, get_story, update_story_folder_path,
+    get_story_characters, get_story_relationships, get_story_board_views, get_story_events, get_event_characters,
+    create_character, create_relationship, create_story_board_view, add_character_to_event, update_event, update_character,
+    create_event, get_story_images, create_image, get_image_character_tags, add_character_tag_to_image, add_image_to_scene,
+    get_story_decision_points, get_decision_options, create_decision_point, add_decision_option
 )
 from app.views.settings_dialog import SettingsDialog
 from app.utils.icons import icon_manager
@@ -455,12 +462,480 @@ class StoryManagerWidget(QWidget):
         Args:
             story_id: ID of the story to duplicate
         """
-        # Show message as placeholder for now
-        QMessageBox.information(
-            self,
-            "Feature Coming Soon",
-            "Story duplication will be implemented in a future update."
-        )
+        try:
+            # Get the original story data
+            original_story_data = None
+            for story in self.stories:
+                if story["id"] == story_id:
+                    original_story_data = story
+                    break
+            
+            if not original_story_data:
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    "Failed to find the selected story."
+                )
+                return
+            
+            # Get user folder from settings
+            user_folder = self.settings.value("user_folder", "")
+            if not user_folder:
+                QMessageBox.warning(
+                    self,
+                    "User Folder Not Set",
+                    "Please set the User Folder in Settings before duplicating a story."
+                )
+                settings_dialog = SettingsDialog(self.window())
+                if settings_dialog.exec():
+                    user_folder = self.settings.value("user_folder", "")
+                else:
+                    return
+            
+            # Create the stories folder if it doesn't exist
+            stories_folder = os.path.join(user_folder, "Stories")
+            os.makedirs(stories_folder, exist_ok=True)
+            
+            # Show progress dialog
+            progress_dialog = QProgressDialog("Creating a copy of the story. Please wait...", "Cancel", 0, 100, self)
+            progress_dialog.setWindowTitle("Creating Story Copy")
+            progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+            progress_dialog.setAutoClose(True)
+            progress_dialog.setMinimumDuration(0)
+            progress_dialog.setValue(0)
+            progress_dialog.show()
+            QApplication.processEvents()
+            
+            # Find appropriate copy number for the title
+            original_title = original_story_data["title"]
+            copy_suffix = 1
+            base_title = original_title
+            
+            # Check if the story title already ends with "(Copy - N)"
+            copy_match = re.search(r'\(Copy - (\d+)\)$', original_title)
+            if copy_match:
+                # If already a copy, extract the base title without the copy suffix
+                copy_number = int(copy_match.group(1))
+                base_title = original_title[:original_title.rfind("(Copy")].strip()
+                copy_suffix = copy_number + 1
+            
+            # Find the highest existing copy number
+            for story in self.stories:
+                # Look for stories with the same base title and a copy suffix
+                title = story["title"]
+                if title.startswith(base_title) and "(Copy -" in title:
+                    match = re.search(r'\(Copy - (\d+)\)', title)
+                    if match:
+                        num = int(match.group(1))
+                        copy_suffix = max(copy_suffix, num + 1)
+            
+            progress_dialog.setValue(10)
+            if progress_dialog.wasCanceled():
+                return
+            
+            # Create new story title
+            new_title = f"{base_title} (Copy - {copy_suffix})"
+            
+            # Create a new folder path with a random ID
+            random_id = self.generate_random_id()
+            new_folder_name = f"{new_title.replace(' ', '_')}_{random_id}"
+            new_folder_path = os.path.join(stories_folder, new_folder_name)
+            
+            # Step 1: Create a new story record with empty folder path
+            new_story_id, new_story_data = create_story(
+                self.db_conn,
+                title=new_title,
+                description=original_story_data["description"],
+                type_name=original_story_data["type_name"],
+                folder_path="",  # Temporary, will be updated after we get the ID
+                universe=original_story_data["universe"],
+                is_part_of_series=original_story_data["is_part_of_series"] in (True, 1),
+                series_name=original_story_data["series_name"],
+                series_order=original_story_data["series_order"],
+                author=original_story_data["author"],
+                year=original_story_data["year"]
+            )
+            
+            # Update progress
+            progress_dialog.setValue(20)
+            progress_dialog.setLabelText("Copying story data...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            # Step 2: Update the story with the proper folder path
+            new_story_data = update_story_folder_path(self.db_conn, new_story_id, new_folder_path)
+            
+            # Step 3: Copy all related data
+            
+            # Step 3.1: Copy characters
+            original_characters = get_story_characters(self.db_conn, story_id)
+            new_character_id_map = {}  # Maps original character IDs to new character IDs
+            
+            progress_dialog.setValue(30)
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            for character in original_characters:
+                # Create a new character with the same data but linked to the new story
+                new_character_id = create_character(
+                    self.db_conn,
+                    name=character["name"],
+                    story_id=new_story_id,
+                    aliases=character["aliases"],
+                    is_main_character=character["is_main_character"] in (True, 1),
+                    age_value=character["age_value"],
+                    age_category=character["age_category"],
+                    gender=character["gender"],
+                    avatar_path=None  # We'll copy the avatar file separately
+                )
+                
+                # Store the mapping between old and new character IDs
+                new_character_id_map[character["id"]] = new_character_id
+            
+            # Step 3.2: Copy relationships
+            progress_dialog.setValue(40)
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            original_relationships = get_story_relationships(self.db_conn, story_id)
+            
+            for relationship in original_relationships:
+                source_id = relationship["source_id"]
+                target_id = relationship["target_id"]
+                
+                # Skip if either character is not from this story
+                if source_id not in new_character_id_map or target_id not in new_character_id_map:
+                    continue
+                
+                # Create a new relationship between the new characters
+                create_relationship(
+                    self.db_conn,
+                    source_id=new_character_id_map[source_id],
+                    target_id=new_character_id_map[target_id],
+                    relationship_type=relationship["relationship_type"],
+                    description=relationship["description"],
+                    color=relationship["color"],
+                    width=relationship["width"]
+                )
+            
+            # Step 3.3: Copy story board views
+            progress_dialog.setValue(50)
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            original_views = get_story_board_views(self.db_conn, story_id)
+            
+            for view in original_views:
+                # Parse the layout data to update character IDs
+                layout_data = json.loads(view["layout_data"])
+                
+                # Update character IDs in the layout data
+                if "characters" in layout_data:
+                    updated_characters = {}
+                    for char_id, char_data in layout_data["characters"].items():
+                        if int(char_id) in new_character_id_map:
+                            new_id = new_character_id_map[int(char_id)]
+                            updated_characters[str(new_id)] = char_data
+                    
+                    layout_data["characters"] = updated_characters
+                
+                # Create a new view with the updated layout data
+                create_story_board_view(
+                    self.db_conn,
+                    name=view["name"],
+                    story_id=new_story_id,
+                    layout_data=json.dumps(layout_data),
+                    description=view["description"]
+                )
+            
+            # Step 3.4: Copy events
+            progress_dialog.setValue(60)
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            original_events = get_story_events(self.db_conn, story_id)
+            event_id_map = {}  # Maps original event IDs to new event IDs
+            
+            # First pass: create all events without parent relationships
+            for event in original_events:
+                new_event_id = create_event(
+                    self.db_conn,
+                    title=event["title"],
+                    story_id=new_story_id,
+                    description=event["description"],
+                    event_type=event["event_type"],
+                    start_date=event["start_date"],
+                    end_date=event["end_date"],
+                    location=event["location"],
+                    importance=event["importance"],
+                    color=event["color"],
+                    is_milestone=event["is_milestone"] in (True, 1),
+                    parent_event_id=None,  # Set parent in second pass
+                    sequence_number=event["sequence_number"]
+                )
+                
+                event_id_map[event["id"]] = new_event_id
+                
+                # Get characters associated with this event
+                event_characters = get_event_characters(self.db_conn, event["id"])
+                
+                # Associate the new characters with the new event
+                for ec in event_characters:
+                    if ec["character_id"] in new_character_id_map:
+                        add_character_to_event(
+                            self.db_conn,
+                            event_id=new_event_id,
+                            character_id=new_character_id_map[ec["character_id"]],
+                            role=ec["role"],
+                            notes=ec["notes"]
+                        )
+            
+            # Second pass: update parent event IDs
+            progress_dialog.setValue(65)
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            for event in original_events:
+                if event["parent_event_id"] is not None and event["parent_event_id"] in event_id_map:
+                    update_event(
+                        self.db_conn,
+                        event_id=event_id_map[event["id"]],
+                        parent_event_id=event_id_map[event["parent_event_id"]]
+                    )
+            
+            # Step 3.5: Copy images
+            progress_dialog.setValue(70)
+            progress_dialog.setLabelText("Copying image records...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            # Get all images for the original story
+            original_images = get_story_images(self.db_conn, story_id)
+            image_id_map = {}
+            
+            for image in original_images:
+                # Update the path to the new story folder
+                original_path = image["path"]
+                new_path = original_path.replace(original_story_data["folder_path"], new_folder_path)
+                
+                # Get the original created_at and updated_at timestamps
+                cursor = self.db_conn.cursor()
+                cursor.execute(
+                    "SELECT created_at, updated_at FROM images WHERE id = ?",
+                    (image["id"],)
+                )
+                timestamp_data = cursor.fetchone()
+                created_at = timestamp_data["created_at"] if timestamp_data else None
+                updated_at = timestamp_data["updated_at"] if timestamp_data else None
+                
+                # Create new image record with preserved timestamps
+                if created_at and updated_at:
+                    cursor.execute(
+                        """
+                        INSERT INTO images (
+                            filename, path, story_id, title, description, width, height,
+                            file_size, mime_type, is_featured, date_taken,
+                            metadata_json, event_id, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            image["filename"], new_path, new_story_id, image["title"], 
+                            image["description"], image["width"], image["height"],
+                            image["file_size"], image["mime_type"], 
+                            1 if image["is_featured"] in (True, 1) else 0, 
+                            image["date_taken"], image["metadata_json"],
+                            event_id_map.get(image["event_id"]) if image["event_id"] else None,
+                            created_at, updated_at
+                        )
+                    )
+                    new_image_id = cursor.lastrowid
+                    self.db_conn.commit()
+                else:
+                    # Fallback to create_image if timestamps are not available
+                    new_image_id = create_image(
+                        self.db_conn,
+                        filename=image["filename"],
+                        path=new_path,
+                        story_id=new_story_id,
+                        title=image["title"],
+                        description=image["description"],
+                        width=image["width"],
+                        height=image["height"],
+                        file_size=image["file_size"],
+                        mime_type=image["mime_type"],
+                        is_featured=image["is_featured"] in (True, 1),
+                        date_taken=image["date_taken"],
+                        metadata_json=image["metadata_json"],
+                        event_id=event_id_map.get(image["event_id"]) if image["event_id"] else None
+                    )
+                
+                # Store the mapping
+                image_id_map[image["id"]] = new_image_id
+                
+                # Copy character tags for this image
+                tags = get_image_character_tags(self.db_conn, image["id"])
+                for tag in tags:
+                    if tag["character_id"] in new_character_id_map:
+                        add_character_tag_to_image(
+                            self.db_conn,
+                            new_image_id,
+                            new_character_id_map[tag["character_id"]],
+                            tag["x_position"],
+                            tag["y_position"],
+                            tag["width"],
+                            tag["height"],
+                            tag.get("note")
+                        )
+            
+            # Step 3.6: Copy scene_images associations
+            progress_dialog.setValue(75)
+            progress_dialog.setLabelText("Copying scene associations...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            # Get all scene_images associations for the original story
+            cursor = self.db_conn.cursor()
+            cursor.execute('''
+                SELECT si.* 
+                FROM scene_images si
+                JOIN events e ON si.scene_event_id = e.id
+                JOIN images i ON si.image_id = i.id
+                WHERE e.story_id = ? AND i.story_id = ?
+            ''', (story_id, story_id))
+            
+            scene_image_associations = cursor.fetchall()
+            
+            # Copy each association with the new IDs
+            for assoc in scene_image_associations:
+                old_scene_id = assoc["scene_event_id"]
+                old_image_id = assoc["image_id"]
+                
+                # Skip if either the scene or image wasn't copied
+                if old_scene_id not in event_id_map or old_image_id not in image_id_map:
+                    continue
+                
+                # Create the new association
+                add_image_to_scene(
+                    self.db_conn,
+                    scene_event_id=event_id_map[old_scene_id],
+                    image_id=image_id_map[old_image_id]
+                )
+            
+            # Update progress
+            progress_dialog.setValue(80)
+            progress_dialog.setLabelText("Copying files...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            # Step 4: Copy all files from the original story folder to the new story folder
+            original_folder = original_story_data["folder_path"]
+            if os.path.exists(original_folder):
+                # Ensure the new folder exists
+                os.makedirs(new_folder_path, exist_ok=True)
+                
+                # Copy files and subfolders
+                for item in os.listdir(original_folder):
+                    source = os.path.join(original_folder, item)
+                    destination = os.path.join(new_folder_path, item)
+                    
+                    if os.path.isdir(source):
+                        # Copy directory and all contents
+                        shutil.copytree(source, destination, dirs_exist_ok=True)
+                    else:
+                        # Copy file
+                        shutil.copy2(source, destination)
+            
+            # Step 5: Update avatar paths for the copied characters
+            progress_dialog.setValue(90)
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            for old_id, new_id in new_character_id_map.items():
+                old_character = next((c for c in original_characters if c["id"] == old_id), None)
+                if old_character and old_character["avatar_path"]:
+                    # Extract the filename from the old path
+                    avatar_filename = os.path.basename(old_character["avatar_path"])
+                    new_avatar_path = os.path.join(new_folder_path, "avatars", avatar_filename)
+                    
+                    # Update the character with the new avatar path
+                    update_character(
+                        self.db_conn,
+                        character_id=new_id,
+                        name=old_character["name"],  # Need to include all required fields
+                        avatar_path=new_avatar_path
+                    )
+                    
+            # Step 6: Copy decision points and their options
+            progress_dialog.setValue(95)
+            progress_dialog.setLabelText("Copying decision points...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
+            
+            # Get decision points for the original story
+            original_decision_points = get_story_decision_points(self.db_conn, story_id)
+            decision_point_id_map = {}  # Maps original decision point IDs to new decision point IDs
+            
+            # Copy each decision point
+            for dp in original_decision_points:
+                # Create new decision point
+                new_dp_id = create_decision_point(
+                    self.db_conn,
+                    title=dp["title"],
+                    story_id=new_story_id,
+                    description=dp["description"],
+                    is_ordered_list=dp["is_ordered_list"] in (True, 1)
+                )
+                
+                # Store mapping
+                decision_point_id_map[dp["id"]] = new_dp_id
+                
+                # Get options for this decision point
+                options = get_decision_options(self.db_conn, dp["id"])
+                
+                # Copy each option
+                for option in options:
+                    add_decision_option(
+                        self.db_conn,
+                        decision_point_id=new_dp_id,
+                        text=option["text"],
+                        is_selected=option["is_selected"] in (True, 1),
+                        display_order=option["display_order"],
+                        played_order=option["played_order"]
+                    )
+            
+            # Step 7: Add the new story to our local list and UI
+            progress_dialog.setValue(100)
+            QApplication.processEvents()
+            
+            self.stories.append(new_story_data)
+            self.add_story_to_list(new_story_data)
+            
+            # Show success message
+            QMessageBox.information(
+                self,
+                "Story Duplicated",
+                f"Story '{original_title}' has been duplicated as '{new_title}'."
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to duplicate story: {str(e)}"
+            )
+            import traceback
+            traceback.print_exc()
     
     def on_delete_story(self, story_id: int) -> None:
         """Handle deleting a story.
@@ -468,12 +943,111 @@ class StoryManagerWidget(QWidget):
         Args:
             story_id: ID of the story to delete
         """
-        # Show message as placeholder for now
-        QMessageBox.information(
-            self,
-            "Feature Coming Soon",
-            "Story deletion will be implemented in a future update."
-        )
+        try:
+            # Get the story data
+            story_data = None
+            for story in self.stories:
+                if story["id"] == story_id:
+                    story_data = story
+                    break
+            
+            if not story_data:
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    "Failed to find the selected story."
+                )
+                return
+            
+            # Confirm deletion
+            title = story_data["title"]
+            confirm = QMessageBox.question(
+                self,
+                "Confirm Deletion",
+                f"Are you sure you want to delete the story '{title}'?\n\n"
+                "This action will permanently delete the story and all its data, "
+                "including characters, relationships, events, and images.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if confirm != QMessageBox.StandardButton.Yes:
+                return
+            
+            # Create a progress dialog
+            progress_dialog = QProgressDialog("Deleting story data...", "Cancel", 0, 100, self)
+            progress_dialog.setWindowTitle("Deleting Story")
+            progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+            progress_dialog.setAutoClose(True)
+            progress_dialog.setMinimumDuration(0)
+            progress_dialog.show()
+            QApplication.processEvents()
+            
+            # Step 1: Get the story folder path
+            folder_path = story_data["folder_path"]
+            
+            # Step 2: Delete the story from the database
+            # The database has ON DELETE CASCADE for related entries
+            progress_dialog.setValue(20)
+            QApplication.processEvents()
+            
+            cursor = self.db_conn.cursor()
+            cursor.execute("DELETE FROM stories WHERE id = ?", (story_id,))
+            self.db_conn.commit()
+            
+            # Step A: Delete from the local stories list
+            self.stories = [story for story in self.stories if story["id"] != story_id]
+            
+            # Step B: Delete from the UI
+            for i in range(self.story_list.count()):
+                item = self.story_list.item(i)
+                if item.data(Qt.ItemDataRole.UserRole) == story_id:
+                    self.story_list.takeItem(i)
+                    break
+            
+            # Step 3: Delete the story folder and all its contents
+            progress_dialog.setValue(50)
+            progress_dialog.setLabelText("Removing story files...")
+            QApplication.processEvents()
+            
+            if os.path.exists(folder_path):
+                try:
+                    # Use shutil to remove the directory and all its contents
+                    shutil.rmtree(folder_path)
+                except Exception as e:
+                    QMessageBox.warning(
+                        self,
+                        "Warning",
+                        f"The story was removed from the database, but there was an error deleting the story folder: {str(e)}"
+                    )
+            
+            # Step 4: Clear the form if the deleted story was currently selected
+            progress_dialog.setValue(80)
+            QApplication.processEvents()
+            
+            selected_items = self.story_list.selectedItems()
+            if not selected_items:
+                self.clear_form()
+            
+            # Complete the progress
+            progress_dialog.setValue(100)
+            QApplication.processEvents()
+            
+            # Show success message
+            QMessageBox.information(
+                self,
+                "Story Deleted",
+                f"Story '{title}' has been deleted."
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to delete story: {str(e)}"
+            )
+            import traceback
+            traceback.print_exc()
     
     def generate_random_id(self, length: int = 6) -> str:
         """Generate a random alphanumeric ID.
