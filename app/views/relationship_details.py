@@ -76,6 +76,7 @@ class RelationshipCard(QFrame):
         self.target_avatar = target_avatar
         self.is_forward = is_forward
         self.relationship_types = relationship_types or []
+        self._is_enabled = True
         
         # Set up the frame style
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -88,6 +89,36 @@ class RelationshipCard(QFrame):
         """)
         
         self._init_ui()
+    
+    def setEnabled(self, enabled: bool) -> None:
+        """Enable or disable the card.
+        
+        Args:
+            enabled: Whether the card should be enabled
+        """
+        self._is_enabled = enabled
+        super().setEnabled(enabled)
+        
+        # Update visual appearance
+        if enabled:
+            self.setStyleSheet("""
+                RelationshipCard {
+                    border-radius: 6px;
+                    padding: 8px;
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                RelationshipCard {
+                    border-radius: 6px;
+                    padding: 8px;
+                    background-color: rgba(30, 30, 30, 180);
+                }
+            """)
+        
+        # Also enable/disable the combo box
+        if hasattr(self, 'relationship_combo'):
+            self.relationship_combo.setEnabled(enabled)
     
     def _init_ui(self) -> None:
         """Initialize the user interface."""
@@ -250,6 +281,12 @@ class RelationshipDetailsDialog(QDialog):
         self.resize(600, 400)
         
         self._init_ui()
+        
+        # Initially disable the backward card
+        self.backward_card.setEnabled(False)
+        
+        # Connect the forward card combo box's currentTextChanged signal
+        self.forward_card.relationship_combo.currentTextChanged.connect(self._on_forward_relationship_changed)
     
     def _get_character_avatar_path(self, character_id: int) -> Optional[str]:
         """Get the avatar path for a character.
@@ -414,4 +451,13 @@ class RelationshipDetailsDialog(QDialog):
         forward_relationship = self.forward_card.get_selected_relationship()
         backward_relationship = self.backward_card.get_selected_relationship()
         
-        return forward_relationship, backward_relationship 
+        return forward_relationship, backward_relationship
+    
+    def _on_forward_relationship_changed(self, text: str) -> None:
+        """Handle when the forward relationship type changes.
+        
+        Args:
+            text: Selected relationship type text
+        """
+        # Enable the backward card only if a valid relationship type is selected
+        self.backward_card.setEnabled(bool(text)) 
