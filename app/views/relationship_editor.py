@@ -11,29 +11,84 @@ from typing import List, Dict, Any, Optional, Tuple, Set
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, 
-    QListWidgetItem, QLabel, QWidget, QFrame, QSizePolicy, QMessageBox
+    QListWidgetItem, QLabel, QWidget, QFrame, QSizePolicy, QMessageBox,
+    QToolTip
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QEvent, QTimer
 from PyQt6.QtGui import (
     QPixmap, QIcon, QColor, QPalette, QPainter, QPen, QPolygon,
-    QMouseEvent
+    QMouseEvent, QFont, QBrush
 )
 
-from app.db_sqlite import get_story_characters
+from app.db_sqlite import get_story_characters, get_character_relationships
+
+
+class RelationshipCountBadge(QLabel):
+    """A badge that shows the number of relationships a character has."""
+    
+    def __init__(self, count: int, parent=None):
+        """Initialize the relationship count badge.
+        
+        Args:
+            count: The number of relationships to display
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        
+        # Set the text to the count
+        self.setText(str(count))
+        
+        # Set size
+        self.setFixedSize(24, 24)
+        
+        # Set alignment
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Set font
+        font = QFont()
+        font.setBold(True)
+        self.setFont(font)
+        
+        # Set text color
+        self.setStyleSheet("color: white;")
+        
+        # Hide if count is 0
+        self.setVisible(count > 0)
+    
+    def paintEvent(self, event):
+        """Paint the badge as a circle with red background."""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Set brush for circle
+        painter.setBrush(QBrush(QColor("red")))
+        painter.setPen(Qt.PenStyle.NoPen)  # No border
+        
+        # Draw circle
+        painter.drawEllipse(0, 0, self.width(), self.height())
+        
+        # Call parent to draw text
+        super().paintEvent(event)
 
 
 class CharacterItemWidget(QWidget):
     """Custom widget for character list items."""
     
-    def __init__(self, character_data: Dict[str, Any], parent=None):
+    def __init__(self, character_data: Dict[str, Any], relationship_count: int = 0, parent=None):
         """Initialize the character item widget.
         
         Args:
             character_data: Character data dictionary
+            relationship_count: Number of relationships the character has
             parent: Parent widget
         """
         super().__init__(parent)
         self.character_data = character_data
+        self.relationship_count = relationship_count
+        self.relationship_details = []
+        self.tooltip_timer = QTimer(self)
+        self.tooltip_timer.setSingleShot(True)
+        self.tooltip_timer.timeout.connect(self.hide_tooltip)
         
         # Create layout
         layout = QHBoxLayout(self)
@@ -60,6 +115,13 @@ class CharacterItemWidget(QWidget):
         self.name_label.setStyleSheet("color: white; font-weight: bold;")
         layout.addWidget(self.name_label)
         
+        # Add spacer to push badge to the right
+        layout.addStretch()
+        
+        # Create relationship count badge
+        self.badge = RelationshipCountBadge(relationship_count)
+        layout.addWidget(self.badge)
+        
         # Set the background color for the widget
         self.setAutoFillBackground(True)
         palette = self.palette()
@@ -68,6 +130,77 @@ class CharacterItemWidget(QWidget):
         
         # Set fixed height for consistency
         self.setFixedHeight(50)
+        
+        # Install event filter for handling hover events
+        self.installEventFilter(self)
+    
+    def update_relationship_count(self, count: int) -> None:
+        """Update the relationship count badge.
+        
+        Args:
+            count: The new relationship count
+        """
+        self.relationship_count = count
+        self.badge.setText(str(count))
+        self.badge.setVisible(count > 0)
+    
+    def set_relationship_details(self, details: List[Dict[str, Any]]) -> None:
+        """Set the relationship details for hover display.
+        
+        Args:
+            details: List of relationship details
+        """
+        self.relationship_details = details
+    
+    def show_tooltip_with_timeout(self, pos: QPoint, text: str, timeout: int = 5000) -> None:
+        """Show tooltip with extended visibility time.
+        
+        Args:
+            pos: Position to show tooltip
+            text: Tooltip text
+            timeout: Time in milliseconds to show tooltip
+        """
+        QToolTip.showText(pos, text)
+        # Start timer to hide the tooltip after timeout
+        self.tooltip_timer.start(timeout)
+    
+    def hide_tooltip(self) -> None:
+        """Hide the tooltip."""
+        QToolTip.hideText()
+    
+    def eventFilter(self, obj, event) -> bool:
+        """Event filter for handling hover events.
+        
+        Args:
+            obj: Object that triggered the event
+            event: Event to be filtered
+            
+        Returns:
+            bool: True if the event was handled, False otherwise
+        """
+        if obj == self and event.type() == QEvent.Type.Enter and self.relationship_count > 0:
+            # Show tooltip with relationship details
+            if self.relationship_details:
+                tooltip_text = "<b>Relationships:</b><br>"
+                # Limit to 5 items
+                for i, relationship in enumerate(self.relationship_details[:5]):
+                    tooltip_text += f"• {relationship['name']}: {relationship['type']}<br>"
+                
+                # Show tooltip at the right position with extended timeout
+                self.show_tooltip_with_timeout(
+                    self.mapToGlobal(QPoint(self.badge.x(), self.badge.y() + self.badge.height())), 
+                    tooltip_text,
+                    5000  # 5 seconds
+                )
+            return True
+            
+        elif obj == self and event.type() == QEvent.Type.Leave:
+            # Hide tooltip
+            self.tooltip_timer.stop()  # Stop any pending timer
+            QToolTip.hideText()
+            return True
+            
+        return super().eventFilter(obj, event)
 
 
 class CharacterListItem(QListWidgetItem):
@@ -250,7 +383,52 @@ class RelationshipEditorDialog(QDialog):
         self.source_list = None
         self.arrow_start_pos = None
         
+        # Initialize relationship data
+        self.character_relationships = {}
+        
+        self.load_relationships()
+        
         self.init_ui()
+    
+    def load_relationships(self) -> None:
+        """Load relationship data for all characters."""
+        for character in self.characters:
+            character_id = character['id']
+            # Get all relationships for this character
+            relationships = get_character_relationships(self.db_conn, character_id)
+            
+            # Store relationship data - all relationships for count, but limit details to 5
+            self.character_relationships[character_id] = {
+                'count': len(relationships),
+                'details': relationships[:5]  # Only keep the 5 most recent for display
+            }
+    
+    def refresh_relationship_counts(self) -> None:
+        """Refresh the relationship counts for all characters in both lists."""
+        # Reload relationship data
+        self.load_relationships()
+        
+        # Update counts in left list
+        for i in range(self.left_characters_list.count()):
+            item = self.left_characters_list.item(i)
+            character_id = item.character_id
+            
+            widget = self.left_characters_list.itemWidget(item)
+            if widget and character_id in self.character_relationships:
+                relationship_data = self.character_relationships[character_id]
+                widget.update_relationship_count(relationship_data['count'])
+                widget.set_relationship_details(relationship_data['details'])
+        
+        # Update counts in right list
+        for i in range(self.right_characters_list.count()):
+            item = self.right_characters_list.item(i)
+            character_id = item.character_id
+            
+            widget = self.right_characters_list.itemWidget(item)
+            if widget and character_id in self.character_relationships:
+                relationship_data = self.character_relationships[character_id]
+                widget.update_relationship_count(relationship_data['count'])
+                widget.set_relationship_details(relationship_data['details'])
     
     def init_ui(self):
         """Initialize the user interface."""
@@ -380,6 +558,15 @@ class RelationshipEditorDialog(QDialog):
         
         # Add characters to both lists
         for character in self.characters:
+            character_id = character['id']
+            relationship_count = 0
+            relationship_details = []
+            
+            # Get relationship data if available
+            if character_id in self.character_relationships:
+                relationship_count = self.character_relationships[character_id]['count']
+                relationship_details = self.character_relationships[character_id]['details']
+            
             # Create list items for each list
             left_item = CharacterListItem(character)
             right_item = CharacterListItem(character)
@@ -389,8 +576,11 @@ class RelationshipEditorDialog(QDialog):
             self.right_characters_list.addItem(right_item)
             
             # Create and set custom widgets
-            left_widget = CharacterItemWidget(character)
-            right_widget = CharacterItemWidget(character)
+            left_widget = CharacterItemWidget(character, relationship_count)
+            left_widget.set_relationship_details(relationship_details)
+            
+            right_widget = CharacterItemWidget(character, relationship_count)
+            right_widget.set_relationship_details(relationship_details)
             
             # Set as item widgets
             self.left_characters_list.setItemWidget(left_item, left_widget)
@@ -651,6 +841,9 @@ class RelationshipEditorDialog(QDialog):
                 target_id=target_id,
                 target_name=target_item.character_data['name']
             )
+            
+            # Refresh relationship counts after adding a relationship
+            self.refresh_relationship_counts()
         else:
             print("DEBUG: No target item found at release position")
         
