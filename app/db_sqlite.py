@@ -607,13 +607,54 @@ def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int
 
 
 def get_character_relationships(conn: sqlite3.Connection, character_id: int) -> List[Dict[str, Any]]:
-    """Get all relationships for a character (both outgoing and incoming)."""
+    """Get all relationships for a character with detailed information.
+    
+    Args:
+        conn: Database connection
+        character_id: ID of the character
+        
+    Returns:
+        List of relationship dictionaries with details for display
+    """
     cursor = conn.cursor()
+    
+    # Query relationships where the character is either source or target
     cursor.execute('''
-    SELECT * FROM relationships 
-    WHERE source_id = ? OR target_id = ?
+    SELECT r.id, r.relationship_type, r.updated_at,
+           c1.id as source_id, c1.name as source_name,
+           c2.id as target_id, c2.name as target_name
+    FROM relationships r
+    JOIN characters c1 ON r.source_id = c1.id
+    JOIN characters c2 ON r.target_id = c2.id
+    WHERE r.source_id = ? OR r.target_id = ?
+    ORDER BY r.updated_at DESC
     ''', (character_id, character_id))
-    return [dict(row) for row in cursor.fetchall()]
+    
+    relationships = []
+    for row in cursor.fetchall():
+        row_dict = dict(row)
+        
+        # Determine the related character (the one that's not the input character_id)
+        if row_dict['source_id'] == character_id:
+            related_id = row_dict['target_id']
+            related_name = row_dict['target_name']
+            relationship_type = row_dict['relationship_type']
+        else:
+            related_id = row_dict['source_id']
+            related_name = row_dict['source_name']
+            relationship_type = f"[Inverse] {row_dict['relationship_type']}"
+        
+        # Create a simplified relationship object for display
+        relationships.append({
+            'id': row_dict['id'],
+            'name': related_name,
+            'character_id': related_id,
+            'type': relationship_type,
+            'updated_at': row_dict['updated_at']
+        })
+    
+    # Return all relationships without limiting
+    return relationships
 
 
 def get_relationship_types(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
