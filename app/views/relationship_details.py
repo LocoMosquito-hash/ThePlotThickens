@@ -186,7 +186,7 @@ class RelationshipCard(QFrame):
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        pen = QPen(QColor("#000000"))
+        pen = QPen(QColor("#FF0000"))
         pen.setWidth(2)
         painter.setPen(pen)
         
