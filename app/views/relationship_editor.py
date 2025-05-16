@@ -644,7 +644,7 @@ class RelationshipEditorDialog(QDialog):
                 target_canvas_pos
             )
             
-            # Show placeholder relationship details dialog
+            # Show the relationship details dialog
             self.show_relationship_placeholder(
                 source_id=source_id,
                 source_name=self.source_item.character_data['name'],
@@ -666,10 +666,9 @@ class RelationshipEditorDialog(QDialog):
         return True
     
     def show_relationship_placeholder(self, source_id: int, source_name: str, target_id: int, target_name: str) -> None:
-        """PLACEHOLDER: Show a simple dialog with relationship details.
+        """Show the relationship details dialog.
         
-        This is a temporary placeholder for a future Relationship Details window
-        that will allow defining the type and properties of the relationship.
+        Opens the RelationshipDetailsDialog to define the relationship type between two characters.
         
         Args:
             source_id: ID of the source character
@@ -677,20 +676,43 @@ class RelationshipEditorDialog(QDialog):
             target_id: ID of the target character
             target_name: Name of the target character
         """
-        # Create a simple message box with relationship details
-        message = (
-            f"Character Relationship Created:\n\n"
-            f"Source Character: {source_name} (ID: {source_id})\n"
-            f"Target Character: {target_name} (ID: {target_id})\n\n"
-            f"[PLACEHOLDER: This dialog will be replaced with a proper\n"
-            f"Relationship Details window in the future.]"
+        from app.views.relationship_details import RelationshipDetailsDialog
+        
+        # Create the relationship details dialog
+        dialog = RelationshipDetailsDialog(
+            self.db_conn,
+            source_id,
+            source_name,
+            target_id,
+            target_name,
+            self
         )
         
-        QMessageBox.information(
-            self,
-            "Relationship Created",
-            message
-        )
+        # Show the dialog (modal)
+        result = dialog.exec()
+        
+        if result == QDialog.DialogCode.Accepted:
+            # Get the selected relationship types
+            forward_rel, backward_rel = dialog.get_selected_relationships()
+            
+            # This is where we would save the relationships to the database
+            # in a future implementation
+            print(f"DEBUG: Forward relationship: {forward_rel}")
+            print(f"DEBUG: Backward relationship: {backward_rel}")
+            
+            # For now, just show a message box confirming the relationships
+            if forward_rel or backward_rel:
+                message = "Relationships selected:\n\n"
+                if forward_rel:
+                    message += f"{source_name} is {target_name}'s: {forward_rel}\n"
+                if backward_rel:
+                    message += f"{target_name} is {source_name}'s: {backward_rel}\n"
+                
+                QMessageBox.information(
+                    self,
+                    "Relationships Defined",
+                    message
+                )
     
     def cancel_drawing(self) -> None:
         """Cancel the current arrow drawing operation."""
