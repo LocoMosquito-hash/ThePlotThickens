@@ -86,9 +86,6 @@ class CharacterItemWidget(QWidget):
         self.character_data = character_data
         self.relationship_count = relationship_count
         self.relationship_details = []
-        self.tooltip_timer = QTimer(self)
-        self.tooltip_timer.setSingleShot(True)
-        self.tooltip_timer.timeout.connect(self.hide_tooltip)
         
         # Create layout
         layout = QHBoxLayout(self)
@@ -152,21 +149,14 @@ class CharacterItemWidget(QWidget):
         """
         self.relationship_details = details
     
-    def show_tooltip_with_timeout(self, pos: QPoint, text: str, timeout: int = 5000) -> None:
-        """Show tooltip with extended visibility time.
+    def show_tooltip(self, pos: QPoint, text: str) -> None:
+        """Show tooltip at the specified position.
         
         Args:
             pos: Position to show tooltip
             text: Tooltip text
-            timeout: Time in milliseconds to show tooltip
         """
         QToolTip.showText(pos, text)
-        # Start timer to hide the tooltip after timeout
-        self.tooltip_timer.start(timeout)
-    
-    def hide_tooltip(self) -> None:
-        """Hide the tooltip."""
-        QToolTip.hideText()
     
     def eventFilter(self, obj, event) -> bool:
         """Event filter for handling hover events.
@@ -186,17 +176,15 @@ class CharacterItemWidget(QWidget):
                 for i, relationship in enumerate(self.relationship_details[:5]):
                     tooltip_text += f"• {relationship['name']}: {relationship['type']}<br>"
                 
-                # Show tooltip at the right position with extended timeout
-                self.show_tooltip_with_timeout(
+                # Show tooltip at the right position without timeout
+                self.show_tooltip(
                     self.mapToGlobal(QPoint(self.badge.x(), self.badge.y() + self.badge.height())), 
-                    tooltip_text,
-                    5000  # 5 seconds
+                    tooltip_text
                 )
             return True
             
         elif obj == self and event.type() == QEvent.Type.Leave:
-            # Hide tooltip
-            self.tooltip_timer.stop()  # Stop any pending timer
+            # Hide tooltip when mouse leaves
             QToolTip.hideText()
             return True
             
