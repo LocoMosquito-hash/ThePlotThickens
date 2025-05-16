@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional, Tuple, Set
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, 
-    QListWidgetItem, QLabel, QWidget, QFrame, QSizePolicy
+    QListWidgetItem, QLabel, QWidget, QFrame, QSizePolicy, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPoint, QRect, QEvent
 from PyQt6.QtGui import (
@@ -643,6 +643,14 @@ class RelationshipEditorDialog(QDialog):
                 self.arrow_start_pos, 
                 target_canvas_pos
             )
+            
+            # Show placeholder relationship details dialog
+            self.show_relationship_placeholder(
+                source_id=source_id,
+                source_name=self.source_item.character_data['name'],
+                target_id=target_id,
+                target_name=target_item.character_data['name']
+            )
         else:
             print("DEBUG: No target item found at release position")
         
@@ -656,6 +664,33 @@ class RelationshipEditorDialog(QDialog):
         self.arrow_start_pos = None
         
         return True
+    
+    def show_relationship_placeholder(self, source_id: int, source_name: str, target_id: int, target_name: str) -> None:
+        """PLACEHOLDER: Show a simple dialog with relationship details.
+        
+        This is a temporary placeholder for a future Relationship Details window
+        that will allow defining the type and properties of the relationship.
+        
+        Args:
+            source_id: ID of the source character
+            source_name: Name of the source character
+            target_id: ID of the target character
+            target_name: Name of the target character
+        """
+        # Create a simple message box with relationship details
+        message = (
+            f"Character Relationship Created:\n\n"
+            f"Source Character: {source_name} (ID: {source_id})\n"
+            f"Target Character: {target_name} (ID: {target_id})\n\n"
+            f"[PLACEHOLDER: This dialog will be replaced with a proper\n"
+            f"Relationship Details window in the future.]"
+        )
+        
+        QMessageBox.information(
+            self,
+            "Relationship Created",
+            message
+        )
     
     def cancel_drawing(self) -> None:
         """Cancel the current arrow drawing operation."""
