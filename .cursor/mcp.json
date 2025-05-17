@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "sqlite-db": {
-      "command": "python",
-      "args": ["simple_mcp_server.py"],
+      "command": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\venv\\Scripts\\python.exe",
+      "args": ["direct_sqlite_mcp_absolute.py"],
       "env": {
         "PYTHONUNBUFFERED": "1"
       }
@@ -13,6 +13,24 @@
       "env": {
         "PYTHONUNBUFFERED": "1"
       }
+    },
+    "sqlite": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "parent_of_servers_repo/servers/src/sqlite",
+        "run",
+        "mcp-server-sqlite",
+        "--db-path",
+        "~/test.db"
+      ]
+    },
+    "official-sqlite": {
+      "command": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\venv\\Scripts\\mcp-server-sqlite.exe",
+      "args": [
+        "--db-path",
+        "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\the_plot_thickens.db"
+      ]
     }
   }
 }
