@@ -40,6 +40,15 @@
       "env": {
         "PYTHONUNBUFFERED": "1"
       }
+    },
+    "github": {
+      "command": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\github_mcp_server.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
     }
   }
 }
