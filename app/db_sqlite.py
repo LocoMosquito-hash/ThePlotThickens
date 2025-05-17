@@ -764,7 +764,6 @@ def initialize_database(db_path: str) -> sqlite3.Connection:
     
     # Initialize relationship tables
     create_relationship_tables(conn)
-    initialize_relationship_categories(conn)
     initialize_relationship_types(conn)
     
     return conn
