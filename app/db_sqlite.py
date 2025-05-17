@@ -21,6 +21,24 @@ from app.utils.character_references import (
     get_quick_event_story_id
 )
 
+# Import relationships module
+from app.relationships import (
+    create_relationship_tables,
+    initialize_relationship_categories,
+    initialize_relationship_types,
+    create_relationship,
+    get_relationship_categories,
+    get_relationship_types as get_relationship_types_from_module,
+    get_relationship_type_by_id,
+    get_relationship_type_inverse,
+    get_character_relationships as get_character_relationships_from_module,
+    get_relationship,
+    update_relationship,
+    delete_relationship,
+    suggest_relationship_type,
+    get_story_relationships as get_story_relationships_from_module
+)
+
 
 # Enumerations
 class StoryType(Enum):
@@ -91,22 +109,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
     )
     ''')
     
-    # Create relationships table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS relationships (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        description TEXT,
-        relationship_type TEXT NOT NULL,
-        color TEXT DEFAULT '#FF0000',
-        width REAL DEFAULT 1.0,
-        source_id INTEGER NOT NULL,
-        target_id INTEGER NOT NULL,
-        FOREIGN KEY (source_id) REFERENCES characters (id) ON DELETE CASCADE,
-        FOREIGN KEY (target_id) REFERENCES characters (id) ON DELETE CASCADE
-    )
-    ''')
+    # Note: relationships table is now managed by the relationships module
     
     # Create story_board_views table
     cursor.execute('''
@@ -591,19 +594,71 @@ def delete_character(db_conn, character_id: int) -> bool:
         return False
 
 
-# Relationship functions
-def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int, relationship_type: str,
-                       description: Optional[str] = None, color: str = "#FF0000", width: float = 1.0) -> int:
-    """Create a new relationship in the database."""
+# Relationship functions - now using the relationships module
+
+def get_relationship_types(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+    """Get all relationship types.
+    
+    Args:
+        conn: Database connection
+        
+    Returns:
+        List of relationship type dictionaries
+    """
+    # Check if we need to initialize the relationship tables
+    cursor = conn.cursor()
+    cursor.execute('''
+    SELECT name FROM sqlite_master 
+    WHERE type='table' AND name='relationship_types'
+    ''')
+    
+    if not cursor.fetchone():
+        # Initialize relationship tables
+        create_relationship_tables(conn)
+        initialize_relationship_categories(conn)
+        initialize_relationship_types(conn)
+    
+    # Get relationship types from the module
+    return get_relationship_types_from_module(conn)
+
+
+def get_used_relationship_types(conn: sqlite3.Connection) -> List[str]:
+    """Get all unique relationship types that have been used in the database.
+    
+    This function maintains backward compatibility with the old relationship system
+    while also supporting the new relationship module structure.
+    
+    Args:
+        conn: Database connection
+        
+    Returns:
+        List of unique relationship type names
+    """
     cursor = conn.cursor()
     
+    # Check if relationship_types table exists (new system)
     cursor.execute('''
-    INSERT INTO relationships (source_id, target_id, relationship_type, description, color, width)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ''', (source_id, target_id, relationship_type, description, color, width))
+    SELECT name FROM sqlite_master 
+    WHERE type='table' AND name='relationship_types'
+    ''')
     
-    conn.commit()
-    return cursor.lastrowid
+    if cursor.fetchone():
+        # Use the new relationship system
+        cursor.execute('''
+        SELECT DISTINCT rt.name
+        FROM relationships r
+        JOIN relationship_types rt ON r.relationship_type_id = rt.id
+        WHERE r.relationship_type_id IS NOT NULL
+        UNION
+        SELECT DISTINCT r.custom_label
+        FROM relationships r
+        WHERE r.is_custom = 1 AND r.custom_label IS NOT NULL
+        ''')
+        return [row[0] for row in cursor.fetchall()]
+    else:
+        # Use the legacy relationship system
+        cursor.execute('SELECT DISTINCT relationship_type FROM relationships')
+        return [row[0] for row in cursor.fetchall()]
 
 
 def get_character_relationships(conn: sqlite3.Connection, character_id: int) -> List[Dict[str, Any]]:
@@ -616,106 +671,28 @@ def get_character_relationships(conn: sqlite3.Connection, character_id: int) -> 
     Returns:
         List of relationship dictionaries with details for display
     """
-    cursor = conn.cursor()
-    
-    # Query relationships where the character is either source or target
-    cursor.execute('''
-    SELECT r.id, r.relationship_type, r.updated_at,
-           c1.id as source_id, c1.name as source_name,
-           c2.id as target_id, c2.name as target_name
-    FROM relationships r
-    JOIN characters c1 ON r.source_id = c1.id
-    JOIN characters c2 ON r.target_id = c2.id
-    WHERE r.source_id = ? OR r.target_id = ?
-    ORDER BY r.updated_at DESC
-    ''', (character_id, character_id))
-    
-    relationships = []
-    for row in cursor.fetchall():
-        row_dict = dict(row)
-        
-        # Determine the related character (the one that's not the input character_id)
-        if row_dict['source_id'] == character_id:
-            related_id = row_dict['target_id']
-            related_name = row_dict['target_name']
-            relationship_type = row_dict['relationship_type']
-        else:
-            related_id = row_dict['source_id']
-            related_name = row_dict['source_name']
-            relationship_type = f"[Inverse] {row_dict['relationship_type']}"
-        
-        # Create a simplified relationship object for display
-        relationships.append({
-            'id': row_dict['id'],
-            'name': related_name,
-            'character_id': related_id,
-            'type': relationship_type,
-            'updated_at': row_dict['updated_at']
-        })
-    
-    # Return all relationships without limiting
-    return relationships
-
-
-def get_relationship_types(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
-    """Get all relationship types from the database."""
-    cursor = conn.cursor()
-    
-    # Check if relationship_types table exists
-    cursor.execute('''
-    SELECT name FROM sqlite_master 
-    WHERE type='table' AND name='relationship_types'
-    ''')
-    
-    if cursor.fetchone():
-        # If the table exists, get all relationship types
-        cursor.execute('SELECT * FROM relationship_types')
-        return [dict(row) for row in cursor.fetchall()]
-    else:
-        # If the table doesn't exist, return a list of default relationship types
-        return [
-            {"id": 1, "name": "Father", "has_inverse": True, "male_variant": "Son", "female_variant": "Daughter"},
-            {"id": 2, "name": "Mother", "has_inverse": True, "male_variant": "Son", "female_variant": "Daughter"},
-            {"id": 3, "name": "Son", "has_inverse": True},
-            {"id": 4, "name": "Daughter", "has_inverse": True},
-            {"id": 5, "name": "Brother", "has_inverse": True, "male_variant": "Brother", "female_variant": "Sister"},
-            {"id": 6, "name": "Sister", "has_inverse": True, "male_variant": "Brother", "female_variant": "Sister"},
-            {"id": 7, "name": "Friend", "has_inverse": True},
-            {"id": 8, "name": "Enemy", "has_inverse": True},
-            {"id": 9, "name": "Coworker", "has_inverse": True},
-            {"id": 10, "name": "Boss", "has_inverse": True, "inverse_name": "Employee"},
-            {"id": 11, "name": "Employee", "has_inverse": True, "inverse_name": "Boss"},
-            {"id": 12, "name": "Spouse", "has_inverse": True},
-            {"id": 13, "name": "Boyfriend", "has_inverse": True, "inverse_name": "Girlfriend"},
-            {"id": 14, "name": "Girlfriend", "has_inverse": True, "inverse_name": "Boyfriend"},
-            {"id": 15, "name": "Mentor", "has_inverse": True, "inverse_name": "Student"},
-            {"id": 16, "name": "Student", "has_inverse": True, "inverse_name": "Mentor"}
-        ]
-
-
-def get_used_relationship_types(conn: sqlite3.Connection) -> List[str]:
-    """Get all unique relationship types that have been used in the database.
-    
-    Args:
-        conn: Database connection
-        
-    Returns:
-        List of unique relationship type names
-    """
-    cursor = conn.cursor()
-    cursor.execute('SELECT DISTINCT relationship_type FROM relationships')
-    return [row[0] for row in cursor.fetchall()]
+    return get_character_relationships_from_module(conn, character_id)
 
 
 def get_story_relationships(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
-    """Get all relationships for a story."""
-    cursor = conn.cursor()
-    cursor.execute('''
-    SELECT r.* FROM relationships r
-    JOIN characters c1 ON r.source_id = c1.id
-    WHERE c1.story_id = ?
-    ''', (story_id,))
-    return [dict(row) for row in cursor.fetchall()]
+    """Get all relationships for a story.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        
+    Returns:
+        List of relationship dictionaries
+    """
+    # Get relationships from the module
+    relationships = get_story_relationships_from_module(conn, story_id)
+    
+    # Map the 'type' key to 'relationship_type' for backward compatibility
+    # and ensure it's always a valid string
+    for relationship in relationships:
+        relationship['relationship_type'] = relationship.get('type', '') or ''
+    
+    return relationships
 
 
 # Story Board View functions
@@ -784,6 +761,11 @@ def initialize_database(db_path: str) -> sqlite3.Connection:
     create_character_details_table(conn)
     create_character_last_tagged_table(conn)
     create_tables_for_decision_points(conn)  # Create decision points tables
+    
+    # Initialize relationship tables
+    create_relationship_tables(conn)
+    initialize_relationship_categories(conn)
+    initialize_relationship_types(conn)
     
     return conn
 

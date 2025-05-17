@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "sqlite-db": {
+      "command": "python",
+      "args": ["simple_mcp_server.py"],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    "test-server": {
+      "command": "python",
+      "args": ["test_mcp_server.py"],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}
