@@ -20,6 +20,7 @@ from app.views.main_window import MainWindow
 from app.utils.image_recognition_util import ImageRecognitionUtil
 from app.utils.theme_manager import ThemeManager
 from app.utils.icons import icon_manager
+from app.migration_manager import check_and_run_migrations
 
 
 def _setup_logging() -> None:
@@ -102,7 +103,15 @@ def main() -> None:
     # Initialize the database
     db_path = os.path.join(app_dir, "..", "the_plot_thickens.db")
     logging.info(f"Database path: {db_path}")
+    
     try:
+        # Run any pending migrations first
+        logging.info("Checking for database migrations...")
+        migrations_success = check_and_run_migrations(db_path)
+        if not migrations_success:
+            logging.warning("Some migrations may have failed. Application may not function correctly.")
+            
+        # Now initialize the database
         db_conn = initialize_database(db_path)
         logging.info("Database initialized successfully")
         
