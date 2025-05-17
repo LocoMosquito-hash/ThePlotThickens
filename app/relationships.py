@@ -50,36 +50,27 @@ def create_relationship_tables(conn: sqlite3.Connection) -> None:
     """
     cursor = conn.cursor()
     
-    # Create relationship_categories table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS relationship_categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        name TEXT NOT NULL UNIQUE,
-        description TEXT,
-        display_order INTEGER DEFAULT 0
-    )
-    ''')
-    
-    # Create enhanced relationship_types table
+    # Create relationship_types table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS relationship_types (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         name TEXT NOT NULL,
-        inverse_id INTEGER,
-        category_id INTEGER NOT NULL,
+        type_key TEXT NOT NULL,
+        color TEXT DEFAULT '#cccccc',
         gender_context TEXT DEFAULT 'NEUTRAL',
+        inverse_id INTEGER,
         is_common BOOLEAN DEFAULT 1,
         is_custom BOOLEAN DEFAULT 0,
         display_name TEXT,
         description TEXT,
-        FOREIGN KEY (inverse_id) REFERENCES relationship_types (id),
-        FOREIGN KEY (category_id) REFERENCES relationship_categories (id)
+        FOREIGN KEY (inverse_id) REFERENCES relationship_types (id)
     )
     ''')
+    
+    # Check if the relationship_types table exists but is missing the gender_context column
+    ensure_gender_context_column(conn)
     
     # Update relationships table if it exists but is missing fields
     cursor.execute("PRAGMA table_info(relationships)")
@@ -111,6 +102,40 @@ def create_relationship_tables(conn: sqlite3.Connection) -> None:
         ''')
     
     conn.commit()
+
+
+def ensure_gender_context_column(conn: sqlite3.Connection) -> None:
+    """Ensure the gender_context column exists in the relationship_types table.
+    
+    Args:
+        conn: Database connection
+    """
+    cursor = conn.cursor()
+    
+    # Check if the relationship_types table exists
+    cursor.execute('''
+    SELECT name FROM sqlite_master 
+    WHERE type='table' AND name='relationship_types'
+    ''')
+    
+    if cursor.fetchone():
+        # Table exists, check if gender_context column exists
+        cursor.execute("PRAGMA table_info(relationship_types)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if "gender_context" not in columns:
+            # Add the missing column
+            print("Adding missing gender_context column to relationship_types table")
+            try:
+                cursor.execute('''
+                ALTER TABLE relationship_types 
+                ADD COLUMN gender_context TEXT DEFAULT 'NEUTRAL'
+                ''')
+                conn.commit()
+            except sqlite3.Error as e:
+                print(f"Error adding gender_context column: {e}")
+                # Don't fail the entire operation if this fails
+                pass
 
 
 def initialize_relationship_categories(conn: sqlite3.Connection) -> None:
@@ -161,94 +186,94 @@ def initialize_relationship_types(conn: sqlite3.Connection) -> None:
     if count == 0:
         # Family relationships
         family_types = [
-            # Name, Category, Gender Context, Is Common, Description
-            ("Father", 1, "MALE", 1, "Paternal relationship"),
-            ("Mother", 1, "FEMALE", 1, "Maternal relationship"),
-            ("Son", 1, "MALE", 1, "Male child relationship"),
-            ("Daughter", 1, "FEMALE", 1, "Female child relationship"),
-            ("Brother", 1, "MALE", 1, "Male sibling relationship"),
-            ("Sister", 1, "FEMALE", 1, "Female sibling relationship"),
-            ("Husband", 1, "MALE", 1, "Male spouse relationship"),
-            ("Wife", 1, "FEMALE", 1, "Female spouse relationship"),
-            ("Grandfather", 1, "MALE", 1, "Male grandparent relationship"),
-            ("Grandmother", 1, "FEMALE", 1, "Female grandparent relationship"),
-            ("Grandson", 1, "MALE", 1, "Male grandchild relationship"),
-            ("Granddaughter", 1, "FEMALE", 1, "Female grandchild relationship"),
-            ("Uncle", 1, "MALE", 1, "Male parental sibling relationship"),
-            ("Aunt", 1, "FEMALE", 1, "Female parental sibling relationship"),
-            ("Nephew", 1, "MALE", 1, "Male sibling's child relationship"),
-            ("Niece", 1, "FEMALE", 1, "Female sibling's child relationship"),
-            ("Cousin", 1, "NEUTRAL", 1, "Extended family relationship"),
-            ("Step-father", 1, "MALE", 1, "Male step-parent relationship"),
-            ("Step-mother", 1, "FEMALE", 1, "Female step-parent relationship"),
-            ("Step-son", 1, "MALE", 1, "Male step-child relationship"),
-            ("Step-daughter", 1, "FEMALE", 1, "Female step-child relationship"),
-            ("Step-brother", 1, "MALE", 1, "Male step-sibling relationship"),
-            ("Step-sister", 1, "FEMALE", 1, "Female step-sibling relationship"),
-            ("Parent", 1, "NEUTRAL", 0, "Neutral parent relationship"),
-            ("Child", 1, "NEUTRAL", 0, "Neutral child relationship"),
-            ("Sibling", 1, "NEUTRAL", 0, "Neutral sibling relationship"),
-            ("Spouse", 1, "NEUTRAL", 0, "Neutral spouse relationship"),
-            ("Grandparent", 1, "NEUTRAL", 0, "Neutral grandparent relationship"),
-            ("Grandchild", 1, "NEUTRAL", 0, "Neutral grandchild relationship")
+            # Name, Type Key, Gender Context, Is Common, Description
+            ("Father", "FAMILY", "MALE", 1, "Paternal relationship"),
+            ("Mother", "FAMILY", "FEMALE", 1, "Maternal relationship"),
+            ("Son", "FAMILY", "MALE", 1, "Male child relationship"),
+            ("Daughter", "FAMILY", "FEMALE", 1, "Female child relationship"),
+            ("Brother", "FAMILY", "MALE", 1, "Male sibling relationship"),
+            ("Sister", "FAMILY", "FEMALE", 1, "Female sibling relationship"),
+            ("Husband", "FAMILY", "MALE", 1, "Male spouse relationship"),
+            ("Wife", "FAMILY", "FEMALE", 1, "Female spouse relationship"),
+            ("Grandfather", "FAMILY", "MALE", 1, "Male grandparent relationship"),
+            ("Grandmother", "FAMILY", "FEMALE", 1, "Female grandparent relationship"),
+            ("Grandson", "FAMILY", "MALE", 1, "Male grandchild relationship"),
+            ("Granddaughter", "FAMILY", "FEMALE", 1, "Female grandchild relationship"),
+            ("Uncle", "FAMILY", "MALE", 1, "Male parental sibling relationship"),
+            ("Aunt", "FAMILY", "FEMALE", 1, "Female parental sibling relationship"),
+            ("Nephew", "FAMILY", "MALE", 1, "Male sibling's child relationship"),
+            ("Niece", "FAMILY", "FEMALE", 1, "Female sibling's child relationship"),
+            ("Cousin", "FAMILY", "NEUTRAL", 1, "Extended family relationship"),
+            ("Step-father", "FAMILY", "MALE", 1, "Male step-parent relationship"),
+            ("Step-mother", "FAMILY", "FEMALE", 1, "Female step-parent relationship"),
+            ("Step-son", "FAMILY", "MALE", 1, "Male step-child relationship"),
+            ("Step-daughter", "FAMILY", "FEMALE", 1, "Female step-child relationship"),
+            ("Step-brother", "FAMILY", "MALE", 1, "Male step-sibling relationship"),
+            ("Step-sister", "FAMILY", "FEMALE", 1, "Female step-sibling relationship"),
+            ("Parent", "FAMILY", "NEUTRAL", 0, "Neutral parent relationship"),
+            ("Child", "FAMILY", "NEUTRAL", 0, "Neutral child relationship"),
+            ("Sibling", "FAMILY", "NEUTRAL", 0, "Neutral sibling relationship"),
+            ("Spouse", "FAMILY", "NEUTRAL", 0, "Neutral spouse relationship"),
+            ("Grandparent", "FAMILY", "NEUTRAL", 0, "Neutral grandparent relationship"),
+            ("Grandchild", "FAMILY", "NEUTRAL", 0, "Neutral grandchild relationship")
         ]
         
         # Work relationships
         work_types = [
-            ("Boss", 2, "NEUTRAL", 1, "Superior at work"),
-            ("Employee", 2, "NEUTRAL", 1, "Reports to another person at work"),
-            ("Coworker", 2, "NEUTRAL", 1, "Works alongside another person"),
-            ("Colleague", 2, "NEUTRAL", 1, "Professional associate"),
-            ("Assistant", 2, "NEUTRAL", 1, "Helps or supports another person at work"),
-            ("Mentor", 2, "NEUTRAL", 1, "Provides guidance and advice"),
-            ("Mentee", 2, "NEUTRAL", 1, "Receives guidance and advice"),
-            ("Supervisor", 2, "NEUTRAL", 1, "Oversees work of another person"),
-            ("Subordinate", 2, "NEUTRAL", 1, "Work is overseen by another person"),
-            ("Business partner", 2, "NEUTRAL", 1, "Shares business interests")
+            ("Boss", "WORK", "NEUTRAL", 1, "Superior at work"),
+            ("Employee", "WORK", "NEUTRAL", 1, "Reports to another person at work"),
+            ("Coworker", "WORK", "NEUTRAL", 1, "Works alongside another person"),
+            ("Colleague", "WORK", "NEUTRAL", 1, "Professional associate"),
+            ("Assistant", "WORK", "NEUTRAL", 1, "Helps or supports another person at work"),
+            ("Mentor", "WORK", "NEUTRAL", 1, "Provides guidance and advice"),
+            ("Mentee", "WORK", "NEUTRAL", 1, "Receives guidance and advice"),
+            ("Supervisor", "WORK", "NEUTRAL", 1, "Oversees work of another person"),
+            ("Subordinate", "WORK", "NEUTRAL", 1, "Work is overseen by another person"),
+            ("Business partner", "WORK", "NEUTRAL", 1, "Shares business interests")
         ]
         
         # Study relationships
         study_types = [
-            ("Teacher", 3, "NEUTRAL", 1, "Provides education"),
-            ("Student", 3, "NEUTRAL", 1, "Receives education"),
-            ("Classmate", 3, "NEUTRAL", 1, "Attends same class"),
-            ("Schoolmate", 3, "NEUTRAL", 1, "Attends same school"),
-            ("Roommate", 3, "NEUTRAL", 1, "Shares living space")
+            ("Teacher", "STUDY", "NEUTRAL", 1, "Provides education"),
+            ("Student", "STUDY", "NEUTRAL", 1, "Receives education"),
+            ("Classmate", "STUDY", "NEUTRAL", 1, "Attends same class"),
+            ("Schoolmate", "STUDY", "NEUTRAL", 1, "Attends same school"),
+            ("Roommate", "STUDY", "NEUTRAL", 1, "Shares living space")
         ]
         
         # Romantic relationships
         romantic_types = [
-            ("Boyfriend", 4, "MALE", 1, "Male romantic partner"),
-            ("Girlfriend", 4, "FEMALE", 1, "Female romantic partner"),
-            ("Fiancé", 4, "MALE", 1, "Male engaged partner"),
-            ("Fiancée", 4, "FEMALE", 1, "Female engaged partner"),
-            ("Lover", 4, "NEUTRAL", 1, "Romantic or sexual partner"),
-            ("Ex-boyfriend", 4, "MALE", 1, "Former male romantic partner"),
-            ("Ex-girlfriend", 4, "FEMALE", 1, "Former female romantic partner"),
-            ("Ex-husband", 4, "MALE", 1, "Former male spouse"),
-            ("Ex-wife", 4, "FEMALE", 1, "Former female spouse"),
-            ("Ex-spouse", 4, "NEUTRAL", 0, "Former spouse"),
-            ("Partner", 4, "NEUTRAL", 1, "Committed relationship partner"),
-            ("Significant other", 4, "NEUTRAL", 0, "Romantic partner")
+            ("Boyfriend", "ROMANTIC", "MALE", 1, "Male romantic partner"),
+            ("Girlfriend", "ROMANTIC", "FEMALE", 1, "Female romantic partner"),
+            ("Fiancé", "ROMANTIC", "MALE", 1, "Male engaged partner"),
+            ("Fiancée", "ROMANTIC", "FEMALE", 1, "Female engaged partner"),
+            ("Lover", "ROMANTIC", "NEUTRAL", 1, "Romantic or sexual partner"),
+            ("Ex-boyfriend", "ROMANTIC", "MALE", 1, "Former male romantic partner"),
+            ("Ex-girlfriend", "ROMANTIC", "FEMALE", 1, "Former female romantic partner"),
+            ("Ex-husband", "ROMANTIC", "MALE", 1, "Former male spouse"),
+            ("Ex-wife", "ROMANTIC", "FEMALE", 1, "Former female spouse"),
+            ("Ex-spouse", "ROMANTIC", "NEUTRAL", 0, "Former spouse"),
+            ("Partner", "ROMANTIC", "NEUTRAL", 1, "Committed relationship partner"),
+            ("Significant other", "ROMANTIC", "NEUTRAL", 0, "Romantic partner")
         ]
         
         # Social relationships
         social_types = [
-            ("Friend", 6, "NEUTRAL", 1, "Social companion"),
-            ("Best friend", 6, "NEUTRAL", 1, "Close friend"),
-            ("Acquaintance", 6, "NEUTRAL", 1, "Casual social connection"),
-            ("Neighbor", 6, "NEUTRAL", 1, "Lives nearby"),
-            ("Roommate", 6, "NEUTRAL", 1, "Shares living space")
+            ("Friend", "SOCIAL", "NEUTRAL", 1, "Social companion"),
+            ("Best friend", "SOCIAL", "NEUTRAL", 1, "Close friend"),
+            ("Acquaintance", "SOCIAL", "NEUTRAL", 1, "Casual social connection"),
+            ("Neighbor", "SOCIAL", "NEUTRAL", 1, "Lives nearby"),
+            ("Roommate", "SOCIAL", "NEUTRAL", 1, "Shares living space")
         ]
         
         # Other relationships
         other_types = [
-            ("Rival", 8, "NEUTRAL", 1, "Competes against"),
-            ("Enemy", 8, "NEUTRAL", 1, "Hostile relationship"),
-            ("Ally", 8, "NEUTRAL", 1, "Cooperates with"),
-            ("Guardian", 8, "NEUTRAL", 1, "Protects or looks after"),
-            ("Ward", 8, "NEUTRAL", 1, "Protected by another person"),
-            ("Caretaker", 8, "NEUTRAL", 1, "Provides care")
+            ("Rival", "OTHER", "NEUTRAL", 1, "Competes against"),
+            ("Enemy", "OTHER", "NEUTRAL", 1, "Hostile relationship"),
+            ("Ally", "OTHER", "NEUTRAL", 1, "Cooperates with"),
+            ("Guardian", "OTHER", "NEUTRAL", 1, "Protects or looks after"),
+            ("Ward", "OTHER", "NEUTRAL", 1, "Protected by another person"),
+            ("Caretaker", "OTHER", "NEUTRAL", 1, "Provides care")
         ]
         
         # Combine all relationship types
@@ -257,7 +282,7 @@ def initialize_relationship_types(conn: sqlite3.Connection) -> None:
         # Insert all relationship types
         for rel_type in all_types:
             cursor.execute('''
-            INSERT INTO relationship_types (name, category_id, gender_context, is_common, description)
+            INSERT INTO relationship_types (name, type_key, gender_context, is_common, description)
             VALUES (?, ?, ?, ?, ?)
             ''', rel_type)
             
@@ -430,14 +455,14 @@ def get_relationship_categories(conn: sqlite3.Connection) -> List[Dict[str, Any]
 
 
 def get_relationship_types(conn: sqlite3.Connection, 
-                         category_id: Optional[int] = None,
+                         category_id: Optional[str] = None,
                          is_common: Optional[bool] = None,
                          gender_context: Optional[str] = None) -> List[Dict[str, Any]]:
     """Get relationship types with optional filtering.
     
     Args:
         conn: Database connection
-        category_id: Optional category ID to filter by
+        category_id: Optional category type_key to filter by
         is_common: Optional flag to filter by common/uncommon types
         gender_context: Optional gender context to filter by
         
@@ -452,7 +477,7 @@ def get_relationship_types(conn: sqlite3.Connection,
     # Add filters
     filters = []
     if category_id is not None:
-        filters.append('category_id = ?')
+        filters.append('type_key = ?')
         params.append(category_id)
     
     if is_common is not None:
@@ -538,11 +563,10 @@ def get_character_relationships(conn: sqlite3.Connection, character_id: int) -> 
     cursor.execute('''
     SELECT r.*, c.name as target_name, 
            rt.name as relationship_name, rt.gender_context,
-           rc.name as category_name
+           rt.type_key as category_name
     FROM relationships r
     JOIN characters c ON r.target_id = c.id
     LEFT JOIN relationship_types rt ON r.relationship_type_id = rt.id
-    LEFT JOIN relationship_categories rc ON rt.category_id = rc.id
     WHERE r.source_id = ?
     ORDER BY r.strength DESC, r.updated_at DESC
     ''', (character_id,))
@@ -553,11 +577,10 @@ def get_character_relationships(conn: sqlite3.Connection, character_id: int) -> 
     cursor.execute('''
     SELECT r.*, c.name as source_name, 
            rt.name as relationship_name, rt.gender_context,
-           rc.name as category_name
+           rt.type_key as category_name
     FROM relationships r
     JOIN characters c ON r.source_id = c.id
     LEFT JOIN relationship_types rt ON r.relationship_type_id = rt.id
-    LEFT JOIN relationship_categories rc ON rt.category_id = rc.id
     WHERE r.target_id = ?
     ORDER BY r.strength DESC, r.updated_at DESC
     ''', (character_id,))
@@ -628,12 +651,11 @@ def get_relationship(conn: sqlite3.Connection, relationship_id: int) -> Optional
            s.name as source_name, s.gender as source_gender,
            t.name as target_name, t.gender as target_gender,
            rt.name as relationship_name, rt.gender_context,
-           rc.name as category_name
+           rt.type_key as category_name
     FROM relationships r
     JOIN characters s ON r.source_id = s.id
     JOIN characters t ON r.target_id = t.id
     LEFT JOIN relationship_types rt ON r.relationship_type_id = rt.id
-    LEFT JOIN relationship_categories rc ON rt.category_id = rc.id
     WHERE r.id = ?
     ''', (relationship_id,))
     
@@ -785,12 +807,11 @@ def suggest_relationship_type(conn: sqlite3.Connection, source_id: int, target_i
     
     # Get relationship types appropriate for source's gender
     query = '''
-    SELECT rt.*, rc.name as category_name
+    SELECT rt.*, rt.type_key as category_name
     FROM relationship_types rt
-    JOIN relationship_categories rc ON rt.category_id = rc.id
     WHERE (rt.gender_context = ? OR rt.gender_context = 'NEUTRAL')
     AND rt.is_common = 1
-    ORDER BY rc.display_order, rt.name
+    ORDER BY rt.type_key, rt.name
     '''
     
     cursor.execute(query, (source_context,))
