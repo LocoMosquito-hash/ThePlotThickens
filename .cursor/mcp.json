@@ -31,6 +31,15 @@
         "--db-path",
         "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\the_plot_thickens.db"
       ]
+    },
+    "filesystem": {
+      "command": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\filesystem_mcp_server.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
     }
   }
 }
