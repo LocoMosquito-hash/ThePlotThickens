@@ -49,6 +49,15 @@
       "env": {
         "PYTHONUNBUFFERED": "1"
       }
+    },
+    "memory": {
+      "command": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\memory_mcp_server.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
     }
   }
 }
