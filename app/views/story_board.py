@@ -2600,7 +2600,7 @@ class StoryBoardWidget(QWidget):
     def on_manage_relationship_types(self) -> None:
         """Open the relationship types manager window."""
         from app.views.relationship_types_manager import RelationshipTypesManager
-        manager = RelationshipTypesManager(self)
+        manager = RelationshipTypesManager(self, db_conn=self.db_conn)
         manager.show()
     
     def on_zoom_in(self) -> None:
