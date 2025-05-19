@@ -261,7 +261,7 @@ class CharacterCard(QGraphicsItemGroup):
         self.addToGroup(name_text)
         
         # Create badges container
-        badges_y = card_height - 20  # Position below the name
+        badges_y = card_height - 15  # Position below the name (increased space)
         self.add_gender_badge(card_width / 2, badges_y)
         
         # Add main character indicator if applicable
@@ -303,7 +303,7 @@ class CharacterCard(QGraphicsItemGroup):
             y: Y coordinate position
         """
         gender = self.character_data.get('gender', 'NOT_SPECIFIED')
-        badge_size = 16
+        badge_size = 20  # Increased from 16 (25% larger)
         
         # Create badge background (circle)
         badge = QGraphicsEllipseItem(x - badge_size/2, y, badge_size, badge_size)
@@ -331,7 +331,7 @@ class CharacterCard(QGraphicsItemGroup):
         
         # Add gender symbol
         symbol_text = QGraphicsTextItem(symbol)
-        symbol_text.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        symbol_text.setFont(QFont("Arial", 11, QFont.Weight.Bold))  # Increased from 9 to 11
         symbol_text.setDefaultTextColor(QColor("#FFFFFF"))  # White text
         
         # Center text in badge
@@ -883,7 +883,7 @@ class CharacterCard(QGraphicsItemGroup):
                 scene.removeItem(gender_symbol)
         
         # Add new gender badge
-        badges_y = card_height - 20  # Position below the name
+        badges_y = card_height - 15  # Position below the name (increased space)
         self.add_gender_badge(card_width / 2, badges_y)
         
         # Update main character indicator
@@ -1616,6 +1616,460 @@ class StoryBoardScene(QGraphicsScene):
         """Handle selection changes from Qt's internal selection mechanism."""
         # Forward to our custom enforcement method
         self._enforce_selection_visibility()
+    
+    def get_selected_characters(self) -> List[Dict[str, Any]]:
+        """Get data for all selected characters.
+        
+        Returns:
+            List of character data dictionaries
+        """
+        selected_chars = []
+        for char_id in self.selected_character_ids:
+            if char_id in self.character_cards:
+                card = self.character_cards[char_id]
+                selected_chars.append(card.character_data)
+        return selected_chars
+    
+    def select_characters_by_ids(self, character_ids: List[int]) -> None:
+        """Select characters by their IDs.
+        
+        Args:
+            character_ids: List of character IDs to select
+        """
+        # Block signals temporarily to avoid multiple updates
+        self.blockSignals(True)
+        
+        try:
+            # Clear current selection first
+            self.clearSelection()
+            
+            # Select each character by ID
+            for char_id in character_ids:
+                if char_id in self.character_cards:
+                    self.character_cards[char_id].setSelected(True)
+        finally:
+            # Restore signals
+            self.blockSignals(False)
+            
+        # Force update of selection visuals
+        self._enforce_selection_visibility()
+    
+    def _enforce_selection_visibility(self) -> None:
+        """Enforce visibility of folded corners and shadows for all selected cards."""
+        # Get all selected character cards
+        selected_cards = [item for item in self.selectedItems() if isinstance(item, CharacterCard)]
+        selected_ids = [card.character_id for card in selected_cards]
+        
+        # Update selection storage, but preserve multi-selection in progress
+        if hasattr(self, '_in_multi_selection') and self._in_multi_selection:
+            # If we're in multi-selection mode, merge with existing selection instead of replacing
+            if not selected_ids:
+                # If nothing is selected now, keep the old selection 
+                # (this helps when selection events might be firing in the wrong order)
+                pass
+            else:
+                # Update with new selection (could be adding or removing)
+                self.selected_character_ids = selected_ids
+        else:
+            # Normal case - not in multi-selection mode
+            self.selected_character_ids = selected_ids
+        
+        # Debug output
+        print(f"Selection updated: {len(selected_ids)} cards selected: {selected_ids}")
+        
+        # Process both selected and unselected cards
+        for card in self.character_cards.values():
+            is_selected = card.isSelected()
+            
+            # Debug individual card selection state
+            if is_selected:
+                print(f"Card {card.character_id} is SELECTED")
+            
+            # Ensure folded corner visibility matches selection state
+            if hasattr(card, 'folded_corner'):
+                card.folded_corner.setVisible(is_selected)
+                if is_selected:
+                    card.folded_corner.setZValue(15)  # High z-value to ensure visibility
+            
+            # Handle shadow visibility and z-value based on selection
+            if is_selected:
+                # Create shadow if needed
+                shadow_offset = 4
+                if card.shadow_rect is None and card.scene():
+                    card_width = 180
+                    card_height = 240
+                    
+                    # Create shadow rectangle as a separate scene item
+                    card.shadow_rect = QGraphicsRectItem()
+                    card.shadow_rect.setRect(0, 0, card_width, card_height)
+                    card.shadow_rect.setBrush(QBrush(QColor(0, 0, 0, 50)))
+                    card.shadow_rect.setPen(QPen(Qt.PenStyle.NoPen))
+                    card.shadow_rect.setZValue(-1)
+                    self.addItem(card.shadow_rect)
+                
+                # Show and position shadow
+                if card.shadow_rect:
+                    card.shadow_rect.setPos(card.pos() + QPointF(shadow_offset/2, shadow_offset/2))
+                    card.shadow_rect.setVisible(True)
+                
+                # Bring card to front
+                card.setZValue(5)
+            else:
+                # Hide shadow for unselected cards
+                if card.shadow_rect:
+                    card.shadow_rect.setVisible(False)
+                
+                # Reset z-value
+                card.setZValue(0)
+        
+        # Update selection indicator
+        self.update_selection_indicator()
+        
+        # Emit signals if needed
+        if not hasattr(self, '_last_selection') or self._last_selection != set(selected_ids):
+            self._last_selection = set(selected_ids)
+            self.selection_changed.emit(selected_ids)
+            
+            # If exactly one character is selected, emit the single character selected signal
+            if len(selected_ids) == 1:
+                self.character_selected.emit(selected_ids[0])
+    
+    def on_character_position_changed(self, character_id: int) -> None:
+        """Handle character position change.
+        
+        Args:
+            character_id: ID of the character that moved
+        """
+        # Refresh relationship styling
+        self.refresh_relationship_styling()
+        
+        # Emit layout changed signal
+        self.layout_changed.emit()
+    
+    def contextMenuEvent(self, event: QGraphicsSceneContextMenuEvent) -> None:
+        """Handle context menu events.
+        
+        Args:
+            event: Context menu event
+        """
+        # Get the clicked position in scene coordinates
+        scene_pos = event.scenePos()
+        
+        # Check if we clicked on an item
+        clicked_item = self.itemAt(scene_pos, QTransform())
+        if clicked_item:
+            # Let the item handle its own context menu
+            super().contextMenuEvent(event)
+            return
+            
+        # Create menu for empty space click
+        menu = QMenu()
+        add_character_action = menu.addAction("Add Character Here")
+        
+        # Show menu and handle actions
+        action = menu.exec(event.screenPos())
+        
+        if action == add_character_action:
+            # Import here to avoid circular imports
+            from app.views.character_dialog import CharacterDialog
+            
+            # Get the parent widget (StoryBoardWidget)
+            parent_widget = self.views()[0].parent() if self.views() else None
+            if not parent_widget or not hasattr(parent_widget, 'current_story_id'):
+                return
+            
+            # Get current character count in database
+            from app.db_sqlite import get_story_characters
+            current_characters = get_story_characters(self.db_conn, parent_widget.current_story_id)
+            print(f"ADD CHAR: Before adding - {len(current_characters)} characters in database for story {parent_widget.current_story_id}")
+            
+            # Log card count before adding character
+            print(f"ADD CHAR: Before adding - {len(self.character_cards)} cards in scene")
+                
+            # Create and show the character dialog
+            dialog = CharacterDialog(self.db_conn, parent_widget.current_story_id, parent=parent_widget)
+            if dialog.exec():
+                # Get the character ID from the dialog
+                character_id = dialog.character_id
+                print(f"DEBUG: Got character ID {character_id} from dialog")
+                
+                # Check character count in database after adding
+                new_characters = get_story_characters(self.db_conn, parent_widget.current_story_id)
+                print(f"ADD CHAR: After adding - {len(new_characters)} characters in database for story {parent_widget.current_story_id}")
+                
+                # Add the character to the current view's layout
+                if parent_widget.current_view_id and character_id:
+                    # Get the current layout
+                    from app.db_sqlite import get_story_board_view, update_story_board_view_layout, get_character
+                    view = get_story_board_view(self.db_conn, parent_widget.current_view_id)
+                    layout = json.loads(view['layout_data']) if view['layout_data'] else {}
+                    
+                    # Initialize characters dictionary if it doesn't exist
+                    if 'characters' not in layout:
+                        layout['characters'] = {}
+                    
+                    # Add the character to the layout at the clicked position
+                    layout['characters'][str(character_id)] = {
+                        'x': scene_pos.x(),
+                        'y': scene_pos.y()
+                    }
+                    
+                    # Update the layout
+                    update_story_board_view_layout(
+                        self.db_conn,
+                        parent_widget.current_view_id,
+                        json.dumps(layout)
+                    )
+                    
+                    # Get the complete character data from the database
+                    complete_character_data = get_character(self.db_conn, character_id)
+                    
+                    # Add the character card directly to the scene at the clicked position
+                    self.add_character_card(character_id, complete_character_data, scene_pos.x(), scene_pos.y())
+                    
+                    # Save the view without triggering a reload
+                    parent_widget.save_current_view()
+                    
+                    # Log card count after adding character
+                    print(f"ADD CHAR: After adding - {len(self.character_cards)} cards in scene")
+    
+    def update_selection_indicator(self) -> None:
+        """Update the selection indicator with current selection information.
+        
+        This now updates the status bar in the main window instead of using scene graphics.
+        """
+        try:
+            # Create selection text
+            if not self.selected_character_ids:
+                # No selection
+                status_text = "No characters selected"
+            else:
+                num_selected = len(self.selected_character_ids)
+                if num_selected == 1:
+                    card = self.character_cards.get(self.selected_character_ids[0])
+                    if card:
+                        status_text = f"Selected: {card.character_data['name']}"
+                    else:
+                        status_text = "Selected: 1 character"
+                else:
+                    # Multiple characters selected
+                    names = []
+                    for char_id in self.selected_character_ids:
+                        card = self.character_cards.get(char_id)
+                        if card:
+                            names.append(card.character_data['name'])
+                    
+                    status_text = f"Selected: {num_selected} characters - " + ", ".join(names)
+            
+            # Find the main window and update its status bar
+            parent = self.parent()
+            while parent and not hasattr(parent, 'statusBar'):
+                parent = parent.parent()
+            
+            if parent and hasattr(parent, 'statusBar'):
+                parent.statusBar().showMessage(status_text)
+            
+        except Exception as e:
+            print(f"Error updating selection indicator: {str(e)}")
+    
+    def add_character_card(self, character_id: int, character_data: Dict[str, Any], x: float = 0, y: float = 0) -> CharacterCard:
+        """Add a character card to the scene.
+        
+        Args:
+            character_id: ID of the character
+            character_data: Character data
+            x: X coordinate
+            y: Y coordinate
+            
+        Returns:
+            The created character card
+        """
+        print(f"ADD CARD: Adding character {character_id} at position ({x}, {y})")
+        
+        # Check if card already exists
+        if character_id in self.character_cards:
+            print(f"ADD CARD: WARNING - Character {character_id} already exists in scene!")
+        
+        card = CharacterCard(character_id, character_data, x, y)
+        self.addItem(card)
+        self.character_cards[character_id] = card
+        
+        # Connect to position changed signal
+        card.position_changed.connect(self.on_character_position_changed)
+        
+        # print(f"ADD CARD: Character {character_id} added successfully. Total cards: {len(self.character_cards)}")
+        
+        return card
+    
+    def add_relationship_line(self, relationship_id: int, relationship_data: Dict[str, Any],
+                            source_id: int, target_id: int) -> Optional[RelationshipLine]:
+        """Add a relationship line to the scene.
+        
+        Args:
+            relationship_id: ID of the relationship
+            relationship_data: Relationship data
+            source_id: ID of the source character
+            target_id: ID of the target character
+            
+        Returns:
+            The created relationship line, or None if the characters don't exist
+        """
+        if source_id not in self.character_cards or target_id not in self.character_cards:
+            return None
+        
+        source_card = self.character_cards[source_id]
+        target_card = self.character_cards[target_id]
+        
+        line = RelationshipLine(relationship_id, relationship_data, source_card, target_card)
+        self.addItem(line)
+        
+        # No need to add the label separately as it's now a child item of the line
+        
+        self.relationship_lines[relationship_id] = line
+        return line
+    
+    def clear_board(self) -> None:
+        """Clear all items from the scene."""
+        # Make sure to remove any shadow rectangles
+        for card in self.character_cards.values():
+            if hasattr(card, 'shadow_rect') and card.shadow_rect is not None:
+                self.removeItem(card.shadow_rect)
+        
+        self.character_cards.clear()
+        self.relationship_lines.clear()
+        self.clear()
+    
+    def get_layout_data(self) -> Dict[str, Any]:
+        """Get the layout data for saving.
+        
+        Returns:
+            Layout data as a dictionary
+        """
+        layout = {"characters": {}}
+        
+        # Add character positions
+        for character_id, card in self.character_cards.items():
+            pos = card.pos()
+            layout["characters"][str(character_id)] = {"x": pos.x(), "y": pos.y()}
+        
+        return layout
+    
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+        """Handle mouse press events.
+        
+        Args:
+            event: Mouse press event
+        """
+        # Get the clicked position
+        pos = event.scenePos()
+        
+        # Check if we clicked on an item
+        clicked_item = self.itemAt(pos, QTransform())
+        
+        # Special handling for Ctrl+Click multi-selection
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            # Set a flag to indicate we're in multi-selection mode
+            self._in_multi_selection = True
+            
+            # Only handle character cards or their children
+            if clicked_item and (isinstance(clicked_item, CharacterCard) or 
+                          (clicked_item.parentItem() and isinstance(clicked_item.parentItem(), CharacterCard))):
+                # Get the card itself
+                card = clicked_item if isinstance(clicked_item, CharacterCard) else clicked_item.parentItem()
+                
+                # Verify click is within bounds
+                local_pos = card.mapFromScene(pos)
+                if QRectF(0, 0, 180, 240).contains(local_pos):
+                    # Toggle the selection state of this card only
+                    was_selected = card.isSelected()
+                    
+                    # Store current selection to preserve it
+                    current_selection = self.selectedItems()
+                    selected_cards = [item for item in current_selection if isinstance(item, CharacterCard)]
+                    
+                    # Add or remove this card from selection
+                    if was_selected:
+                        card.setSelected(False)
+                    else:
+                        card.setSelected(True)
+                        
+                    # Make sure we're not clearing other selections
+                    for selected_card in selected_cards:
+                        if selected_card != card:
+                            selected_card.setSelected(True)
+                    
+                    # Immediately update selection visuals
+                    self._enforce_selection_visibility()
+                    
+                    # Protect selection from being changed by events
+                    QTimer.singleShot(50, self._finish_multi_selection)
+                    
+                    # Consume event to prevent Qt's default behavior
+                    event.accept()
+                    return
+        
+        # For all other clicks, use standard Qt behavior
+        super().mousePressEvent(event)
+        
+        # Ensure selection visuals are updated
+        QTimer.singleShot(0, self._enforce_selection_visibility)
+    
+    def _finish_multi_selection(self) -> None:
+        """Finish multi-selection mode and clean up."""
+        # Clear the multi-selection flag
+        self._in_multi_selection = False
+        
+        # Update selection visuals once more
+        self._enforce_selection_visibility()
+    
+    def on_character_selected(self, character_id: int) -> None:
+        """Handle single character selection.
+        
+        Args:
+            character_id: ID of the selected character
+        """
+        # Ensure the character ID is in the selected list
+        if character_id not in self.selected_character_ids:
+            self.selected_character_ids = [character_id]
+        
+        # Get character data
+        character_data = None
+        if character_id in self.character_cards:
+            character_data = self.character_cards[character_id].character_data
+        
+        # Emit the character selected signal with ID and data
+        if character_data:
+            self.character_selected.emit(character_id, character_data)
+            
+            # Display a status message
+            main_window = self.window()
+            if hasattr(main_window, 'status_bar'):
+                main_window.status_bar.showPermanentMessage(f"Selected character: {character_data['name']}")
+    
+    def on_selection_changed(self, selected_ids: List[int]) -> None:
+        """Handle multiple character selection.
+        
+        Args:
+            selected_ids: List of IDs of the selected characters
+        """
+        self.selected_character_ids = selected_ids
+        
+        # Get character data for all selected characters
+        selected_data = []
+        for char_id in selected_ids:
+            if char_id in self.character_cards:
+                selected_data.append(self.character_cards[char_id].character_data)
+        
+        # Emit the selection changed signal with list of character data
+        self.selection_changed.emit(selected_data)
+        
+        # Display a status message
+        main_window = self.window()
+        if hasattr(main_window, 'status_bar'):
+            if len(selected_ids) > 1:
+                main_window.status_bar.showPermanentMessage(f"Selected {len(selected_ids)} characters")
+            elif len(selected_ids) == 0:
+                main_window.status_bar.showPermanentMessage("No characters selected")
     
     def get_selected_characters(self) -> List[Dict[str, Any]]:
         """Get data for all selected characters.
