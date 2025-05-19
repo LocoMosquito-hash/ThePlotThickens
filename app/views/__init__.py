@@ -15,4 +15,5 @@ from app.views.character_dialog import CharacterDialog
 from app.views.gallery_widget import GalleryWidget
 from app.views.decision_points_tab import DecisionPointsTab
 from app.views.relationship_editor import RelationshipEditorDialog
-from app.views.relationship_details import RelationshipDetailsDialog 
+from app.views.relationship_details import RelationshipDetailsDialog
+from app.views.relationship_types_manager import RelationshipTypesManager 

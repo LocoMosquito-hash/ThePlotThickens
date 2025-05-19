@@ -2246,6 +2246,13 @@ class StoryBoardWidget(QWidget):
         
         toolbar.addSeparator()
         
+        # Add relationship types manager button
+        self.manage_relationship_types_button = QPushButton("Manage Relationship Types")
+        self.manage_relationship_types_button.clicked.connect(self.on_manage_relationship_types)
+        toolbar.addWidget(self.manage_relationship_types_button)
+        
+        toolbar.addSeparator()
+        
         # Add grid snapping controls
         self.grid_snap_checkbox = QCheckBox("Snap to Grid")
         self.grid_snap_checkbox.setChecked(self.settings.value("storyboard/grid_snap", False, type=bool))
@@ -2310,6 +2317,7 @@ class StoryBoardWidget(QWidget):
         self.grid_snap_checkbox.setEnabled(False)
         self.grid_visible_checkbox.setEnabled(False)
         self.grid_size_combo.setEnabled(False)
+        self.manage_relationship_types_button.setEnabled(False)
         
         # Auto-save timer
         self.auto_save_timer = QTimer(self)
@@ -2341,6 +2349,7 @@ class StoryBoardWidget(QWidget):
         self.grid_snap_checkbox.setEnabled(True)
         self.grid_visible_checkbox.setEnabled(True)
         self.grid_size_combo.setEnabled(True)
+        self.manage_relationship_types_button.setEnabled(True)
         
         # Apply saved grid settings to the scene
         self.apply_grid_settings()
@@ -2587,6 +2596,12 @@ class StoryBoardWidget(QWidget):
         """Handle delete view button click."""
         # TODO: Implement delete view functionality
         QMessageBox.information(self, "Not Implemented", "Delete view functionality is not yet implemented.")
+    
+    def on_manage_relationship_types(self) -> None:
+        """Open the relationship types manager window."""
+        from app.views.relationship_types_manager import RelationshipTypesManager
+        manager = RelationshipTypesManager(self)
+        manager.show()
     
     def on_zoom_in(self) -> None:
         """Handle zoom in button click."""
