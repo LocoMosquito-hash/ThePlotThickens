@@ -477,6 +477,16 @@ class StoryManagerWidget(QWidget):
                     "Failed to find the selected story."
                 )
                 return
+                
+            # Debug info
+            print("DEBUG: Original story data:")
+            for key, value in original_story_data.items():
+                print(f"  {key}: {value}")
+                
+            # Ensure description field is sanitized
+            if "description" in original_story_data and original_story_data["description"] is None:
+                original_story_data["description"] = ""
+                print("DEBUG: Sanitized NULL description field to empty string")
             
             # Get user folder from settings
             user_folder = self.settings.value("user_folder", "")
@@ -496,7 +506,7 @@ class StoryManagerWidget(QWidget):
             stories_folder = os.path.join(user_folder, "Stories")
             os.makedirs(stories_folder, exist_ok=True)
             
-            # Show progress dialog
+            # Get progress dialog ready for our operations
             progress_dialog = QProgressDialog("Creating a copy of the story. Please wait...", "Cancel", 0, 100, self)
             progress_dialog.setWindowTitle("Creating Story Copy")
             progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
@@ -542,19 +552,52 @@ class StoryManagerWidget(QWidget):
             new_folder_path = os.path.join(stories_folder, new_folder_name)
             
             # Step 1: Create a new story record with empty folder path
-            new_story_id, new_story_data = create_story(
-                self.db_conn,
-                title=new_title,
-                description=original_story_data["description"],
-                type_name=original_story_data["type_name"],
-                folder_path="",  # Temporary, will be updated after we get the ID
-                universe=original_story_data["universe"],
-                is_part_of_series=original_story_data["is_part_of_series"] in (True, 1),
-                series_name=original_story_data["series_name"],
-                series_order=original_story_data["series_order"],
-                author=original_story_data["author"],
-                year=original_story_data["year"]
+            cursor = self.db_conn.cursor()
+            
+            # Get the original timestamps for the story
+            cursor.execute(
+                "SELECT created_at, updated_at FROM stories WHERE id = ?",
+                (story_id,)
             )
+            timestamp_data = cursor.fetchone()
+            created_at = timestamp_data["created_at"] if timestamp_data else None
+            updated_at = timestamp_data["updated_at"] if timestamp_data else None
+            
+            # Insert the new story directly with SQL to ensure all fields are handled correctly
+            cursor.execute("""
+                INSERT INTO stories (
+                    title, description, type_name, folder_path, universe, 
+                    is_part_of_series, series_name, series_order, author, year,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                new_title, 
+                original_story_data["description"] or "", 
+                original_story_data["type_name"] or "OTHER",
+                "",  # Temporary empty folder path
+                original_story_data["universe"] or "",
+                1 if original_story_data["is_part_of_series"] in (True, 1) else 0,
+                original_story_data["series_name"] or "",
+                original_story_data["series_order"],
+                original_story_data["author"] or "",
+                original_story_data["year"],
+                created_at or "CURRENT_TIMESTAMP",
+                updated_at or "CURRENT_TIMESTAMP"
+            ))
+            
+            new_story_id = cursor.lastrowid
+            self.db_conn.commit()
+            
+            # Update the folder path
+            cursor.execute(
+                "UPDATE stories SET folder_path = ? WHERE id = ?",
+                (new_folder_path, new_story_id)
+            )
+            self.db_conn.commit()
+            
+            # Get the updated story data
+            cursor.execute("SELECT * FROM stories WHERE id = ?", (new_story_id,))
+            new_story_data = dict(cursor.fetchone())
             
             # Update progress
             progress_dialog.setValue(20)
@@ -563,12 +606,9 @@ class StoryManagerWidget(QWidget):
                 return
             QApplication.processEvents()
             
-            # Step 2: Update the story with the proper folder path
-            new_story_data = update_story_folder_path(self.db_conn, new_story_id, new_folder_path)
+            # Step 2: Copy all related data
             
-            # Step 3: Copy all related data
-            
-            # Step 3.1: Copy characters
+            # Step 2.1: Copy characters
             original_characters = get_story_characters(self.db_conn, story_id)
             new_character_id_map = {}  # Maps original character IDs to new character IDs
             
@@ -578,23 +618,54 @@ class StoryManagerWidget(QWidget):
             QApplication.processEvents()
             
             for character in original_characters:
-                # Create a new character with the same data but linked to the new story
-                new_character_id = create_character(
-                    self.db_conn,
-                    name=character["name"],
-                    story_id=new_story_id,
-                    aliases=character["aliases"],
-                    is_main_character=character["is_main_character"] in (True, 1),
-                    age_value=character["age_value"],
-                    age_category=character["age_category"],
-                    gender=character["gender"],
-                    avatar_path=None  # We'll copy the avatar file separately
+                # For debugging
+                print(f"DEBUG: Copying character {character['name']} with gender {character['gender']}")
+                
+                # Get the original character's timestamps
+                cursor = self.db_conn.cursor()
+                cursor.execute(
+                    "SELECT created_at, updated_at FROM characters WHERE id = ?",
+                    (character["id"],)
                 )
+                timestamp_data = cursor.fetchone()
+                created_at = timestamp_data["created_at"] if timestamp_data else None
+                updated_at = timestamp_data["updated_at"] if timestamp_data else None
+                
+                # Update avatar path if it exists
+                avatar_path = None
+                if character["avatar_path"]:
+                    # Convert the original path to the new story folder path
+                    avatar_path = character["avatar_path"].replace(original_story_data["folder_path"], new_folder_path)
+                    print(f"DEBUG: Updated avatar path from {character['avatar_path']} to {avatar_path}")
+                
+                # Create a new character directly with SQL to ensure all fields are copied
+                cursor.execute("""
+                    INSERT INTO characters (
+                        name, story_id, aliases, is_main_character, age_value, age_category, 
+                        gender, avatar_path, is_archived, is_deceased, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    character["name"],
+                    new_story_id,
+                    character["aliases"] or "",  # Convert None to empty string for aliases
+                    1 if character["is_main_character"] in (True, 1) else 0,
+                    character["age_value"],
+                    character["age_category"] or "",  # Convert None to empty string for age_category
+                    character["gender"] or "NOT_SPECIFIED",  # Ensure gender is never None
+                    avatar_path,  # Updated avatar path instead of None
+                    1 if character.get("is_archived") in (True, 1) else 0,
+                    1 if character.get("is_deceased") in (True, 1) else 0,
+                    created_at or "CURRENT_TIMESTAMP",
+                    updated_at or "CURRENT_TIMESTAMP"
+                ))
+                
+                new_character_id = cursor.lastrowid
+                self.db_conn.commit()
                 
                 # Store the mapping between old and new character IDs
                 new_character_id_map[character["id"]] = new_character_id
             
-            # Step 3.2: Copy relationships
+            # Step 2.2: Copy relationships
             progress_dialog.setValue(40)
             if progress_dialog.wasCanceled():
                 return
@@ -610,49 +681,148 @@ class StoryManagerWidget(QWidget):
                 if source_id not in new_character_id_map or target_id not in new_character_id_map:
                     continue
                 
+                # Ensure description isn't missing
+                relationship_description = relationship.get("description", "")
+                if relationship_description is None:
+                    relationship_description = ""
+                
+                # Get the relationship type ID
+                relationship_type_id = relationship.get("relationship_type_id")
+                if relationship_type_id is None and "relationship_type" in relationship:
+                    # For backward compatibility, get relationship type ID from name
+                    cursor = self.db_conn.cursor()
+                    cursor.execute("SELECT id FROM relationship_types WHERE name = ?", 
+                                  (relationship["relationship_type"],))
+                    result = cursor.fetchone()
+                    if result:
+                        relationship_type_id = result["id"]
+                
+                # If we still don't have a relationship type ID, skip this relationship
+                if relationship_type_id is None:
+                    print(f"WARNING: Could not find relationship type ID for {relationship.get('relationship_type', 'unknown')}. Skipping.")
+                    continue
+                
                 # Create a new relationship between the new characters
-                create_relationship(
-                    self.db_conn,
-                    source_id=new_character_id_map[source_id],
-                    target_id=new_character_id_map[target_id],
-                    relationship_type=relationship["relationship_type"],
-                    description=relationship["description"],
-                    color=relationship["color"],
-                    width=relationship["width"]
-                )
+                try:
+                    create_relationship(
+                        self.db_conn,
+                        source_id=new_character_id_map[source_id],
+                        target_id=new_character_id_map[target_id],
+                        relationship_type_id=relationship_type_id,
+                        description=relationship_description,
+                        color=relationship.get("color", "#000000"),  # Default to black if missing
+                        width=relationship.get("width", 1.0),  # Default to 1.0 if missing
+                        is_custom=relationship.get("is_custom", False),
+                        custom_label=relationship.get("custom_label")
+                    )
+                except Exception as rel_error:
+                    print(f"WARNING: Error copying relationship: {rel_error}")
+                    import traceback
+                    traceback.print_exc()
+                    # Try again with defaults for all non-essential fields
+                    try:
+                        create_relationship(
+                            self.db_conn,
+                            source_id=new_character_id_map[source_id],
+                            target_id=new_character_id_map[target_id],
+                            relationship_type_id=relationship_type_id,
+                            description="",  # Empty description
+                            color="#000000",  # Default color
+                            width=1.0  # Default width
+                        )
+                    except Exception as retry_error:
+                        print(f"ERROR: Failed on second attempt to copy relationship: {retry_error}")
+                        import traceback
+                        traceback.print_exc()
             
-            # Step 3.3: Copy story board views
+            # Step 2.3: Copy story board views
             progress_dialog.setValue(50)
             if progress_dialog.wasCanceled():
                 return
             QApplication.processEvents()
             
-            original_views = get_story_board_views(self.db_conn, story_id)
-            
-            for view in original_views:
-                # Parse the layout data to update character IDs
-                layout_data = json.loads(view["layout_data"])
+            try:
+                original_views = get_story_board_views(self.db_conn, story_id)
+                print(f"DEBUG: Found {len(original_views)} story board views to copy")
                 
-                # Update character IDs in the layout data
-                if "characters" in layout_data:
-                    updated_characters = {}
-                    for char_id, char_data in layout_data["characters"].items():
-                        if int(char_id) in new_character_id_map:
-                            new_id = new_character_id_map[int(char_id)]
-                            updated_characters[str(new_id)] = char_data
-                    
-                    layout_data["characters"] = updated_characters
-                
-                # Create a new view with the updated layout data
-                create_story_board_view(
-                    self.db_conn,
-                    name=view["name"],
-                    story_id=new_story_id,
-                    layout_data=json.dumps(layout_data),
-                    description=view["description"]
-                )
+                for view in original_views:
+                    try:
+                        print(f"DEBUG: Copying view: {view.get('name', 'unnamed')}")
+                        
+                        # Parse the layout data to update character IDs
+                        layout_data = {}
+                        try:
+                            layout_json = view.get("layout_data", "{}")
+                            if layout_json:
+                                layout_data = json.loads(layout_json)
+                            else:
+                                layout_data = {}
+                                print("DEBUG: Empty layout data, using empty dict")
+                        except json.JSONDecodeError as jde:
+                            print(f"WARNING: Could not parse layout data: {jde}")
+                            layout_data = {}  # Use empty dict as fallback
+                        
+                        # Update character IDs in the layout data
+                        if "characters" in layout_data:
+                            updated_characters = {}
+                            for char_id, char_data in layout_data["characters"].items():
+                                try:
+                                    char_id_int = int(char_id)
+                                    if char_id_int in new_character_id_map:
+                                        new_id = new_character_id_map[char_id_int]
+                                        updated_characters[str(new_id)] = char_data
+                                except (ValueError, KeyError) as e:
+                                    print(f"WARNING: Error updating character ID {char_id}: {e}")
+                                    continue
+                            
+                            layout_data["characters"] = updated_characters
+                        
+                        # Ensure description isn't None
+                        view_name = view.get("name", "View")
+                        if view_name is None:
+                            view_name = "View"
+                            print("DEBUG: Sanitized NULL view name to 'View'")
+                            
+                        view_description = view.get("description", "")
+                        if view_description is None:
+                            view_description = ""
+                            print("DEBUG: Sanitized NULL view description to empty string")
+                        
+                        # Create a new view with the updated layout data
+                        try:
+                            new_view_id = create_story_board_view(
+                                self.db_conn,
+                                name=view_name,
+                                story_id=new_story_id,
+                                layout_data=json.dumps(layout_data),
+                                description=view_description
+                            )
+                            print(f"DEBUG: Created story board view with ID {new_view_id}")
+                        except Exception as view_error:
+                            print(f"WARNING: Error creating story board view: {view_error}")
+                            import traceback
+                            traceback.print_exc()
+                            # Try again with empty description
+                            new_view_id = create_story_board_view(
+                                self.db_conn,
+                                name=view_name,
+                                story_id=new_story_id,
+                                layout_data=json.dumps(layout_data),
+                                description=""
+                            )
+                            print(f"DEBUG: Created story board view on second attempt with ID {new_view_id}")
+                    except Exception as e:
+                        print(f"WARNING: Failed to copy story board view: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        continue
+            except Exception as e:
+                print(f"WARNING: Failed to copy story board views: {e}")
+                import traceback
+                traceback.print_exc()
+                # Continue with the duplication process
             
-            # Step 3.4: Copy events
+            # Step 2.4: Copy events
             progress_dialog.setValue(60)
             if progress_dialog.wasCanceled():
                 return
@@ -663,21 +833,45 @@ class StoryManagerWidget(QWidget):
             
             # First pass: create all events without parent relationships
             for event in original_events:
-                new_event_id = create_event(
-                    self.db_conn,
-                    title=event["title"],
-                    story_id=new_story_id,
-                    description=event["description"],
-                    event_type=event["event_type"],
-                    start_date=event["start_date"],
-                    end_date=event["end_date"],
-                    location=event["location"],
-                    importance=event["importance"],
-                    color=event["color"],
-                    is_milestone=event["is_milestone"] in (True, 1),
-                    parent_event_id=None,  # Set parent in second pass
-                    sequence_number=event["sequence_number"]
-                )
+                # Ensure description isn't None
+                event_description = event.get("description", "")
+                if event_description is None:
+                    event_description = ""
+                
+                try:
+                    new_event_id = create_event(
+                        self.db_conn,
+                        title=event["title"],
+                        story_id=new_story_id,
+                        description=event_description,
+                        event_type=event["event_type"],
+                        start_date=event["start_date"],
+                        end_date=event["end_date"],
+                        location=event["location"],
+                        importance=event["importance"],
+                        color=event["color"],
+                        is_milestone=event["is_milestone"] in (True, 1),
+                        parent_event_id=None,  # Set parent in second pass
+                        sequence_number=event["sequence_number"]
+                    )
+                except Exception as event_error:
+                    print(f"WARNING: Error copying event: {event_error}")
+                    # Try again with empty description
+                    new_event_id = create_event(
+                        self.db_conn,
+                        title=event["title"],
+                        story_id=new_story_id,
+                        description="",  # Force empty string
+                        event_type=event["event_type"],
+                        start_date=event["start_date"],
+                        end_date=event["end_date"],
+                        location=event["location"],
+                        importance=event["importance"],
+                        color=event["color"],
+                        is_milestone=event["is_milestone"] in (True, 1),
+                        parent_event_id=None,  # Set parent in second pass
+                        sequence_number=event["sequence_number"]
+                    )
                 
                 event_id_map[event["id"]] = new_event_id
                 
@@ -709,7 +903,7 @@ class StoryManagerWidget(QWidget):
                         parent_event_id=event_id_map[event["parent_event_id"]]
                     )
             
-            # Step 3.5: Copy images
+            # Step 2.5: Copy images
             progress_dialog.setValue(70)
             progress_dialog.setLabelText("Copying image records...")
             if progress_dialog.wasCanceled():
@@ -725,6 +919,11 @@ class StoryManagerWidget(QWidget):
                 original_path = image["path"]
                 new_path = original_path.replace(original_story_data["folder_path"], new_folder_path)
                 
+                # Ensure no NULL values in fields
+                image_description = image.get("description", "")
+                if image_description is None:
+                    image_description = ""
+                
                 # Get the original created_at and updated_at timestamps
                 cursor = self.db_conn.cursor()
                 cursor.execute(
@@ -736,36 +935,56 @@ class StoryManagerWidget(QWidget):
                 updated_at = timestamp_data["updated_at"] if timestamp_data else None
                 
                 # Create new image record with preserved timestamps
-                if created_at and updated_at:
-                    cursor.execute(
-                        """
-                        INSERT INTO images (
-                            filename, path, story_id, title, description, width, height,
-                            file_size, mime_type, is_featured, date_taken,
-                            metadata_json, event_id, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            image["filename"], new_path, new_story_id, image["title"], 
-                            image["description"], image["width"], image["height"],
-                            image["file_size"], image["mime_type"], 
-                            1 if image["is_featured"] in (True, 1) else 0, 
-                            image["date_taken"], image["metadata_json"],
-                            event_id_map.get(image["event_id"]) if image["event_id"] else None,
-                            created_at, updated_at
+                try:
+                    if created_at and updated_at:
+                        cursor.execute(
+                            """
+                            INSERT INTO images (
+                                filename, path, story_id, title, description, width, height,
+                                file_size, mime_type, is_featured, date_taken,
+                                metadata_json, event_id, created_at, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                image["filename"], new_path, new_story_id, image["title"], 
+                                image_description, image["width"], image["height"],
+                                image["file_size"], image["mime_type"], 
+                                1 if image["is_featured"] in (True, 1) else 0, 
+                                image["date_taken"], image["metadata_json"],
+                                event_id_map.get(image["event_id"]) if image["event_id"] else None,
+                                created_at, updated_at
+                            )
                         )
-                    )
-                    new_image_id = cursor.lastrowid
-                    self.db_conn.commit()
-                else:
-                    # Fallback to create_image if timestamps are not available
+                        new_image_id = cursor.lastrowid
+                        self.db_conn.commit()
+                    else:
+                        # Fallback to create_image if timestamps are not available
+                        new_image_id = create_image(
+                            self.db_conn,
+                            filename=image["filename"],
+                            path=new_path,
+                            story_id=new_story_id,
+                            title=image["title"],
+                            description=image_description,
+                            width=image["width"],
+                            height=image["height"],
+                            file_size=image["file_size"],
+                            mime_type=image["mime_type"],
+                            is_featured=image["is_featured"] in (True, 1),
+                            date_taken=image["date_taken"],
+                            metadata_json=image["metadata_json"],
+                            event_id=event_id_map.get(image["event_id"]) if image["event_id"] else None
+                        )
+                except Exception as img_error:
+                    print(f"WARNING: Error creating image record: {img_error}")
+                    # Try again with empty description
                     new_image_id = create_image(
                         self.db_conn,
                         filename=image["filename"],
                         path=new_path,
                         story_id=new_story_id,
                         title=image["title"],
-                        description=image["description"],
+                        description="",  # Force empty string
                         width=image["width"],
                         height=image["height"],
                         file_size=image["file_size"],
@@ -783,491 +1002,461 @@ class StoryManagerWidget(QWidget):
                 tags = get_image_character_tags(self.db_conn, image["id"])
                 for tag in tags:
                     if tag["character_id"] in new_character_id_map:
+                        # Ensure no NULL values in position coordinates for image_character_tags
+                        x_position = tag["x_position"] if tag["x_position"] is not None else 0.0
+                        y_position = tag["y_position"] if tag["y_position"] is not None else 0.0
+                        width = tag["width"] if tag["width"] is not None else 0.0
+                        height = tag["height"] if tag["height"] is not None else 0.0
+                        
                         add_character_tag_to_image(
                             self.db_conn,
                             new_image_id,
                             new_character_id_map[tag["character_id"]],
-                            tag["x_position"],
-                            tag["y_position"],
-                            tag["width"],
-                            tag["height"],
-                            tag.get("note")
+                            x_position,
+                            y_position,
+                            width,
+                            height,
+                            tag.get("note", "")
                         )
+                self.db_conn.commit()
             
-            # Step 3.5.1: Copy image_tags (front-end visible tags)
+            # Step 2.5.1: Copy image_tags (front-end visible tags)
             progress_dialog.setValue(72)
             progress_dialog.setLabelText("Copying image tags...")
             if progress_dialog.wasCanceled():
                 return
             QApplication.processEvents()
             
-            cursor = self.db_conn.cursor()
-            cursor.execute('''
-                SELECT * FROM image_tags
-                WHERE image_id IN (
-                    SELECT id FROM images WHERE story_id = ?
-                )
-            ''', (story_id,))
-            image_tags = cursor.fetchall()
+            try:
+                cursor = self.db_conn.cursor()
+                cursor.execute('''
+                    SELECT * FROM image_tags
+                    WHERE image_id IN (
+                        SELECT id FROM images WHERE story_id = ?
+                    )
+                ''', (story_id,))
+                image_tags = cursor.fetchall()
+                
+                for tag in image_tags:
+                    try:
+                        if tag["image_id"] in image_id_map and tag["character_id"] in new_character_id_map:
+                            # Safely access position values with defaults if they don't exist or are NULL
+                            x = 0.0
+                            if "x" in tag and tag["x"] is not None:
+                                x = tag["x"]
+                                
+                            y = 0.0
+                            if "y" in tag and tag["y"] is not None:
+                                y = tag["y"]
+                                
+                            width = 0.0
+                            if "width" in tag and tag["width"] is not None:
+                                width = tag["width"]
+                                
+                            height = 0.0
+                            if "height" in tag and tag["height"] is not None:
+                                height = tag["height"]
+                            
+                            cursor.execute('''
+                                INSERT INTO image_tags (
+                                    created_at, updated_at, x, y, width, height, 
+                                    image_id, character_id
+                                ) VALUES (
+                                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?, ?,
+                                    ?, ?
+                                )
+                            ''', (
+                                x, y, width, height,
+                                image_id_map[tag["image_id"]], new_character_id_map[tag["character_id"]]
+                            ))
+                    except KeyError as ke:
+                        print(f"Warning: Missing key in image tag: {ke}")
+                        continue
+                    except Exception as te:
+                        print(f"Warning: Error copying image tag: {te}")
+                        continue
+                        
+                self.db_conn.commit()
+            except Exception as e:
+                print(f"Warning: Failed to copy image tags: {e}")
+                # Continue with the rest of the duplication process
             
-            for tag in image_tags:
-                if tag["image_id"] in image_id_map and tag["character_id"] in new_character_id_map:
-                    cursor.execute('''
-                        INSERT INTO image_tags (
-                            created_at, updated_at, x, y, width, height, 
-                            image_id, character_id
-                        ) VALUES (
-                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?, ?,
-                            ?, ?
-                        )
-                    ''', (
-                        tag["x"], tag["y"], tag["width"], tag["height"],
-                        image_id_map[tag["image_id"]], new_character_id_map[tag["character_id"]]
-                    ))
-            self.db_conn.commit()
-            
-            # Step 3.5.2: Copy image_features (for character recognition)
+            # Step 2.5.2: Copy image_features (for character recognition)
             progress_dialog.setValue(73)
             progress_dialog.setLabelText("Copying image features...")
             if progress_dialog.wasCanceled():
                 return
             QApplication.processEvents()
             
-            cursor.execute('''
-                SELECT * FROM image_features
-                WHERE character_id IN (
-                    SELECT id FROM characters WHERE story_id = ?
-                )
-            ''', (story_id,))
-            image_features = cursor.fetchall()
-            
-            for feature in image_features:
-                new_image_id = None
-                if feature["image_id"] is not None and feature["image_id"] in image_id_map:
-                    new_image_id = image_id_map[feature["image_id"]]
-                    
-                if feature["character_id"] in new_character_id_map:
-                    cursor.execute('''
-                        INSERT INTO image_features (
-                            character_id, image_id, is_avatar, feature_data,
-                            color_histogram, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    ''', (
-                        new_character_id_map[feature["character_id"]],
-                        new_image_id,
-                        feature["is_avatar"],
-                        feature["feature_data"],
-                        feature["color_histogram"]
-                    ))
-            self.db_conn.commit()
-            
-            # Step 3.5.3: Copy face_encodings
-            progress_dialog.setValue(74)
-            progress_dialog.setLabelText("Copying face encodings...")
-            if progress_dialog.wasCanceled():
-                return
-            QApplication.processEvents()
-            
-            cursor.execute('''
-                SELECT * FROM face_encodings
-                WHERE character_id IN (
-                    SELECT id FROM characters WHERE story_id = ?
-                )
-            ''', (story_id,))
-            face_encodings = cursor.fetchall()
-            
-            for encoding in face_encodings:
-                new_image_id = None
-                if encoding["image_id"] is not None and encoding["image_id"] in image_id_map:
-                    new_image_id = image_id_map[encoding["image_id"]]
+            try:
+                cursor.execute('''
+                    SELECT * FROM image_features
+                    WHERE character_id IN (
+                        SELECT id FROM characters WHERE story_id = ?
+                    )
+                ''', (story_id,))
+                image_features = cursor.fetchall()
                 
-                if encoding["character_id"] in new_character_id_map:
-                    # Update encoding path to new story folder
-                    encoding_path = encoding["encoding_path"]
-                    if encoding_path and original_story_data["folder_path"] in encoding_path:
-                        encoding_path = encoding_path.replace(
-                            original_story_data["folder_path"], new_folder_path
-                        )
-                    
-                    cursor.execute('''
-                        INSERT INTO face_encodings (
-                            character_id, encoding_path, confidence, is_avatar,
-                            image_id, x, y, width, height, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    ''', (
-                        new_character_id_map[encoding["character_id"]],
-                        encoding_path,
-                        encoding["confidence"],
-                        encoding["is_avatar"],
-                        new_image_id,
-                        encoding["x"],
-                        encoding["y"],
-                        encoding["width"],
-                        encoding["height"]
-                    ))
-            self.db_conn.commit()
-            
-            # Step 3.6: Copy scene_images associations
-            progress_dialog.setValue(75)
-            progress_dialog.setLabelText("Copying scene associations...")
-            if progress_dialog.wasCanceled():
-                return
-            QApplication.processEvents()
-            
-            # Get all scene_images associations for the original story
-            cursor = self.db_conn.cursor()
-            cursor.execute('''
-                SELECT si.* 
-                FROM scene_images si
-                JOIN events e ON si.scene_event_id = e.id
-                JOIN images i ON si.image_id = i.id
-                WHERE e.story_id = ? AND i.story_id = ?
-            ''', (story_id, story_id))
-            
-            scene_image_associations = cursor.fetchall()
-            
-            # Copy each association with the new IDs
-            for assoc in scene_image_associations:
-                old_scene_id = assoc["scene_event_id"]
-                old_image_id = assoc["image_id"]
+                for feature in image_features:
+                    try:
+                        new_image_id = None
+                        if "image_id" in feature and feature["image_id"] is not None and feature["image_id"] in image_id_map:
+                            new_image_id = image_id_map[feature["image_id"]]
+                            
+                        if "character_id" in feature and feature["character_id"] in new_character_id_map:
+                            cursor.execute('''
+                                INSERT INTO image_features (
+                                    character_id, image_id, is_avatar, feature_data,
+                                    color_histogram, created_at, updated_at
+                                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            ''', (
+                                new_character_id_map[feature["character_id"]],
+                                new_image_id,
+                                feature.get("is_avatar", 0),
+                                feature.get("feature_data", None),
+                                feature.get("color_histogram", None)
+                            ))
+                    except Exception as fe:
+                        print(f"Warning: Error copying image feature: {fe}")
+                        continue
                 
-                # Skip if either the scene or image wasn't copied
-                if old_scene_id not in event_id_map or old_image_id not in image_id_map:
-                    continue
+                self.db_conn.commit()
+            except Exception as e:
+                print(f"Warning: Failed to copy image features: {e}")
+                # Continue with the duplication process
                 
-                # Create the new association
-                add_image_to_scene(
-                    self.db_conn,
-                    scene_event_id=event_id_map[old_scene_id],
-                    image_id=image_id_map[old_image_id]
-                )
-            
-            # Step 3.7: Copy character_details
+            # Step 2.7: Copy character_details
             progress_dialog.setValue(76)
             progress_dialog.setLabelText("Copying character details...")
             if progress_dialog.wasCanceled():
                 return
             QApplication.processEvents()
             
-            cursor.execute('''
-                SELECT cd.*
-                FROM character_details cd
-                JOIN characters c ON cd.character_id = c.id
-                WHERE c.story_id = ?
-            ''', (story_id,))
-            character_details = cursor.fetchall()
-            
-            for detail in character_details:
-                if detail["character_id"] in new_character_id_map:
-                    cursor.execute('''
-                        INSERT INTO character_details (
-                            created_at, updated_at, character_id, detail_text,
-                            detail_type, sequence_number
-                        ) VALUES (
-                            ?, ?, ?, ?, ?, ?
-                        )
-                    ''', (
-                        detail["created_at"],
-                        detail["updated_at"],
-                        new_character_id_map[detail["character_id"]],
-                        detail["detail_text"],
-                        detail["detail_type"],
-                        detail["sequence_number"]
-                    ))
-            self.db_conn.commit()
-            
-            # Step 3.8: Copy character_last_tagged
-            progress_dialog.setValue(77)
-            progress_dialog.setLabelText("Copying character tagging data...")
-            if progress_dialog.wasCanceled():
-                return
-            QApplication.processEvents()
-            
-            cursor.execute('''
-                SELECT * FROM character_last_tagged
-                WHERE story_id = ?
-            ''', (story_id,))
-            last_tagged = cursor.fetchall()
-            
-            for tag in last_tagged:
-                if tag["character_id"] in new_character_id_map:
-                    cursor.execute('''
-                        INSERT INTO character_last_tagged (
-                            created_at, updated_at, character_id, story_id, last_tagged_at
-                        ) VALUES (
-                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?
-                        )
-                    ''', (
-                        new_character_id_map[tag["character_id"]],
-                        new_story_id,
-                        tag["last_tagged_at"]
-                    ))
-            self.db_conn.commit()
-            
-            # Step 3.9: Copy quick_events
-            progress_dialog.setValue(78)
-            progress_dialog.setLabelText("Copying quick events...")
-            if progress_dialog.wasCanceled():
-                return
-            QApplication.processEvents()
-            
-            # First get all quick events linked to this story's characters
-            cursor.execute('''
-                SELECT * FROM quick_events
-                WHERE character_id IN (
-                    SELECT id FROM characters WHERE story_id = ?
-                )
-            ''', (story_id,))
-            quick_events = cursor.fetchall()
-            quick_event_id_map = {}  # Maps original quick event IDs to new quick event IDs
-            
-            for qe in quick_events:
-                new_character_id = None
-                if qe["character_id"] is not None and qe["character_id"] in new_character_id_map:
-                    new_character_id = new_character_id_map[qe["character_id"]]
-                
+            try:
                 cursor.execute('''
-                    INSERT INTO quick_events (
-                        created_at, updated_at, text, sequence_number, character_id
-                    ) VALUES (
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?
-                    )
-                ''', (
-                    qe["text"],
-                    qe["sequence_number"],
-                    new_character_id
-                ))
-                new_quick_event_id = cursor.lastrowid
-                quick_event_id_map[qe["id"]] = new_quick_event_id
-            self.db_conn.commit()
-            
-            # Step 3.10: Copy quick_event_characters
-            progress_dialog.setValue(79)
-            if progress_dialog.wasCanceled():
-                return
-            QApplication.processEvents()
-            
-            cursor.execute('''
-                SELECT qec.*
-                FROM quick_event_characters qec
-                JOIN quick_events qe ON qec.quick_event_id = qe.id
-                JOIN characters c ON qec.character_id = c.id
-                WHERE c.story_id = ? AND qe.id IN (SELECT id FROM quick_events WHERE character_id IN (SELECT id FROM characters WHERE story_id = ?))
-            ''', (story_id, story_id))
-            quick_event_characters = cursor.fetchall()
-            
-            for qec in quick_event_characters:
-                if (qec["quick_event_id"] in quick_event_id_map and 
-                    qec["character_id"] in new_character_id_map):
-                    cursor.execute('''
-                        INSERT INTO quick_event_characters (
-                            created_at, updated_at, quick_event_id, character_id
-                        ) VALUES (
-                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?
-                        )
-                    ''', (
-                        quick_event_id_map[qec["quick_event_id"]],
-                        new_character_id_map[qec["character_id"]]
-                    ))
-            self.db_conn.commit()
-            
-            # Step 3.11: Copy quick_event_images
-            progress_dialog.setValue(80)
-            if progress_dialog.wasCanceled():
-                return
-            QApplication.processEvents()
-            
-            cursor.execute('''
-                SELECT qei.*
-                FROM quick_event_images qei
-                JOIN quick_events qe ON qei.quick_event_id = qe.id
-                JOIN images i ON qei.image_id = i.id
-                WHERE i.story_id = ? AND qe.id IN (SELECT id FROM quick_events WHERE character_id IN (SELECT id FROM characters WHERE story_id = ?))
-            ''', (story_id, story_id))
-            quick_event_images = cursor.fetchall()
-            
-            for qei in quick_event_images:
-                if (qei["quick_event_id"] in quick_event_id_map and 
-                    qei["image_id"] in image_id_map):
-                    cursor.execute('''
-                        INSERT INTO quick_event_images (
-                            created_at, updated_at, quick_event_id, image_id, note
-                        ) VALUES (
-                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?
-                        )
-                    ''', (
-                        quick_event_id_map[qei["quick_event_id"]],
-                        image_id_map[qei["image_id"]],
-                        qei["note"]
-                    ))
-            self.db_conn.commit()
-            
-            # Step 3.12: Copy scene_quick_events
-            progress_dialog.setValue(81)
-            progress_dialog.setLabelText("Copying scene to quick event associations...")
-            if progress_dialog.wasCanceled():
-                return
-            QApplication.processEvents()
-            
-            cursor.execute('''
-                SELECT sqe.*
-                FROM scene_quick_events sqe
-                JOIN events e ON sqe.scene_event_id = e.id
-                JOIN quick_events qe ON sqe.quick_event_id = qe.id
-                WHERE e.story_id = ? AND qe.id IN (SELECT id FROM quick_events WHERE character_id IN (SELECT id FROM characters WHERE story_id = ?))
-            ''', (story_id, story_id))
-            scene_quick_events = cursor.fetchall()
-            
-            for sqe in scene_quick_events:
-                if (sqe["scene_event_id"] in event_id_map and 
-                    sqe["quick_event_id"] in quick_event_id_map):
-                    cursor.execute('''
-                        INSERT INTO scene_quick_events (
-                            created_at, updated_at, scene_event_id, quick_event_id, sequence_number
-                        ) VALUES (
-                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?
-                        )
-                    ''', (
-                        event_id_map[sqe["scene_event_id"]],
-                        quick_event_id_map[sqe["quick_event_id"]],
-                        sqe["sequence_number"]
-                    ))
-            self.db_conn.commit()
-            
-            # Step 3.13: Copy timeline_views
+                    SELECT cd.*
+                    FROM character_details cd
+                    JOIN characters c ON cd.character_id = c.id
+                    WHERE c.story_id = ?
+                ''', (story_id,))
+                character_details = cursor.fetchall()
+                
+                for detail in character_details:
+                    try:
+                        if "character_id" in detail and detail["character_id"] in new_character_id_map:
+                            # Safely get values with defaults
+                            detail_text = detail.get("detail_text", "")
+                            detail_type = detail.get("detail_type", "GENERAL")
+                            sequence_number = detail.get("sequence_number", 0)
+                            created_at = detail.get("created_at", "CURRENT_TIMESTAMP")
+                            updated_at = detail.get("updated_at", "CURRENT_TIMESTAMP")
+                            
+                            cursor.execute('''
+                                INSERT INTO character_details (
+                                    created_at, updated_at, character_id, detail_text,
+                                    detail_type, sequence_number
+                                ) VALUES (
+                                    ?, ?, ?, ?, ?, ?
+                                )
+                            ''', (
+                                created_at,
+                                updated_at,
+                                new_character_id_map[detail["character_id"]],
+                                detail_text,
+                                detail_type,
+                                sequence_number
+                            ))
+                    except Exception as de:
+                        print(f"Warning: Error copying character detail: {de}")
+                        continue
+                
+                self.db_conn.commit()
+            except Exception as e:
+                print(f"Warning: Failed to copy character details: {e}")
+                # Continue with the duplication process
+                
+            # Step 2.13: Copy timeline_views
             progress_dialog.setValue(82)
             progress_dialog.setLabelText("Copying timeline views...")
             if progress_dialog.wasCanceled():
                 return
             QApplication.processEvents()
             
-            cursor.execute('''
-                SELECT * FROM timeline_views
-                WHERE story_id = ?
-            ''', (story_id,))
-            timeline_views = cursor.fetchall()
-            
-            for view in timeline_views:
-                # Parse and update the layout data if it exists
-                layout_data = view["layout_data"]
-                if layout_data:
-                    try:
-                        layout_json = json.loads(layout_data)
-                        # Update any event IDs in the layout data
-                        # This depends on the structure of your layout data
-                        # This is a simplified example - you may need to adapt
-                        if "events" in layout_json:
-                            updated_events = {}
-                            for event_id, event_data in layout_json["events"].items():
-                                if int(event_id) in event_id_map:
-                                    updated_events[str(event_id_map[int(event_id)])] = event_data
-                            layout_json["events"] = updated_events
-                        layout_data = json.dumps(layout_json)
-                    except (json.JSONDecodeError, TypeError):
-                        # If we can't parse it, leave it as is
-                        pass
-                
+            try:
                 cursor.execute('''
-                    INSERT INTO timeline_views (
-                        created_at, updated_at, name, description, view_type, layout_data, story_id
-                    ) VALUES (
-                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?
-                    )
-                ''', (
-                    view["name"],
-                    view["description"],
-                    view["view_type"],
-                    layout_data,
-                    new_story_id
-                ))
-            self.db_conn.commit()
-            
-            # Step 4: Copy all files from the original story folder to the new story folder
-            progress_dialog.setValue(85)
-            progress_dialog.setLabelText("Copying files...")
-            if progress_dialog.wasCanceled():
-                return
-            QApplication.processEvents()
-            
-            original_folder = original_story_data["folder_path"]
-            if os.path.exists(original_folder):
-                # Ensure the new folder exists
-                os.makedirs(new_folder_path, exist_ok=True)
+                    SELECT * FROM timeline_views
+                    WHERE story_id = ?
+                ''', (story_id,))
+                timeline_views = cursor.fetchall()
                 
-                # Copy files and subfolders
-                for item in os.listdir(original_folder):
-                    source = os.path.join(original_folder, item)
-                    destination = os.path.join(new_folder_path, item)
-                    
-                    if os.path.isdir(source):
-                        # Copy directory and all contents
-                        shutil.copytree(source, destination, dirs_exist_ok=True)
-                    else:
-                        # Copy file
-                        shutil.copy2(source, destination)
-            
-            # Step 5: Update avatar paths for the copied characters
-            progress_dialog.setValue(90)
-            progress_dialog.setLabelText("Updating character avatars...")
-            if progress_dialog.wasCanceled():
-                return
-            QApplication.processEvents()
-            
-            for old_id, new_id in new_character_id_map.items():
-                old_character = next((c for c in original_characters if c["id"] == old_id), None)
-                if old_character and old_character["avatar_path"]:
-                    # Extract the filename from the old path
-                    avatar_filename = os.path.basename(old_character["avatar_path"])
-                    new_avatar_path = os.path.join(new_folder_path, "avatars", avatar_filename)
-                    
-                    # Update the character with the new avatar path
-                    update_character(
-                        self.db_conn,
-                        character_id=new_id,
-                        name=old_character["name"],  # Need to include all required fields
-                        avatar_path=new_avatar_path
-                    )
-            
-            # Step 6: Copy decision points and their options
+                for view in timeline_views:
+                    try:
+                        # Parse and update the layout data if it exists
+                        layout_data = view.get("layout_data", None)
+                        if layout_data:
+                            try:
+                                layout_json = json.loads(layout_data)
+                                # Update any event IDs in the layout data
+                                # This depends on the structure of your layout data
+                                # This is a simplified example - you may need to adapt
+                                if "events" in layout_json:
+                                    updated_events = {}
+                                    for event_id, event_data in layout_json["events"].items():
+                                        if int(event_id) in event_id_map:
+                                            updated_events[str(event_id_map[int(event_id)])] = event_data
+                                    layout_json["events"] = updated_events
+                                layout_data = json.dumps(layout_json)
+                            except (json.JSONDecodeError, TypeError) as je:
+                                print(f"Warning: Could not parse layout data: {je}")
+                                # If we can't parse it, leave it as is
+                                pass
+                        
+                        # Ensure description and view_type values aren't None
+                        view_name = view.get("name", "")
+                        if view_name is None:
+                            view_name = ""
+                            
+                        view_description = view.get("description", "")
+                        if view_description is None:
+                            view_description = ""
+                            
+                        view_type = view.get("view_type", "")
+                        if view_type is None:
+                            view_type = ""
+                        
+                        cursor.execute('''
+                            INSERT INTO timeline_views (
+                                created_at, updated_at, name, description, view_type, layout_data, story_id
+                            ) VALUES (
+                                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?
+                            )
+                        ''', (
+                            view_name,
+                            view_description,
+                            view_type,
+                            layout_data,
+                            new_story_id
+                        ))
+                    except Exception as ve:
+                        print(f"Warning: Error copying timeline view: {ve}")
+                        continue
+                
+                self.db_conn.commit()
+            except Exception as e:
+                print(f"Warning: Failed to copy timeline views: {e}")
+                # Continue with the duplication process
+                
+            # Step 5: Copy decision points and their options
             progress_dialog.setValue(95)
             progress_dialog.setLabelText("Copying decision points...")
             if progress_dialog.wasCanceled():
                 return
             QApplication.processEvents()
             
-            # Get decision points for the original story
-            original_decision_points = get_story_decision_points(self.db_conn, story_id)
-            decision_point_id_map = {}  # Maps original decision point IDs to new decision point IDs
+            try:
+                # Print each step for debugging
+                print("DEBUG: Starting decision points copy")
+                
+                # Get decision points for the original story
+                original_decision_points = get_story_decision_points(self.db_conn, story_id)
+                print(f"DEBUG: Found {len(original_decision_points)} decision points")
+                
+                decision_point_id_map = {}  # Maps original decision point IDs to new decision point IDs
+                
+                # Copy each decision point
+                for dp in original_decision_points:
+                    try:
+                        # Print what we're working with for debugging
+                        print(f"DEBUG: Copying decision point: ID={dp.get('id', 'unknown')}, Title={dp.get('title', 'untitled')}")
+                        
+                        # Create new decision point with defensive access to attributes
+                        title = dp.get("title", "Untitled")  # Default to "Untitled" if title is missing
+                        description = dp.get("description", "")  # Default to empty string if description is missing
+                        is_ordered_list = dp.get("is_ordered_list", 0) in (1, True)
+                        
+                        # Ensure description is not None
+                        if description is None:
+                            description = ""
+                            print("DEBUG: Sanitized NULL description to empty string")
+                            
+                        print(f"DEBUG: Creating decision point with title='{title}', description='{description}', is_ordered_list={is_ordered_list}")
+                        
+                        try:
+                            new_dp_id = create_decision_point(
+                                self.db_conn,
+                                title=title,
+                                story_id=new_story_id,
+                                description=description,
+                                is_ordered_list=is_ordered_list
+                            )
+                            print(f"DEBUG: Created decision point with ID {new_dp_id}")
+                        except Exception as dp_create_error:
+                            print(f"ERROR creating decision point: {dp_create_error}")
+                            import traceback
+                            traceback.print_exc()
+                            # Try one more time with an empty description
+                            new_dp_id = create_decision_point(
+                                self.db_conn,
+                                title=title,
+                                story_id=new_story_id,
+                                description="",  # Force empty string
+                                is_ordered_list=is_ordered_list
+                            )
+                            print(f"DEBUG: Created decision point on second attempt with ID {new_dp_id}")
+                        
+                        # Store mapping if we have the original ID
+                        if "id" in dp and dp["id"] is not None:
+                            decision_point_id_map[dp["id"]] = new_dp_id
+                        
+                        # Get options for this decision point
+                        try:
+                            options = get_decision_options(self.db_conn, dp["id"])
+                            print(f"DEBUG: Found {len(options)} options for decision point")
+                        
+                            # Copy each option
+                            for option in options:
+                                try:
+                                    print(f"DEBUG: Copying option: {option.get('text', 'no text')}")
+                                    
+                                    # Defensively access option attributes
+                                    text = option.get("text", "")
+                                    if text is None:
+                                        text = ""
+                                        print("DEBUG: Sanitized NULL option text to empty string")
+                                        
+                                    is_selected = option.get("is_selected", 0) in (1, True)
+                                    display_order = option.get("display_order", 0)
+                                    played_order = option.get("played_order", None)
+                                    
+                                    add_decision_option(
+                                        self.db_conn,
+                                        decision_point_id=new_dp_id,
+                                        text=text,
+                                        is_selected=is_selected,
+                                        display_order=display_order,
+                                        played_order=played_order
+                                    )
+                                except Exception as oe:
+                                    print(f"WARNING: Error copying decision option: {oe}")
+                                    import traceback
+                                    traceback.print_exc()
+                                    continue
+                        except Exception as opt_error:
+                            print(f"ERROR: Failed to get decision options: {opt_error}")
+                            import traceback
+                            traceback.print_exc()
+                            continue
+                    except Exception as dpe:
+                        print(f"WARNING: Error copying decision point: {dpe}")
+                        import traceback
+                        traceback.print_exc()
+                        continue
+            except Exception as e:
+                print(f"WARNING: Failed to copy decision points: {e}")
+                import traceback
+                traceback.print_exc()
+                # Continue with the duplication process
             
-            # Copy each decision point
-            for dp in original_decision_points:
-                # Create new decision point
-                new_dp_id = create_decision_point(
-                    self.db_conn,
-                    title=dp["title"],
-                    story_id=new_story_id,
-                    description=dp["description"],
-                    is_ordered_list=dp["is_ordered_list"] in (True, 1)
-                )
-                
-                # Store mapping
-                decision_point_id_map[dp["id"]] = new_dp_id
-                
-                # Get options for this decision point
-                options = get_decision_options(self.db_conn, dp["id"])
-                
-                # Copy each option
-                for option in options:
-                    add_decision_option(
-                        self.db_conn,
-                        decision_point_id=new_dp_id,
-                        text=option["text"],
-                        is_selected=option["is_selected"] in (True, 1),
-                        display_order=option["display_order"],
-                        played_order=option["played_order"]
-                    )
+            # Step 5.5: Copy actual image files
+            progress_dialog.setValue(98)
+            progress_dialog.setLabelText("Copying image files...")
+            if progress_dialog.wasCanceled():
+                return
+            QApplication.processEvents()
             
-            # Step 7: Add the new story to our local list and UI
+            try:
+                print("DEBUG: Starting image file copying")
+                
+                # Create images directory in the new story folder
+                original_images_dir = os.path.join(original_story_data["folder_path"], "images")
+                new_images_dir = os.path.join(new_folder_path, "images")
+                
+                os.makedirs(new_images_dir, exist_ok=True)
+                print(f"DEBUG: Created directory {new_images_dir}")
+                
+                # Get list of image files
+                if os.path.exists(original_images_dir):
+                    image_files = os.listdir(original_images_dir)
+                    print(f"DEBUG: Found {len(image_files)} image files to copy")
+                    
+                    for filename in image_files:
+                        src_path = os.path.join(original_images_dir, filename)
+                        dst_path = os.path.join(new_images_dir, filename)
+                        
+                        if os.path.isfile(src_path):
+                            try:
+                                shutil.copy2(src_path, dst_path)
+                                print(f"DEBUG: Copied {filename}")
+                            except Exception as copy_error:
+                                print(f"ERROR: Failed to copy image file {filename}: {copy_error}")
+                                import traceback
+                                traceback.print_exc()
+                                continue
+                else:
+                    print(f"WARNING: Original images directory {original_images_dir} does not exist")
+                
+                # Create thumbnails directory if needed
+                original_thumbnails_dir = os.path.join(original_story_data["folder_path"], "thumbnails")
+                if os.path.exists(original_thumbnails_dir):
+                    new_thumbnails_dir = os.path.join(new_folder_path, "thumbnails")
+                    os.makedirs(new_thumbnails_dir, exist_ok=True)
+                    print(f"DEBUG: Created thumbnails directory {new_thumbnails_dir}")
+                    
+                    thumbnail_files = os.listdir(original_thumbnails_dir)
+                    print(f"DEBUG: Found {len(thumbnail_files)} thumbnail files to copy")
+                    
+                    for filename in thumbnail_files:
+                        src_path = os.path.join(original_thumbnails_dir, filename)
+                        dst_path = os.path.join(new_thumbnails_dir, filename)
+                        
+                        if os.path.isfile(src_path):
+                            try:
+                                shutil.copy2(src_path, dst_path)
+                                print(f"DEBUG: Copied thumbnail {filename}")
+                            except Exception as copy_error:
+                                print(f"ERROR: Failed to copy thumbnail file {filename}: {copy_error}")
+                                continue
+                
+                # Create avatars directory if needed
+                original_avatars_dir = os.path.join(original_story_data["folder_path"], "avatars")
+                if os.path.exists(original_avatars_dir):
+                    new_avatars_dir = os.path.join(new_folder_path, "avatars")
+                    os.makedirs(new_avatars_dir, exist_ok=True)
+                    print(f"DEBUG: Created avatars directory {new_avatars_dir}")
+                    
+                    avatar_files = os.listdir(original_avatars_dir)
+                    print(f"DEBUG: Found {len(avatar_files)} avatar files to copy")
+                    
+                    for filename in avatar_files:
+                        src_path = os.path.join(original_avatars_dir, filename)
+                        dst_path = os.path.join(new_avatars_dir, filename)
+                        
+                        if os.path.isfile(src_path):
+                            try:
+                                shutil.copy2(src_path, dst_path)
+                                print(f"DEBUG: Copied avatar {filename}")
+                            except Exception as copy_error:
+                                print(f"ERROR: Failed to copy avatar file {filename}: {copy_error}")
+                                continue
+                
+                # Copy artwork.png if it exists
+                original_artwork_path = os.path.join(original_story_data["folder_path"], "artwork.png")
+                if os.path.exists(original_artwork_path):
+                    new_artwork_path = os.path.join(new_folder_path, "artwork.png")
+                    try:
+                        shutil.copy2(original_artwork_path, new_artwork_path)
+                        print(f"DEBUG: Copied story artwork from {original_artwork_path} to {new_artwork_path}")
+                    except Exception as artwork_error:
+                        print(f"ERROR: Failed to copy story artwork: {artwork_error}")
+                        import traceback
+                        traceback.print_exc()
+            except Exception as e:
+                print(f"ERROR: Failed to copy image files: {e}")
+                import traceback
+                traceback.print_exc()
+                # Continue with the duplication process, even if image copying failed
+            
+            # Step 6: Add the new story to our local list and UI
             progress_dialog.setValue(100)
             QApplication.processEvents()
             
@@ -1282,13 +1471,20 @@ class StoryManagerWidget(QWidget):
             )
             
         except Exception as e:
+            print(f"ERROR: Failed to duplicate story: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
+            # Create more detailed error message
+            error_type = type(e).__name__
+            error_message = str(e)
+            
             QMessageBox.critical(
                 self,
                 "Error",
-                f"Failed to duplicate story: {str(e)}"
+                f"Failed to duplicate story: {error_type} - {error_message}\n\n"
+                "Check the console for more detailed error information."
             )
-            import traceback
-            traceback.print_exc()
     
     def on_delete_story(self, story_id: int) -> None:
         """Handle deleting a story.

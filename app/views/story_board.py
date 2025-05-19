@@ -260,6 +260,10 @@ class CharacterCard(QGraphicsItemGroup):
         name_text.setZValue(1.7)  # Ensure text is above everything
         self.addToGroup(name_text)
         
+        # Create badges container
+        badges_y = card_height - 20  # Position below the name
+        self.add_gender_badge(card_width / 2, badges_y)
+        
         # Add main character indicator if applicable
         if self.character_data.get('is_main_character', False):
             star_size = 15
@@ -290,6 +294,54 @@ class CharacterCard(QGraphicsItemGroup):
         # Add a visible border around the entire group
         # We need to use a custom paint method for this
         self.setBoundingRectVisible(True)
+    
+    def add_gender_badge(self, x: float, y: float) -> None:
+        """Add a gender badge to the card.
+        
+        Args:
+            x: X coordinate center position
+            y: Y coordinate position
+        """
+        gender = self.character_data.get('gender', 'NOT_SPECIFIED')
+        badge_size = 16
+        
+        # Create badge background (circle)
+        badge = QGraphicsEllipseItem(x - badge_size/2, y, badge_size, badge_size)
+        
+        # Set color based on gender
+        if gender == 'FEMALE':
+            badge.setBrush(QBrush(QColor("#FF69B4")))  # Pink
+            badge.setPen(QPen(QColor("#C71585"), 1))  # Darker pink
+            symbol = "♀"
+        elif gender == 'MALE':
+            badge.setBrush(QBrush(QColor("#87CEFA")))  # Light blue
+            badge.setPen(QPen(QColor("#1E90FF"), 1))  # Darker blue
+            symbol = "♂"
+        elif gender == 'FUTA':
+            badge.setBrush(QBrush(QColor("#BA55D3")))  # Purple
+            badge.setPen(QPen(QColor("#9400D3"), 1))  # Darker purple
+            symbol = "⚧"
+        else:  # NOT_SPECIFIED
+            badge.setBrush(QBrush(QColor("#333333")))  # Dark gray
+            badge.setPen(QPen(QColor("#000000"), 1))  # Black
+            symbol = "?"
+        
+        badge.setZValue(1.8)
+        self.addToGroup(badge)
+        
+        # Add gender symbol
+        symbol_text = QGraphicsTextItem(symbol)
+        symbol_text.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        symbol_text.setDefaultTextColor(QColor("#FFFFFF"))  # White text
+        
+        # Center text in badge
+        symbol_rect = symbol_text.boundingRect()
+        symbol_text.setPos(
+            x - symbol_rect.width()/2,
+            y + (badge_size - symbol_rect.height())/2
+        )
+        symbol_text.setZValue(1.9)
+        self.addToGroup(symbol_text)
     
     def setBoundingRectVisible(self, visible: bool) -> None:
         """Set whether the bounding rect is visible.
@@ -739,6 +791,8 @@ class CharacterCard(QGraphicsItemGroup):
         name_text = None
         mc_indicator = None
         mc_text = None
+        gender_badge = None
+        gender_symbol = None
         
         # Identify existing components
         for item in self.childItems():
@@ -749,14 +803,17 @@ class CharacterCard(QGraphicsItemGroup):
                 if item.brush().color().name() == "#eeeeee":
                     photo_rect = item
             elif isinstance(item, QGraphicsTextItem):
-                name_text = item
-            elif isinstance(item, QGraphicsEllipseItem) and item.brush().color().name() == "#ffd700":  # Gold color for MC
-                mc_indicator = item
-                # Find the MC text which is usually added right after the indicator
-                for i in range(self.childItems().index(item) + 1, len(self.childItems())):
-                    if isinstance(self.childItems()[i], QGraphicsTextItem) and self.childItems()[i].toPlainText() == "MC":
-                        mc_text = self.childItems()[i]
-                        break
+                if isinstance(item.parentItem(), QGraphicsEllipseItem) or item.toPlainText() in ["♀", "♂", "⚧", "?"]:
+                    gender_symbol = item
+                elif item.toPlainText() == "MC":
+                    mc_text = item
+                else:
+                    name_text = item
+            elif isinstance(item, QGraphicsEllipseItem):
+                if item.brush().color().name() in ["#ff69b4", "#87cefa", "#ba55d3", "#333333"]:  # Gender badge colors
+                    gender_badge = item
+                elif item.brush().color().name() == "#ffd700":  # Gold color for MC
+                    mc_indicator = item
         
         # Card dimensions
         card_width = 180
@@ -814,6 +871,20 @@ class CharacterCard(QGraphicsItemGroup):
             # Recenter name
             name_y = card_height - 35
             name_text.setPos(card_width / 2 - name_text.boundingRect().width() / 2, name_y)
+        
+        # Update gender badge
+        if gender_badge and gender_symbol:
+            # Remove existing gender badge and symbol
+            self.removeFromGroup(gender_badge)
+            self.removeFromGroup(gender_symbol)
+            scene = self.scene()
+            if scene:
+                scene.removeItem(gender_badge)
+                scene.removeItem(gender_symbol)
+        
+        # Add new gender badge
+        badges_y = card_height - 20  # Position below the name
+        self.add_gender_badge(card_width / 2, badges_y)
         
         # Update main character indicator
         is_main_character = self.character_data.get('is_main_character', False)

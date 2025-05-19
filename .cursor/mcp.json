@@ -33,6 +33,16 @@
       "env": {
         "PYTHONUNBUFFERED": "1"
       }
+    },
+    "docs-crawler": {
+      "command": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\docs_crawler_mcp_server.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens"
+      }
     }
   }
 }
