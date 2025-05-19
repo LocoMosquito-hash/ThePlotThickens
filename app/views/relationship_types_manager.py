@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QPushButton, QListWidget, QListWidgetItem,
     QAbstractItemView, QFrame, QLineEdit, QScrollArea,
-    QRadioButton, QButtonGroup, QToolButton, QDialog
+    QRadioButton, QButtonGroup, QToolButton, QDialog, QCheckBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QColor, QIcon
@@ -164,6 +164,11 @@ class RelationshipTypesManager(QMainWindow):
         self.inverse_list.itemClicked.connect(self.on_inverse_selected)
         self.right_layout.addWidget(self.inverse_list)
         
+        # Add checkbox for self-inverse relationships
+        self.self_inverse_checkbox = QCheckBox("Also set as its own inverse")
+        self.self_inverse_checkbox.setToolTip("For reciprocal relationships like Brother↔Brother, Friend↔Friend")
+        self.right_layout.addWidget(self.self_inverse_checkbox)
+        
         # Gender context section
         gender_context_label = QLabel("Gender Context:")
         self.right_layout.addWidget(gender_context_label)
@@ -180,6 +185,7 @@ class RelationshipTypesManager(QMainWindow):
         self.masculine_button.setToolTip("Masculine")
         self.masculine_button.setCheckable(True)
         self.masculine_button.setFixedSize(40, 40)
+        self.masculine_button.setStyleSheet("color: #87CEFA;")  # Light blue
         self.gender_group.addButton(self.masculine_button, 1)
         
         # Feminine button
@@ -188,6 +194,7 @@ class RelationshipTypesManager(QMainWindow):
         self.feminine_button.setToolTip("Feminine")
         self.feminine_button.setCheckable(True)
         self.feminine_button.setFixedSize(40, 40)
+        self.feminine_button.setStyleSheet("color: #FF80AB;")  # Pink
         self.gender_group.addButton(self.feminine_button, 2)
         
         # Neutral button
@@ -196,6 +203,7 @@ class RelationshipTypesManager(QMainWindow):
         self.neutral_button.setToolTip("Neutral")
         self.neutral_button.setCheckable(True)
         self.neutral_button.setFixedSize(40, 40)
+        self.neutral_button.setStyleSheet("color: #FFFFFF;")  # White (explicit)
         self.gender_group.addButton(self.neutral_button, 3)
         
         # Default to neutral
@@ -302,7 +310,7 @@ class RelationshipTypesManager(QMainWindow):
                 
             category_id = result[0]
             
-            # Get relationship types for this category
+            # Get ALL relationship types for this category, including current one
             cursor.execute("""
                 SELECT label FROM relationship_types_new 
                 WHERE category_id = ? 
@@ -325,6 +333,7 @@ class RelationshipTypesManager(QMainWindow):
         self.category_input.clear()
         self.inverse_input.clear()
         self.neutral_button.setChecked(True)
+        self.self_inverse_checkbox.setChecked(False)
         
         # Show the edit section
         self.right_section.setVisible(True)
@@ -379,7 +388,7 @@ class RelationshipTypesManager(QMainWindow):
             
             # Get inverse relationship(s) if any
             cursor.execute("""
-                SELECT rt.label
+                SELECT rt.label, rt.type_id
                 FROM relationship_type_inverses rti
                 JOIN relationship_types_new rt ON rti.inverse_type_id = rt.type_id
                 WHERE rti.type_id = ?
@@ -387,6 +396,7 @@ class RelationshipTypesManager(QMainWindow):
             
             inverse_results = cursor.fetchall()
             inverse_names = [result[0] for result in inverse_results]
+            inverse_ids = [result[1] for result in inverse_results]
             
             # Set form values
             self.current_type_id = type_id
@@ -395,6 +405,9 @@ class RelationshipTypesManager(QMainWindow):
             self.name_validation_label.clear()  # Clear because we're editing an existing item
             self.category_input.setText(category_name)
             self.inverse_input.setText(", ".join(inverse_names))
+            
+            # Check if the relationship has itself as an inverse
+            self.self_inverse_checkbox.setChecked(type_id in inverse_ids)
             
             # Set gender context
             if gender_context == 'masculine':
@@ -515,15 +528,34 @@ class RelationshipTypesManager(QMainWindow):
                     """, (name.lower(), name, gender_context, category_id, self.current_type_id))
                     
                     # Handle inverse relationships
-                    # Remove any existing inverses
+                    # First, remove any existing inverses in both directions
                     cursor.execute("DELETE FROM relationship_type_inverses WHERE type_id = ?", (self.current_type_id,))
+                    cursor.execute("DELETE FROM relationship_type_inverses WHERE inverse_type_id = ?", (self.current_type_id,))
                     
-                    # Add new inverses
+                    # Add new inverses bidirectionally (except for self-inverse which is handled separately)
                     for inverse_id in inverse_ids:
+                        # Skip self-inverse here as it will be handled by the checkbox
+                        if inverse_id == self.current_type_id:
+                            continue
+                            
+                        # Add the relationship from current type to inverse
                         cursor.execute("""
                             INSERT INTO relationship_type_inverses (type_id, inverse_type_id)
                             VALUES (?, ?)
                         """, (self.current_type_id, inverse_id))
+                        
+                        # Add the reverse relationship from inverse to current type
+                        cursor.execute("""
+                            INSERT INTO relationship_type_inverses (type_id, inverse_type_id)
+                            VALUES (?, ?)
+                        """, (inverse_id, self.current_type_id))
+                    
+                    # Handle self-inverse if checkbox is checked
+                    if self.self_inverse_checkbox.isChecked():
+                        cursor.execute("""
+                            INSERT INTO relationship_type_inverses (type_id, inverse_type_id)
+                            VALUES (?, ?)
+                        """, (self.current_type_id, self.current_type_id))
                 else:
                     # Insert new relationship type
                     cursor.execute("""
@@ -535,12 +567,30 @@ class RelationshipTypesManager(QMainWindow):
                     cursor.execute("SELECT last_insert_rowid()")
                     new_type_id = cursor.fetchone()[0]
                     
-                    # Add inverse relationships if selected
+                    # Add inverse relationships bidirectionally (except for self-inverse)
                     for inverse_id in inverse_ids:
+                        # Skip self-inverse here as it will be handled by the checkbox
+                        if inverse_id == new_type_id:
+                            continue
+                            
+                        # Add the relationship from new type to inverse
                         cursor.execute("""
                             INSERT INTO relationship_type_inverses (type_id, inverse_type_id)
                             VALUES (?, ?)
                         """, (new_type_id, inverse_id))
+                        
+                        # Add the reverse relationship from inverse to new type
+                        cursor.execute("""
+                            INSERT INTO relationship_type_inverses (type_id, inverse_type_id)
+                            VALUES (?, ?)
+                        """, (inverse_id, new_type_id))
+                    
+                    # Handle self-inverse if checkbox is checked
+                    if self.self_inverse_checkbox.isChecked():
+                        cursor.execute("""
+                            INSERT INTO relationship_type_inverses (type_id, inverse_type_id)
+                            VALUES (?, ?)
+                        """, (new_type_id, new_type_id))
                 
                 # Commit changes
                 self.db_conn.commit()
