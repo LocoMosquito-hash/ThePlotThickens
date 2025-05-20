@@ -988,12 +988,18 @@ class RelationshipDetailsDialog(QDialog):
             )
             
     def accept(self) -> None:
-        """Handle the dialog acceptance (Apply button).
-        
-        Saves the relationships and closes the dialog.
-        """
-        # Save the relationships to the database
+        """Save the relationship and close the dialog."""
+        # Save the relationship(s) to the database
         self.save_relationships()
         
-        # Call the parent's accept method to close the dialog
+        # Look for any open Story Board and trigger a refresh
+        main_window = self.window()
+        while main_window and not hasattr(main_window, 'story_board'):
+            main_window = main_window.parent() if hasattr(main_window, 'parent') else None
+        
+        # If we found the main window with a story board, refresh it
+        if main_window and hasattr(main_window, 'story_board'):
+            main_window.story_board.refresh_board()
+        
+        # Close the dialog
         super().accept() 

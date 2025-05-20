@@ -3453,3 +3453,16 @@ class StoryBoardWidget(QWidget):
             character_ids: List of character IDs to select
         """
         self.scene.select_characters_by_ids(character_ids)
+    
+    def refresh_board(self) -> None:
+        """Refresh the story board to show updated data.
+        
+        This method reloads the current view to reflect any database changes,
+        particularly useful when relationships are added or modified elsewhere.
+        """
+        if self.current_view_id:
+            self.load_view(self.current_view_id)
+            # Show a brief status message
+            main_window = self.window()
+            if hasattr(main_window, 'status_bar'):
+                main_window.status_bar.showPermanentMessage("Story Board refreshed")
