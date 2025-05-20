@@ -283,6 +283,12 @@ class ArrowCanvas(QWidget):
         self.temp_arrow = None
         self.update()  # Request repaint
     
+    def clear(self) -> None:
+        """Clear all arrows from the canvas."""
+        self.arrows = []
+        self.temp_arrow = None
+        self.update()  # Request repaint
+    
     def paintEvent(self, event) -> None:
         """Draw the arrows on the canvas.
         
@@ -873,27 +879,16 @@ class RelationshipEditorDialog(QDialog):
         result = dialog.exec()
         
         if result == QDialog.DialogCode.Accepted:
-            # Get the selected relationship types
+            # Clear existing arrows as the relationships might have changed
+            self.arrow_canvas.clear()
+            
+            # Refresh relationship counts after adding/updating relationships
+            self.refresh_relationship_counts()
+            
+            # Get the selected relationship types (for debugging purposes)
             forward_rel, backward_rel = dialog.get_selected_relationships()
-            
-            # This is where we would save the relationships to the database
-            # in a future implementation
-            print(f"DEBUG: Forward relationship: {forward_rel}")
-            print(f"DEBUG: Backward relationship: {backward_rel}")
-            
-            # For now, just show a message box confirming the relationships
-            if forward_rel or backward_rel:
-                message = "Relationships selected:\n\n"
-                if forward_rel:
-                    message += f"{source_name} is {target_name}'s: {forward_rel}\n"
-                if backward_rel:
-                    message += f"{target_name} is {source_name}'s: {backward_rel}\n"
-                
-                QMessageBox.information(
-                    self,
-                    "Relationships Defined",
-                    message
-                )
+            print(f"DEBUG: Forward relationship ID: {forward_rel}")
+            print(f"DEBUG: Backward relationship ID: {backward_rel}")
     
     def cancel_drawing(self) -> None:
         """Cancel the current arrow drawing operation."""
