@@ -1563,6 +1563,43 @@ class CharacterDialog(QDialog):
             character_data['name'] = f"Unnamed {count + 1}"
             print(f"DEBUG: Generated default name: {character_data['name']}")
         
+        # Check for duplicate name
+        cursor = self.db_conn.cursor()
+        
+        if self.character_id is None:
+            # For new characters
+            cursor.execute(
+                "SELECT id, name FROM characters WHERE story_id = ? AND name = ?",
+                (self.story_id, character_data['name'])
+            )
+        else:
+            # For existing characters, exclude the current character from the check
+            cursor.execute(
+                "SELECT id, name FROM characters WHERE story_id = ? AND name = ? AND id != ?",
+                (self.story_id, character_data['name'], self.character_id)
+            )
+            
+        existing_character = cursor.fetchone()
+        
+        if existing_character:
+            # Ask the user if they want to proceed with duplicate name
+            message = (
+                f"A character named '{character_data['name']}' already exists in this story.\n"
+                f"Do you want to {'create' if self.character_id is None else 'rename to'} the same name?"
+            )
+            
+            reply = QMessageBox.warning(
+                self,
+                "Duplicate Character Name",
+                message,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.No:
+                # Return early without saving
+                return
+        
         # Print debug info
         print(f"DEBUG: Initial character data: {character_data}")
         
