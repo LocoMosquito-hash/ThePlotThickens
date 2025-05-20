@@ -421,14 +421,29 @@ def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int
     """
     cursor = conn.cursor()
     
+    # Get the relationship type label to use for the legacy relationship_type column
+    relationship_type_label = custom_label
+    if not is_custom or not custom_label:
+        try:
+            cursor.execute("SELECT label FROM relationship_types_new WHERE type_id = ?", (relationship_type_id,))
+            result = cursor.fetchone()
+            if result:
+                relationship_type_label = result[0]
+            else:
+                # Fallback if relationship type not found
+                relationship_type_label = "Unknown Relationship"
+        except Exception as e:
+            print(f"Error fetching relationship type label: {e}")
+            relationship_type_label = "Unknown Relationship"
+    
     cursor.execute('''
     INSERT INTO relationships (
-        source_id, target_id, relationship_type_id, 
+        source_id, target_id, relationship_type_id, relationship_type,
         description, strength, color, width,
         is_custom, custom_label
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
-        source_id, target_id, relationship_type_id, 
+        source_id, target_id, relationship_type_id, relationship_type_label,
         description, strength, color, width,
         1 if is_custom else 0, custom_label
     ))
@@ -562,11 +577,12 @@ def get_character_relationships(conn: sqlite3.Connection, character_id: int) -> 
     # Get relationships where the character is the source
     cursor.execute('''
     SELECT r.*, c.name as target_name, 
-           rt.name as relationship_name, rt.gender_context,
-           rt.type_key as category_name
+           rt.label as relationship_name, rt.gender_context,
+           rc.name as category_name
     FROM relationships r
     JOIN characters c ON r.target_id = c.id
-    LEFT JOIN relationship_types rt ON r.relationship_type_id = rt.id
+    LEFT JOIN relationship_types_new rt ON r.relationship_type_id = rt.type_id
+    LEFT JOIN relationship_categories rc ON rt.category_id = rc.id
     WHERE r.source_id = ?
     ORDER BY r.strength DESC, r.updated_at DESC
     ''', (character_id,))
@@ -576,11 +592,12 @@ def get_character_relationships(conn: sqlite3.Connection, character_id: int) -> 
     # Get relationships where the character is the target
     cursor.execute('''
     SELECT r.*, c.name as source_name, 
-           rt.name as relationship_name, rt.gender_context,
-           rt.type_key as category_name
+           rt.label as relationship_name, rt.gender_context,
+           rc.name as category_name
     FROM relationships r
     JOIN characters c ON r.source_id = c.id
-    LEFT JOIN relationship_types rt ON r.relationship_type_id = rt.id
+    LEFT JOIN relationship_types_new rt ON r.relationship_type_id = rt.type_id
+    LEFT JOIN relationship_categories rc ON rt.category_id = rc.id
     WHERE r.target_id = ?
     ORDER BY r.strength DESC, r.updated_at DESC
     ''', (character_id,))
@@ -650,12 +667,13 @@ def get_relationship(conn: sqlite3.Connection, relationship_id: int) -> Optional
     SELECT r.*, 
            s.name as source_name, s.gender as source_gender,
            t.name as target_name, t.gender as target_gender,
-           rt.name as relationship_name, rt.gender_context,
-           rt.type_key as category_name
+           rt.label as relationship_name, rt.gender_context,
+           rc.name as category_name
     FROM relationships r
     JOIN characters s ON r.source_id = s.id
     JOIN characters t ON r.target_id = t.id
-    LEFT JOIN relationship_types rt ON r.relationship_type_id = rt.id
+    LEFT JOIN relationship_types_new rt ON r.relationship_type_id = rt.type_id
+    LEFT JOIN relationship_categories rc ON rt.category_id = rc.id
     WHERE r.id = ?
     ''', (relationship_id,))
     
@@ -713,6 +731,16 @@ def update_relationship(conn: sqlite3.Connection, relationship_id: int,
     if relationship_type_id is not None:
         updates.append('relationship_type_id = ?')
         params.append(relationship_type_id)
+        
+        # Also update the relationship_type column with the label
+        try:
+            cursor.execute("SELECT label FROM relationship_types_new WHERE type_id = ?", (relationship_type_id,))
+            result = cursor.fetchone()
+            if result:
+                updates.append('relationship_type = ?')
+                params.append(result[0])
+        except Exception as e:
+            print(f"Error fetching relationship type label: {e}")
     
     if strength is not None:
         updates.append('strength = ?')
@@ -733,6 +761,11 @@ def update_relationship(conn: sqlite3.Connection, relationship_id: int,
     if custom_label is not None:
         updates.append('custom_label = ?')
         params.append(custom_label)
+        
+        # If this is a custom relationship, also update the relationship_type column
+        if is_custom or (is_custom is None and cursor.execute("SELECT is_custom FROM relationships WHERE id = ?", (relationship_id,)).fetchone()[0]):
+            updates.append('relationship_type = ?')
+            params.append(custom_label)
     
     # Always update the timestamp
     updates.append('updated_at = CURRENT_TIMESTAMP')
@@ -796,22 +829,21 @@ def suggest_relationship_type(conn: sqlite3.Connection, source_id: int, target_i
     
     # Map the application's gender values to our simplified ones
     gender_map = {
-        'MALE': 'MALE',
-        'FEMALE': 'FEMALE',
-        'NOT_SPECIFIED': 'NEUTRAL',
-        'OTHER': 'NEUTRAL'
+        'MALE': 'masculine',
+        'FEMALE': 'feminine',
+        'NOT_SPECIFIED': 'neutral',
+        'OTHER': 'neutral'
     }
     
-    source_context = gender_map.get(source_gender, 'NEUTRAL')
-    target_context = gender_map.get(target_gender, 'NEUTRAL')
+    source_context = gender_map.get(source_gender, 'neutral')
     
     # Get relationship types appropriate for source's gender
     query = '''
-    SELECT rt.*, rt.type_key as category_name
-    FROM relationship_types rt
-    WHERE (rt.gender_context = ? OR rt.gender_context = 'NEUTRAL')
-    AND rt.is_common = 1
-    ORDER BY rt.type_key, rt.name
+    SELECT rt.*, rc.name as category_name
+    FROM relationship_types_new rt
+    JOIN relationship_categories rc ON rt.category_id = rc.id
+    WHERE (rt.gender_context = ? OR rt.gender_context = 'neutral')
+    ORDER BY rc.display_order, rt.name
     '''
     
     cursor.execute(query, (source_context,))
@@ -834,11 +866,11 @@ def get_story_relationships(conn: sqlite3.Connection, story_id: int) -> List[Dic
     SELECT r.*, 
            s.name as source_name, s.id as source_id,
            t.name as target_name, t.id as target_id,
-           COALESCE(r.custom_label, rt.name) as relationship_name
+           COALESCE(r.custom_label, rt.label) as relationship_name
     FROM relationships r
     JOIN characters s ON r.source_id = s.id
     JOIN characters t ON r.target_id = t.id
-    LEFT JOIN relationship_types rt ON r.relationship_type_id = rt.id
+    LEFT JOIN relationship_types_new rt ON r.relationship_type_id = rt.type_id
     WHERE s.story_id = ?
     ORDER BY r.strength DESC, r.updated_at DESC
     ''', (story_id,))

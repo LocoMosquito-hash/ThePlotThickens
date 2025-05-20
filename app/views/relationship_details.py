@@ -13,7 +13,7 @@ from typing import Optional, Dict, Any, List, Tuple, Set
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QPushButton, QLineEdit, QListWidget, QListWidgetItem,
-    QComboBox, QCompleter, QSizePolicy, QWidget
+    QComboBox, QCompleter, QSizePolicy, QWidget, QMessageBox
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QPoint
 from PyQt6.QtGui import QPixmap, QIcon, QColor, QPainter, QPen
@@ -937,4 +937,63 @@ class RelationshipDetailsDialog(QDialog):
                 self.backward_card.highlightSuggestions([])
         else:
             # If no forward relationship is selected, clear any suggestions
-            self.backward_card.highlightSuggestions([]) 
+            self.backward_card.highlightSuggestions([])
+            
+    def save_relationships(self) -> None:
+        """Save the selected relationships to the database.
+        
+        Gets the selected relationship types and saves them to the database.
+        - The forward relationship is from source character to target character
+        - The backward relationship is from target character to source character
+        """
+        from app.relationships import create_relationship
+        
+        # Get the selected relationship types
+        forward_type_id, backward_type_id = self.get_selected_relationships()
+        
+        try:
+            # Save forward relationship (if selected)
+            if forward_type_id is not None:
+                print(f"Creating forward relationship: source_id={self.source_id}, target_id={self.target_id}, type_id={forward_type_id}")
+                create_relationship(
+                    self.db_conn,
+                    source_id=self.source_id,
+                    target_id=self.target_id,
+                    relationship_type_id=forward_type_id
+                )
+            
+            # Save backward relationship (if selected)
+            if backward_type_id is not None:
+                print(f"Creating backward relationship: source_id={self.target_id}, target_id={self.source_id}, type_id={backward_type_id}")
+                create_relationship(
+                    self.db_conn,
+                    source_id=self.target_id,
+                    target_id=self.source_id,
+                    relationship_type_id=backward_type_id
+                )
+                
+            # Commit the changes to the database
+            self.db_conn.commit()
+            print("Relationships saved successfully")
+            
+        except Exception as e:
+            print(f"Error saving relationships: {e}")
+            import traceback
+            traceback.print_exc()
+            # Show error message to the user
+            QMessageBox.critical(
+                self,
+                "Error Saving Relationships",
+                f"An error occurred while saving relationships: {str(e)}"
+            )
+            
+    def accept(self) -> None:
+        """Handle the dialog acceptance (Apply button).
+        
+        Saves the relationships and closes the dialog.
+        """
+        # Save the relationships to the database
+        self.save_relationships()
+        
+        # Call the parent's accept method to close the dialog
+        super().accept() 
