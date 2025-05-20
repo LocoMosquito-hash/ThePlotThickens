@@ -1318,28 +1318,26 @@ class RelationshipLine(QGraphicsLineItem):
         pen.setWidth(int(force_width))
         self.setPen(pen)
         
-        # Calculate midpoint of the line
-        midpoint = QPointF(
-            (source_pin.x() + target_pin.x()) / 2,
-            (source_pin.y() + target_pin.y()) / 2
+        # Calculate position for label (40% of the way from source to target)
+        # This places the label closer to the source card rather than at the exact midpoint
+        label_position_factor = 0.4
+        label_point = QPointF(
+            source_pin.x() + (target_pin.x() - source_pin.x()) * label_position_factor,
+            source_pin.y() + (target_pin.y() - source_pin.y()) * label_position_factor
         )
         
-        # Calculate angle of the line
-        angle = math.atan2(target_pin.y() - source_pin.y(), target_pin.x() - source_pin.x())
-        
-        # Calculate label position
         # Convert to local coordinates since the label is now a child item
-        local_midpoint = self.mapFromScene(midpoint)
+        local_label_point = self.mapFromScene(label_point)
         
         # Get label dimensions
         label_rect = self.label.boundingRect()
         label_width = label_rect.width()
         label_height = label_rect.height()
         
-        # Position the label centered on the midpoint of the line
+        # Position the label centered on the calculated point
         label_pos = QPointF(
-            local_midpoint.x() - label_width / 2,
-            local_midpoint.y() - label_height / 2
+            local_label_point.x() - label_width / 2,
+            local_label_point.y() - label_height / 2
         )
         
         # Set the background rectangle to match the label size with padding
