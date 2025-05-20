@@ -336,7 +336,7 @@ class RegionSelectionDialog(QDialog):
             recent_characters = get_characters_by_last_tagged(self.db_conn, self.story_id)
             
             # Limit to top 10 manually
-            recent_characters = recent_characters[:10] if recent_characters else []
+            # INSERT_YOUR_REWRITE_HERE
             
             # Add them to the list
             for character in recent_characters:
