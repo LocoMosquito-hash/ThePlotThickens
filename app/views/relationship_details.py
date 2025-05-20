@@ -223,8 +223,13 @@ class SearchableComboBox(QComboBox):
                     model = self.model()
                     if model and model.item(new_index):
                         item = model.item(new_index)
-                        item.setBackground(QColor("#4682B4"))
-                        item.setForeground(QColor("#FFFFFF"))
+                        item.setBackground(QColor("#2E8B57"))  # Sea Green
+                        item.setForeground(QColor("#FFFFFF"))  # White text
+                        
+                        # Make the font bold
+                        font = item.font()
+                        font.setBold(True)
+                        item.setFont(font)
             
             # Map old index to new
             old_to_new_index[old_index] = new_index
@@ -244,12 +249,21 @@ class SearchableComboBox(QComboBox):
     
     def clearSuggestions(self) -> None:
         """Clear suggestion highlighting from all items."""
+        print(f"Clearing {len(self._suggested_indices)} suggestions")
         for index in self._suggested_indices:
             # Make sure index is valid and visible now
             if index < self.count():
-                item = self.model().item(index)
-                item.setBackground(QColor())  # Reset background
-                item.setForeground(QColor())  # Reset foreground
+                model = self.model()
+                if model:
+                    item = model.item(index)
+                    if item:
+                        item.setBackground(QColor())  # Reset background
+                        item.setForeground(QColor())  # Reset foreground
+                        
+                        # Reset font (remove bold)
+                        font = item.font()
+                        font.setBold(False)
+                        item.setFont(font)
         
         self._suggested_indices.clear()
     
@@ -267,9 +281,19 @@ class SearchableComboBox(QComboBox):
             type_id = self.itemData(i, Qt.ItemDataRole.UserRole)
             if type_id in type_ids:
                 item = self.model().item(i)
-                item.setBackground(QColor("#4682B4"))  # Steel blue background
+                # Make suggested items more visually distinct with a stronger styling
+                item.setBackground(QColor("#2E8B57"))  # Sea Green - more noticeable
                 item.setForeground(QColor("#FFFFFF"))  # White text
+                
+                # Make the font bold to stand out more
+                font = item.font()
+                font.setBold(True)
+                item.setFont(font)
+                
+                # Store the index as a suggestion
                 self._suggested_indices.add(i)
+                
+                print(f"Highlighted suggestion: {self.itemText(i)} (type_id: {type_id})")
                 
     def getSelectedTypeId(self) -> Optional[int]:
         """Get the selected relationship type ID.
@@ -800,6 +824,7 @@ class RelationshipDetailsDialog(QDialog):
             List of inverse relationship type IDs
         """
         if not type_id:
+            print("No type_id provided to _get_inverse_relationship_types")
             return []
             
         try:
@@ -815,14 +840,26 @@ class RelationshipDetailsDialog(QDialog):
                 print("relationship_type_inverses table doesn't exist")
                 return []
             
+            # For debugging, print all inverse relationships
+            cursor.execute("SELECT type_id, inverse_type_id FROM relationship_type_inverses LIMIT 20")
+            all_inverses = cursor.fetchall()
+            print(f"First 20 inverse relationships: {all_inverses}")
+            
+            # Now get the specific ones
             cursor.execute("""
                 SELECT inverse_type_id 
                 FROM relationship_type_inverses 
                 WHERE type_id = ?
             """, (type_id,))
-            return [row[0] for row in cursor.fetchall()]
+            
+            result = [row[0] for row in cursor.fetchall()]
+            print(f"Found {len(result)} inverse relationship types for type_id {type_id}: {result}")
+            
+            return result
         except Exception as e:
             print(f"Error getting inverse relationship types: {e}")
+            import traceback
+            traceback.print_exc()
             return []
     
     def _populate_relationship_combos(self) -> None:
@@ -886,11 +923,18 @@ class RelationshipDetailsDialog(QDialog):
             # Get the selected relationship type ID
             forward_type_id = self.forward_card.get_selected_relationship_type_id()
             
-            # Get suggested inverse relationship types
-            inverse_type_ids = self._get_inverse_relationship_types(forward_type_id)
-            
-            # Highlight the suggested inverse relationships
-            self.backward_card.highlightSuggestions(inverse_type_ids)
+            if forward_type_id is not None:
+                print(f"Selected forward relationship type ID: {forward_type_id}")
+                
+                # Get suggested inverse relationship types
+                inverse_type_ids = self._get_inverse_relationship_types(forward_type_id)
+                print(f"Inverse relationship type IDs: {inverse_type_ids}")
+                
+                # Highlight the suggested inverse relationships
+                self.backward_card.highlightSuggestions(inverse_type_ids)
+            else:
+                print("No valid relationship type ID selected")
+                self.backward_card.highlightSuggestions([])
         else:
             # If no forward relationship is selected, clear any suggestions
             self.backward_card.highlightSuggestions([]) 
