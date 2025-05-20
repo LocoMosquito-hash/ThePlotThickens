@@ -902,4 +902,21 @@ class RelationshipEditorDialog(QDialog):
             self.arrow_canvas.clear_temp_arrow()
             self.is_drawing = False
             self.source_item = None
-            self.arrow_start_pos = None 
+            self.arrow_start_pos = None
+        
+    def accept(self) -> None:
+        """Handle dialog acceptance.
+        
+        Triggers a Story Board refresh and closes the dialog.
+        """
+        # Look for any open Story Board and trigger a refresh
+        main_window = self.window()
+        while main_window and not hasattr(main_window, 'story_board'):
+            main_window = main_window.parent() if hasattr(main_window, 'parent') else None
+        
+        # If we found the main window with a story board, refresh it
+        if main_window and hasattr(main_window, 'story_board'):
+            main_window.story_board.refresh_board()
+        
+        # Close the dialog
+        super().accept() 
