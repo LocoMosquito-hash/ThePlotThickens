@@ -1412,8 +1412,59 @@ class RelationshipLine(QGraphicsLineItem):
                 self.setPen(pen)
                 # TODO: Update relationship in database
         elif action == delete_action:
-            # TODO: Implement relationship deletion
-            QMessageBox.information(None, "Not Implemented", "Relationship deletion is not yet implemented.")
+            # Confirm deletion
+            reply = QMessageBox.question(
+                None,
+                "Delete Relationship",
+                f"Are you sure you want to delete this relationship?\n({self.relationship_data['relationship_type']})",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Delete relationship from database
+                self.delete_relationship()
+        
+    def delete_relationship(self) -> None:
+        """Delete this relationship from the database and remove it from the scene."""
+        # Get the scene
+        scene = self.scene()
+        if not scene or not hasattr(scene, 'db_conn'):
+            return
+            
+        try:
+            # Delete from database
+            cursor = scene.db_conn.cursor()
+            cursor.execute("DELETE FROM relationships WHERE id = ?", (self.relationship_id,))
+            scene.db_conn.commit()
+            
+            # Remove from the character cards' relationship lists
+            self.source_card.remove_relationship(self)
+            self.target_card.remove_relationship(self)
+            
+            # Remove from scene's tracking dictionary
+            if self.relationship_id in scene.relationship_lines:
+                del scene.relationship_lines[self.relationship_id]
+            
+            # Remove from scene
+            scene.removeItem(self)
+            
+            # Emit layout changed signal to trigger auto-save
+            if hasattr(scene, 'layout_changed'):
+                scene.layout_changed.emit()
+                
+            # Find main window and trigger board refresh if possible
+            parent_widget = scene.views()[0].parent() if scene.views() else None
+            if parent_widget and hasattr(parent_widget, 'refresh_board'):
+                # Use QTimer to call refresh_board after this event has finished processing
+                QTimer.singleShot(100, lambda: parent_widget.refresh_board())
+                
+        except Exception as e:
+            QMessageBox.critical(
+                None,
+                "Error",
+                f"Failed to delete relationship: {str(e)}"
+            )
 
 
 class StoryBoardScene(QGraphicsScene):
