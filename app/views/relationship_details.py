@@ -8,7 +8,7 @@ This module provides a dialog for viewing and editing relationships between char
 """
 
 import os
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Set
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
@@ -18,11 +18,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QPoint
 from PyQt6.QtGui import QPixmap, QIcon, QColor, QPainter, QPen
 
-from app.db_sqlite import get_relationship_types, get_used_relationship_types
+# Removed the deprecated import
+# from app.db_sqlite import get_relationship_types, get_used_relationship_types
 
 
 class SearchableComboBox(QComboBox):
-    """A ComboBox with search functionality."""
+    """A ComboBox with search functionality and category support."""
     
     def __init__(self, parent=None):
         """Initialize the searchable combo box.
@@ -37,13 +38,249 @@ class SearchableComboBox(QComboBox):
         self.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         
         # Enable autocomplete
-        self.completer = QCompleter(self.model())
+        self.completer = QCompleter(self.model() or [])
         self.completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.completer.setFilterMode(Qt.MatchFlag.MatchContains)
         self.setCompleter(self.completer)
         
         # Style the combo box
         self.setMinimumHeight(30)
+        
+        # Store category info and gender contexts
+        self._categories = {}  # Maps item index to category ID
+        self._gender_contexts = {}  # Maps item index to gender context
+        self._suggested_indices = set()  # Set of indices for suggested items
+        self._visible_indices = set()  # Set of currently visible indices
+        
+    def addCategoryItem(self, category_name: str, category_id: int) -> None:
+        """Add a category header item to the combo box.
+        
+        Args:
+            category_name: Name of the category
+            category_id: ID of the category
+        """
+        index = self.count()
+        # Add a symbol and make the category name more distinct
+        self.addItem(f"▼ {category_name}")
+        
+        # Guard against None model
+        model = self.model()
+        if model is None:
+            print("Warning: ComboBox model is None")
+            return
+            
+        item = model.item(index)
+        if item is None:
+            print(f"Warning: Item at index {index} is None")
+            return
+            
+        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsSelectable)  # Make non-selectable
+        item.setBackground(QColor("#9932CC"))  # Purple background for categories
+        item.setForeground(QColor("#FFFFFF"))  # White text
+        
+        # Set bold font for categories
+        font = item.font()
+        font.setBold(True)
+        font.setPointSize(font.pointSize() + 1)  # Make font slightly larger
+        item.setFont(font)
+        
+        # Store category info
+        self._categories[index] = category_id
+        self._visible_indices.add(index)  # Categories are always visible
+        
+    def addRelationshipTypeItem(self, label: str, type_id: int, gender_context: str, suggested: bool = False) -> None:
+        """Add a relationship type item to the combo box.
+        
+        Args:
+            label: Display label for the relationship type
+            type_id: ID of the relationship type
+            gender_context: Gender context (masculine, feminine, neutral)
+            suggested: Whether this is a suggested relationship type
+        """
+        index = self.count()
+        # Add indentation to relationship types to visually separate from categories
+        self.addItem(f"    {label}")
+        
+        # Set type ID as user data
+        self.setItemData(index, type_id, Qt.ItemDataRole.UserRole)
+        
+        # Get model item for styling
+        model = self.model()
+        if model is None:
+            print("Warning: ComboBox model is None")
+            return
+            
+        item = model.item(index)
+        if item is None:
+            print(f"Warning: Item at index {index} is None")
+            return
+            
+        # Store gender context
+        self._gender_contexts[index] = gender_context
+        self._visible_indices.add(index)  # Initially all items are visible
+        
+        # If this is a suggested relationship, highlight it
+        if suggested:
+            item.setBackground(QColor("#4682B4"))  # Steel blue background for suggestions
+            item.setForeground(QColor("#FFFFFF"))  # White text
+            self._suggested_indices.add(index)
+            
+    def filterByGender(self, gender: str) -> None:
+        """Filter relationship types by gender context.
+        
+        Args:
+            gender: Gender to filter by (MALE, FEMALE, or None for no filter)
+        """
+        # Map gender to gender context
+        gender_context_filter = None
+        if gender == "MALE":
+            gender_context_filter = "masculine"
+        elif gender == "FEMALE":
+            gender_context_filter = "feminine"
+            
+        # We'll rebuild the combo box with only the filtered items
+        current_text = self.currentText()
+        self._visible_indices.clear()
+        
+        # Store all items temporarily
+        items_to_keep = []
+        
+        for i in range(self.count()):
+            if i in self._categories:
+                # Always show categories
+                items_to_keep.append((i, self.itemText(i), self.itemData(i, Qt.ItemDataRole.UserRole)))
+                self._visible_indices.add(i)
+            elif i in self._gender_contexts:
+                gender_context = self._gender_contexts[i]
+                
+                # Show if:
+                # 1. No filter is applied
+                # 2. It matches the filter
+                # 3. It's neutral (always shown)
+                should_show = (
+                    gender_context_filter is None or 
+                    gender_context == gender_context_filter or 
+                    gender_context == "neutral"
+                )
+                
+                if should_show:
+                    items_to_keep.append((i, self.itemText(i), self.itemData(i, Qt.ItemDataRole.UserRole)))
+                    self._visible_indices.add(i)
+        
+        # Remember current selection
+        current_type_id = self.getSelectedTypeId()
+        
+        # Clear and rebuild
+        self.clear()
+        
+        # We need to maintain mapping from old indices to new ones 
+        old_to_new_index = {}
+        new_index = 0
+        
+        # Rebuild categories and items
+        current_category = None
+        for old_index, text, user_data in items_to_keep:
+            # Add the item
+            self.addItem(text)
+            
+            # If this was a category header, restore its styling
+            if old_index in self._categories:
+                current_category = self._categories[old_index]
+                
+                # Style as category
+                model = self.model()
+                if model and model.item(new_index):
+                    item = model.item(new_index)
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+                    item.setBackground(QColor("#9932CC"))
+                    item.setForeground(QColor("#FFFFFF"))
+                    
+                    # Restore bold font for categories
+                    font = item.font()
+                    font.setBold(True)
+                    font.setPointSize(font.pointSize() + 1)
+                    item.setFont(font)
+                    
+                # Update category mapping
+                self._categories[new_index] = current_category
+                if old_index != new_index:
+                    del self._categories[old_index]
+            else:
+                # Set the user data (type_id)
+                self.setItemData(new_index, user_data, Qt.ItemDataRole.UserRole)
+                
+                # Update gender context mapping
+                if old_index in self._gender_contexts:
+                    self._gender_contexts[new_index] = self._gender_contexts[old_index]
+                    if old_index != new_index:
+                        del self._gender_contexts[old_index]
+                        
+                # Update suggestion styling if needed
+                if old_index in self._suggested_indices:
+                    self._suggested_indices.remove(old_index)
+                    self._suggested_indices.add(new_index)
+                    
+                    model = self.model()
+                    if model and model.item(new_index):
+                        item = model.item(new_index)
+                        item.setBackground(QColor("#4682B4"))
+                        item.setForeground(QColor("#FFFFFF"))
+            
+            # Map old index to new
+            old_to_new_index[old_index] = new_index
+            new_index += 1
+                
+        # Try to restore selection
+        if current_type_id is not None:
+            for i in range(self.count()):
+                if self.itemData(i, Qt.ItemDataRole.UserRole) == current_type_id:
+                    self.setCurrentIndex(i)
+                    break
+        else:
+            # Otherwise try to restore by text
+            index = self.findText(current_text)
+            if index >= 0:
+                self.setCurrentIndex(index)
+    
+    def clearSuggestions(self) -> None:
+        """Clear suggestion highlighting from all items."""
+        for index in self._suggested_indices:
+            # Make sure index is valid and visible now
+            if index < self.count():
+                item = self.model().item(index)
+                item.setBackground(QColor())  # Reset background
+                item.setForeground(QColor())  # Reset foreground
+        
+        self._suggested_indices.clear()
+    
+    def highlightSuggestions(self, type_ids: List[int]) -> None:
+        """Highlight the suggested relationship types.
+        
+        Args:
+            type_ids: List of relationship type IDs to highlight
+        """
+        # Clear previous suggestions
+        self.clearSuggestions()
+        
+        # Find and highlight new suggestions
+        for i in range(self.count()):
+            type_id = self.itemData(i, Qt.ItemDataRole.UserRole)
+            if type_id in type_ids:
+                item = self.model().item(i)
+                item.setBackground(QColor("#4682B4"))  # Steel blue background
+                item.setForeground(QColor("#FFFFFF"))  # White text
+                self._suggested_indices.add(i)
+                
+    def getSelectedTypeId(self) -> Optional[int]:
+        """Get the selected relationship type ID.
+        
+        Returns:
+            Relationship type ID or None if no selection or a category is selected
+        """
+        if self.currentIndex() == -1:
+            return None
+            
+        return self.currentData(Qt.ItemDataRole.UserRole)
 
 
 class RelationshipCard(QFrame):
@@ -52,7 +289,8 @@ class RelationshipCard(QFrame):
     def __init__(self, source_id: int, source_name: str, target_id: int, 
                  target_name: str, source_avatar: Optional[str] = None, 
                  target_avatar: Optional[str] = None, is_forward: bool = True, 
-                 relationship_types: List[str] = None, parent=None):
+                 source_gender: str = "NOT_SPECIFIED", target_gender: str = "NOT_SPECIFIED",
+                 parent=None):
         """Initialize the relationship card.
         
         Args:
@@ -63,7 +301,8 @@ class RelationshipCard(QFrame):
             source_avatar: Path to the source character's avatar
             target_avatar: Path to the target character's avatar
             is_forward: If True, displays source -> target; if False, displays target -> source
-            relationship_types: List of relationship types to populate the combobox
+            source_gender: Gender of the source character
+            target_gender: Gender of the target character
             parent: Parent widget
         """
         super().__init__(parent)
@@ -75,7 +314,8 @@ class RelationshipCard(QFrame):
         self.source_avatar = source_avatar
         self.target_avatar = target_avatar
         self.is_forward = is_forward
-        self.relationship_types = relationship_types or []
+        self.source_gender = source_gender
+        self.target_gender = target_gender
         self._is_enabled = True
         
         # Set up the frame style
@@ -162,10 +402,14 @@ class RelationshipCard(QFrame):
         
         # Create right side with searchable combobox
         self.relationship_combo = SearchableComboBox()
-        self.relationship_combo.addItems(self.relationship_types)
-        self.relationship_combo.setCurrentIndex(-1)  # No selection by default
-        self.relationship_combo.setPlaceholderText("Select relationship type...")
         
+        # Apply filtering based on gender (will be populated later)
+        if self.is_forward:
+            gender_for_filtering = self.source_gender
+        else:
+            gender_for_filtering = self.target_gender
+            
+        # For the reverse relationship, we show suggestions based on the selected forward relationship
         main_layout.addWidget(self.relationship_combo)
     
     def _create_avatar(self, avatar_path: Optional[str] = None) -> QLabel:
@@ -234,12 +478,39 @@ class RelationshipCard(QFrame):
         return arrow_label
     
     def get_selected_relationship(self) -> Optional[str]:
-        """Get the selected relationship type.
+        """Get the selected relationship type label.
         
         Returns:
-            Selected relationship type or None if none selected
+            Selected relationship type label or None if none selected
         """
-        return self.relationship_combo.currentText() if self.relationship_combo.currentText() else None
+        if self.relationship_combo.currentIndex() == -1:
+            return None
+            
+        return self.relationship_combo.currentText()
+        
+    def get_selected_relationship_type_id(self) -> Optional[int]:
+        """Get the selected relationship type ID.
+        
+        Returns:
+            Selected relationship type ID or None if none selected
+        """
+        return self.relationship_combo.getSelectedTypeId()
+        
+    def filterByGender(self, gender: str) -> None:
+        """Filter relationship types by gender.
+        
+        Args:
+            gender: Gender to filter by (MALE, FEMALE, or None for no filter)
+        """
+        self.relationship_combo.filterByGender(gender)
+        
+    def highlightSuggestions(self, type_ids: List[int]) -> None:
+        """Highlight suggested relationship types.
+        
+        Args:
+            type_ids: List of relationship type IDs to highlight as suggestions
+        """
+        self.relationship_combo.highlightSuggestions(type_ids)
 
 
 class RelationshipDetailsDialog(QDialog):
@@ -272,9 +543,11 @@ class RelationshipDetailsDialog(QDialog):
         except ImportError:
             print("PyQtDarkTheme not available. Using default theme.")
         
-        # Get avatar paths from the database
+        # Get avatar paths and genders from the database
         self.source_avatar = self._get_character_avatar_path(source_id)
         self.target_avatar = self._get_character_avatar_path(target_id)
+        self.source_gender = self._get_character_gender(source_id)
+        self.target_gender = self._get_character_gender(target_id)
         
         # Set up the dialog
         self.setWindowTitle("Relationship Details")
@@ -286,7 +559,7 @@ class RelationshipDetailsDialog(QDialog):
         self.backward_card.setEnabled(False)
         
         # Connect the forward card combo box's currentTextChanged signal
-        self.forward_card.relationship_combo.currentTextChanged.connect(self._on_forward_relationship_changed)
+        self.forward_card.relationship_combo.currentIndexChanged.connect(self._on_forward_relationship_changed)
     
     def _get_character_avatar_path(self, character_id: int) -> Optional[str]:
         """Get the avatar path for a character.
@@ -369,6 +642,30 @@ class RelationshipDetailsDialog(QDialog):
             print(f"Error getting character avatar: {e}")
             
         return None
+        
+    def _get_character_gender(self, character_id: int) -> str:
+        """Get the gender of a character.
+        
+        Args:
+            character_id: ID of the character
+            
+        Returns:
+            Gender of the character as a string, or "NOT_SPECIFIED" if not found
+        """
+        if not character_id:
+            return "NOT_SPECIFIED"
+            
+        try:
+            cursor = self.db_conn.cursor()
+            cursor.execute("SELECT gender FROM characters WHERE id = ?", (character_id,))
+            result = cursor.fetchone()
+            
+            if result and result[0]:
+                return result[0]
+        except Exception as e:
+            print(f"Error getting character gender: {e}")
+            
+        return "NOT_SPECIFIED"
     
     def _init_ui(self) -> None:
         """Initialize the user interface."""
@@ -376,48 +673,41 @@ class RelationshipDetailsDialog(QDialog):
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(16)
         
-        # Get relationship types from the database
-        standard_types = [rt['name'] for rt in get_relationship_types(self.db_conn)]
-        used_types = get_used_relationship_types(self.db_conn)
-        
-        # Combine lists with used types at the top
-        relationship_items = []
-        
-        # Add used types first (if they exist)
-        if used_types:
-            relationship_items.extend(used_types)
-            relationship_items.append("---")  # Separator
-        
-        # Add standard types
-        relationship_items.extend(standard_types)
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_items = []
-        for item in relationship_items:
-            if item not in seen and item != "---":
-                seen.add(item)
-                unique_items.append(item)
-            elif item == "---" and unique_items:  # Only add separator if we have items before it
-                unique_items.append(item)
-        
-        # Create the forward relationship card (A -> B)
-        self.forward_card = RelationshipCard(
-            self.source_id, self.source_name, 
-            self.target_id, self.target_name,
-            self.source_avatar, self.target_avatar,
-            True, unique_items
-        )
-        main_layout.addWidget(self.forward_card)
-        
-        # Create the backward relationship card (B -> A)
-        self.backward_card = RelationshipCard(
-            self.source_id, self.source_name, 
-            self.target_id, self.target_name,
-            self.source_avatar, self.target_avatar,
-            False, unique_items
-        )
-        main_layout.addWidget(self.backward_card)
+        try:
+            # Load relationship categories and types
+            self.categories = self._load_relationship_categories()
+            self.relationship_types = self._load_relationship_types()
+            
+            # Create the forward relationship card (A -> B)
+            self.forward_card = RelationshipCard(
+                self.source_id, self.source_name, 
+                self.target_id, self.target_name,
+                self.source_avatar, self.target_avatar,
+                True, self.source_gender, self.target_gender
+            )
+            main_layout.addWidget(self.forward_card)
+            
+            # Create the backward relationship card (B -> A)
+            self.backward_card = RelationshipCard(
+                self.source_id, self.source_name, 
+                self.target_id, self.target_name,
+                self.source_avatar, self.target_avatar,
+                False, self.target_gender, self.source_gender
+            )
+            main_layout.addWidget(self.backward_card)
+            
+            # Populate relationship type dropdowns
+            self._populate_relationship_combos()
+            
+            # Apply gender-based filtering
+            self.forward_card.filterByGender(self.source_gender)
+            self.backward_card.filterByGender(self.target_gender)
+            
+        except Exception as e:
+            print(f"Error initializing UI: {e}")
+            error_label = QLabel(f"Error loading relationship data: {str(e)}")
+            error_label.setStyleSheet("color: red;")
+            main_layout.addWidget(error_label)
         
         # Add stretch to push everything up
         main_layout.addStretch()
@@ -442,22 +732,165 @@ class RelationshipDetailsDialog(QDialog):
         
         main_layout.addLayout(buttons_layout)
     
-    def get_selected_relationships(self) -> Tuple[Optional[str], Optional[str]]:
-        """Get the selected relationship types.
+    def _load_relationship_categories(self) -> List[Dict[str, Any]]:
+        """Load relationship categories from the database.
         
         Returns:
-            Tuple of (forward_relationship, backward_relationship)
+            List of relationship category dictionaries
         """
-        forward_relationship = self.forward_card.get_selected_relationship()
-        backward_relationship = self.backward_card.get_selected_relationship()
-        
-        return forward_relationship, backward_relationship
+        try:
+            cursor = self.db_conn.cursor()
+            
+            # First check if the table exists
+            cursor.execute("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name='relationship_categories'
+            """)
+            
+            if not cursor.fetchone():
+                print("relationship_categories table doesn't exist")
+                return []
+            
+            cursor.execute("""
+                SELECT id, name, description, display_order 
+                FROM relationship_categories 
+                ORDER BY display_order
+            """)
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            print(f"Error loading relationship categories: {e}")
+            return []
     
-    def _on_forward_relationship_changed(self, text: str) -> None:
-        """Handle when the forward relationship type changes.
+    def _load_relationship_types(self) -> List[Dict[str, Any]]:
+        """Load relationship types from the database.
+        
+        Returns:
+            List of relationship type dictionaries
+        """
+        try:
+            cursor = self.db_conn.cursor()
+            
+            # First check if the table exists
+            cursor.execute("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name='relationship_types_new'
+            """)
+            
+            if not cursor.fetchone():
+                print("relationship_types_new table doesn't exist")
+                return []
+            
+            cursor.execute("""
+                SELECT type_id, name, label, gender_context, category_id
+                FROM relationship_types_new 
+                ORDER BY category_id, name
+            """)
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            print(f"Error loading relationship types: {e}")
+            return []
+    
+    def _get_inverse_relationship_types(self, type_id: int) -> List[int]:
+        """Get inverse relationship type IDs for a given relationship type.
         
         Args:
-            text: Selected relationship type text
+            type_id: ID of the relationship type
+            
+        Returns:
+            List of inverse relationship type IDs
+        """
+        if not type_id:
+            return []
+            
+        try:
+            cursor = self.db_conn.cursor()
+            
+            # First check if the table exists
+            cursor.execute("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name='relationship_type_inverses'
+            """)
+            
+            if not cursor.fetchone():
+                print("relationship_type_inverses table doesn't exist")
+                return []
+            
+            cursor.execute("""
+                SELECT inverse_type_id 
+                FROM relationship_type_inverses 
+                WHERE type_id = ?
+            """, (type_id,))
+            return [row[0] for row in cursor.fetchall()]
+        except Exception as e:
+            print(f"Error getting inverse relationship types: {e}")
+            return []
+    
+    def _populate_relationship_combos(self) -> None:
+        """Populate the relationship combo boxes with categorized relationship types."""
+        # Group relationship types by category
+        types_by_category = {}
+        for rel_type in self.relationship_types:
+            category_id = rel_type["category_id"]
+            if category_id not in types_by_category:
+                types_by_category[category_id] = []
+            types_by_category[category_id].append(rel_type)
+        
+        # Populate both combo boxes with categorized relationships
+        for combo in [self.forward_card.relationship_combo, self.backward_card.relationship_combo]:
+            # Clear any existing items
+            combo.clear()
+            combo.setPlaceholderText("Select relationship type...")
+            
+            # Handle empty categories or types
+            if not self.categories or not self.relationship_types:
+                print("No relationship categories or types found")
+                combo.addItem("No relationship types available")
+                continue
+            
+            # Add each category with its relationship types
+            for category in self.categories:
+                category_id = category["id"]
+                combo.addCategoryItem(category["name"], category_id)
+                
+                # Add relationship types for this category
+                if category_id in types_by_category:
+                    for rel_type in types_by_category[category_id]:
+                        combo.addRelationshipTypeItem(
+                            rel_type["label"],
+                            rel_type["type_id"],
+                            rel_type["gender_context"]
+                        )
+    
+    def get_selected_relationships(self) -> Tuple[Optional[int], Optional[int]]:
+        """Get the selected relationship type IDs.
+        
+        Returns:
+            Tuple of (forward_relationship_id, backward_relationship_id)
+        """
+        forward_relationship_id = self.forward_card.get_selected_relationship_type_id()
+        backward_relationship_id = self.backward_card.get_selected_relationship_type_id()
+        
+        return forward_relationship_id, backward_relationship_id
+    
+    def _on_forward_relationship_changed(self, index: int) -> None:
+        """Handle when the forward relationship type selection changes.
+        
+        Args:
+            index: Current index in the combo box
         """
         # Enable the backward card only if a valid relationship type is selected
-        self.backward_card.setEnabled(bool(text)) 
+        enable_backward = index != -1 and index is not None
+        self.backward_card.setEnabled(enable_backward)
+        
+        if enable_backward:
+            # Get the selected relationship type ID
+            forward_type_id = self.forward_card.get_selected_relationship_type_id()
+            
+            # Get suggested inverse relationship types
+            inverse_type_ids = self._get_inverse_relationship_types(forward_type_id)
+            
+            # Highlight the suggested inverse relationships
+            self.backward_card.highlightSuggestions(inverse_type_ids)
+        else:
+            # If no forward relationship is selected, clear any suggestions
+            self.backward_card.highlightSuggestions([]) 
