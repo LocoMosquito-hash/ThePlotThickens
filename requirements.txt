@@ -5,4 +5,9 @@ SQLAlchemy==1.4.46
 pyqtdarktheme==2.1.0
 # Tabler icons packages - you can use either one
 pytablericons==1.0.1  # Pillow-based, preferred option
-tabler-qicon==0.3.0   # Direct QIcon implementation, alternative 
+tabler-qicon==0.3.0   # Direct QIcon implementation, alternative
+
+# Image processing dependencies
+numpy>=1.24.0
+opencv-python>=4.8.0
+Pillow>=10.0.0 
