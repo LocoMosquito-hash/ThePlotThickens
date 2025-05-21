@@ -27,6 +27,7 @@ from PyQt6.QtGui import (
 from app.views.gallery.tagging import TaggableImageLabel, GraphicsTagView
 from app.views.gallery.dialogs.quick_event_dialog import QuickEventSelectionDialog, QuickEventEditor
 from app.views.gallery.character.completer import CharacterTagCompleter
+from app.views.gallery.image_enhancement import ImageEnhancementWidget
 
 from app.db_sqlite import (
     get_image_character_tags, add_character_tag_to_image, remove_character_tag,
@@ -184,6 +185,10 @@ class ImageDetailDialog(QDialog):
         
         # Update the image display
         self.image_label.set_image(pixmap, image_data.get("width"), image_data.get("height"))
+        
+        # Update the enhancement widget with the new image
+        if hasattr(self, 'enhancement_widget'):
+            self.enhancement_widget.set_image(pixmap)
         
         # Update character tags and quick events
         self.load_character_tags()
@@ -488,6 +493,21 @@ class ImageDetailDialog(QDialog):
         quick_events_layout.addWidget(quick_events_group)
         
         right_panel.addTab(quick_events_tab, "Quick Events")
+        
+        # Image Enhancement tab
+        enhancement_tab = QWidget()
+        enhancement_layout = QVBoxLayout(enhancement_tab)
+        
+        # Create the image enhancement widget
+        self.enhancement_widget = ImageEnhancementWidget()
+        self.enhancement_widget.set_image(self.original_pixmap)
+        self.enhancement_widget.image_changed.connect(self.on_enhancement_image_changed)
+        self.enhancement_widget.image_saved.connect(self.on_enhancement_image_saved)
+        
+        enhancement_layout.addWidget(self.enhancement_widget)
+        
+        # Add the enhancement tab to the right panel
+        right_panel.addTab(enhancement_tab, "Enhance Image")
         
         # Add the right panel to the splitter
         splitter.addWidget(right_panel)
@@ -983,3 +1003,25 @@ class ImageDetailDialog(QDialog):
             
         # Ensure settings are written to disk
         self.settings.sync()
+
+    def on_enhancement_image_changed(self, pixmap: QPixmap):
+        """Handle image changes from the enhancement widget.
+        
+        Args:
+            pixmap: Enhanced pixmap
+        """
+        if pixmap and not pixmap.isNull():
+            # Update the displayed image
+            self.image_label.set_image(pixmap, pixmap.width(), pixmap.height())
+            
+            # Show status message
+            self.statusBar().showMessage("Image enhanced")
+
+    def on_enhancement_image_saved(self, file_path: str):
+        """Handle image saved event from the enhancement widget.
+        
+        Args:
+            file_path: Path where the image was saved
+        """
+        # Update status bar with saved path
+        self.statusBar().showMessage(f"Image saved to: {file_path}")
