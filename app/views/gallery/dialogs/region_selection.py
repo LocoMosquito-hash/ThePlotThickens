@@ -41,6 +41,9 @@ from app.db_sqlite import (
 # Import image recognition utility
 from app.utils.image_recognition_util import ImageRecognitionUtil
 
+# Import the ImageEnhancementWidget
+from app.views.gallery.image_enhancement import ImageEnhancementWidget
+
 
 class RegionSelectionDialog(QDialog):
     """Dialog for manually selecting regions to recognize characters in."""
@@ -282,6 +285,21 @@ class RegionSelectionDialog(QDialog):
         
         # Add events tab to tabs
         tabs.addTab(events_tab, "Quick Events")
+        
+        # Tab for image enhancement
+        enhance_tab = QWidget()
+        enhance_layout = QVBoxLayout(enhance_tab)
+        
+        # Create the image enhancement widget
+        self.enhancement_widget = ImageEnhancementWidget()
+        self.enhancement_widget.set_image(self.pixmap)
+        self.enhancement_widget.image_changed.connect(self.on_enhancement_image_changed)
+        self.enhancement_widget.image_saved.connect(self.on_enhancement_image_saved)
+        
+        enhance_layout.addWidget(self.enhancement_widget)
+        
+        # Add the enhancement tab to tabs
+        tabs.addTab(enhance_tab, "Enhance Image")
         
         # Set the first tab (Region Selection) as the default
         tabs.setCurrentIndex(0)
@@ -1221,3 +1239,42 @@ class RegionSelectionDialog(QDialog):
             
         # Ensure settings are written to disk
         self.settings.sync()
+
+    def on_enhancement_image_changed(self, pixmap: QPixmap) -> None:
+        """Handle image changes from the enhancement widget.
+        
+        Args:
+            pixmap: Enhanced pixmap
+        """
+        if pixmap and not pixmap.isNull():
+            # Update the displayed image in the scene
+            self.scene.removeItem(self.pixmap_item)
+            self.pixmap = pixmap
+            self.pixmap_item = QGraphicsPixmapItem(self.pixmap)
+            self.scene.addItem(self.pixmap_item)
+            
+            # Update the image with the enhanced version
+            self.image = self.pixmap.toImage()
+            
+            # Fit the scene in view
+            self.fit_scene_in_view()
+            
+            # Show status message
+            self._status_bar.showMessage("Image enhanced")
+
+    def on_enhancement_image_saved(self, file_path: str) -> None:
+        """Handle image saved event from the enhancement widget.
+        
+        Args:
+            file_path: Path where the image was saved
+        """
+        # Update status bar with saved path
+        self._status_bar.showMessage(f"Image saved to: {file_path}")
+        
+        # Update parent gallery if available
+        parent_gallery = self.parent()
+        if parent_gallery and hasattr(parent_gallery, 'refresh_gallery'):
+            try:
+                parent_gallery.refresh_gallery()
+            except Exception as e:
+                self._status_bar.showMessage(f"Could not refresh gallery: {str(e)}")
