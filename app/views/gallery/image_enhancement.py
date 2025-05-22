@@ -853,7 +853,7 @@ class ImageEnhancementWidget(QWidget):
                     if file_size == 0:
                         logger.error("File saved but has zero size!")
                         save_success = False
-                    else:6
+                    else:
                         save_success = True
                 else:
                     logger.error("File was not created!")
