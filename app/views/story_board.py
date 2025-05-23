@@ -1131,6 +1131,9 @@ class RelationshipLine(QGraphicsLineItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setAcceptHoverEvents(True)
         
+        # Set z-value to ensure relationship lines always appear behind character cards
+        self.setZValue(-10)  # Negative z-value to stay behind character cards
+        
         # Create label using QGraphicsTextItem with a QTextDocument for letter spacing
         self.label = QGraphicsTextItem(self)  # Make the label a child of the line
         
@@ -1205,8 +1208,8 @@ class RelationshipLine(QGraphicsLineItem):
         # Update the background to match the new label size
         self.update_position()
         
-        # Bring to front
-        self.setZValue(2)
+        # Bring to front but still behind character cards
+        self.setZValue(-5)  # Higher than normal (-10) but still behind character cards (0+)
         
         super().hoverEnterEvent(event)
     
@@ -1241,8 +1244,8 @@ class RelationshipLine(QGraphicsLineItem):
         # Update the background to match the new label size
         self.update_position()
         
-        # Restore z-value
-        self.setZValue(0)
+        # Restore z-value to stay behind character cards
+        self.setZValue(-10)  # Back to original z-value behind character cards
         
         super().hoverLeaveEvent(event)
     
@@ -1581,8 +1584,14 @@ class StoryBoardScene(QGraphicsScene):
     def refresh_relationship_styling(self) -> None:
         """Refresh the styling of all relationship lines in the scene."""
         for relationship_id, line in self.relationship_lines.items():
-            # Just ensure the z-ordering and styling are preserved
-            # No need to update positions as that's handled elsewhere
+            # Ensure the z-ordering and styling are preserved
+            # Set the line z-value to stay behind character cards
+            if not line.is_hovered:
+                line.setZValue(-10)  # Behind character cards when not hovered
+            else:
+                line.setZValue(-5)   # Still behind character cards but more visible when hovered
+            
+            # Ensure label z-ordering within the relationship line
             line.label_background.setZValue(-1)
             line.label.setZValue(1)
             
