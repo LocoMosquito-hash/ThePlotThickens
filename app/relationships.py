@@ -400,7 +400,7 @@ def initialize_relationship_types(conn: sqlite3.Connection) -> None:
 
 def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int, 
                        relationship_type_id: int, description: Optional[str] = None, 
-                       strength: int = 3, color: str = "#FF0000", width: float = 1.0,
+                       strength: int = 3, color: str = "#FF0000", width: float = 6.0,
                        is_custom: bool = False, custom_label: Optional[str] = None) -> int:
     """Create a new relationship in the database.
     
