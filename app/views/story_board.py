@@ -723,7 +723,8 @@ class CharacterCard(QGraphicsItemGroup):
             scene.db_conn,
             self._character_id,
             target_id,
-            relationship_type['name']
+            relationship_type['name'],
+            width=6.0  # Explicitly set width parameter to match the UI
         )
         
         # Add relationship line - this will automatically group with existing lines
@@ -770,7 +771,8 @@ class CharacterCard(QGraphicsItemGroup):
                     scene.db_conn,
                     target_id,
                     self._character_id,
-                    inverse_name
+                    inverse_name,
+                    width=6.0  # Explicitly set width parameter to match the UI
                 )
                 
                 # Add the inverse relationship line to the scene
