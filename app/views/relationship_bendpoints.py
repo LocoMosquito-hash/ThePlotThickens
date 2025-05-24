@@ -140,6 +140,23 @@ class BendPoint(QGraphicsEllipseItem):
         self.setZValue(-5)  # Back to the default z-value
         super().hoverLeaveEvent(event)
     
+    def setSelected(self, selected: bool) -> None:
+        """Override setSelected to ensure bendpoint stays visible when selected.
+        
+        Args:
+            selected: Whether the bendpoint should be selected
+        """
+        super().setSelected(selected)
+        
+        # Always stay visible when selected
+        if selected:
+            self.setVisible(True)
+            # Use even brighter color when selected
+            self.setBrush(QBrush(QColor("#FF9999")))  # Brighter red for selection
+            self.setPen(QPen(QColor("#FF0000"), 3.5))  # Thicker border
+            # Bring to front
+            self.setZValue(-2)  # Higher z-value to be above lines
+    
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
         """Handle mouse press events.
         
