@@ -27,7 +27,7 @@ from PyQt6.QtCore import Qt, QSize, QPointF, QRectF, QLineF, pyqtSignal, QTimer,
 from PyQt6.QtGui import (
     QPixmap, QImage, QColor, QPen, QBrush, QFont, QPainter, QPainterPath,
     QTransform, QCursor, QDrag, QMouseEvent, QWheelEvent, QKeyEvent,
-    QTextDocument, QTextOption
+    QTextDocument, QTextOption, QPainterPathStroker
 )
 
 from app.db_sqlite import (
@@ -716,7 +716,7 @@ class CharacterCard(QGraphicsItemGroup):
         relationship_data = {
             'relationship_type': relationship_type['name'],
             'color': "#FF0000",  # Default color
-            'width': 4.0  # 4x the original width
+            'width': 6.0  # Thicker lines for better visibility but not excessive
         }
         
         relationship_id = create_relationship(
@@ -752,7 +752,7 @@ class CharacterCard(QGraphicsItemGroup):
             inverse_data = {
                 'relationship_type': inverse_name,
                 'color': "#FF0000",  # Default color
-                'width': 4.0  # 4x the original width
+                'width': 6.0  # Thicker lines for better visibility but not excessive
             }
             
             # Ask user if they want to create the inverse relationship
@@ -1117,8 +1117,8 @@ class RelationshipLine(QGraphicsPathItem):
         primary_relationship = relationships[0]
         self.normal_color = QColor(primary_relationship['color']) if primary_relationship['color'] else QColor("#FF0000")
         self.hover_color = self.normal_color.lighter(130)  # Lighter version for hover
-        self.normal_width = float(primary_relationship['width']) if primary_relationship['width'] else 8.0  # 8x the original width (200% thicker)
-        self.hover_width = self.normal_width * 1.5  # Thicker on hover (reduced multiplier since lines are already thick)
+        self.normal_width = float(primary_relationship['width']) if primary_relationship['width'] else 6.0  # Thicker lines but not excessive
+        self.hover_width = self.normal_width * 1.5  # Thicker on hover
         
         # Set initial pen
         self.setPen(QPen(self.normal_color, int(self.normal_width), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
@@ -1258,6 +1258,23 @@ class RelationshipLine(QGraphicsPathItem):
         
         super().hoverLeaveEvent(event)
     
+    def shape(self) -> QPainterPath:
+        """Override shape to create a wider hit area for the path.
+        
+        Returns:
+            A wider path shape for hit detection
+        """
+        # Get the normal path
+        path = self.path()
+        
+        # Create a stroker to make the path wider for hit detection
+        stroker = QPainterPathStroker()
+        # Make hit area wider (3x the visual width) for better clickability
+        stroker.setWidth(self.pen().width() * 3)
+        
+        # Create the wider path
+        return stroker.createStroke(path)
+    
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None) -> None:
         """Override the paint method to draw a more visible line with glow effect.
         
@@ -1275,9 +1292,9 @@ class RelationshipLine(QGraphicsPathItem):
         # Draw a glow effect first (larger, semi-transparent line)
         glow_pen = QPen(self.pen())
         glow_color = QColor(self.pen().color())
-        glow_color.setAlpha(80)  # Semi-transparent
+        glow_color.setAlpha(100)  # Semi-transparent glow
         glow_pen.setColor(glow_color)
-        glow_pen.setWidth(int(self.pen().width() * 2))  # Double width for glow
+        glow_pen.setWidth(int(self.pen().width() * 2))  # Double width for moderate glow effect
         painter.setPen(glow_pen)
         painter.drawPath(self.path())
         
