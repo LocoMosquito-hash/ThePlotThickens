@@ -10,8 +10,12 @@ print(f"Starting GitHub MCP Server", file=sys.stderr)
 print(f"Current working directory: {os.getcwd()}", file=sys.stderr)
 
 # GitHub API token - should be stored securely in production
-GITHUB_TOKEN = "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"
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 GITHUB_API_URL = "https://api.github.com"
+
+# Validate that the token is available
+if not GITHUB_TOKEN:
+    print("Warning: GITHUB_TOKEN environment variable not set. GitHub API access will be limited.", file=sys.stderr)
 
 # Initialize the MCP server with a descriptive name
 mcp = FastMCP("GitHub MCP Server for The Plot Thickens")
@@ -22,11 +26,15 @@ def get_github_headers() -> Dict[str, str]:
     Returns:
         Dictionary of headers including authorization
     """
-    return {
+    headers = {
         "Accept": "application/vnd.github.v3+json",
-        "Authorization": f"token {GITHUB_TOKEN}",
         "User-Agent": "ThePlotThickens-MCP-Client"
     }
+    
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"token {GITHUB_TOKEN}"
+    
+    return headers
 
 @mcp.tool()
 def list_repositories(username: str) -> List[Dict[str, Any]]:
