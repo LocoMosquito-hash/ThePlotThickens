@@ -1184,6 +1184,27 @@ class RelationshipLine(QGraphicsPathItem):
         
         # Update position and path
         self.update_position()
+        
+    def setSelected(self, selected: bool) -> None:
+        """Override setSelected to show/hide bendpoints based on selection state.
+        
+        Args:
+            selected: Whether the line should be selected
+        """
+        # Call the parent implementation first
+        super().setSelected(selected)
+        
+        # Update bendpoints visibility based on selection state
+        for bendpoint in self.bendpoints:
+            bendpoint.setVisible(selected)
+            
+        # If selected, bring to front temporarily
+        if selected:
+            self.setZValue(-2)  # Higher than normal (-10) but still behind character cards
+        else:
+            # If not selected, ensure normal z-value
+            if not self.is_hovered:
+                self.setZValue(-10)  # Normal z-value
     
     def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent) -> None:
         """Handle hover enter events.
@@ -1448,14 +1469,21 @@ class RelationshipLine(QGraphicsPathItem):
         path.moveTo(start)
         
         # Add bendpoints if they exist, otherwise it's a straight line
-        if self.bendpoints:
+        if self.bendpoints and len(self.bendpoints) > 0:
+            print(f"UPDATE PATH: Using {len(self.bendpoints)} bendpoints for relationship")
+            
             # Sort bendpoints by position for consistent curve
             sorted_bendpoints = sorted(self.bendpoints, key=lambda bp: bp.position)
+            
+            # Debug info about bendpoints
+            for i, bp in enumerate(sorted_bendpoints):
+                print(f"  Bendpoint {i+1}: ID={bp.bendpoint_id}, position={bp.position}, at ({bp.pos().x()}, {bp.pos().y()})")
             
             if len(sorted_bendpoints) == 1:
                 # With just one bendpoint, create a smooth quadratic curve
                 bp_pos = sorted_bendpoints[0].pos()
                 scene_pos = self.mapToScene(bp_pos)
+                print(f"  Using single bendpoint at ({scene_pos.x()}, {scene_pos.y()}) to curve from ({start.x()}, {start.y()}) to ({end.x()}, {end.y()})")
                 path.quadTo(scene_pos, end)
             else:
                 # With multiple bendpoints, create a smooth curve through all points
@@ -1489,7 +1517,8 @@ class RelationshipLine(QGraphicsPathItem):
                 # Create final curve from last bendpoint to end
                 path.quadTo(prev_point, end)
         else:
-            # End at the target with a straight line
+            # No bendpoints, use a straight line
+            print(f"UPDATE PATH: No bendpoints for relationship, using straight line from ({start.x()}, {start.y()}) to ({end.x()}, {end.y()})")
             path.lineTo(end)
         
         # Set the path
@@ -1501,19 +1530,44 @@ class RelationshipLine(QGraphicsPathItem):
             bendpoint.update_position()
     
     def load_bendpoints(self) -> None:
-        """Load bendpoints from the database."""
-        # Get the primary relationship ID
-        relationship_id = self.relationships[0]['id']
-        
-        # Load bendpoints
-        new_bendpoints = load_bendpoints(self, relationship_id)
-        
-        # Add to the scene
+        """Load bendpoints from the database for all relationships in this line."""
         scene = self.scene()
-        if scene:
-            for bendpoint in new_bendpoints:
-                scene.addItem(bendpoint)
-                self.bendpoints.append(bendpoint)
+        if not scene:
+            print("ERROR: No scene found for relationship line when loading bendpoints")
+            return
+            
+        print(f"RELATIONSHIP: Loading bendpoints for relationship group with {len(self.relationships)} relationships")
+        print(f"RELATIONSHIP IDS: {[rel['id'] for rel in self.relationships]}")
+        print(f"RELATIONSHIP TYPE: {self.relationships[0]['relationship_type']}")
+        print(f"RELATIONSHIP SOURCE: ID={self.source_card.character_id}, Name={self.source_card.character_data['name']}")
+        print(f"RELATIONSHIP TARGET: ID={self.target_card.character_id}, Name={self.target_card.character_data['name']}")
+            
+        # Get all relationship IDs in this group
+        all_bendpoints = []
+        for relationship in self.relationships:
+            relationship_id = relationship['id']
+            
+            # Load bendpoints for this relationship
+            new_bendpoints = load_bendpoints(self, relationship_id)
+            
+            # Add to temporary list
+            all_bendpoints.extend(new_bendpoints)
+        
+        # Add all bendpoints to the scene
+        for bendpoint in all_bendpoints:
+            scene.addItem(bendpoint)
+            self.bendpoints.append(bendpoint)
+            
+        # Log debug info about loaded bendpoints
+        if all_bendpoints:
+            print(f"Loaded {len(all_bendpoints)} bendpoints across {len(self.relationships)} relationships")
+            for i, bp in enumerate(all_bendpoints):
+                print(f"  Bendpoint {i+1}: ID={bp.bendpoint_id}, position={bp.position}, offsets=({bp.x_offset}, {bp.y_offset})")
+        else:
+            print(f"WARNING: No bendpoints found for relationship group {[rel['id'] for rel in self.relationships]}")
+            
+        # Force an update of the path
+        self.update_path()
     
     def add_bendpoint(self, position: float) -> None:
         """Add a bendpoint to the line.
@@ -1551,6 +1605,10 @@ class RelationshipLine(QGraphicsPathItem):
             bendpoint: The bendpoint to remove
         """
         if bendpoint in self.bendpoints:
+            # Remove from database first
+            if bendpoint.bendpoint_id:
+                bendpoint.remove_from_database()
+                
             # Remove from list
             self.bendpoints.remove(bendpoint)
             
@@ -1561,6 +1619,8 @@ class RelationshipLine(QGraphicsPathItem):
             
             # Update path
             self.update_path()
+            
+            print(f"Removed bendpoint ID={bendpoint.bendpoint_id} from relationship line")
     
     def contextMenuEvent(self, event: QGraphicsSceneContextMenuEvent) -> None:
         """Handle context menu events.
@@ -1647,10 +1707,16 @@ class RelationshipLine(QGraphicsPathItem):
             return
             
         try:
-            # Delete bendpoints first
+            # Delete bendpoints for all relationships in this group
             cursor = scene.db_conn.cursor()
-            cursor.execute("DELETE FROM relationship_bendpoints WHERE relationship_id = ?",
-                          (self.relationships[0]['id'],))
+            relationship_ids = [rel['id'] for rel in self.relationships]
+            
+            # Use parameterized query with placeholder for each ID
+            placeholders = ', '.join(['?'] * len(relationship_ids))
+            cursor.execute(f"DELETE FROM relationship_bendpoints WHERE relationship_id IN ({placeholders})",
+                          relationship_ids)
+            
+            print(f"Deleted bendpoints for relationship IDs: {relationship_ids}")
             
             # Delete relationship from database
             cursor.execute("DELETE FROM relationships WHERE id = ?", (self.relationships[0]['id'],))
@@ -1819,6 +1885,24 @@ class StoryBoardScene(QGraphicsScene):
                 # Ensure proper font
                 doc = line.label.document()
                 doc.setDefaultFont(QFont("Courier New", 21, QFont.Weight.Bold))
+                
+        # Also update bendpoint visibility
+        self._update_bendpoint_visibility()
+        
+    def _update_bendpoint_visibility(self) -> None:
+        """Update the visibility of all bendpoints based on selection state."""
+        # Get all selected relationship lines
+        selected_lines = [item for item in self.selectedItems() if isinstance(item, RelationshipLine)]
+        
+        # First hide all bendpoints
+        for relationship_id, line in self.relationship_lines.items():
+            for bendpoint in line.bendpoints:
+                bendpoint.setVisible(False)
+                
+        # Then show bendpoints only for selected lines
+        for line in selected_lines:
+            for bendpoint in line.bendpoints:
+                bendpoint.setVisible(True)
     
     def set_grid_snap(self, enabled: bool) -> None:
         """Enable or disable grid snapping.
@@ -1888,6 +1972,9 @@ class StoryBoardScene(QGraphicsScene):
         """Handle selection changes from Qt's internal selection mechanism."""
         # Forward to our custom enforcement method
         self._enforce_selection_visibility()
+        
+        # Update bendpoint visibility based on which relationship lines are selected
+        self._update_bendpoint_visibility()
     
     def get_selected_characters(self) -> List[Dict[str, Any]]:
         """Get data for all selected characters.
@@ -2197,17 +2284,21 @@ class StoryBoardScene(QGraphicsScene):
         
         # Check if we already have a line for this character pair
         existing_line = None
-        for line in self.relationship_lines.values():
+        for line_id, line in self.relationship_lines.items():
             if isinstance(line, RelationshipLine):
                 line_source_id = line.source_card.character_id
                 line_target_id = line.target_card.character_id
                 line_pair_key = f"{min(line_source_id, line_target_id)}_{max(line_source_id, line_target_id)}"
                 
                 if line_pair_key == pair_key:
+                    print(f"Found existing relationship line between characters {source_id} and {target_id}")
+                    print(f"Existing line has {len(line.relationships)} relationships")
                     existing_line = line
                     break
         
         if existing_line:
+            print(f"ADD RELATIONSHIP: Adding relationship {relationship_id} to existing line with {len(existing_line.relationships)} relationships")
+            
             # Add this relationship to the existing line
             existing_line.relationships.append(relationship_data)
             
@@ -2221,7 +2312,23 @@ class StoryBoardScene(QGraphicsScene):
             html_text = f'<span style="letter-spacing: 0.5px;">{escaped_text}</span>'
             doc.setHtml(html_text)
             
-            # Update position to recalculate label background
+            # Load any bendpoints for this relationship
+            print(f"ADD RELATIONSHIP: Checking for bendpoints on relationship {relationship_id}")
+            bendpoints_before = len(existing_line.bendpoints)
+            
+            # Load any bendpoints for this relationship ID and add them to the existing line
+            new_bendpoints = load_bendpoints(existing_line, relationship_id)
+            
+            # Add new bendpoints to the scene and line
+            for bendpoint in new_bendpoints:
+                self.addItem(bendpoint)
+                existing_line.bendpoints.append(bendpoint)
+            
+            bendpoints_after = len(existing_line.bendpoints)
+            if bendpoints_after > bendpoints_before:
+                print(f"ADD RELATIONSHIP: Added {bendpoints_after - bendpoints_before} bendpoints from relationship {relationship_id}")
+            
+            # Update position to recalculate label background and path
             existing_line.update_position()
             
             # Store this relationship_id mapping to the existing line
@@ -3134,6 +3241,9 @@ class StoryBoardWidget(QWidget):
         
         # Log card count after loading
         print(f"LOAD VIEW: After loading - {len(self.scene.character_cards)} cards in scene")
+        
+        # Ensure all bendpoints are initially hidden
+        self.scene._update_bendpoint_visibility()
         
         # Only center if this is the first load (no current positions)
         if not current_positions:
