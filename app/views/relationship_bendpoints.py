@@ -68,6 +68,9 @@ class BendPoint(QGraphicsEllipseItem):
         # Set z-value to be above the line but below other items
         self.setZValue(-5)  # Matches RelationshipLine hover z-value
         
+        # Hide bendpoints by default - only show when parent line is selected
+        self.setVisible(False)
+        
         # Update position based on initial parameters
         self.update_position()
     
@@ -205,6 +208,7 @@ class BendPoint(QGraphicsEllipseItem):
         # Get the database connection from the scene
         scene = self.relationship_line.scene()
         if not scene or not hasattr(scene, 'db_conn'):
+            print(f"ERROR: Could not save bendpoint - no scene or db connection")
             return
         
         try:
@@ -216,6 +220,7 @@ class BendPoint(QGraphicsEllipseItem):
                 WHERE id = ?
                 """
                 params = (self.position, self.x_offset, self.y_offset, self.bendpoint_id)
+                print(f"Updating bendpoint ID: {self.bendpoint_id}, position: {self.position}, offsets: ({self.x_offset}, {self.y_offset})")
             else:
                 # Insert new bendpoint
                 query = """
@@ -224,7 +229,9 @@ class BendPoint(QGraphicsEllipseItem):
                 VALUES (?, ?, ?, ?)
                 """
                 # Get the relationship ID from the primary relationship
+                # Always use the first relationship in the group for consistency
                 relationship_id = self.relationship_line.relationships[0]['id']
+                print(f"Saving new bendpoint for relationship ID: {relationship_id}, position: {self.position}, offsets: ({self.x_offset}, {self.y_offset})")
                 params = (relationship_id, self.position, self.x_offset, self.y_offset)
             
             cursor = scene.db_conn.cursor()
@@ -233,28 +240,38 @@ class BendPoint(QGraphicsEllipseItem):
             # Get the bendpoint ID if it was a new insertion
             if not self.bendpoint_id:
                 self.bendpoint_id = cursor.lastrowid
+                print(f"New bendpoint created with ID: {self.bendpoint_id}")
             
             scene.db_conn.commit()
         except Exception as e:
-            print(f"Error saving bendpoint: {e}")
+            print(f"ERROR saving bendpoint: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     def remove_from_database(self) -> None:
         """Remove the bendpoint from the database."""
         if not self.bendpoint_id:
+            print(f"Cannot remove bendpoint from database - no bendpoint ID")
             return
             
         # Get the database connection from the scene
         scene = self.relationship_line.scene()
         if not scene or not hasattr(scene, 'db_conn'):
+            print(f"ERROR: Could not remove bendpoint - no scene or db connection")
             return
         
         try:
+            print(f"Removing bendpoint ID {self.bendpoint_id} from database")
             query = "DELETE FROM relationship_bendpoints WHERE id = ?"
             cursor = scene.db_conn.cursor()
             cursor.execute(query, (self.bendpoint_id,))
+            rows_affected = cursor.rowcount
             scene.db_conn.commit()
+            print(f"Deleted bendpoint ID {self.bendpoint_id} - {rows_affected} rows affected")
         except Exception as e:
-            print(f"Error removing bendpoint: {e}")
+            print(f"ERROR removing bendpoint: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
 
 def load_bendpoints(relationship_line: 'RelationshipLine', relationship_id: int) -> List[BendPoint]:
@@ -272,37 +289,79 @@ def load_bendpoints(relationship_line: 'RelationshipLine', relationship_id: int)
     # Get the database connection from the scene
     scene = relationship_line.scene()
     if not scene or not hasattr(scene, 'db_conn'):
+        print(f"ERROR: No scene or db_conn found for relationship line")
         return bendpoints
     
     try:
+        print(f"LOADING BENDPOINTS: Querying for relationship ID {relationship_id}")
+        
+        # Get the character IDs for this relationship
+        source_id = relationship_line.source_card.character_id
+        target_id = relationship_line.target_card.character_id
+        
+        # Check for any bendpoints related to this character pair, not just the specific relationship
+        # This handles the case where bendpoints are stored for one direction of a relationship
+        # but might be loaded from another relationship ID
         query = """
-        SELECT id, position, x_offset, y_offset
-        FROM relationship_bendpoints
-        WHERE relationship_id = ?
-        ORDER BY position
+        SELECT bp.id, bp.position, bp.x_offset, bp.y_offset, bp.relationship_id
+        FROM relationship_bendpoints bp
+        JOIN relationships r ON bp.relationship_id = r.id
+        WHERE (r.source_id = ? AND r.target_id = ?) OR (r.source_id = ? AND r.target_id = ?)
+        ORDER BY bp.position
         """
         
         cursor = scene.db_conn.cursor()
-        cursor.execute(query, (relationship_id,))
+        cursor.execute(query, (source_id, target_id, target_id, source_id))
+        rows = cursor.fetchall()
         
-        for row in cursor.fetchall():
+        print(f"LOADING BENDPOINTS: Found {len(rows)} bendpoints for character pair ({source_id}, {target_id})")
+        
+        # Track bendpoint IDs we've already added to avoid duplicates
+        added_bendpoint_ids = set()
+        
+        for row in rows:
             bendpoint_id = row[0]
+            
+            # Skip if we've already added this bendpoint
+            if bendpoint_id in added_bendpoint_ids:
+                continue
+                
+            added_bendpoint_ids.add(bendpoint_id)
+            
             position = row[1]
             x_offset = row[2]
             y_offset = row[3]
+            rel_id = row[4]
             
-            # Create bendpoint
-            bendpoint = BendPoint(
-                relationship_line=relationship_line,
-                position=position,
-                x_offset=x_offset,
-                y_offset=y_offset,
-                bendpoint_id=bendpoint_id
-            )
+            print(f"LOADING BENDPOINT: ID={bendpoint_id}, position={position}, offsets=({x_offset}, {y_offset}), from relationship ID={rel_id}")
             
-            # Add to the list
-            bendpoints.append(bendpoint)
+            # Check if this bendpoint's relationship ID matches the one we're looking for
+            # or if it belongs to any relationship ID in this line's relationships
+            rel_ids_in_line = [rel['id'] for rel in relationship_line.relationships]
+            
+            if rel_id == relationship_id or rel_id in rel_ids_in_line:
+                # Create bendpoint
+                bendpoint = BendPoint(
+                    relationship_line=relationship_line,
+                    position=position,
+                    x_offset=x_offset,
+                    y_offset=y_offset,
+                    bendpoint_id=bendpoint_id
+                )
+                
+                # Add to the list
+                bendpoints.append(bendpoint)
+        
+        if len(bendpoints) > 0:
+            # Get line info
+            start, end = relationship_line.get_base_line_points()
+            print(f"RELATIONSHIP LINE: Start=({start.x()}, {start.y()}), End=({end.x()}, {end.y()})")
+            print(f"RELATIONSHIP SOURCE: ID={relationship_line.source_card.character_id}")
+            print(f"RELATIONSHIP TARGET: ID={relationship_line.target_card.character_id}")
+            
     except Exception as e:
-        print(f"Error loading bendpoints: {e}")
+        print(f"ERROR loading bendpoints: {str(e)}")
+        import traceback
+        traceback.print_exc()
     
     return bendpoints 
