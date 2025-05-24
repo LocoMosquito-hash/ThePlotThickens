@@ -1894,15 +1894,19 @@ class StoryBoardScene(QGraphicsScene):
         # Get all selected relationship lines
         selected_lines = [item for item in self.selectedItems() if isinstance(item, RelationshipLine)]
         
-        # First hide all bendpoints
+        # Get all selected bendpoints
+        selected_bendpoints = [item for item in self.selectedItems() if isinstance(item, BendPoint)]
+        
+        # First hide all bendpoints except selected ones
         for relationship_id, line in self.relationship_lines.items():
             for bendpoint in line.bendpoints:
-                bendpoint.setVisible(False)
-                
-        # Then show bendpoints only for selected lines
-        for line in selected_lines:
-            for bendpoint in line.bendpoints:
-                bendpoint.setVisible(True)
+                # Only hide if not selected and parent line not selected
+                if bendpoint not in selected_bendpoints:
+                    bendpoint.setVisible(line in selected_lines)
+                    
+        # Ensure selected bendpoints are always visible
+        for bendpoint in selected_bendpoints:
+            bendpoint.setVisible(True)
     
     def set_grid_snap(self, enabled: bool) -> None:
         """Enable or disable grid snapping.
