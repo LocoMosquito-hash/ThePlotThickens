@@ -38,6 +38,9 @@ from app.db_sqlite import (
     get_character
 )
 
+# Import BendPoint and load_bendpoints function
+from app.views.relationship_bendpoints import BendPoint, load_bendpoints
+
 
 def create_vertical_line() -> QFrame:
     """Create a vertical line for use as a separator.
@@ -470,6 +473,10 @@ class CharacterCard(QGraphicsItemGroup):
             relationship: Relationship line
         """
         if relationship in self.relationships:
+            # Remove bendpoints first
+            for bendpoint in relationship.bendpoints.copy():
+                relationship.remove_bendpoint(bendpoint)
+                
             self.relationships.remove(relationship)
     
     def delete_character(self) -> None:
@@ -1084,7 +1091,7 @@ class RoundedRectItem(QGraphicsPathItem):
         painter.drawPath(self.path())
 
 
-class RelationshipLine(QGraphicsLineItem):
+class RelationshipLine(QGraphicsPathItem):
     """A graphical item representing a relationship between characters on the story board."""
     
     def __init__(self, relationships: List[Dict[str, Any]], 
@@ -1110,7 +1117,7 @@ class RelationshipLine(QGraphicsLineItem):
         primary_relationship = relationships[0]
         self.normal_color = QColor(primary_relationship['color']) if primary_relationship['color'] else QColor("#FF0000")
         self.hover_color = self.normal_color.lighter(130)  # Lighter version for hover
-        self.normal_width = float(primary_relationship['width']) if primary_relationship['width'] else 4.0  # 4x the original width
+        self.normal_width = float(primary_relationship['width']) if primary_relationship['width'] else 8.0  # 8x the original width (200% thicker)
         self.hover_width = self.normal_width * 1.5  # Thicker on hover (reduced multiplier since lines are already thick)
         
         # Set initial pen
@@ -1166,7 +1173,16 @@ class RelationshipLine(QGraphicsLineItem):
         # Track hover state
         self.is_hovered = False
         
-        # Update position
+        # Bendpoints list
+        self.bendpoints = []
+        
+        # Minimum distance between bendpoints (in relative position units 0-1)
+        self.min_bendpoint_distance = 0.05
+        
+        # Load existing bendpoints from database
+        self.load_bendpoints()
+        
+        # Update position and path
         self.update_position()
     
     def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent) -> None:
@@ -1256,9 +1272,6 @@ class RelationshipLine(QGraphicsLineItem):
         # Enable antialiasing for smoother lines
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        # Get the line
-        line = self.line()
-        
         # Draw a glow effect first (larger, semi-transparent line)
         glow_pen = QPen(self.pen())
         glow_color = QColor(self.pen().color())
@@ -1266,30 +1279,29 @@ class RelationshipLine(QGraphicsLineItem):
         glow_pen.setColor(glow_color)
         glow_pen.setWidth(int(self.pen().width() * 2))  # Double width for glow
         painter.setPen(glow_pen)
-        painter.drawLine(line)
+        painter.drawPath(self.path())
         
         # Now draw the actual line
         painter.setPen(self.pen())
-        painter.drawLine(line)
+        painter.drawPath(self.path())
         
         # Restore the painter state
         painter.restore()
         
         # Don't call the parent implementation as we're completely replacing it
     
-    def update_position(self) -> None:
-        """Update the position of the line and label."""
-        # Save current styling before repositioning
-        current_text_color = self.label.defaultTextColor()
-        current_font = self.label.document().defaultFont()
+    def get_base_line_points(self) -> Tuple[QPointF, QPointF]:
+        """Get the start and end points of the base line (original straight line).
         
+        Returns:
+            Tuple of start and end points
+        """
         # Get the bounding rectangles of the character cards
         source_rect = self.source_card.sceneBoundingRect()
         target_rect = self.target_card.sceneBoundingRect()
         
         # Calculate pin positions (centered at the top of each card)
         card_width = 180  # Width of the character card
-        pin_size = 20     # Size of the pin
         
         # Calculate the center of the pin for each card
         source_pin = QPointF(
@@ -1302,24 +1314,26 @@ class RelationshipLine(QGraphicsLineItem):
             target_rect.y()                     # Top of the card
         )
         
-        # Set the line to connect the pins
-        self.setLine(QLineF(source_pin, target_pin))
+        return source_pin, target_pin
+    
+    def update_position(self) -> None:
+        """Update the position of the line and label."""
+        # Save current styling before repositioning
+        current_text_color = self.label.defaultTextColor()
+        current_font = self.label.document().defaultFont()
         
-        # FORCE a much thicker line width regardless of stored value
-        force_width = 8.0  # Set to a very visible value
-        if self.is_hovered:
-            force_width = 12.0  # Even thicker on hover
-            
-        pen = self.pen()
-        pen.setWidth(int(force_width))
-        self.setPen(pen)
+        # Get the start and end points
+        start, end = self.get_base_line_points()
+        
+        # Update path with bendpoints
+        self.update_path()
         
         # Calculate position for label (40% of the way from source to target)
         # This places the label closer to the source card rather than at the exact midpoint
         label_position_factor = 0.4
         label_point = QPointF(
-            source_pin.x() + (target_pin.x() - source_pin.x()) * label_position_factor,
-            source_pin.y() + (target_pin.y() - source_pin.y()) * label_position_factor
+            start.x() + (end.x() - start.x()) * label_position_factor,
+            start.y() + (end.y() - start.y()) * label_position_factor
         )
         
         # Convert to local coordinates since the label is now a child item
@@ -1365,6 +1379,133 @@ class RelationshipLine(QGraphicsLineItem):
         # Restore the font
         doc = self.label.document()
         doc.setDefaultFont(current_font)
+        
+        # Update bendpoint positions
+        self.update_bendpoint_positions()
+    
+    def update_path(self) -> None:
+        """Update the path with bendpoints."""
+        # Get base line points
+        start, end = self.get_base_line_points()
+        
+        # Create a path
+        path = QPainterPath()
+        path.moveTo(start)
+        
+        # Add bendpoints if they exist, otherwise it's a straight line
+        if self.bendpoints:
+            # Sort bendpoints by position for consistent curve
+            sorted_bendpoints = sorted(self.bendpoints, key=lambda bp: bp.position)
+            
+            if len(sorted_bendpoints) == 1:
+                # With just one bendpoint, create a smooth quadratic curve
+                bp_pos = sorted_bendpoints[0].pos()
+                scene_pos = self.mapToScene(bp_pos)
+                path.quadTo(scene_pos, end)
+            else:
+                # With multiple bendpoints, create a smooth curve through all points
+                prev_point = start
+                
+                for i, bendpoint in enumerate(sorted_bendpoints):
+                    bp_pos = bendpoint.pos()
+                    scene_pos = self.mapToScene(bp_pos)
+                    
+                    if i == 0:
+                        # First bendpoint - create curve from start to this point
+                        midpoint = QPointF(
+                            (prev_point.x() + scene_pos.x()) / 2,
+                            (prev_point.y() + scene_pos.y()) / 2
+                        )
+                        path.quadTo(prev_point, midpoint)
+                    else:
+                        # For subsequent bendpoints, create smooth curves between them
+                        prev_bp_pos = sorted_bendpoints[i-1].pos()
+                        prev_scene_pos = self.mapToScene(prev_bp_pos)
+                        
+                        # Create control point halfway between the points
+                        control_point = QPointF(
+                            (prev_scene_pos.x() + scene_pos.x()) / 2,
+                            (prev_scene_pos.y() + scene_pos.y()) / 2
+                        )
+                        path.quadTo(control_point, scene_pos)
+                    
+                    prev_point = scene_pos
+                
+                # Create final curve from last bendpoint to end
+                path.quadTo(prev_point, end)
+        else:
+            # End at the target with a straight line
+            path.lineTo(end)
+        
+        # Set the path
+        self.setPath(path)
+    
+    def update_bendpoint_positions(self) -> None:
+        """Update the positions of all bendpoints."""
+        for bendpoint in self.bendpoints:
+            bendpoint.update_position()
+    
+    def load_bendpoints(self) -> None:
+        """Load bendpoints from the database."""
+        # Get the primary relationship ID
+        relationship_id = self.relationships[0]['id']
+        
+        # Load bendpoints
+        new_bendpoints = load_bendpoints(self, relationship_id)
+        
+        # Add to the scene
+        scene = self.scene()
+        if scene:
+            for bendpoint in new_bendpoints:
+                scene.addItem(bendpoint)
+                self.bendpoints.append(bendpoint)
+    
+    def add_bendpoint(self, position: float) -> None:
+        """Add a bendpoint to the line.
+        
+        Args:
+            position: Relative position along the line (0-1)
+        """
+        # Check for minimum distance from existing bendpoints
+        for bp in self.bendpoints:
+            if abs(bp.position - position) < self.min_bendpoint_distance:
+                # Too close to an existing bendpoint
+                return
+        
+        # Create new bendpoint
+        bendpoint = BendPoint(self, position)
+        
+        # Add to scene
+        scene = self.scene()
+        if scene:
+            scene.addItem(bendpoint)
+            
+        # Add to list
+        self.bendpoints.append(bendpoint)
+        
+        # Save to database
+        bendpoint.save_to_database()
+        
+        # Update path
+        self.update_path()
+    
+    def remove_bendpoint(self, bendpoint: 'BendPoint') -> None:
+        """Remove a bendpoint from the line.
+        
+        Args:
+            bendpoint: The bendpoint to remove
+        """
+        if bendpoint in self.bendpoints:
+            # Remove from list
+            self.bendpoints.remove(bendpoint)
+            
+            # Remove from scene
+            scene = self.scene()
+            if scene:
+                scene.removeItem(bendpoint)
+            
+            # Update path
+            self.update_path()
     
     def contextMenuEvent(self, event: QGraphicsSceneContextMenuEvent) -> None:
         """Handle context menu events.
@@ -1375,6 +1516,8 @@ class RelationshipLine(QGraphicsLineItem):
         menu = QMenu()
         
         # Add actions
+        add_bendpoint_action = menu.addAction("Add Bendpoint")
+        menu.addSeparator()
         edit_action = menu.addAction("Edit Relationship")
         color_action = menu.addAction("Change Color")
         width_action = menu.addAction("Change Width")
@@ -1383,7 +1526,27 @@ class RelationshipLine(QGraphicsLineItem):
         # Show menu and handle actions
         action = menu.exec(event.screenPos())
         
-        if action == edit_action:
+        if action == add_bendpoint_action:
+            # Get mouse position relative to line
+            scene_pos = event.scenePos()
+            
+            # Get line start and end points
+            start, end = self.get_base_line_points()
+            
+            # Calculate relative position along the line
+            line_length = math.sqrt((end.x() - start.x())**2 + (end.y() - start.y())**2)
+            
+            # Project the point onto the line
+            t = ((scene_pos.x() - start.x()) * (end.x() - start.x()) + 
+                 (scene_pos.y() - start.y()) * (end.y() - start.y())) / (line_length**2)
+            
+            # Clamp t to [0, 1]
+            t = max(0, min(1, t))
+            
+            # Add bendpoint at this position
+            self.add_bendpoint(t)
+            
+        elif action == edit_action:
             # TODO: Implement relationship editing
             QMessageBox.information(None, "Not Implemented", "Relationship editing is not yet implemented.")
         elif action == color_action:
@@ -1420,7 +1583,7 @@ class RelationshipLine(QGraphicsLineItem):
             if reply == QMessageBox.StandardButton.Yes:
                 # Delete relationship from database
                 self.delete_relationship()
-        
+    
     def delete_relationship(self) -> None:
         """Delete this relationship from the database and remove it from the scene."""
         # Get the scene
@@ -1429,8 +1592,12 @@ class RelationshipLine(QGraphicsLineItem):
             return
             
         try:
-            # Delete from database
+            # Delete bendpoints first
             cursor = scene.db_conn.cursor()
+            cursor.execute("DELETE FROM relationship_bendpoints WHERE relationship_id = ?",
+                          (self.relationships[0]['id'],))
+            
+            # Delete relationship from database
             cursor.execute("DELETE FROM relationships WHERE id = ?", (self.relationships[0]['id'],))
             scene.db_conn.commit()
             
@@ -1461,7 +1628,6 @@ class RelationshipLine(QGraphicsLineItem):
                 "Error",
                 f"Failed to delete relationship: {str(e)}"
             )
-
 
 class StoryBoardScene(QGraphicsScene):
     """Custom graphics scene for the story board."""
