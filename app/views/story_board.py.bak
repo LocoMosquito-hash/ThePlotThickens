@@ -698,28 +698,7 @@ class CharacterCard(QGraphicsItemGroup):
             # Create the relationship
             self.create_relationship(target_id, selected_type)
     
-    def create_relationship(self, target_id: int, relationship_type: Dict[str, Any]) -> None:
-        """Create a relationship to another character.
-        
-        Args:
-            target_id: ID of the target character
-            relationship_type: Relationship type data
-        """
-        from app.db_sqlite import create_relationship
-        
-        # Get the scene and database connection
-        scene = self.scene()
-        if not scene or not hasattr(scene, 'db_conn'):
-            return
-        
-        # Create the relationship in the database
-        relationship_data = {
-            'relationship_type': relationship_type['name'],
-            'color': "#FF0000",  # Default color
-            'width': 6.0  # Thicker lines for better visibility but not excessive
-        }
-        
-        relationship_id = create_relationship(
+    def create_relationship(self, target_id: int, relationship_type: Dict[str, Any]) -> None:        """Create a relationship to another character.                Args:            target_id: ID of the target character            relationship_type: Relationship type data        """        from app.db_sqlite import create_relationship                # Get the scene and database connection        scene = self.scene()        if not scene or not hasattr(scene, 'db_conn'):            return                    # Create the relationship in the database        relationship_data = {            'relationship_type': relationship_type['name'],            'color': "#FF0000",  # Default color            'width': 6.0  # Moderately thick lines for better visibility        }                relationship_id = create_relationship(
             scene.db_conn,
             self._character_id,
             target_id,
@@ -752,7 +731,7 @@ class CharacterCard(QGraphicsItemGroup):
             inverse_data = {
                 'relationship_type': inverse_name,
                 'color': "#FF0000",  # Default color
-                'width': 6.0  # Thicker lines for better visibility but not excessive
+                'width': 32.0  # Much thicker lines for better visibility
             }
             
             # Ask user if they want to create the inverse relationship
@@ -1117,8 +1096,8 @@ class RelationshipLine(QGraphicsPathItem):
         primary_relationship = relationships[0]
         self.normal_color = QColor(primary_relationship['color']) if primary_relationship['color'] else QColor("#FF0000")
         self.hover_color = self.normal_color.lighter(130)  # Lighter version for hover
-        self.normal_width = float(primary_relationship['width']) if primary_relationship['width'] else 6.0  # Thicker lines but not excessive
-        self.hover_width = self.normal_width * 1.5  # Thicker on hover
+        self.normal_width = float(primary_relationship['width']) if primary_relationship['width'] else 32.0  # SUPER THICC lines as requested
+        self.hover_width = self.normal_width * 1.5  # Thicker on hover (reduced multiplier since lines are already thick)
         
         # Set initial pen
         self.setPen(QPen(self.normal_color, int(self.normal_width), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
@@ -1269,8 +1248,8 @@ class RelationshipLine(QGraphicsPathItem):
         
         # Create a stroker to make the path wider for hit detection
         stroker = QPainterPathStroker()
-        # Make hit area wider (3x the visual width) for better clickability
-        stroker.setWidth(self.pen().width() * 3)
+        # Make hit area extra wide (4x the visual width) for max clickability
+        stroker.setWidth(self.pen().width() * 4)
         
         # Create the wider path
         return stroker.createStroke(path)
@@ -1292,9 +1271,9 @@ class RelationshipLine(QGraphicsPathItem):
         # Draw a glow effect first (larger, semi-transparent line)
         glow_pen = QPen(self.pen())
         glow_color = QColor(self.pen().color())
-        glow_color.setAlpha(100)  # Semi-transparent glow
+        glow_color.setAlpha(120)  # Even more visible glow
         glow_pen.setColor(glow_color)
-        glow_pen.setWidth(int(self.pen().width() * 2))  # Double width for moderate glow effect
+        glow_pen.setWidth(int(self.pen().width() * 4))  # Quadruple width for maximum glow effect
         painter.setPen(glow_pen)
         painter.drawPath(self.path())
         
