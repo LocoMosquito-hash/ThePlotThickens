@@ -1345,13 +1345,51 @@ class RelationshipLine(QGraphicsPathItem):
         # Update path with bendpoints
         self.update_path()
         
-        # Calculate position for label (40% of the way from source to target)
-        # This places the label closer to the source card rather than at the exact midpoint
+        # Get the actual path for calculating label position
+        path = self.path()
+        
+        # Calculate position for label (40% of the way along the path)
         label_position_factor = 0.4
-        label_point = QPointF(
-            start.x() + (end.x() - start.x()) * label_position_factor,
-            start.y() + (end.y() - start.y()) * label_position_factor
-        )
+        
+        # Get point along the actual path, accounting for curves
+        if self.bendpoints:
+            # If we have bendpoints, calculate position along the path
+            path_length = path.length()
+            
+            # Find a good position for the label
+            # Try to avoid placing it too close to bendpoints
+            found_good_position = False
+            best_label_factor = label_position_factor
+            
+            # Try a few positions to find one not too close to a bendpoint
+            test_positions = [0.3, 0.4, 0.5, 0.25, 0.6]
+            min_distance_to_bendpoint = 50  # Minimum pixel distance from bendpoint
+            
+            for test_factor in test_positions:
+                test_point = path.pointAtPercent(test_factor)
+                
+                # Check distance to all bendpoints
+                too_close = False
+                for bendpoint in self.bendpoints:
+                    bp_pos = self.mapToScene(bendpoint.pos())
+                    distance = math.sqrt((test_point.x() - bp_pos.x())**2 + (test_point.y() - bp_pos.y())**2)
+                    if distance < min_distance_to_bendpoint:
+                        too_close = True
+                        break
+                
+                if not too_close:
+                    best_label_factor = test_factor
+                    found_good_position = True
+                    break
+            
+            # Get the label point using the best factor
+            label_point = path.pointAtPercent(best_label_factor)
+        else:
+            # For straight lines, use the original calculation
+            label_point = QPointF(
+                start.x() + (end.x() - start.x()) * label_position_factor,
+                start.y() + (end.y() - start.y()) * label_position_factor
+            )
         
         # Convert to local coordinates since the label is now a child item
         local_label_point = self.mapFromScene(label_point)
