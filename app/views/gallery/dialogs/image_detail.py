@@ -961,6 +961,9 @@ class ImageDetailDialog(QDialog):
         # Save window geometry
         self.saveWindowGeometry()
         
+        # Reload the thumbnails to reflect any changes made in the dialog
+        self.load_images()
+        
         # Continue with normal close event
         super().closeEvent(event)
         

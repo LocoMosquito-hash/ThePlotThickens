@@ -339,6 +339,16 @@ def create_tables(conn: sqlite3.Connection) -> None:
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_character_last_tagged_story_id ON character_last_tagged(story_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_character_last_tagged_character_id ON character_last_tagged(character_id)')
     
+    # Create indexes for better performance
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_images_story_id ON images(story_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_images_created_at ON images(created_at)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_image_character_tags_image_id ON image_character_tags(image_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_image_character_tags_character_id ON image_character_tags(character_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_quick_event_images_image_id ON quick_event_images(image_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_quick_event_images_quick_event_id ON quick_event_images(quick_event_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_quick_events_character_id ON quick_events(character_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_characters_story_id ON characters(story_id)')
+    
     conn.commit()
 
 
@@ -3312,3 +3322,128 @@ def delete_decision_option(conn: sqlite3.Connection, option_id: int) -> bool:
     
     conn.commit()
     return cursor.rowcount > 0
+
+def get_images_character_tags_batch(conn: sqlite3.Connection, image_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
+    """Get character tags for multiple images in a single query.
+    
+    Args:
+        conn: Database connection
+        image_ids: List of image IDs
+        
+    Returns:
+        Dictionary mapping image_id to list of character tag dictionaries
+    """
+    if not image_ids:
+        return {}
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Create placeholders for the IN clause
+        placeholders = ','.join('?' * len(image_ids))
+        
+        cursor.execute(f'''
+        SELECT t.*, c.name as character_name
+        FROM image_character_tags t
+        JOIN characters c ON t.character_id = c.id
+        WHERE t.image_id IN ({placeholders})
+        ORDER BY t.image_id, t.created_at
+        ''', image_ids)
+        
+        rows = cursor.fetchall()
+        
+        # Group by image_id
+        result = {}
+        for row in rows:
+            image_id = row['image_id']
+            if image_id not in result:
+                result[image_id] = []
+            result[image_id].append(dict(row))
+        
+        # Ensure all requested image_ids have an entry (even if empty)
+        for image_id in image_ids:
+            if image_id not in result:
+                result[image_id] = []
+        
+        return result
+    except sqlite3.Error as e:
+        print(f"Error getting batch image character tags: {e}")
+        return {image_id: [] for image_id in image_ids}
+
+
+def get_images_quick_events_batch(conn: sqlite3.Connection, image_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
+    """Get quick events for multiple images in a single query.
+    
+    Args:
+        conn: Database connection
+        image_ids: List of image IDs
+        
+    Returns:
+        Dictionary mapping image_id to list of quick event dictionaries
+    """
+    if not image_ids:
+        return {}
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Create placeholders for the IN clause
+        placeholders = ','.join('?' * len(image_ids))
+        
+        cursor.execute(f'''
+        SELECT qe.*, c.name as character_name, qei.note, qei.created_at as association_date, qei.image_id
+        FROM quick_events qe
+        LEFT JOIN characters c ON qe.character_id = c.id
+        JOIN quick_event_images qei ON qe.id = qei.quick_event_id
+        WHERE qei.image_id IN ({placeholders})
+        ORDER BY qei.image_id, qe.sequence_number, qe.created_at
+        ''', image_ids)
+        
+        rows = cursor.fetchall()
+        
+        # Group by image_id
+        result = {}
+        for row in rows:
+            image_id = row['image_id']
+            if image_id not in result:
+                result[image_id] = []
+            result[image_id].append(dict(row))
+        
+        # Ensure all requested image_ids have an entry (even if empty)
+        for image_id in image_ids:
+            if image_id not in result:
+                result[image_id] = []
+        
+        return result
+    except sqlite3.Error as e:
+        print(f"Error getting batch image quick events: {e}")
+        return {image_id: [] for image_id in image_ids}
+
+
+def get_character_image_counts_by_story(conn: sqlite3.Connection, story_id: int) -> Dict[int, int]:
+    """Get image counts for all characters in a story.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        
+    Returns:
+        Dictionary mapping character_id to image count
+    """
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        SELECT c.id as character_id, COUNT(DISTINCT t.image_id) as image_count
+        FROM characters c
+        LEFT JOIN image_character_tags t ON c.id = t.character_id
+        WHERE c.story_id = ?
+        GROUP BY c.id
+        ''', (story_id,))
+        
+        rows = cursor.fetchall()
+        
+        return {row['character_id']: row['image_count'] for row in rows}
+    except sqlite3.Error as e:
+        print(f"Error getting character image counts: {e}")
+        return {}

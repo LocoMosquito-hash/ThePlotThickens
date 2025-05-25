@@ -663,6 +663,22 @@ class MainWindow(QMainWindow):
             self.gallery.load_images()
             self.status_bar.showPermanentMessage("Gallery refreshed")
     
+    def refresh_gallery_incremental(self, image_id: int = None) -> None:
+        """Refresh gallery with incremental updates when possible.
+        
+        Args:
+            image_id: Optional specific image ID to refresh. If None, does full refresh.
+        """
+        if hasattr(self, 'gallery') and self.gallery:
+            if image_id is not None:
+                # Refresh only the specific image
+                self.gallery.refresh_single_image(image_id)
+                self.status_bar.showPermanentMessage(f"Image {image_id} refreshed")
+            else:
+                # Full refresh
+                self.gallery.load_images()
+                self.status_bar.showPermanentMessage("Gallery refreshed")
+    
     def refresh_timeline(self) -> None:
         """Refresh the timeline tab contents."""
         if hasattr(self, 'timeline') and self.timeline:
