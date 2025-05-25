@@ -20,7 +20,7 @@ from PyQt6.QtGui import QColor, QPen, QBrush, QPainterPath
 
 # Conditional imports to avoid circular imports
 if TYPE_CHECKING:
-    from app.views.story_board import RelationshipLine
+    from app.views.story_board_modular import RelationshipLine
 
 
 class BendPoint(QGraphicsEllipseItem):

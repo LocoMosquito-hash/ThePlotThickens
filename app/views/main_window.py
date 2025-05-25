@@ -22,7 +22,7 @@ from PyQt6.QtGui import QAction, QIcon, QTextCursor, QKeyEvent
 
 from app.widgets.enhanced_status_bar import EnhancedStatusBar
 from app.views.story_manager import StoryManagerWidget
-from app.views.story_board import StoryBoardWidget
+from app.views.story_board_modular import StoryBoardWidget
 from app.views.settings_dialog import SettingsDialog
 from app.views.gallery_widget import GalleryWidget
 from app.views.timeline_widget import TimelineWidget

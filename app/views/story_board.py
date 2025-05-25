@@ -7,6 +7,8 @@ Story Board widget for The Plot Thickens application.
 This module defines the widget for the story board visualization.
 """
 
+print("⚠️  WARNING: Loading OLD story_board.py module! This should have been replaced by story_board_modular!")
+
 import os
 import sys
 import json
@@ -39,7 +41,7 @@ from app.db_sqlite import (
 )
 
 # Import BendPoint and load_bendpoints function
-from app.views.relationship_bendpoints import BendPoint, load_bendpoints
+from app.views.story_board_modular.graphics_components import BendPoint, load_bendpoints
 
 
 def create_vertical_line() -> QFrame:
