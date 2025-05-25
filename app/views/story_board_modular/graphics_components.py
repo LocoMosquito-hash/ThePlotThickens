@@ -503,16 +503,8 @@ class CharacterCard(QGraphicsItemGroup):
         edit_action = menu.addAction("Edit Character")
         delete_action = menu.addAction("Delete Character")
         
-        # Add relationship submenu
-        relationship_menu = menu.addMenu("Add Relationship")
-        
-        # Get all characters in the scene
-        scene = self.scene()
-        if scene:
-            for character_id, card in scene.character_cards.items():
-                if character_id != self._character_id:
-                    target_action = relationship_menu.addAction(f"To: {card.character_data['name']}")
-                    target_action.setData(character_id)
+        # Add single relationship action instead of submenu
+        add_relationship_action = menu.addAction("Add Relationship")
         
         action = menu.exec(event.screenPos())
         
@@ -520,14 +512,11 @@ class CharacterCard(QGraphicsItemGroup):
             self.edit_character()
         elif action == delete_action:
             self.delete_character()
-        elif action and action.text().startswith("To: "):
-            # Get the target character ID
-            target_id = action.data()
-            target_card = scene.character_cards[target_id]
-            target_name = target_card.character_data['name']
-            
-            # Show relationship type selection dialog
-            self.show_relationship_dialog(target_id, target_name)
+        elif action == add_relationship_action:
+            # Start relationship mode in the scene
+            scene = self.scene()
+            if scene and hasattr(scene, 'start_relationship_mode'):
+                scene.start_relationship_mode(self)
     
     def edit_character(self) -> None:
         """Open the character edit dialog."""
@@ -556,99 +545,7 @@ class CharacterCard(QGraphicsItemGroup):
         # Show the dialog
         dialog.exec()
     
-    def show_relationship_dialog(self, target_id: int, target_name: str) -> None:
-        """Show a dialog to select the relationship type.
-        
-        Args:
-            target_id: ID of the target character
-            target_name: Name of the target character
-        """
-        # Get the scene and database connection
-        scene = self.scene()
-        if not scene or not hasattr(scene, 'db_conn'):
-            return
-        
-        # Get standard relationship types
-        standard_types = get_relationship_types(scene.db_conn)
-        
-        # Get previously used relationship types
-        used_types = get_used_relationship_types(scene.db_conn)
-        
-        # Create a combined list with used types at the top
-        relationship_items = []
-        
-        # Add used types first (if they exist)
-        if used_types:
-            relationship_items.extend(used_types)
-            relationship_items.append("---")  # Separator
-        
-        # Add standard types
-        relationship_items.extend([rt['name'] for rt in standard_types])
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_items = []
-        for item in relationship_items:
-            if item not in seen and item != "---":
-                seen.add(item)
-                unique_items.append(item)
-            elif item == "---" and unique_items:  # Only add separator if we have items before it
-                unique_items.append(item)
-        
-        # Create a custom dialog with autocomplete
-        dialog = QDialog()
-        dialog.setWindowTitle(f"Add Relationship to {target_name}")
-        
-        layout = QVBoxLayout(dialog)
-        
-        # Add label
-        label = QLabel(f"Select relationship type from {self.character_data['name']} to {target_name}:")
-        layout.addWidget(label)
-        
-        # Add combobox with autocomplete
-        combo = QComboBox()
-        combo.setEditable(True)
-        combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)  # Don't add items when typing
-        combo.addItems(unique_items)
-        combo.setCurrentIndex(-1)  # No selection by default
-        
-        # Enable autocomplete
-        combo.setCompleter(combo.completer())
-        combo.completer().setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        
-        layout.addWidget(combo)
-        
-        # Add buttons
-        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        button_box.accepted.connect(dialog.accept)
-        button_box.rejected.connect(dialog.reject)
-        layout.addWidget(button_box)
-        
-        # Show dialog
-        if dialog.exec():
-            relationship_type = combo.currentText()
-            
-            # Skip if empty or separator
-            if not relationship_type or relationship_type == "---":
-                return
-            
-            # Find the selected relationship type in standard types
-            selected_type = None
-            for rt in standard_types:
-                if rt['name'] == relationship_type:
-                    selected_type = rt
-                    break
-            
-            # If the relationship type doesn't exist in standard types, create a custom one
-            if not selected_type:
-                selected_type = {
-                    'id': -1,  # Temporary ID for custom type
-                    'name': relationship_type,
-                    'has_inverse': False
-                }
-            
-            # Create the relationship
-            self.create_relationship(target_id, selected_type)
+
     
     def create_relationship(self, target_id: int, relationship_type: Dict[str, Any]) -> None:
         """Create a relationship to another character.
