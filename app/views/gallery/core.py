@@ -67,6 +67,9 @@ from app.db_sqlite import (
 # Import image recognition utility
 from app.utils.image_recognition_util import ImageRecognitionUtil
 
+# Import icon manager for Tabler icons
+from app.utils.icons import icon_manager
+
 
 class GalleryWidget(QWidget):
     """Widget for managing and displaying a story's image gallery."""
@@ -132,11 +135,13 @@ class GalleryWidget(QWidget):
         
         # Import image button
         import_btn = QPushButton("Import Image")
+        import_btn.setIcon(icon_manager.get_icon("upload"))
         import_btn.clicked.connect(self.import_image)
         control_layout.addWidget(import_btn)
         
         # Paste image button
         paste_btn = QPushButton("Paste from Clipboard")
+        paste_btn.setIcon(icon_manager.get_icon("clipboard"))
         paste_btn.clicked.connect(self.paste_image)
         control_layout.addWidget(paste_btn)
         
@@ -148,12 +153,14 @@ class GalleryWidget(QWidget):
         
         # Add create decision point button
         create_decision_btn = QPushButton("Create Decision Point")
+        create_decision_btn.setIcon(icon_manager.get_icon("git-branch"))
         create_decision_btn.clicked.connect(self.create_decision_point)
         create_decision_btn.setToolTip("Create a new decision point")
         control_layout.addWidget(create_decision_btn)
         
         # Add create scene button
         create_scene_btn = QPushButton("Create Scene")
+        create_scene_btn.setIcon(icon_manager.get_icon("movie"))
         create_scene_btn.clicked.connect(self.create_scene)
         create_scene_btn.setToolTip("Create a new scene")
         control_layout.addWidget(create_scene_btn)
@@ -178,16 +185,19 @@ class GalleryWidget(QWidget):
         
         # Add filter button
         filter_btn = QPushButton("Filters")
+        filter_btn.setIcon(icon_manager.get_icon("filter"))
         filter_btn.clicked.connect(self.show_filters_dialog)
         control_layout.addWidget(filter_btn)
         
         # Add clear filters button
         clear_filters_btn = QPushButton("Clear Filters")
+        clear_filters_btn.setIcon(icon_manager.get_icon("filter-off"))
         clear_filters_btn.clicked.connect(self.clear_filters)
         control_layout.addWidget(clear_filters_btn)
         
         # Add rebuild recognition database button
         rebuild_db_btn = QPushButton("Rebuild Recognition DB")
+        rebuild_db_btn.setIcon(icon_manager.get_icon("database"))
         rebuild_db_btn.clicked.connect(self.rebuild_recognition_database)
         control_layout.addWidget(rebuild_db_btn)
         
@@ -212,6 +222,7 @@ class GalleryWidget(QWidget):
         
         # Move to scene button
         move_to_scene_btn = QPushButton("Move to Scene...")
+        move_to_scene_btn.setIcon(icon_manager.get_icon("folder-plus"))
         move_to_scene_btn.clicked.connect(self.on_move_to_scene)
         batch_buttons_layout.addWidget(move_to_scene_btn)
         
