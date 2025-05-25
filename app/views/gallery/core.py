@@ -59,7 +59,9 @@ from app.db_sqlite import (
     process_quick_event_character_tags, get_quick_event_scenes,
     add_image_to_scene, remove_image_from_scene, get_image_scenes,
     update_character_last_tagged, get_characters_by_last_tagged,
-    get_story_folder_paths, ensure_story_folders_exist
+    get_story_folder_paths, ensure_story_folders_exist,
+    get_images_character_tags_batch, get_images_quick_events_batch,
+    get_character_image_counts_by_story
 )
 
 # Import image recognition utility
@@ -90,6 +92,11 @@ class GalleryWidget(QWidget):
         self.thumbnails = {}  # Map of image_id -> ThumbnailWidget
         self.images = []      # List of image data dicts
         self.pixmap_cache = {}  # Cache of image_id -> QPixmap
+        
+        # Cached data for performance
+        self.story_characters = {}  # Cache of story characters
+        self.image_character_tags_cache = {}  # Cache of image character tags
+        self.image_quick_events_cache = {}  # Cache of image quick events
         
         # Selection state
         self.selected_images = set()  # Set of selected image IDs
@@ -405,6 +412,31 @@ class GalleryWidget(QWidget):
             # No quick events
             thumbnail.set_quick_event_text("")
     
+    def _set_thumbnail_quick_event_text_cached(self, thumbnail: ThumbnailWidget, image_id: int) -> None:
+        """Set quick event text on a thumbnail using cached data.
+        
+        Args:
+            thumbnail: Thumbnail widget to update
+            image_id: ID of the image
+        """
+        # Get quick events for this image from cache
+        quick_events = self.image_quick_events_cache.get(image_id, [])
+        
+        if quick_events:
+            # Use the first quick event as the thumbnail text
+            quick_event = quick_events[0]
+            
+            # Format the text using cached characters
+            from app.utils.character_references import convert_char_refs_to_mentions
+            characters = list(self.story_characters.values())
+            display_text = convert_char_refs_to_mentions(quick_event["text"], characters)
+            
+            # Set on the thumbnail
+            thumbnail.set_quick_event_text(display_text)
+        else:
+            # No quick events
+            thumbnail.set_quick_event_text("")
+    
     def clear_thumbnails(self) -> None:
         """Clear all thumbnails from the display."""
         # First, delete all thumbnail widgets
@@ -420,6 +452,43 @@ class GalleryWidget(QWidget):
         
         # Clear selected images set
         self.selected_images.clear()
+    
+    def clear_thumbnails_preserve_cache(self) -> None:
+        """Clear thumbnails but preserve data caches for performance."""
+        # First, delete all thumbnail widgets
+        for thumbnail in self.thumbnails.values():
+            # Remove from layout
+            self.thumbnails_layout.removeWidget(thumbnail)
+            # Delete the widget
+            thumbnail.deleteLater()
+        
+        # Clear the dictionary but preserve caches
+        self.thumbnails.clear()
+        # Don't clear pixmap_cache, story_characters, image_character_tags_cache, image_quick_events_cache
+        
+        # Clear selected images set
+        self.selected_images.clear()
+    
+    def refresh_single_image(self, image_id: int) -> None:
+        """Refresh a single image's data and thumbnail.
+        
+        Args:
+            image_id: ID of the image to refresh
+        """
+        # Update caches for this specific image
+        self.image_character_tags_cache[image_id] = get_image_character_tags(self.db_conn, image_id)
+        self.image_quick_events_cache[image_id] = get_image_quick_events(self.db_conn, image_id)
+        
+        # Update thumbnail if it exists
+        if image_id in self.thumbnails:
+            thumbnail = self.thumbnails[image_id]
+            self._set_thumbnail_quick_event_text_cached(thumbnail, image_id)
+            
+            # Update thumbnail visibility
+            if self.show_nsfw:
+                self.set_thumbnail_nsfw(thumbnail)
+            else:
+                self.set_thumbnail_normal(thumbnail, image_id)
     
     def set_story(self, story_id: int, story_data: Dict[str, Any]) -> None:
         """Set the story to display in the gallery.
@@ -478,6 +547,9 @@ class GalleryWidget(QWidget):
         # Store images
         self.images = images
         
+        # Pre-load all data in batch for better performance
+        self._preload_gallery_data(images)
+        
         # Display images based on grouping option
         if self.scene_grouping:
             self._display_images_with_scene_grouping(images)
@@ -486,6 +558,26 @@ class GalleryWidget(QWidget):
         
         # Update filter status
         self.update_filter_status()
+    
+    def _preload_gallery_data(self, images: List[Dict[str, Any]]) -> None:
+        """Pre-load all data needed for gallery display in batch queries.
+        
+        Args:
+            images: List of image data dictionaries
+        """
+        if not images:
+            return
+        
+        image_ids = [img["id"] for img in images]
+        
+        # Load story characters once
+        self.story_characters = {char["id"]: char for char in get_story_characters(self.db_conn, self.story_id)}
+        
+        # Batch load character tags for all images
+        self.image_character_tags_cache = get_images_character_tags_batch(self.db_conn, image_ids)
+        
+        # Batch load quick events for all images
+        self.image_quick_events_cache = get_images_quick_events_batch(self.db_conn, image_ids)
     
     def _display_images_classic_view(self, images: List[Dict[str, Any]]) -> None:
         """Display images in a standard grid layout without scene grouping.
@@ -502,8 +594,8 @@ class GalleryWidget(QWidget):
         if self.character_filters:
             # We have filters, so we need to check each image
             for image in images:
-                # Get character tags for this image
-                tags = get_image_character_tags(self.db_conn, image["id"])
+                # Get character tags for this image from cache
+                tags = self.image_character_tags_cache.get(image["id"], [])
                 character_ids = set(tag["character_id"] for tag in tags)
                 
                 # Check if this image should be included
@@ -550,8 +642,8 @@ class GalleryWidget(QWidget):
             # Add to thumbnails dictionary
             self.thumbnails[image["id"]] = thumbnail
             
-            # Set quick event text
-            self._set_thumbnail_quick_event_text(thumbnail, image["id"])
+            # Set quick event text using cached data
+            self._set_thumbnail_quick_event_text_cached(thumbnail, image["id"])
             
             # Increment column
             current_col += 1
@@ -791,7 +883,7 @@ class GalleryWidget(QWidget):
             thumbnail.checkbox_toggled.connect(self.on_thumbnail_checkbox_toggled)
             
             # Add quick event text if any
-            self._set_thumbnail_quick_event_text(thumbnail, image_id)
+            self._set_thumbnail_quick_event_text_cached(thumbnail, image_id)
             
             # Add to thumbnails dictionary
             self.thumbnails[image_id] = thumbnail
@@ -1391,8 +1483,8 @@ class GalleryWidget(QWidget):
             
             dialog.exec()
             
-            # Reload the thumbnails to reflect any changes made in the dialog
-            self.load_images()
+            # Use incremental refresh instead of full reload for better performance
+            self.refresh_single_image(image_id)
             
         except Exception as e:
             self.show_error("Error", f"An error occurred: {str(e)}")
