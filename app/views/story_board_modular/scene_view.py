@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional
 
 from PyQt6.QtWidgets import (
     QGraphicsScene, QGraphicsView, QGraphicsSceneMouseEvent, QGraphicsSceneContextMenuEvent,
-    QGraphicsTextItem, QGraphicsRectItem, QMenu
+    QGraphicsTextItem, QGraphicsRectItem, QMenu, QDialog
 )
 from PyQt6.QtCore import Qt, QPointF, QRectF, pyqtSignal, QTimer
 from PyQt6.QtGui import (
@@ -61,6 +61,10 @@ class StoryBoardScene(QGraphicsScene):
         # Selection mode flags
         self._in_multi_selection = False
         
+        # Relationship addition state
+        self.relationship_mode = False
+        self.relationship_source_card = None
+        
         # Grid snapping settings
         self.grid_snap_enabled = False
         self.grid_size = 50
@@ -68,6 +72,9 @@ class StoryBoardScene(QGraphicsScene):
         
         # Set scene size
         self.setSceneRect(0, 0, 10000, 10000)
+        
+        # Enable key events for the scene
+        self.setFocusOnTouch(True)
         
         # Connect signals
         self.selectionChanged.connect(self.on_qt_selection_changed)
@@ -184,6 +191,136 @@ class StoryBoardScene(QGraphicsScene):
         # Ensure selected bendpoints are always visible
         for bendpoint in selected_bendpoints:
             bendpoint.setVisible(True)
+    
+    def start_relationship_mode(self, source_card: CharacterCard) -> None:
+        """Start relationship addition mode.
+        
+        Args:
+            source_card: The character card that initiated the relationship
+        """
+        self.relationship_mode = True
+        self.relationship_source_card = source_card
+        
+        # Update status bar
+        self.update_status_message("Select another character to add a relationship")
+        
+        # Visual feedback for the source card
+        source_card.setZValue(10)  # Bring to front
+        
+        # Optionally add a visual indicator (like a glow effect)
+        self._add_relationship_mode_visual_feedback(source_card)
+    
+    def cancel_relationship_mode(self) -> None:
+        """Cancel relationship addition mode."""
+        if self.relationship_mode and self.relationship_source_card:
+            # Remove visual feedback
+            self._remove_relationship_mode_visual_feedback(self.relationship_source_card)
+            self.relationship_source_card.setZValue(0)  # Reset z-value
+        
+        self.relationship_mode = False
+        self.relationship_source_card = None
+        
+        # Update status bar
+        self.update_status_message("Relationship addition cancelled")
+    
+    def handle_character_click_in_relationship_mode(self, target_card: CharacterCard) -> None:
+        """Handle character click when in relationship mode.
+        
+        Args:
+            target_card: The character card that was clicked
+        """
+        if not self.relationship_mode or not self.relationship_source_card:
+            return
+        
+        # Prevent self-relationships
+        if target_card.character_id == self.relationship_source_card.character_id:
+            self.update_status_message("Cannot create relationship with the same character")
+            return
+        
+        # Get character data
+        source_id = self.relationship_source_card.character_id
+        source_name = self.relationship_source_card.character_data['name']
+        target_id = target_card.character_id
+        target_name = target_card.character_data['name']
+        
+        # Clean up relationship mode
+        self.cancel_relationship_mode()
+        
+        # Show the relationship details dialog directly
+        self.show_relationship_details_dialog(source_id, source_name, target_id, target_name)
+    
+    def show_relationship_details_dialog(self, source_id: int, source_name: str, 
+                                       target_id: int, target_name: str) -> None:
+        """Show the relationship details dialog.
+        
+        Args:
+            source_id: ID of the source character
+            source_name: Name of the source character
+            target_id: ID of the target character
+            target_name: Name of the target character
+        """
+        from app.views.relationship_details import RelationshipDetailsDialog
+        
+        # Get the parent widget (StoryBoardWidget)
+        parent_widget = self.views()[0].parent() if self.views() else None
+        
+        # Create and show the dialog
+        dialog = RelationshipDetailsDialog(
+            self.db_conn,
+            source_id,
+            source_name,
+            target_id,
+            target_name,
+            parent_widget
+        )
+        
+        # Show the dialog (modal)
+        result = dialog.exec()
+        
+        if result == dialog.DialogCode.Accepted:
+            # Get the selected relationship types
+            forward_rel, backward_rel = dialog.get_selected_relationships()
+            
+            # Refresh the story board to show the new relationships
+            if parent_widget and hasattr(parent_widget, 'refresh_board'):
+                parent_widget.refresh_board()
+            
+            self.update_status_message(f"Relationship added between {source_name} and {target_name}")
+        else:
+            self.update_status_message("Relationship addition cancelled")
+    
+    def update_status_message(self, message: str) -> None:
+        """Update the status bar message.
+        
+        Args:
+            message: Message to display
+        """
+        # Find the main window and update its status bar
+        parent = self.parent()
+        while parent and not hasattr(parent, 'statusBar'):
+            parent = parent.parent()
+        
+        if parent and hasattr(parent, 'statusBar'):
+            parent.statusBar().showMessage(message, 3000)  # Show for 3 seconds
+    
+    def _add_relationship_mode_visual_feedback(self, card: CharacterCard) -> None:
+        """Add visual feedback for relationship mode.
+        
+        Args:
+            card: Character card to add feedback to
+        """
+        # Add a subtle glow effect or border to indicate the source card
+        # For now, we'll just use the existing selection visual feedback
+        card.setSelected(True)
+    
+    def _remove_relationship_mode_visual_feedback(self, card: CharacterCard) -> None:
+        """Remove visual feedback for relationship mode.
+        
+        Args:
+            card: Character card to remove feedback from
+        """
+        # Remove the visual feedback
+        card.setSelected(False)
     
     def set_grid_snap(self, enabled: bool) -> None:
         """Enable or disable grid snapping.
@@ -663,6 +800,26 @@ class StoryBoardScene(QGraphicsScene):
         # Check if we clicked on an item
         clicked_item = self.itemAt(pos, QTransform())
         
+        # Handle relationship mode first
+        if self.relationship_mode:
+            # Check if we clicked on a character card
+            if clicked_item and (isinstance(clicked_item, CharacterCard) or 
+                          (clicked_item.parentItem() and isinstance(clicked_item.parentItem(), CharacterCard))):
+                # Get the card itself
+                card = clicked_item if isinstance(clicked_item, CharacterCard) else clicked_item.parentItem()
+                
+                # Verify click is within bounds
+                local_pos = card.mapFromScene(pos)
+                if QRectF(0, 0, CARD_WIDTH, CARD_HEIGHT).contains(local_pos):
+                    # Handle the character click in relationship mode
+                    self.handle_character_click_in_relationship_mode(card)
+                    event.accept()
+                    return
+            else:
+                # Clicked on empty space or other item - cancel relationship mode
+                self.cancel_relationship_mode()
+                # Continue with normal processing
+        
         # Special handling for Ctrl+Click multi-selection
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             # Set a flag to indicate we're in multi-selection mode
@@ -710,6 +867,21 @@ class StoryBoardScene(QGraphicsScene):
         
         # Ensure selection visuals are updated
         QTimer.singleShot(0, self._enforce_selection_visibility)
+    
+    def keyPressEvent(self, event) -> None:
+        """Handle key press events.
+        
+        Args:
+            event: Key press event
+        """
+        # Handle ESC key to cancel relationship mode
+        if event.key() == Qt.Key.Key_Escape and self.relationship_mode:
+            self.cancel_relationship_mode()
+            event.accept()
+            return
+        
+        # For all other keys, use standard behavior
+        super().keyPressEvent(event)
     
     def _finish_multi_selection(self) -> None:
         """Finish multi-selection mode and clean up."""
@@ -794,6 +966,9 @@ class StoryBoardView(QGraphicsView):
         self.min_zoom = 0.1
         self.max_zoom = 4.0
         self.zoom_factor = 1.25
+        
+        # Enable focus for key events
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         
         # Set scene rect to be large enough to accommodate all character positions
         self.setSceneRect(0, 0, 10000, 10000)
