@@ -225,15 +225,16 @@ class GalleryWidget(QWidget):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         
-        # Create widget to hold all thumbnails
+        # Create the thumbnails layout (grid layout for thumbnails)
+        self.thumbnails_layout = QGridLayout()
+        self.thumbnails_layout.setSpacing(10)
+        self.thumbnails_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        # Create a widget to hold the thumbnails layout
         self.thumbnails_widget = QWidget()
+        self.thumbnails_widget.setLayout(self.thumbnails_layout)
         
-        # Create grid layout for thumbnails
-        self.thumbnails_layout = QGridLayout(self.thumbnails_widget)
-        self.thumbnails_layout.setHorizontalSpacing(10)
-        self.thumbnails_layout.setVerticalSpacing(10)
-        
-        # Add thumbnails widget to scroll area
+        # Add to scroll area
         self.scroll_area.setWidget(self.thumbnails_widget)
         
         # Add scroll area to main layout
@@ -819,6 +820,7 @@ class GalleryWidget(QWidget):
                 # Add a separator for this scene
                 separator = SeparatorWidget(scene_data['title'])
                 self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
+                
                 row += 1
                 
                 # Only proceed if there are images to display
@@ -837,6 +839,7 @@ class GalleryWidget(QWidget):
                     # Add separator for ungrouped images
                     separator = SeparatorWidget("Ungrouped")
                     self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
+                    
                     row += 1
                     
                     # Display ungrouped images and get the next row
@@ -893,7 +896,7 @@ class GalleryWidget(QWidget):
         
         # Return the next row after the last one we used
         return current_row + ((len(images) - 1) // cols) + 1
-        
+    
     def _get_image_thumbnail_pixmap(self, image: Dict[str, Any]) -> QPixmap:
         """Get the thumbnail pixmap for an image.
         

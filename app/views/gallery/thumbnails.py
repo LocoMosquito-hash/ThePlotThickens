@@ -220,7 +220,7 @@ class SeparatorWidget(QFrame):
         """
         super().__init__(parent)
         
-        # Visual styling
+        # Visual styling with more robust CSS
         self.setFrameShape(QFrame.Shape.Box)
         self.setLineWidth(2)
         self.setStyleSheet("""
@@ -230,19 +230,29 @@ class SeparatorWidget(QFrame):
                 background-color: #333;
                 margin-top: 10px;
                 margin-bottom: 5px;
+                min-height: 40px;
+                max-height: 50px;
             }
         """)
         
         # Layout
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(10, 5, 10, 5)
+        self.layout.setContentsMargins(10, 8, 10, 8)
         
-        # Title label
+        # Title label with better styling
         self.title_label = QLabel(title)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.title_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
+        self.title_label.setStyleSheet("""
+            color: white; 
+            font-size: 14px; 
+            font-weight: bold;
+            min-height: 20px;
+        """)
         self.layout.addWidget(self.title_label)
         
-        # Set size policy - Expanding horizontally, fixed vertically
+        # Set size policy - Expanding horizontally, Fixed vertically
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(40) 
+        
+        # Use a more conservative height setting
+        self.setMinimumHeight(40)
+        self.setMaximumHeight(50) 
