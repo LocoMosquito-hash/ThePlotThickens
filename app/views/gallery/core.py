@@ -43,6 +43,7 @@ from app.views.gallery.dialogs.filter_dialog import GalleryFilterDialog
 from app.views.gallery.dialogs.quick_event_dialog import (
     QuickEventSelectionDialog, QuickEventEditor
 )
+from app.views.gallery.dialogs.batch_character_tagging import BatchCharacterTaggingDialog
 from app.views.gallery.character.widgets import (
     CharacterListWidget, OnSceneCharacterListWidget
 )
@@ -225,6 +226,12 @@ class GalleryWidget(QWidget):
         move_to_scene_btn.setIcon(icon_manager.get_icon("folder-plus"))
         move_to_scene_btn.clicked.connect(self.on_move_to_scene)
         batch_buttons_layout.addWidget(move_to_scene_btn)
+        
+        # Batch character tagging button
+        batch_tag_btn = QPushButton("Batch Tag Characters...")
+        batch_tag_btn.setIcon(icon_manager.get_icon("users"))
+        batch_tag_btn.clicked.connect(self.on_batch_character_tagging)
+        batch_buttons_layout.addWidget(batch_tag_btn)
         
         batch_buttons_layout.addStretch()
         batch_layout.addLayout(batch_buttons_layout)
@@ -2007,6 +2014,28 @@ class GalleryWidget(QWidget):
             
             # Reload images to reflect the changes
             self.load_images()
+    
+    def on_batch_character_tagging(self) -> None:
+        """Handle batch character tagging action."""
+        # Check if any images are selected
+        if not self.selected_images:
+            self.show_error("No Images Selected", "Please select images to batch tag characters")
+            return
+        
+        # Create and show the batch character tagging dialog
+        dialog = BatchCharacterTaggingDialog(
+            self.db_conn, 
+            self.story_id, 
+            self.selected_images.copy(),  # Pass a copy of the set
+            self
+        )
+        
+        # Show the dialog
+        dialog.exec()
+        
+        # After the dialog closes, refresh the gallery to reflect any changes
+        # This will apply any active filters as well
+        self.load_images()
     
     def get_on_scene_characters(self) -> List[Dict[str, Any]]:
         """Get a list of characters that appear in the active scene.
