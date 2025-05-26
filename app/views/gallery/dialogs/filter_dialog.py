@@ -52,7 +52,7 @@ class GalleryFilterDialog(QDialog):
         self.context_filters = []
         
         self.setWindowTitle("Gallery Filters")
-        self.resize(600, 400)
+        self.resize(1000, 700)
         
         self.init_ui()
         self.load_characters()
