@@ -335,9 +335,34 @@ def create_tables(conn: sqlite3.Connection) -> None:
     )
     ''')
     
+    # Create image_contexts table (global context presets)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS image_contexts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        name TEXT NOT NULL UNIQUE
+    )
+    ''')
+    
+    # Create image_context_tags table (many-to-many relationship between images and contexts)
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS image_context_tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        image_id INTEGER NOT NULL,
+        context_id INTEGER NOT NULL,
+        FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE CASCADE,
+        FOREIGN KEY (context_id) REFERENCES image_contexts (id) ON DELETE CASCADE,
+        UNIQUE(image_id, context_id)
+    )
+    ''')
+    
     # Create indexes for efficient querying
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_character_last_tagged_story_id ON character_last_tagged(story_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_character_last_tagged_character_id ON character_last_tagged(character_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_image_context_tags_image_id ON image_context_tags(image_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_image_context_tags_context_id ON image_context_tags(context_id)')
     
     # Create indexes for better performance
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_images_story_id ON images(story_id)')
@@ -3430,20 +3455,235 @@ def get_character_image_counts_by_story(conn: sqlite3.Connection, story_id: int)
     Returns:
         Dictionary mapping character_id to image count
     """
-    try:
-        cursor = conn.cursor()
-        
-        cursor.execute('''
+    cursor = conn.cursor()
+    cursor.execute(
+        """
         SELECT c.id as character_id, COUNT(DISTINCT t.image_id) as image_count
         FROM characters c
         LEFT JOIN image_character_tags t ON c.id = t.character_id
-        WHERE c.story_id = ?
+        LEFT JOIN images i ON t.image_id = i.id
+        WHERE c.story_id = ? AND (i.story_id = ? OR i.story_id IS NULL)
         GROUP BY c.id
-        ''', (story_id,))
+        """,
+        (story_id, story_id))
+    
+    return {row["id"]: row["image_count"] for row in cursor.fetchall()}
+
+
+# ============================================================================
+# IMAGE CONTEXT FUNCTIONS
+# ============================================================================
+
+def get_all_image_contexts(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+    """Get all image contexts (global).
+    
+    Args:
+        conn: Database connection
         
-        rows = cursor.fetchall()
+    Returns:
+        List of context dictionaries
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT * FROM image_contexts
+        ORDER BY name COLLATE NOCASE
+        ''')
         
-        return {row['character_id']: row['image_count'] for row in rows}
+        return [dict(row) for row in cursor.fetchall()]
     except sqlite3.Error as e:
-        print(f"Error getting character image counts: {e}")
-        return {}
+        print(f"Error getting image contexts: {e}")
+        return []
+
+
+def create_image_context(conn: sqlite3.Connection, name: str) -> int:
+    """Create a new image context.
+    
+    Args:
+        conn: Database connection
+        name: Name of the context (will be capitalized)
+        
+    Returns:
+        ID of the created context or None if failed
+    """
+    try:
+        # Capitalize first letter
+        capitalized_name = name.strip().capitalize()
+        
+        cursor = conn.cursor()
+        cursor.execute('''
+        INSERT INTO image_contexts (name, created_at, updated_at)
+        VALUES (?, datetime('now'), datetime('now'))
+        ''', (capitalized_name,))
+        
+        conn.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        # Context already exists
+        print(f"Context '{capitalized_name}' already exists")
+        return None
+    except sqlite3.Error as e:
+        print(f"Error creating image context: {e}")
+        return None
+
+
+def update_image_context(conn: sqlite3.Connection, context_id: int, name: str) -> bool:
+    """Update an image context name.
+    
+    Args:
+        conn: Database connection
+        context_id: ID of the context to update
+        name: New name for the context (will be capitalized)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Capitalize first letter
+        capitalized_name = name.strip().capitalize()
+        
+        cursor = conn.cursor()
+        cursor.execute('''
+        UPDATE image_contexts 
+        SET name = ?, updated_at = datetime('now')
+        WHERE id = ?
+        ''', (capitalized_name, context_id))
+        
+        conn.commit()
+        return cursor.rowcount > 0
+    except sqlite3.IntegrityError:
+        # Context name already exists
+        print(f"Context '{capitalized_name}' already exists")
+        return False
+    except sqlite3.Error as e:
+        print(f"Error updating image context: {e}")
+        return False
+
+
+def delete_image_context(conn: sqlite3.Connection, context_id: int) -> bool:
+    """Delete an image context and all its associations.
+    
+    Args:
+        conn: Database connection
+        context_id: ID of the context to delete
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Delete the context (cascade will handle image_context_tags)
+        cursor.execute('''
+        DELETE FROM image_contexts
+        WHERE id = ?
+        ''', (context_id,))
+        
+        conn.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error deleting image context: {e}")
+        return False
+
+
+def add_context_to_image(conn: sqlite3.Connection, image_id: int, context_id: int) -> bool:
+    """Add a context tag to an image.
+    
+    Args:
+        conn: Database connection
+        image_id: ID of the image
+        context_id: ID of the context
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+        INSERT INTO image_context_tags (image_id, context_id, created_at)
+        VALUES (?, ?, datetime('now'))
+        ''', (image_id, context_id))
+        
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        # Association already exists
+        return True  # Consider this a success
+    except sqlite3.Error as e:
+        print(f"Error adding context to image: {e}")
+        return False
+
+
+def remove_context_from_image(conn: sqlite3.Connection, image_id: int, context_id: int) -> bool:
+    """Remove a context tag from an image.
+    
+    Args:
+        conn: Database connection
+        image_id: ID of the image
+        context_id: ID of the context
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+        DELETE FROM image_context_tags
+        WHERE image_id = ? AND context_id = ?
+        ''', (image_id, context_id))
+        
+        conn.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error removing context from image: {e}")
+        return False
+
+
+def get_image_contexts(conn: sqlite3.Connection, image_id: int) -> List[Dict[str, Any]]:
+    """Get all contexts for an image.
+    
+    Args:
+        conn: Database connection
+        image_id: ID of the image
+        
+    Returns:
+        List of context dictionaries
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT c.*, t.created_at as tagged_at
+        FROM image_contexts c
+        JOIN image_context_tags t ON c.id = t.context_id
+        WHERE t.image_id = ?
+        ORDER BY c.name COLLATE NOCASE
+        ''', (image_id,))
+        
+        return [dict(row) for row in cursor.fetchall()]
+    except sqlite3.Error as e:
+        print(f"Error getting image contexts: {e}")
+        return []
+
+
+def search_image_contexts(conn: sqlite3.Connection, search_term: str) -> List[Dict[str, Any]]:
+    """Search image contexts by name (case-insensitive).
+    
+    Args:
+        conn: Database connection
+        search_term: Search term to filter contexts
+        
+    Returns:
+        List of matching context dictionaries
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT * FROM image_contexts
+        WHERE name LIKE ? COLLATE NOCASE
+        ORDER BY name COLLATE NOCASE
+        ''', (f'%{search_term}%',))
+        
+        return [dict(row) for row in cursor.fetchall()]
+    except sqlite3.Error as e:
+        print(f"Error searching image contexts: {e}")
+        return []

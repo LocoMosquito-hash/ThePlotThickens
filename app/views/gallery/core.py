@@ -44,6 +44,7 @@ from app.views.gallery.dialogs.quick_event_dialog import (
     QuickEventSelectionDialog, QuickEventEditor
 )
 from app.views.gallery.dialogs.batch_character_tagging import BatchCharacterTaggingDialog
+from app.views.gallery.dialogs.batch_context_tagging import BatchContextTaggingDialog
 from app.views.gallery.character.widgets import (
     CharacterListWidget, OnSceneCharacterListWidget
 )
@@ -232,6 +233,12 @@ class GalleryWidget(QWidget):
         batch_tag_btn.setIcon(icon_manager.get_icon("users"))
         batch_tag_btn.clicked.connect(self.on_batch_character_tagging)
         batch_buttons_layout.addWidget(batch_tag_btn)
+        
+        # Batch context tagging button
+        batch_context_btn = QPushButton("Batch Tag Contexts...")
+        batch_context_btn.setIcon(icon_manager.get_icon("tag"))
+        batch_context_btn.clicked.connect(self.on_batch_context_tagging)
+        batch_buttons_layout.addWidget(batch_context_btn)
         
         batch_buttons_layout.addStretch()
         batch_layout.addLayout(batch_buttons_layout)
@@ -2026,6 +2033,27 @@ class GalleryWidget(QWidget):
         dialog = BatchCharacterTaggingDialog(
             self.db_conn, 
             self.story_id, 
+            self.selected_images.copy(),  # Pass a copy of the set
+            self
+        )
+        
+        # Show the dialog
+        dialog.exec()
+        
+        # After the dialog closes, refresh the gallery to reflect any changes
+        # Show a progress indicator during refresh
+        self.refresh_gallery_with_progress()
+    
+    def on_batch_context_tagging(self) -> None:
+        """Handle batch context tagging action."""
+        # Check if any images are selected
+        if not self.selected_images:
+            self.show_error("No Images Selected", "Please select images to batch tag contexts")
+            return
+        
+        # Create and show the batch context tagging dialog
+        dialog = BatchContextTaggingDialog(
+            self.db_conn, 
             self.selected_images.copy(),  # Pass a copy of the set
             self
         )
