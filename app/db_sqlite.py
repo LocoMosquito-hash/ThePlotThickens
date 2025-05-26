@@ -3467,7 +3467,7 @@ def get_character_image_counts_by_story(conn: sqlite3.Connection, story_id: int)
         """,
         (story_id, story_id))
     
-    return {row["id"]: row["image_count"] for row in cursor.fetchall()}
+    return {row["character_id"]: row["image_count"] for row in cursor.fetchall()}
 
 
 # ============================================================================
