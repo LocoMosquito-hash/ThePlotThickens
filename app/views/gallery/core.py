@@ -473,6 +473,12 @@ class GalleryWidget(QWidget):
             # Delete the widget
             thumbnail.deleteLater()
         
+        # Clear any lingering layout items (including separators and spacers)
+        while self.thumbnails_layout.count() > 0:
+            item = self.thumbnails_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
         # Clear the dictionary and pixmap cache
         self.thumbnails.clear()
         self.pixmap_cache.clear()
@@ -488,6 +494,12 @@ class GalleryWidget(QWidget):
             self.thumbnails_layout.removeWidget(thumbnail)
             # Delete the widget
             thumbnail.deleteLater()
+        
+        # Clear any lingering layout items (including separators and spacers)
+        while self.thumbnails_layout.count() > 0:
+            item = self.thumbnails_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
         
         # Clear the dictionary but preserve caches
         self.thumbnails.clear()
@@ -524,9 +536,33 @@ class GalleryWidget(QWidget):
             story_id: ID of the story
             story_data: Dictionary containing story data
         """
+        print(f"[DEBUG] set_story called for story {story_id}: {story_data.get('title', 'Unknown')}")
+        print(f"[DEBUG] Before clearing - Character filters: {self.character_filters}")
+        print(f"[DEBUG] Before clearing - Context filters: {self.context_filters}")
+        
         # Store story data
         self.story_id = story_id
         self.story_data = story_data
+        
+        # Clear ALL filters when switching stories to prevent contamination
+        self.character_filters = []
+        self.context_filters = []
+        
+        # Clear ALL caches to prevent data contamination from previous stories
+        self.story_characters = {}
+        self.image_character_tags_cache = {}
+        self.image_quick_events_cache = {}
+        self.pixmap_cache = {}
+        
+        # Clear images list
+        self.images = []
+        
+        # Clear selection state
+        self.selected_images.clear()
+        
+        print(f"[DEBUG] After clearing - Character filters: {self.character_filters}")
+        print(f"[DEBUG] After clearing - Context filters: {self.context_filters}")
+        print(f"[DEBUG] Cleared all caches and data structures")
         
         # Clear existing thumbnails
         self.clear_thumbnails()
@@ -542,7 +578,10 @@ class GalleryWidget(QWidget):
     def load_images(self) -> None:
         """Load and display images for the current story."""
         if not self.story_id:
+            print("[DEBUG] load_images: No story_id set")
             return
+        
+        print(f"[DEBUG] load_images: Loading images for story {self.story_id}")
         
         # Get images from database
         cursor = self.db_conn.cursor()
@@ -593,18 +632,23 @@ class GalleryWidget(QWidget):
             images: List of image data dictionaries
         """
         if not images:
+            print("[DEBUG] _preload_gallery_data: No images to preload")
             return
         
         image_ids = [img["id"] for img in images]
+        print(f"[DEBUG] _preload_gallery_data: Preloading data for {len(image_ids)} images in story {self.story_id}")
         
         # Load story characters once
         self.story_characters = {char["id"]: char for char in get_story_characters(self.db_conn, self.story_id)}
+        print(f"[DEBUG] Loaded {len(self.story_characters)} characters for story {self.story_id}")
         
         # Batch load character tags for all images
         self.image_character_tags_cache = get_images_character_tags_batch(self.db_conn, image_ids)
-        
+        print(f"[DEBUG] Loaded character tags cache with {len(self.image_character_tags_cache)} entries")
+                
         # Batch load quick events for all images
         self.image_quick_events_cache = get_images_quick_events_batch(self.db_conn, image_ids)
+        print(f"[DEBUG] Loaded quick events cache with {len(self.image_quick_events_cache)} entries")
     
     def _display_images_classic_view(self, images: List[Dict[str, Any]]) -> None:
         """Display images in a standard grid layout without scene grouping.
@@ -683,6 +727,9 @@ class GalleryWidget(QWidget):
             (self.story_id,)
         )
         scenes = cursor.fetchall()
+        print(f"[DEBUG] Found {len(scenes)} scenes for story {self.story_id}")
+        for scene in scenes:
+            print(f"[DEBUG] Scene: {scene['id']} - {scene['title']} (seq: {scene['sequence_number']})")
         
         # First, obtain creation timestamps for all images
         for image in images:
@@ -701,8 +748,8 @@ class GalleryWidget(QWidget):
         
         # If we have no scenes defined, treat all images as orphans
         if not scenes:
-            # Apply character filters to all images
-            filtered_images = self._filter_images_by_character(images)
+            # Apply all filters to images
+            filtered_images = self._filter_images(images)
             
             row = 0
             separator = SeparatorWidget("Ungrouped")
@@ -900,7 +947,7 @@ class GalleryWidget(QWidget):
         
         # Return the next row after the last one we used
         return current_row + ((len(images) - 1) // cols) + 1
-    
+        
     def _get_image_thumbnail_pixmap(self, image: Dict[str, Any]) -> QPixmap:
         """Get the thumbnail pixmap for an image.
         
@@ -2325,7 +2372,7 @@ class GalleryWidget(QWidget):
                 QMessageBox.information(self, "Success", "Scene created successfully.")
         except Exception as e:
             print(f"Error creating scene: {e}")
-            QMessageBox.warning(self, "Error", f"Failed to create scene: {str(e)}")
+            QMessageBox.warning(self, "Error", f"Failed to create scene: {str(e)}") 
     
     def _filter_images(self, images: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Filter images based on character and context filters.
