@@ -33,7 +33,7 @@ from app.db_sqlite import (
     get_image_character_tags, add_character_tag_to_image, remove_character_tag,
     get_image_quick_events, associate_quick_event_with_image, remove_quick_event_image_association,
     get_story_characters, get_character, get_quick_event_tagged_characters,
-    update_character_last_tagged
+    update_character_last_tagged, get_image_contexts
 )
 
 
@@ -212,6 +212,11 @@ class ImageDetailDialog(QDialog):
             self.date_label.setText(f"Created: {formatted_date}")
             self.dimensions_label.setText(f"Dimensions: {width} × {height}")
             self.events_label.setText(f"Quick Event: {quick_event_text}")
+            
+            # Update context tags
+            context_tags_text = self.get_context_tags_text()
+            self.contexts_label.setText(f"Context: {context_tags_text}")
+            
             self.id_label.setText(f"Image ID: {self.image_id}")
         
         # Update tag mode
@@ -378,6 +383,9 @@ class ImageDetailDialog(QDialog):
             # Get quick event text
             quick_event_text = self.get_most_recent_quick_event_text()
             
+            # Get context tags text
+            context_tags_text = self.get_context_tags_text()
+            
             # Create labels for each detail
             self.path_label = QLabel(f"Path: {full_path}")
             self.path_label.setWordWrap(True)
@@ -393,6 +401,10 @@ class ImageDetailDialog(QDialog):
             self.events_label.setWordWrap(True)
             self.events_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             
+            self.contexts_label = QLabel(f"Context: {context_tags_text}")
+            self.contexts_label.setWordWrap(True)
+            self.contexts_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            
             self.id_label = QLabel(f"Image ID: {self.image_id}")
             self.id_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             
@@ -401,6 +413,7 @@ class ImageDetailDialog(QDialog):
             details_layout.addWidget(self.date_label)
             details_layout.addWidget(self.dimensions_label)
             details_layout.addWidget(self.events_label)
+            details_layout.addWidget(self.contexts_label)
             details_layout.addWidget(self.id_label)
             
             # Add details panel to image panel
@@ -935,6 +948,33 @@ class ImageDetailDialog(QDialog):
         display_text = convert_char_refs_to_mentions(event["text"], formatted_characters)
         
         return display_text
+    
+    def get_context_tags_text(self) -> str:
+        """Get the context tags for display.
+        
+        Returns:
+            Formatted context tags text or 'No contexts tagged'
+        """
+        try:
+            # Get context tags for this image
+            contexts = get_image_contexts(self.db_conn, self.image_id)
+            
+            if not contexts:
+                return "No contexts tagged"
+            
+            # Extract context names and join them
+            context_names = [context.get('name', 'Unknown') for context in contexts]
+            
+            # Join with commas, but limit the display length
+            context_text = ", ".join(context_names)
+            if len(context_text) > 100:
+                # Truncate and add ellipsis
+                context_text = context_text[:97] + "..."
+            
+            return context_text
+        except Exception as e:
+            print(f"Error getting context tags: {e}")
+            return "Error loading contexts"
     
     def accept(self):
         """Override accept to save settings before accepting."""
