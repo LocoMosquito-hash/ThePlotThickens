@@ -246,13 +246,14 @@ class SeparatorWidget(QFrame):
             color: white; 
             font-size: 14px; 
             font-weight: bold;
-            min-height: 20px;
+            min-height: 24px;
         """)
         self.layout.addWidget(self.title_label)
         
         # Set size policy - Expanding horizontally, Fixed vertically
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
-        # Use a more conservative height setting
+        # Use fixed height settings to prevent compression
         self.setMinimumHeight(40)
-        self.setMaximumHeight(50) 
+        self.setMaximumHeight(50)
+        self.setFixedHeight(45)  # Ensure consistent height 

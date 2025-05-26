@@ -8,6 +8,7 @@ environment:
 • Shell: PowerShell (NOT Command Prompt)
 • Application Launcher: Always use `python run.py` to start the application
 • PowerShell Syntax: Use `;` instead of `&&` for command chaining (PowerShell does not support `&&`)
+• NEVER EVER EVER ask me to "Open terminal". Offer the "Run" button instead.
 
 rules:
 • Python & PyQT 6 Mastery: Write high-quality Python code with PyQT 6, ensuring best practices for GUI application development.
