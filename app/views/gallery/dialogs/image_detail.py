@@ -962,7 +962,11 @@ class ImageDetailDialog(QDialog):
         self.saveWindowGeometry()
         
         # Reload the thumbnails to reflect any changes made in the dialog
-        self.load_images()
+        # Call the parent gallery's refresh method if available
+        if hasattr(self.parent(), 'refresh_single_image') and self.image_id:
+            self.parent().refresh_single_image(self.image_id)
+        elif hasattr(self.parent(), 'load_images'):
+            self.parent().load_images()
         
         # Continue with normal close event
         super().closeEvent(event)
