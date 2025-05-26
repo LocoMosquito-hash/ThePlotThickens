@@ -147,11 +147,11 @@ class GalleryFilterDialog(QDialog):
         # Clear the filter list first
         self.filter_list.clear()
         
-        # Add each active filter to the list
+        # Add each active filter to the list (without modifying self.character_filters)
         for character_id, include in self.character_filters:
             character = self.characters_by_id.get(character_id)
             if character:
-                self.add_character_filter(character, include)
+                self._add_filter_to_ui_only(character, include)
     
     def add_character_filter(self, character: Dict[str, Any], include: bool):
         """Add a character filter.
@@ -163,38 +163,28 @@ class GalleryFilterDialog(QDialog):
         if not character:
             return
         
-        # Check if this character is already in the filter list
-        for i in range(self.filter_list.count()):
-            item = self.filter_list.item(i)
-            data = item.data(Qt.ItemDataRole.UserRole)
-            
-            if data["character_id"] == character["id"]:
-                # Update the filter
-                data["include"] = include
-                
-                # Update the item text
-                item_text = f"{character['name']} - {'Include' if include else 'Exclude'}"
-                item.setText(item_text)
-                
-                # Update the item icon
-                icon = QIcon("resources/icons/include.png" if include else "resources/icons/exclude.png")
-                if icon.isNull():
-                    # Fallback icon text
-                    icon_text = "✓" if include else "✗"
-                    item_text = f"{icon_text} {character['name']}"
-                    item.setText(item_text)
-                else:
-                    item.setIcon(icon)
-                
-                # Update the character filters list
-                for i, (char_id, inc) in enumerate(self.character_filters):
-                    if char_id == character["id"]:
-                        self.character_filters[i] = (char_id, include)
-                        break
-                
+        character_id = character["id"]
+        
+        # Check if this character is already in the character_filters list
+        for i, (char_id, inc) in enumerate(self.character_filters):
+            if char_id == character_id:
+                # Update existing filter
+                self.character_filters[i] = (char_id, include)
+                self._update_filter_in_ui(character, include)
                 return
         
-        # Create a new filter
+        # Add new filter to the list
+        self.character_filters.append((character_id, include))
+        self._add_filter_to_ui_only(character, include)
+    
+    def _add_filter_to_ui_only(self, character: Dict[str, Any], include: bool):
+        """Add a filter to the UI only (without modifying character_filters list).
+        
+        Args:
+            character: Character data
+            include: Whether to include or exclude images with this character
+        """
+        # Create a new filter item
         item_text = f"{character['name']} - {'Include' if include else 'Exclude'}"
         item = QListWidgetItem(item_text)
         
@@ -217,25 +207,59 @@ class GalleryFilterDialog(QDialog):
         
         # Add to list
         self.filter_list.addItem(item)
+    
+    def _update_filter_in_ui(self, character: Dict[str, Any], include: bool):
+        """Update an existing filter in the UI.
         
-        # Add to filters
-        self.character_filters.append((character["id"], include))
+        Args:
+            character: Character data
+            include: Whether to include or exclude images with this character
+        """
+        # Find and update the existing item
+        for i in range(self.filter_list.count()):
+            item = self.filter_list.item(i)
+            data = item.data(Qt.ItemDataRole.UserRole)
+            
+            if data["character_id"] == character["id"]:
+                # Update the filter data
+                data["include"] = include
+                item.setData(Qt.ItemDataRole.UserRole, data)
+                
+                # Update the item text
+                item_text = f"{character['name']} - {'Include' if include else 'Exclude'}"
+                item.setText(item_text)
+                
+                # Update the item icon
+                icon = QIcon("resources/icons/include.png" if include else "resources/icons/exclude.png")
+                if icon.isNull():
+                    # Fallback icon text
+                    icon_text = "✓" if include else "✗"
+                    item_text = f"{icon_text} {character['name']}"
+                    item.setText(item_text)
+                else:
+                    item.setIcon(icon)
+                
+                break
     
     def remove_selected_filters(self):
         """Remove selected filters from the list."""
         selected_items = self.filter_list.selectedItems()
         
+        # Collect character IDs to remove
+        character_ids_to_remove = []
+        
         for item in selected_items:
             data = item.data(Qt.ItemDataRole.UserRole)
+            character_ids_to_remove.append(data["character_id"])
             
             # Remove from the list widget
             self.filter_list.takeItem(self.filter_list.row(item))
-            
-            # Remove from the filters list
-            for i, (char_id, include) in enumerate(self.character_filters):
-                if char_id == data["character_id"]:
-                    self.character_filters.pop(i)
-                    break
+        
+        # Remove from the filters list (iterate backwards to avoid index issues)
+        for i in range(len(self.character_filters) - 1, -1, -1):
+            char_id, include = self.character_filters[i]
+            if char_id in character_ids_to_remove:
+                self.character_filters.pop(i)
     
     def get_character_filters(self) -> List[Tuple[int, bool]]:
         """Get the character filters.
