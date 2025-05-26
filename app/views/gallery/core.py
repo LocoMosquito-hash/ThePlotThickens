@@ -601,35 +601,7 @@ class GalleryWidget(QWidget):
         self.clear_thumbnails()
         
         # Filter images based on character filters
-        filtered_images = []
-        
-        if self.character_filters:
-            # We have filters, so we need to check each image
-            for image in images:
-                # Get character tags for this image from cache
-                tags = self.image_character_tags_cache.get(image["id"], [])
-                character_ids = set(tag["character_id"] for tag in tags)
-                
-                # Check if this image should be included
-                include_image = True
-                
-                for character_id, include in self.character_filters:
-                    if include:
-                        # If this filter is to include, then the image must have this character
-                        if character_id not in character_ids:
-                            include_image = False
-                            break
-                    else:
-                        # If this filter is to exclude, then the image must not have this character
-                        if character_id in character_ids:
-                            include_image = False
-                            break
-                
-                if include_image:
-                    filtered_images.append(image)
-        else:
-            # No filters, show all images
-            filtered_images = images
+        filtered_images = self._filter_images_by_character(images)
         
         # Display all filtered images in a grid
         current_row = 0
@@ -714,12 +686,15 @@ class GalleryWidget(QWidget):
         
         # If we have no scenes defined, treat all images as orphans
         if not scenes:
+            # Apply character filters to all images
+            filtered_images = self._filter_images_by_character(images)
+            
             row = 0
             separator = SeparatorWidget("Ungrouped")
             self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
             row += 1
             
-            self._display_image_list(images, row)
+            self._display_image_list(filtered_images, row)
             return
         
         # Get all quick event associations for all images
@@ -755,11 +730,14 @@ class GalleryWidget(QWidget):
                 for scene in direct_scenes:
                     image_scenes[image_id].add((scene['id'], scene['title'], scene['sequence_number']))
         
-        # Group images by scene
+        # Apply character filters to all images first
+        filtered_images = self._filter_images_by_character(images)
+        
+        # Group filtered images by scene
         scene_images = {}
         orphan_images = []
         
-        for image in images:
+        for image in filtered_images:
             image_id = image['id']
             if image_id in image_scenes:
                 for scene_id, scene_title, sequence_number in image_scenes[image_id]:
@@ -776,7 +754,7 @@ class GalleryWidget(QWidget):
                 # Image not associated with a scene
                 orphan_images.append(image)
         
-        # If we have no images in any scenes, treat all images as orphans
+        # If we have no images in any scenes, treat all filtered images as orphans
         if not scene_images:
             row = 0
             separator = SeparatorWidget("Ungrouped")
@@ -2222,4 +2200,44 @@ class GalleryWidget(QWidget):
                 QMessageBox.information(self, "Success", "Scene created successfully.")
         except Exception as e:
             print(f"Error creating scene: {e}")
-            QMessageBox.warning(self, "Error", f"Failed to create scene: {str(e)}") 
+            QMessageBox.warning(self, "Error", f"Failed to create scene: {str(e)}")
+    
+    def _filter_images_by_character(self, images: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Filter images based on character filters.
+        
+        Args:
+            images: List of image data dictionaries
+            
+        Returns:
+            Filtered list of images
+        """
+        if not self.character_filters:
+            # No filters, return all images
+            return images
+        
+        filtered_images = []
+        
+        for image in images:
+            # Get character tags for this image from cache
+            tags = self.image_character_tags_cache.get(image["id"], [])
+            character_ids = set(tag["character_id"] for tag in tags)
+            
+            # Check if this image should be included
+            include_image = True
+            
+            for character_id, include in self.character_filters:
+                if include:
+                    # If this filter is to include, then the image must have this character
+                    if character_id not in character_ids:
+                        include_image = False
+                        break
+                else:
+                    # If this filter is to exclude, then the image must not have this character
+                    if character_id in character_ids:
+                        include_image = False
+                        break
+            
+            if include_image:
+                filtered_images.append(image)
+        
+        return filtered_images
