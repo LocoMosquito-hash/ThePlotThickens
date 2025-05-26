@@ -311,9 +311,9 @@ class GalleryWidget(QWidget):
         # Save the state to settings
         self.settings.setValue("gallery/scene_grouping", self.scene_grouping)
         
-        # Reload images with new grouping
+        # Reload images with new grouping using progress indicator
         if self.story_id:
-            self.load_images()
+            self.refresh_gallery_with_progress()
     
     def update_thumbnail_visibility(self) -> None:
         """Update thumbnail visibility based on filters and settings."""
@@ -528,8 +528,8 @@ class GalleryWidget(QWidget):
             title = f"Gallery - {story_data.get('title', 'Untitled Story')}"
             self.parent().setWindowTitle(title)
         
-        # Load images for this story
-        self.load_images()
+        # Load images for this story with progress indicator
+        self.refresh_gallery_with_progress()
     
     def load_images(self) -> None:
         """Load and display images for the current story."""
@@ -2034,8 +2034,44 @@ class GalleryWidget(QWidget):
         dialog.exec()
         
         # After the dialog closes, refresh the gallery to reflect any changes
-        # This will apply any active filters as well
-        self.load_images()
+        # Show a progress indicator during refresh
+        self.refresh_gallery_with_progress()
+    
+    def refresh_gallery_with_progress(self) -> None:
+        """Refresh the gallery with a visual progress indicator."""
+        # Create a progress dialog
+        progress = QProgressDialog(
+            "Refreshing gallery...",
+            None,  # No cancel button
+            0,
+            0,  # Indeterminate progress
+            self
+        )
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)  # Show immediately
+        progress.setWindowTitle("Gallery Refresh")
+        
+        # Show the progress dialog
+        progress.show()
+        QApplication.processEvents()  # Ensure it's displayed
+        
+        try:
+            # Perform the actual refresh
+            self.load_images()
+            
+            # Brief delay to ensure user sees the progress indicator
+            QTimer.singleShot(100, progress.close)
+            
+        except Exception as e:
+            # Ensure progress dialog is closed even if there's an error
+            progress.close()
+            logging.exception(f"Error during gallery refresh: {e}")
+            self.show_error("Refresh Error", f"Failed to refresh gallery: {str(e)}")
+        
+        finally:
+            # Ensure progress dialog is always closed
+            if progress.isVisible():
+                progress.close()
     
     def get_on_scene_characters(self) -> List[Dict[str, Any]]:
         """Get a list of characters that appear in the active scene.
@@ -2072,8 +2108,8 @@ class GalleryWidget(QWidget):
     
     def apply_filters(self):
         """Apply filters to the gallery view."""
-        # Reload images with current filters
-        self.load_images()
+        # Reload images with current filters using progress indicator
+        self.refresh_gallery_with_progress()
         
         # Update filter status
         self.update_filter_status()
@@ -2082,8 +2118,8 @@ class GalleryWidget(QWidget):
         """Clear all active filters and refresh the gallery."""
         self.character_filters = []
         
-        # Reload all images
-        self.load_images()
+        # Reload all images with progress indicator
+        self.refresh_gallery_with_progress()
         
         # Update status
         self.update_filter_status()
