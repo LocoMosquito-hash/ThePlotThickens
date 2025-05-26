@@ -110,6 +110,7 @@ class GalleryWidget(QWidget):
         self.show_nsfw = self.settings.value("gallery/show_nsfw", False, type=bool)
         self.scene_grouping = self.settings.value("gallery/scene_grouping", False, type=bool)
         self.character_filters = []  # List of (character_id, include) tuples
+        self.context_filters = []   # List of (context_id, include) tuples
         
         # Network manager for downloading images
         self.network_manager = QNetworkAccessManager()
@@ -614,8 +615,8 @@ class GalleryWidget(QWidget):
         # Clear existing thumbnails
         self.clear_thumbnails()
         
-        # Filter images based on character filters
-        filtered_images = self._filter_images_by_character(images)
+        # Filter images based on all active filters
+        filtered_images = self._filter_images(images)
         
         # Display all filtered images in a grid
         current_row = 0
@@ -744,8 +745,8 @@ class GalleryWidget(QWidget):
                 for scene in direct_scenes:
                     image_scenes[image_id].add((scene['id'], scene['title'], scene['sequence_number']))
         
-        # Apply character filters to all images first
-        filtered_images = self._filter_images_by_character(images)
+        # Apply all filters to images first
+        filtered_images = self._filter_images(images)
         
         # Group filtered images by scene
         scene_images = {}
@@ -2123,6 +2124,7 @@ class GalleryWidget(QWidget):
         
         # Set current filters
         dialog.character_filters = self.character_filters.copy()
+        dialog.context_filters = self.context_filters.copy()
         
         # Explicitly populate the filter list with current filters
         dialog.populate_filter_list()
@@ -2130,6 +2132,7 @@ class GalleryWidget(QWidget):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             # Get updated filters
             self.character_filters = dialog.get_character_filters()
+            self.context_filters = dialog.get_context_filters()
             
             # Apply filters
             self.apply_filters()
@@ -2145,6 +2148,7 @@ class GalleryWidget(QWidget):
     def clear_filters(self) -> None:
         """Clear all active filters and refresh the gallery."""
         self.character_filters = []
+        self.context_filters = []
         
         # Reload all images with progress indicator
         self.refresh_gallery_with_progress()
@@ -2156,6 +2160,9 @@ class GalleryWidget(QWidget):
         """Update the filter status label."""
         # Build a status message
         status_text = ""
+        
+        # Build filter status
+        filter_parts = []
         
         # Character filters
         if self.character_filters:
@@ -2176,7 +2183,32 @@ class GalleryWidget(QWidget):
                         character_names.append(f"Exclude: {character_name}")
             
             if character_names:
-                status_text += "Filters: " + ", ".join(character_names)
+                filter_parts.extend(character_names)
+        
+        # Context filters
+        if self.context_filters:
+            # Get context names
+            context_names = []
+            
+            for context_id, include in self.context_filters:
+                # Get context name
+                cursor = self.db_conn.cursor()
+                cursor.execute("SELECT name FROM image_contexts WHERE id = ?", (context_id,))
+                result = cursor.fetchone()
+                
+                if result:
+                    context_name = result[0]
+                    if include:
+                        context_names.append(f"Include: {context_name}")
+                    else:
+                        context_names.append(f"Exclude: {context_name}")
+            
+            if context_names:
+                filter_parts.extend(context_names)
+        
+        # Combine all filters
+        if filter_parts:
+            status_text += "Filters: " + ", ".join(filter_parts)
         
         # NSFW setting
         if self.show_nsfw:
@@ -2295,8 +2327,8 @@ class GalleryWidget(QWidget):
             print(f"Error creating scene: {e}")
             QMessageBox.warning(self, "Error", f"Failed to create scene: {str(e)}")
     
-    def _filter_images_by_character(self, images: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Filter images based on character filters.
+    def _filter_images(self, images: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Filter images based on character and context filters.
         
         Args:
             images: List of image data dictionaries
@@ -2304,31 +2336,54 @@ class GalleryWidget(QWidget):
         Returns:
             Filtered list of images
         """
-        if not self.character_filters:
+        if not self.character_filters and not self.context_filters:
             # No filters, return all images
             return images
         
         filtered_images = []
         
         for image in images:
-            # Get character tags for this image from cache
-            tags = self.image_character_tags_cache.get(image["id"], [])
-            character_ids = set(tag["character_id"] for tag in tags)
+            image_id = image["id"]
             
             # Check if this image should be included
             include_image = True
             
-            for character_id, include in self.character_filters:
-                if include:
-                    # If this filter is to include, then the image must have this character
-                    if character_id not in character_ids:
-                        include_image = False
-                        break
-                else:
-                    # If this filter is to exclude, then the image must not have this character
-                    if character_id in character_ids:
-                        include_image = False
-                        break
+            # Check character filters
+            if self.character_filters:
+                # Get character tags for this image from cache
+                tags = self.image_character_tags_cache.get(image_id, [])
+                character_ids = set(tag["character_id"] for tag in tags)
+                
+                for character_id, include in self.character_filters:
+                    if include:
+                        # If this filter is to include, then the image must have this character
+                        if character_id not in character_ids:
+                            include_image = False
+                            break
+                    else:
+                        # If this filter is to exclude, then the image must not have this character
+                        if character_id in character_ids:
+                            include_image = False
+                            break
+            
+            # Check context filters (only if character filters passed)
+            if include_image and self.context_filters:
+                # Get context tags for this image
+                from app.db_sqlite import get_image_contexts
+                contexts = get_image_contexts(self.db_conn, image_id)
+                context_ids = set(context["id"] for context in contexts)
+                
+                for context_id, include in self.context_filters:
+                    if include:
+                        # If this filter is to include, then the image must have this context
+                        if context_id not in context_ids:
+                            include_image = False
+                            break
+                    else:
+                        # If this filter is to exclude, then the image must not have this context
+                        if context_id in context_ids:
+                            include_image = False
+                            break
             
             if include_image:
                 filtered_images.append(image)
