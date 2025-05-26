@@ -305,24 +305,27 @@ class TaggableImageLabel(QLabel):
                 pen = QPen(QColor(0, 255, 0))  # Green for normal
                 pen.setWidth(2)
                 
-            # FIRST: Draw the rectangle at the exact calculated position
-            painter.setPen(pen)
-            painter.drawRect(rect_x, rect_y, int(display_width), int(display_height))
+            # FIRST: Draw the rectangle at the exact calculated position (only if it has dimensions)
+            if tag_width_ratio > 0.0 and tag_height_ratio > 0.0:
+                painter.setPen(pen)
+                painter.drawRect(rect_x, rect_y, int(display_width), int(display_height))
             
             # SECOND: Draw text as a completely separate element above the rectangle
-            # Calculate text position independently from the rectangle
-            text_x = rect_x
-            text_y = max(0, rect_y - text_height - 2)  # Ensure text y position is never negative
-            
-            # Draw text background
-            painter.setPen(QPen(Qt.PenStyle.NoPen))  # FIXED: Create a QPen object with NoPen style
-            text_rect = QRect(text_x, text_y, int(display_width), text_height)
-            painter.fillRect(text_rect, QColor(0, 0, 0, 180))
-            
-            # Draw text
-            painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-            painter.setPen(QColor(255, 255, 255))
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, character_name)
+            # Only draw character name overlay if tag has visible dimensions (not an invisible on-scene tag)
+            if tag_width_ratio > 0.0 and tag_height_ratio > 0.0:
+                # Calculate text position independently from the rectangle
+                text_x = rect_x
+                text_y = max(0, rect_y - text_height - 2)  # Ensure text y position is never negative
+                
+                # Draw text background
+                painter.setPen(QPen(Qt.PenStyle.NoPen))  # FIXED: Create a QPen object with NoPen style
+                text_rect = QRect(text_x, text_y, int(display_width), text_height)
+                painter.fillRect(text_rect, QColor(0, 0, 0, 180))
+                
+                # Draw text
+                painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+                painter.setPen(QColor(255, 255, 255))
+                painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, character_name)
     
     def resizeEvent(self, event):
         """Handle resize events to recalculate offsets.
@@ -419,9 +422,13 @@ class GraphicsTagView(QGraphicsView):
         # Clear existing tag items
         for tag_id, items in self.tag_items.items():
             rect_item, text_item, text_bg = items
-            self.scene.removeItem(rect_item)
-            self.scene.removeItem(text_item)
-            self.scene.removeItem(text_bg)
+            # Only remove items that exist (not None for invisible tags)
+            if rect_item is not None:
+                self.scene.removeItem(rect_item)
+            if text_item is not None:
+                self.scene.removeItem(text_item)
+            if text_bg is not None:
+                self.scene.removeItem(text_bg)
         self.tag_items.clear()
         
         # Create tag items
@@ -439,33 +446,39 @@ class GraphicsTagView(QGraphicsView):
             abs_width = tag_width * self.image_width
             abs_height = tag_height * self.image_height
             
-            # Create rectangle item
-            rect_x = abs_x - (abs_width / 2)
-            rect_y = abs_y - (abs_height / 2)
-            rect_item = QGraphicsRectItem(rect_x, rect_y, abs_width, abs_height)
-            rect_item.setPen(QPen(QColor(0, 255, 0), 2))
-            rect_item.setData(0, tag_id)  # Store tag ID in item data
-            self.scene.addItem(rect_item)
-            
-            # Create text item
-            text_item = QGraphicsTextItem(character_name)
-            text_item.setDefaultTextColor(QColor(255, 255, 255))
-            text_item.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-            text_item.setPos(rect_x, rect_y - 25)  # Position above the rectangle
-            
-            # Add background rect to text
-            # This is a simple approach - ideally we'd create a custom item that draws both
-            text_bg = QGraphicsRectItem(text_item.boundingRect())
-            text_bg.setBrush(QBrush(QColor(0, 0, 0, 180)))
-            text_bg.setPen(QPen(Qt.PenStyle.NoPen))
-            text_bg.setZValue(text_item.zValue() - 1)  # Place behind text
-            text_bg.setPos(text_item.pos())
-            self.scene.addItem(text_bg)
-            
-            self.scene.addItem(text_item)
-            
-            # Store items
-            self.tag_items[tag_id] = (rect_item, text_item, text_bg)
+            # Only create visible rectangle and text items if tag has dimensions (not an invisible on-scene tag)
+            if tag_width > 0.0 and tag_height > 0.0:
+                # Create rectangle item
+                rect_x = abs_x - (abs_width / 2)
+                rect_y = abs_y - (abs_height / 2)
+                rect_item = QGraphicsRectItem(rect_x, rect_y, abs_width, abs_height)
+                rect_item.setPen(QPen(QColor(0, 255, 0), 2))
+                rect_item.setData(0, tag_id)  # Store tag ID in item data
+                self.scene.addItem(rect_item)
+                
+                # Create text item
+                text_item = QGraphicsTextItem(character_name)
+                text_item.setDefaultTextColor(QColor(255, 255, 255))
+                text_item.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+                text_item.setPos(rect_x, rect_y - 25)  # Position above the rectangle
+                
+                # Add background rect to text
+                # This is a simple approach - ideally we'd create a custom item that draws both
+                text_bg = QGraphicsRectItem(text_item.boundingRect())
+                text_bg.setBrush(QBrush(QColor(0, 0, 0, 180)))
+                text_bg.setPen(QPen(Qt.PenStyle.NoPen))
+                text_bg.setZValue(text_item.zValue() - 1)  # Place behind text
+                text_bg.setPos(text_item.pos())
+                self.scene.addItem(text_bg)
+                
+                self.scene.addItem(text_item)
+                
+                # Store items
+                self.tag_items[tag_id] = (rect_item, text_item, text_bg)
+            else:
+                # For invisible on-scene tags, create empty placeholders to maintain the structure
+                # This ensures the tag_items dictionary has entries for all tags
+                self.tag_items[tag_id] = (None, None, None)
     
     def enable_tag_mode(self, enabled=True):
         """Enable or disable tag adding mode.
@@ -529,12 +542,14 @@ class GraphicsTagView(QGraphicsView):
         """
         # Reset all tags to normal style
         for tid, (rect_item, text_item, text_bg) in self.tag_items.items():
-            if tid == tag_id:
-                # Highlight this tag
-                rect_item.setPen(QPen(QColor(255, 165, 0), 3))  # Orange for selected
-            else:
-                # Normal style
-                rect_item.setPen(QPen(QColor(0, 255, 0), 2))  # Green for normal
+            # Only highlight visible tags (not None for invisible on-scene tags)
+            if rect_item is not None:
+                if tid == tag_id:
+                    # Highlight this tag
+                    rect_item.setPen(QPen(QColor(255, 165, 0), 3))  # Orange for selected
+                else:
+                    # Normal style
+                    rect_item.setPen(QPen(QColor(0, 255, 0), 2))  # Green for normal
         
         # Store selected tag ID
         self.selected_tag_id = tag_id
