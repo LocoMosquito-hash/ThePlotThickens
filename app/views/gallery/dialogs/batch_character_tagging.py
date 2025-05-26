@@ -356,15 +356,15 @@ class BatchCharacterTaggingDialog(QDialog):
                     skipped_count += 1
                     continue
                 
-                # Add the character tag (using center position as default)
+                # Add the character tag (invisible point tag for on-scene presence)
                 tag_id = add_character_tag_to_image(
                     self.db_conn,
                     image_id,
                     character_id,
                     0.5,  # x_position (center)
                     0.5,  # y_position (center)
-                    0.2,  # width (20% of image)
-                    0.2,  # height (20% of image)
+                    0.0,  # width (0.0 for invisible point tag)
+                    0.0,  # height (0.0 for invisible point tag)
                     f"Batch tagged as {character_name}"
                 )
                 
