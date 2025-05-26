@@ -48,8 +48,8 @@ class CharacterListItem(QListWidgetItem):
         # Store character data
         self.setData(Qt.ItemDataRole.UserRole, character_data)
         
-        # Set item size hint for avatar display
-        self.setSizeHint(QSize(200, 60))
+        # Set item size hint for avatar display (much larger for better visibility)
+        self.setSizeHint(QSize(350, 160))  # Increased to accommodate 150x150 avatars
         
         # Load avatar if available
         self._load_avatar()
@@ -64,9 +64,9 @@ class CharacterListItem(QListWidgetItem):
             pixmap = QPixmap(avatar_path)
             
             if not pixmap.isNull():
-                # Scale the avatar to a reasonable size
+                # Scale the avatar to a much larger size for better visibility
                 scaled_pixmap = pixmap.scaled(
-                    QSize(48, 48),
+                    QSize(150, 150),
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation
                 )
@@ -80,8 +80,8 @@ class CharacterListItem(QListWidgetItem):
     
     def _create_placeholder_avatar(self):
         """Create a placeholder avatar with character initials."""
-        # Create a simple colored square with initials
-        pixmap = QPixmap(48, 48)
+        # Create a simple colored square with initials (much larger)
+        pixmap = QPixmap(150, 150)
         
         # Use a hash of the character name to generate a consistent color
         name_hash = hash(self.character_name)
@@ -95,7 +95,7 @@ class CharacterListItem(QListWidgetItem):
         # Draw initials
         painter = QPainter(pixmap)
         painter.setPen(Qt.GlobalColor.white)
-        painter.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        painter.setFont(QFont("Arial", 36, QFont.Weight.Bold))  # Even larger font for 150x150 avatars
         
         # Get initials (first letter of each word, max 2)
         words = self.character_name.split()
@@ -134,7 +134,7 @@ class BatchCharacterTaggingDialog(QDialog):
         # Set up the dialog
         self.setWindowTitle("Batch Character Tagging")
         self.setModal(True)
-        self.resize(400, 600)
+        self.resize(600, 800)  # Even larger dialog to accommodate 150x150 avatars
         
         # Initialize UI
         self.init_ui()
@@ -174,6 +174,10 @@ class BatchCharacterTaggingDialog(QDialog):
         self.characters_list = QListWidget()
         self.characters_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.characters_list.itemSelectionChanged.connect(self.on_character_selection_changed)
+        
+        # Set the icon size to match our larger avatars
+        self.characters_list.setIconSize(QSize(150, 150))
+        
         layout.addWidget(self.characters_list)
         
         # Action buttons
