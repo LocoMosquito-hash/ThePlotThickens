@@ -16,12 +16,13 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QComboBox, QSpinBox, QCheckBox, QPushButton,
     QFileDialog, QMessageBox, QApplication, QGroupBox, QListWidget, 
     QListWidgetItem, QMenu, QTextEdit, QSplitter,
-    QTreeWidget, QTreeWidgetItem, QStyle
+    QTreeWidget, QTreeWidgetItem, QStyle, QButtonGroup, QToolButton
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint
+from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QSize
 from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QColor
 
 from app.utils.character_completer import CharacterCompleter
+from app.utils.icons import icon_manager
 
 # Import the centralized character reference functions
 from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
@@ -1321,36 +1322,207 @@ class CharacterDialog(QDialog):
         self.age_value_spin.setSpecialValueText("Not specified")
         self.age_value_spin.valueChanged.connect(self.on_field_changed)
         
-        # Age category
-        self.age_category_combo = QComboBox()
-        self.age_category_combo.addItem("Not specified", None)
-        self.age_category_combo.addItem("Minor", "MINOR")
-        self.age_category_combo.addItem("Teen", "TEEN")
-        self.age_category_combo.addItem("Young", "YOUNG")
-        self.age_category_combo.addItem("Adult", "ADULT")
-        self.age_category_combo.addItem("Middle-aged", "MIDDLE_AGED")
-        self.age_category_combo.addItem("Mature", "MATURE")
-        self.age_category_combo.addItem("Old", "OLD")
-        self.age_category_combo.currentIndexChanged.connect(self.on_field_changed)
-        
         age_layout.addWidget(QLabel("Value:"))
         age_layout.addWidget(self.age_value_spin)
-        age_layout.addWidget(QLabel("Category:"))
-        age_layout.addWidget(self.age_category_combo)
         
         form_layout2.addRow("Age:", age_layout)
         
-        # Gender field
-        self.gender_combo = QComboBox()
-        self.gender_combo.addItem("Not specified", "NOT_SPECIFIED")
-        self.gender_combo.addItem("Male", "MALE")
-        self.gender_combo.addItem("Female", "FEMALE")
-        self.gender_combo.addItem("Futa", "FUTA")
-        self.gender_combo.currentIndexChanged.connect(self.on_field_changed)
-        form_layout2.addRow("Gender:", self.gender_combo)
+        # Age category icon buttons
+        self.age_category_group = self._create_age_category_buttons()
+        form_layout2.addRow("Age Category:", self.age_category_group)
+        
+        # Gender icon buttons
+        self.gender_group = self._create_gender_buttons()
+        form_layout2.addRow("Gender:", self.gender_group)
         
         layout.addLayout(form_layout2)
         layout.addStretch()
+    
+    def _create_age_category_buttons(self) -> QWidget:
+        """Create age category icon button group.
+        
+        Returns:
+            Widget containing the age category icon buttons
+        """
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(5)
+        
+        # Create button group for exclusive selection
+        self.age_category_button_group = QButtonGroup()
+        self.age_category_buttons = {}
+        
+        # Define age categories with their icons and tooltips
+        age_categories = [
+            (None, "forbid_2", "Not specified"),
+            ("MINOR", "horse_toy", "Minor"),
+            ("TEEN", "backpack", "Teen"),
+            ("YOUNG", "glass_cocktail", "Young"),
+            ("ADULT", "briefcase_2", "Adult"),
+            ("MIDDLE_AGED", "book", "Middle-aged"),
+            ("MATURE", "eyeglass", "Mature"),
+            ("OLD", "cane", "Old")
+        ]
+        
+        for value, icon_name, tooltip in age_categories:
+            button = QToolButton()
+            button.setIcon(icon_manager.get_icon(icon_name))
+            button.setIconSize(QSize(24, 24))
+            button.setToolTip(tooltip)
+            button.setCheckable(True)
+            button.setFixedSize(32, 32)
+            
+            # Store the value in the button
+            button.setProperty("age_category_value", value)
+            
+            # Connect to handler
+            button.clicked.connect(self._on_age_category_selected)
+            
+            # Add to button group and layout
+            self.age_category_button_group.addButton(button)
+            self.age_category_buttons[value] = button
+            layout.addWidget(button)
+        
+        layout.addStretch()
+        return container
+    
+    def _create_gender_buttons(self) -> QWidget:
+        """Create gender icon button group.
+        
+        Returns:
+            Widget containing the gender icon buttons
+        """
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(5)
+        
+        # Create button group for exclusive selection
+        self.gender_button_group = QButtonGroup()
+        self.gender_buttons = {}
+        
+        # Define genders with their icons, colors, and tooltips
+        genders = [
+            ("NOT_SPECIFIED", "forbid_2", None, "Not specified"),
+            ("MALE", "gender_male", "#87CEEB", "Male"),  # Light blue
+            ("FEMALE", "gender_female", "#FFB6C1", "Female"),  # Pink
+            ("FUTA", "gender_transgender", "#DDA0DD", "Futa/Trans")  # Purple
+        ]
+        
+        for value, icon_name, color, tooltip in genders:
+            button = QToolButton()
+            button.setIcon(icon_manager.get_icon(icon_name))
+            button.setIconSize(QSize(24, 24))
+            button.setToolTip(tooltip)
+            button.setCheckable(True)
+            button.setFixedSize(32, 32)
+            
+            # Apply color styling if specified
+            if color:
+                button.setStyleSheet(f"""
+                    QToolButton {{
+                        color: {color};
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        background-color: transparent;
+                    }}
+                    QToolButton:checked {{
+                        background-color: {color};
+                        color: white;
+                        border: 2px solid {color};
+                    }}
+                    QToolButton:hover {{
+                        background-color: rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2);
+                    }}
+                """)
+            else:
+                button.setStyleSheet("""
+                    QToolButton {
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        background-color: transparent;
+                    }
+                    QToolButton:checked {
+                        background-color: #ddd;
+                        border: 2px solid #999;
+                    }
+                    QToolButton:hover {
+                        background-color: rgba(200, 200, 200, 0.3);
+                    }
+                """)
+            
+            # Store the value in the button
+            button.setProperty("gender_value", value)
+            
+            # Connect to handler
+            button.clicked.connect(self._on_gender_selected)
+            
+            # Add to button group and layout
+            self.gender_button_group.addButton(button)
+            self.gender_buttons[value] = button
+            layout.addWidget(button)
+        
+        layout.addStretch()
+        return container
+    
+    def _on_age_category_selected(self) -> None:
+        """Handle age category button selection."""
+        sender = self.sender()
+        if sender and sender.isChecked():
+            self.on_field_changed()
+    
+    def _on_gender_selected(self) -> None:
+        """Handle gender button selection."""
+        sender = self.sender()
+        if sender and sender.isChecked():
+            self.on_field_changed()
+    
+    def _get_selected_age_category(self) -> Optional[str]:
+        """Get the currently selected age category.
+        
+        Returns:
+            The selected age category value or None
+        """
+        for button in self.age_category_buttons.values():
+            if button.isChecked():
+                return button.property("age_category_value")
+        return None
+    
+    def _get_selected_gender(self) -> str:
+        """Get the currently selected gender.
+        
+        Returns:
+            The selected gender value
+        """
+        for button in self.gender_buttons.values():
+            if button.isChecked():
+                return button.property("gender_value")
+        return "NOT_SPECIFIED"
+    
+    def _set_age_category_selection(self, value: Optional[str]) -> None:
+        """Set the age category selection.
+        
+        Args:
+            value: The age category value to select
+        """
+        if value in self.age_category_buttons:
+            self.age_category_buttons[value].setChecked(True)
+        else:
+            # Default to "Not specified"
+            self.age_category_buttons[None].setChecked(True)
+    
+    def _set_gender_selection(self, value: str) -> None:
+        """Set the gender selection.
+        
+        Args:
+            value: The gender value to select
+        """
+        if value in self.gender_buttons:
+            self.gender_buttons[value].setChecked(True)
+        else:
+            # Default to "Not specified"
+            self.gender_buttons["NOT_SPECIFIED"].setChecked(True)
     
     def load_character_data(self) -> None:
         """Load character data into the form."""
@@ -1413,15 +1585,10 @@ class CharacterDialog(QDialog):
             self.age_value_spin.setValue(self.character_data['age_value'])
         
         # Set age category
-        if self.character_data['age_category']:
-            index = self.age_category_combo.findData(self.character_data['age_category'])
-            if index >= 0:
-                self.age_category_combo.setCurrentIndex(index)
+        self._set_age_category_selection(self.character_data['age_category'])
         
         # Set gender
-        index = self.gender_combo.findData(self.character_data['gender'])
-        if index >= 0:
-            self.gender_combo.setCurrentIndex(index)
+        self._set_gender_selection(self.character_data['gender'])
     
     def connect_signals(self) -> None:
         """Connect signals to slots."""
@@ -1703,10 +1870,10 @@ class CharacterDialog(QDialog):
             age_value = None
         
         # Get age category
-        age_category = self.age_category_combo.currentData()
+        age_category = self._get_selected_age_category()
         
         # Get gender
-        gender = self.gender_combo.currentData()
+        gender = self._get_selected_gender()
         
         # Get avatar path - preserve existing path if not changed
         if self.avatar_changed:
