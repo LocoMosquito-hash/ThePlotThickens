@@ -17,16 +17,18 @@ from io import BytesIO
 import tempfile
 import random
 import string
+import json
+import hashlib
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QGridLayout, QFileDialog, QMessageBox,
     QCheckBox, QSplitter, QTabWidget, QFrame, QMenu,
-    QApplication, QDialog, QProgressDialog
+    QApplication, QDialog, QProgressDialog, QSizePolicy, QGroupBox
 )
 from PyQt6.QtCore import (
     Qt, QSize, pyqtSignal, QBuffer, QIODevice, 
-    QUrl, QPoint, QRect, QTimer, QSettings
+    QUrl, QPoint, QRect, QTimer, QSettings, QThread, pyqtSlot
 )
 from PyQt6.QtGui import (
     QPixmap, QImage, QColor, QBrush, QPen, QPainter, 
@@ -70,7 +72,103 @@ from app.db_sqlite import (
 from app.utils.image_recognition_util import ImageRecognitionUtil
 
 # Import icon manager for Tabler icons
-from app.utils.icons import icon_manager
+from app.utils.icons.icon_manager import icon_manager
+
+
+class ClipboardMonitor(QThread):
+    """Thread to monitor clipboard changes and detect when content stabilizes."""
+    
+    clipboard_ready = pyqtSignal(str)  # Emits hash when clipboard is ready
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.monitoring = False
+        self.last_hash = ""
+        self.stable_count = 0
+        self.required_stable_count = 3  # Number of consecutive identical checks needed
+        
+    def start_monitoring(self):
+        """Start monitoring clipboard for changes."""
+        self.monitoring = True
+        self.start()
+        
+    def stop_monitoring(self):
+        """Stop monitoring clipboard."""
+        self.monitoring = False
+        self.quit()
+        self.wait()
+        
+    def run(self):
+        """Monitor clipboard content for stability."""
+        while self.monitoring:
+            try:
+                # Get current clipboard content hash
+                current_hash = self._get_clipboard_hash()
+                
+                if current_hash == self.last_hash:
+                    self.stable_count += 1
+                    if self.stable_count >= self.required_stable_count:
+                        # Clipboard content is stable
+                        if current_hash and current_hash != "empty":
+                            self.clipboard_ready.emit(current_hash)
+                        self.monitoring = False
+                        break
+                else:
+                    # Content changed, reset counter
+                    self.last_hash = current_hash
+                    self.stable_count = 0
+                
+                # Wait before next check
+                self.msleep(200)  # Check every 200ms
+                
+            except Exception as e:
+                print(f"Error in clipboard monitoring: {e}")
+                self.monitoring = False
+                break
+    
+    def _get_clipboard_hash(self) -> str:
+        """Get a hash of current clipboard content."""
+        try:
+            clipboard = QApplication.clipboard()
+            mime_data = clipboard.mimeData()
+            
+            if not mime_data:
+                return "empty"
+            
+            # Only generate hash for content that has basic formats
+            if not (mime_data.hasImage() or mime_data.hasUrls() or mime_data.hasHtml()):
+                return "empty"
+            
+            # Create a hash based on available formats and some content
+            hash_input = ""
+            
+            # Add formats to hash
+            formats = sorted(mime_data.formats())
+            hash_input += "|".join(formats)
+            
+            # Add image data if available and valid
+            if mime_data.hasImage():
+                image = clipboard.image()
+                if not image.isNull() and image.width() > 0 and image.height() > 0:
+                    # Use image size and format as part of hash
+                    hash_input += f"|img:{image.width()}x{image.height()}:{image.format()}"
+            
+            # Add text data if available (first 100 chars)
+            if mime_data.hasText():
+                text = mime_data.text()[:100]
+                hash_input += f"|text:{text}"
+            
+            # Add URL data if available
+            if mime_data.hasUrls():
+                urls = [url.toString() for url in mime_data.urls()]
+                hash_input += f"|urls:{','.join(urls[:3])}"  # First 3 URLs
+            
+            # Generate hash
+            return hashlib.md5(hash_input.encode()).hexdigest()
+            
+        except Exception as e:
+            print(f"Error generating clipboard hash: {e}")
+            return "error"
 
 
 class GalleryWidget(QWidget):
@@ -114,6 +212,14 @@ class GalleryWidget(QWidget):
         
         # Network manager for downloading images
         self.network_manager = QNetworkAccessManager()
+        
+        # Clipboard monitoring
+        self.clipboard_monitor = ClipboardMonitor(self)
+        self.clipboard_monitor.clipboard_ready.connect(self._on_clipboard_ready)
+        self.last_processed_hash = ""
+        self.paste_in_progress = False
+        self.character_recognition_in_progress = False
+        self.processed_content_hashes = set()  # Track processed content to prevent duplicates
         
         # Image recognition utility for character recognition
         self.recognition_util = ImageRecognitionUtil(self.db_conn)
@@ -553,6 +659,9 @@ class GalleryWidget(QWidget):
         self.image_character_tags_cache = {}
         self.image_quick_events_cache = {}
         self.pixmap_cache = {}
+        
+        # Clear processed content hashes to prevent memory buildup
+        self.processed_content_hashes.clear()
         
         # Clear images list
         self.images = []
@@ -1119,69 +1228,334 @@ class GalleryWidget(QWidget):
             super().keyPressEvent(event)
     
     def paste_image(self) -> None:
-        """Paste an image from the clipboard."""
-        # Get the clipboard
-        clipboard = QApplication.clipboard()
+        """Paste an image from the clipboard with smart timing detection."""
+        if self.paste_in_progress:
+            print("Paste already in progress, ignoring...")
+            return
+            
+        self.paste_in_progress = True
         
-        # Check if the clipboard has an image
+        # First, try immediate paste (for cases where clipboard is already stable)
+        clipboard = QApplication.clipboard()
         mime_data = clipboard.mimeData()
         
-        if mime_data.hasImage():
-            # Get the image from the clipboard
-            image = clipboard.image()
+        # Get current clipboard hash
+        current_hash = self.clipboard_monitor._get_clipboard_hash()
+        
+        # If we've already processed this content, skip it
+        if current_hash == self.last_processed_hash and current_hash != "empty":
+            print("Skipping already processed clipboard content")
+            self.paste_in_progress = False
+            return
+        
+        # Check if clipboard has valid content immediately available
+        if mime_data and self._has_valid_clipboard_content(mime_data):
+            # Try immediate processing
+            try:
+                self._process_clipboard_content()
+                return
+            except Exception as e:
+                print(f"Immediate paste failed, starting monitoring: {e}")
+        
+        # If no valid content found, just silently return
+        if not mime_data or not self._has_valid_clipboard_content_for_hash(mime_data):
+            print("No valid clipboard content found, ignoring paste request")
+            self.paste_in_progress = False
+            return
+        
+        # If immediate paste failed, start monitoring for changes
+        print("Starting clipboard monitoring for delayed content...")
+        
+        # Show a brief status message
+        status_msg = QMessageBox()
+        status_msg.setIcon(QMessageBox.Icon.Information)
+        status_msg.setWindowTitle("Waiting for Clipboard")
+        status_msg.setText("Waiting for clipboard content to stabilize...")
+        status_msg.setStandardButtons(QMessageBox.StandardButton.Cancel)
+        status_msg.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        
+        # Set up a timer to auto-close the dialog after 3 seconds
+        close_timer = QTimer()
+        close_timer.setSingleShot(True)
+        close_timer.timeout.connect(lambda: self._handle_monitoring_timeout(status_msg))
+        close_timer.start(3000)  # 3 seconds
+        
+        # Start monitoring
+        self.clipboard_monitor.start_monitoring()
+        
+        # Show the dialog (non-blocking)
+        result = status_msg.exec()
+        
+        # Stop the timer and monitoring if user cancelled
+        close_timer.stop()
+        if result == QMessageBox.StandardButton.Cancel:
+            self.clipboard_monitor.stop_monitoring()
+            self.paste_in_progress = False
+            print("Clipboard monitoring cancelled by user")
+    
+    @pyqtSlot(str)
+    def _on_clipboard_ready(self, content_hash: str):
+        """Handle clipboard content being ready.
+        
+        Args:
+            content_hash: Hash of the clipboard content
+        """
+        # Avoid processing the same content twice
+        if content_hash == self.last_processed_hash:
+            print("Skipping duplicate clipboard content")
+            return
             
-            if not image.isNull():
-                # Save the image to the story
-                self.save_image_to_story(image)
-            else:
-                self.show_error("Clipboard Error", "Could not get valid image from clipboard")
-        elif mime_data.hasUrls():
-            # Check if it's a local file URL
-            urls = mime_data.urls()
+        self.last_processed_hash = content_hash
+        
+        # Process the clipboard content
+        self._process_clipboard_content()
+        
+    def _process_clipboard_content(self):
+        """Process the current clipboard content."""
+        try:
+            # Get the clipboard
+            clipboard = QApplication.clipboard()
+            mime_data = clipboard.mimeData()
             
-            if urls and urls[0].isLocalFile():
-                # Get the local file path
-                file_path = urls[0].toLocalFile()
+            # Double-check that we have valid content before processing
+            if not self._has_valid_clipboard_content(mime_data):
+                print("No valid clipboard content found during processing")
+                self.paste_in_progress = False
+                return
+            
+            # Generate a content hash to check for duplicates
+            content_hash = self._generate_content_hash(mime_data)
+            
+            # Check if we've already processed this content
+            if content_hash in self.processed_content_hashes:
+                print(f"Skipping duplicate content (hash: {content_hash[:8]}...)")
+                self.paste_in_progress = False
+                return
+            
+            # Add to processed hashes
+            self.processed_content_hashes.add(content_hash)
+            
+            if mime_data.hasImage():
+                # Get the image from the clipboard
+                image = clipboard.image()
                 
-                # Check if it's an image file
-                if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
-                    # Load the image
-                    image = QImage(file_path)
+                if not image.isNull() and image.width() > 0 and image.height() > 0:
+                    # Save the image to the story
+                    self.save_image_to_story(image)
+                    print(f"Successfully processed clipboard image: {image.width()}x{image.height()}")
+                else:
+                    print("Clipboard image is null or has invalid dimensions")
+                    # Don't show error dialog for this case, just silently fail
                     
-                    if not image.isNull():
-                        # Save the image to the story
-                        self.save_image_to_story(image)
-                    else:
-                        self.show_error("Image Error", f"Could not load image from {file_path}")
+            elif mime_data.hasUrls():
+                # Handle URLs (file paths, etc.)
+                self._handle_clipboard_urls(mime_data.urls())
+                
+            elif mime_data.hasHtml():
+                # Check the HTML for image tags
+                html = mime_data.html()
+                urls = self._extract_image_urls_from_html(html)
+                
+                if urls:
+                    # Download the first image
+                    url = QUrl(urls[0])
+                    self._download_image(url)
                 else:
-                    self.show_error("File Type Error", "The file in the clipboard is not a supported image format")
+                    print("No valid image URLs found in HTML content")
             else:
-                # It's a remote URL
-                for url in urls:
-                    # Check if it's an image URL
-                    url_str = url.toString()
-                    if any(url_str.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']):
-                        # Download the image
-                        self._download_image(url)
-                        break
-                else:
-                    # No valid image URLs
-                    self.debug_clipboard()
-        elif mime_data.hasHtml():
-            # Check the HTML for image tags
-            html = mime_data.html()
-            urls = self._extract_image_urls_from_html(html)
+                print("No processable content found in clipboard")
+                
+        except Exception as e:
+            print(f"Error processing clipboard content: {e}")
+            # Only show error dialog for unexpected exceptions
+            if "Could not get valid image from clipboard" not in str(e):
+                self.show_error("Clipboard Error", f"Error processing clipboard: {str(e)}")
+        finally:
+            self.paste_in_progress = False
             
-            if urls:
-                # Download the first image
-                url = QUrl(urls[0])
+    def _handle_clipboard_urls(self, urls):
+        """Handle URLs from clipboard.
+        
+        Args:
+            urls: List of QUrl objects
+        """
+        if not urls:
+            return
+            
+        url = urls[0]
+        
+        if url.isLocalFile():
+            # Get the local file path
+            file_path = url.toLocalFile()
+            
+            # Check if it's an image file
+            if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                # Load the image
+                image = QImage(file_path)
+                
+                if not image.isNull():
+                    # Save the image to the story
+                    self.save_image_to_story(image)
+                else:
+                    self.show_error("Image Error", f"Could not load image from {file_path}")
+            else:
+                self.show_error("File Type Error", "The file in the clipboard is not a supported image format")
+        else:
+            # It's a remote URL - check if it's an image URL
+            url_str = url.toString()
+            if any(url_str.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']):
+                # Download the image
                 self._download_image(url)
             else:
-                # No image URLs found
+                # No valid image URLs
                 self.debug_clipboard()
-        else:
-            # No image in clipboard
-            self.debug_clipboard()
+    
+    def _has_valid_clipboard_content(self, mime_data) -> bool:
+        """Check if clipboard contains valid content we can process.
+        
+        Args:
+            mime_data: QMimeData from clipboard
+            
+        Returns:
+            True if clipboard has valid processable content
+        """
+        if not mime_data:
+            return False
+            
+        # Check for valid image
+        if mime_data.hasImage():
+            try:
+                image = QApplication.clipboard().image()
+                if not image.isNull() and image.width() > 0 and image.height() > 0:
+                    return True
+            except Exception as e:
+                print(f"Error checking clipboard image: {e}")
+                return False
+        
+        # Check for valid URLs
+        if mime_data.hasUrls():
+            try:
+                urls = mime_data.urls()
+                if urls:
+                    url = urls[0]
+                    if url.isLocalFile():
+                        file_path = url.toLocalFile()
+                        if file_path and file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                            return True
+                    else:
+                        url_str = url.toString()
+                        if any(url_str.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']):
+                            return True
+            except Exception as e:
+                print(f"Error checking clipboard URLs: {e}")
+                return False
+        
+        # Check for HTML with image URLs
+        if mime_data.hasHtml():
+            try:
+                html = mime_data.html()
+                urls = self._extract_image_urls_from_html(html)
+                if urls:
+                    return True
+            except Exception as e:
+                print(f"Error checking clipboard HTML: {e}")
+                return False
+        
+        return False
+    
+    def _has_valid_clipboard_content_for_hash(self, mime_data) -> bool:
+        """Quick check for valid clipboard content for hash generation.
+        
+        Args:
+            mime_data: QMimeData from clipboard
+            
+        Returns:
+            True if clipboard has content worth hashing
+        """
+        if not mime_data:
+            return False
+            
+        # Check for image (quick check without full validation)
+        if mime_data.hasImage():
+            return True
+        
+        # Check for URLs
+        if mime_data.hasUrls():
+            return True
+        
+        # Check for HTML
+        if mime_data.hasHtml():
+            return True
+            
+        return False
+    
+    def _generate_content_hash(self, mime_data) -> str:
+        """Generate a hash for clipboard content to detect duplicates.
+        
+        Args:
+            mime_data: QMimeData from clipboard
+            
+        Returns:
+            Hash string of the content
+        """
+        try:
+            hash_input = ""
+            
+            # Add formats to hash
+            formats = sorted(mime_data.formats())
+            hash_input += "|".join(formats)
+            
+            # Add image data if available and valid
+            if mime_data.hasImage():
+                clipboard = QApplication.clipboard()
+                image = clipboard.image()
+                if not image.isNull() and image.width() > 0 and image.height() > 0:
+                    # Use image size and format as part of hash
+                    hash_input += f"|img:{image.width()}x{image.height()}:{image.format()}"
+                    
+                    # Add a sample of pixel data for more uniqueness
+                    if image.width() >= 10 and image.height() >= 10:
+                        # Sample a few pixels from different areas
+                        pixel1 = image.pixel(5, 5)
+                        pixel2 = image.pixel(image.width()//2, image.height()//2)
+                        pixel3 = image.pixel(image.width()-5, image.height()-5)
+                        hash_input += f"|pixels:{pixel1}:{pixel2}:{pixel3}"
+            
+            # Add text data if available (first 100 chars)
+            if mime_data.hasText():
+                text = mime_data.text()[:100]
+                hash_input += f"|text:{text}"
+            
+            # Add URL data if available
+            if mime_data.hasUrls():
+                urls = [url.toString() for url in mime_data.urls()]
+                hash_input += f"|urls:{','.join(urls[:3])}"  # First 3 URLs
+            
+            # Generate hash
+            return hashlib.md5(hash_input.encode()).hexdigest()
+            
+        except Exception as e:
+            print(f"Error generating content hash: {e}")
+            return f"error_{time.time()}"  # Fallback to timestamp-based hash
+    
+    def _handle_monitoring_timeout(self, status_msg):
+        """Handle timeout of clipboard monitoring.
+        
+        Args:
+            status_msg: Status message dialog
+        """
+        status_msg.close()
+        self.clipboard_monitor.stop_monitoring()
+        
+        # Try one final immediate paste
+        try:
+            self._process_clipboard_content()
+        except Exception as e:
+            print(f"Final paste attempt failed: {e}")
+            self.show_error("Clipboard Timeout", 
+                          "Clipboard content did not stabilize within the timeout period. "
+                          "Try copying the image again and pasting immediately.")
+            self.paste_in_progress = False
     
     def _download_image(self, url: QUrl) -> None:
         """Download an image from a URL.
@@ -1366,63 +1740,74 @@ class GalleryWidget(QWidget):
             
             self.images.insert(0, new_image)  # Add to start (newest)
             
-            # Run character recognition on the image
-            # Show a progress dialog for the longer operation
-            progress_dialog = QProgressDialog(
-                "Analyzing image for character recognition...",
-                "Cancel", 0, 100, self
-            )
-            progress_dialog.setWindowTitle("Character Recognition")
-            progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-            progress_dialog.setMinimumDuration(500)  # Show after 500ms delay
-            progress_dialog.setValue(0)
-            
-            # Allow some processing before showing the dialog
-            QApplication.processEvents()
-            
-            # Open the RegionSelectionDialog for character recognition
-            from app.views.gallery.dialogs.region_selection import RegionSelectionDialog
-            region_dialog = RegionSelectionDialog(self.db_conn, image, self.story_id, self, image_id=image_id)
-            
-            progress_dialog.setValue(100)
-            progress_dialog.close()
-            
-            # Show the dialog - this will block until it's closed
-            if region_dialog.exec():
-                # Get selected character data and process it if needed
+            # Run character recognition on the image (only if not already in progress)
+            if not self.character_recognition_in_progress:
+                self.character_recognition_in_progress = True
+                
                 try:
-                    # Get the data returned from the dialog
-                    result_data = region_dialog.get_selected_character_data()
-                    if result_data:
-                        # Process character tags and quick event information
-                        character_data = result_data.get('characters', [])
-                        quick_event_id = result_data.get('quick_event_id')
-                        
-                        # Process character tags
-                        if character_data:
-                            from app.db_sqlite import add_character_tag_to_image
-                            for character in character_data:
-                                character_id = character['character_id']
-                                region = character['region']
+                    # Show a progress dialog for the longer operation
+                    progress_dialog = QProgressDialog(
+                        "Analyzing image for character recognition...",
+                        "Cancel", 0, 100, self
+                    )
+                    progress_dialog.setWindowTitle("Character Recognition")
+                    progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+                    progress_dialog.setMinimumDuration(500)  # Show after 500ms delay
+                    progress_dialog.setValue(0)
+                    
+                    # Allow some processing before showing the dialog
+                    QApplication.processEvents()
+                    
+                    # Open the RegionSelectionDialog for character recognition
+                    from app.views.gallery.dialogs.region_selection import RegionSelectionDialog
+                    region_dialog = RegionSelectionDialog(self.db_conn, image, self.story_id, self, image_id=image_id)
+                    
+                    progress_dialog.setValue(100)
+                    progress_dialog.close()
+                    
+                    # Show the dialog - this will block until it's closed
+                    if region_dialog.exec():
+                        # Get selected character data and process it if needed
+                        try:
+                            # Get the data returned from the dialog
+                            result_data = region_dialog.get_selected_character_data()
+                            if result_data:
+                                # Process character tags and quick event information
+                                character_data = result_data.get('characters', [])
+                                quick_event_id = result_data.get('quick_event_id')
                                 
-                                # Add the character tag to the image with the region coordinates
-                                add_character_tag_to_image(
-                                    self.db_conn,
-                                    image_id,
-                                    character_id,
-                                    region['x'],  # Center X (normalized)
-                                    region['y'],  # Center Y (normalized)
-                                    region['width'],  # Width (normalized)
-                                    region['height'],  # Height (normalized),
-                                    character.get('description', "Character tag added")
-                                )
-                        
-                        # Associate quick event if one was selected
-                        if quick_event_id:
-                            self.associate_quick_event_with_image(image_id, quick_event_id)
+                                # Process character tags
+                                if character_data:
+                                    from app.db_sqlite import add_character_tag_to_image
+                                    for character in character_data:
+                                        character_id = character['character_id']
+                                        region = character['region']
+                                        
+                                        # Add the character tag to the image with the region coordinates
+                                        add_character_tag_to_image(
+                                            self.db_conn,
+                                            image_id,
+                                            character_id,
+                                            region['x'],  # Center X (normalized)
+                                            region['y'],  # Center Y (normalized)
+                                            region['width'],  # Width (normalized)
+                                            region['height'],  # Height (normalized),
+                                            character.get('description', "Character tag added")
+                                        )
+                                
+                                # Associate quick event if one was selected
+                                if quick_event_id:
+                                    self.associate_quick_event_with_image(image_id, quick_event_id)
+                        except Exception as e:
+                            self.show_error("Error", f"Failed to process character recognition data: {str(e)}")
+                            logging.exception(f"Error processing character recognition data: {e}")
+                
                 except Exception as e:
-                    self.show_error("Error", f"Failed to process character recognition data: {str(e)}")
-                    logging.exception(f"Error processing character recognition data: {e}")
+                    self.show_error("Character Recognition Error", f"Failed to open character recognition: {str(e)}")
+                    logging.exception(f"Error opening character recognition: {e}")
+                finally:
+                    # Always reset the flag when done
+                    self.character_recognition_in_progress = False
             
             # Reload images
             self.load_images()
