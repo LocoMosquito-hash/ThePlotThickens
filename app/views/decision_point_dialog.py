@@ -20,9 +20,10 @@ from PyQt6.QtGui import QKeySequence, QShortcut
 from app.db_sqlite import (
     create_decision_point, update_decision_point, get_decision_point,
     get_decision_options, add_decision_option, update_decision_option,
-    delete_decision_option
+    delete_decision_option, get_story_characters
 )
 from app.utils.ocr_widget import OCRWidget
+from app.utils.character_completer import CharacterCompleter
 
 
 class OptionItem:
@@ -77,6 +78,9 @@ class DecisionPointDialog(QDialog):
         if decision_point_id:
             self.load_decision_point_data()
         
+        # Load characters for autocompletion
+        self.load_characters()
+        
         # Setup keyboard shortcuts
         self.setup_shortcuts()
     
@@ -90,6 +94,27 @@ class DecisionPointDialog(QDialog):
         """Activate the OCR tab and focus it."""
         # Switch to OCR tab
         self.tab_widget.setCurrentIndex(1)  # Index 1 is the OCR tab
+    
+    def load_characters(self) -> None:
+        """Load characters for autocompletion."""
+        try:
+            # Get all characters for this story
+            characters = get_story_characters(self.db_conn, self.story_id)
+            
+            # Set characters in the completer
+            self.character_completer.set_characters(characters)
+            
+        except Exception as e:
+            print(f"Error loading characters for autocompletion: {e}")
+    
+    def on_character_selected(self, character_name: str) -> None:
+        """Handle character selection from the completer.
+        
+        Args:
+            character_name: Name of the selected character
+        """
+        # Insert the character tag at the current cursor position
+        self.character_completer.insert_character_tag(character_name)
     
     def init_ui(self) -> None:
         """Initialize the user interface."""
@@ -114,6 +139,13 @@ class DecisionPointDialog(QDialog):
         title_layout.addWidget(title_label)
         title_layout.addWidget(self.title_edit)
         decision_point_layout.addLayout(title_layout)
+        
+        # Setup character autocompletion for the title field
+        # Users can type "@" followed by character names to get autocompletion suggestions
+        # This helps with remembering character names and saves typing time
+        self.character_completer = CharacterCompleter()
+        self.character_completer.attach_to_widget(self.title_edit)
+        self.character_completer.character_selected.connect(self.on_character_selected)
         
         # Add option button
         self.add_option_button = QPushButton("Add option")
@@ -190,21 +222,41 @@ class DecisionPointDialog(QDialog):
         """Handle text extracted from OCR.
         
         Args:
-            text: The extracted text to add as a new option
+            text: The extracted text to add as option(s)
         """
         if text.strip():
-            # Add the extracted text as a new option
-            self.add_option(text.strip())
+            # Split text by line breaks and filter out empty lines
+            lines = [line.strip() for line in text.split('\n') if line.strip()]
             
-            # Switch back to the Decision Point tab
-            self.tab_widget.setCurrentIndex(0)
-            
-            # Show confirmation
-            QMessageBox.information(
-                self,
-                "Option Added",
-                f"Added new option from OCR text"
-            )
+            if len(lines) == 1:
+                # Single line: add as one option (same as before)
+                self.add_option(lines[0])
+                
+                # Switch back to the Decision Point tab
+                self.tab_widget.setCurrentIndex(0)
+                
+                # Show confirmation
+                QMessageBox.information(
+                    self,
+                    "Option Added",
+                    f"Added new option from OCR text"
+                )
+            elif len(lines) > 1:
+                # Multiple lines: add each line as a separate option
+                for line in lines:
+                    self.add_option(line)
+                
+                # Switch back to the Decision Point tab
+                self.tab_widget.setCurrentIndex(0)
+                
+                # Show confirmation with count
+                QMessageBox.information(
+                    self,
+                    "Options Added",
+                    f"Added {len(lines)} options from OCR text:\n" + 
+                    "\n".join(f"• {line}" for line in lines[:5]) +
+                    (f"\n... and {len(lines) - 5} more" if len(lines) > 5 else "")
+                )
     
     def on_add_option(self) -> None:
         """Handle add option button click."""

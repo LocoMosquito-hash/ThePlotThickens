@@ -134,7 +134,7 @@ class OCRWidget(QWidget):
         
         # Preprocessing checkbox
         self.preprocess_check = QCheckBox("Preprocess Image")
-        self.preprocess_check.setChecked(True)
+        self.preprocess_check.setChecked(False)
         ocr_options_layout.addWidget(self.preprocess_check)
         
         # Line mode checkbox
@@ -389,17 +389,50 @@ class OCRWidget(QWidget):
         # Convert to RGB format
         if qimage.format() != QImage.Format.Format_RGB32:
             qimage = qimage.convertToFormat(QImage.Format.Format_RGB32)
+        
+        # Use a more robust method to convert QImage to numpy array
+        # This avoids the PyQt6 sip.voidptr issue
+        try:
+            # Method 1: Use QBuffer to convert via bytes
+            buffer = QBuffer()
+            buffer.open(QIODevice.OpenModeFlag.ReadWrite)
+            qimage.save(buffer, "PNG")
             
-        # Get pointer to data
-        ptr = qimage.bits()
-        
-        # Create NumPy array from the data
-        arr = np.frombuffer(ptr, np.uint8).reshape((height, width, 4))
-        
-        # Convert to BGR format (for OpenCV)
-        arr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
-        
-        return arr
+            # Get the bytes data
+            bytes_data = buffer.data().data()
+            
+            # Convert to PIL Image first, then to numpy
+            pil_img = Image.open(io.BytesIO(bytes_data))
+            
+            # Convert PIL to numpy array
+            arr = np.array(pil_img)
+            
+            # If the image has an alpha channel, remove it
+            if len(arr.shape) == 3 and arr.shape[2] == 4:
+                arr = arr[:, :, :3]  # Remove alpha channel
+            
+            # Convert RGB to BGR for OpenCV
+            if len(arr.shape) == 3 and arr.shape[2] == 3:
+                arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+            
+            return arr
+            
+        except Exception as e:
+            print(f"Error in qimage_to_numpy conversion: {e}")
+            # Fallback: try direct conversion with size specification
+            try:
+                ptr = qimage.bits()
+                # Specify the size explicitly to avoid the voidptr issue
+                byte_count = qimage.sizeInBytes()
+                arr = np.frombuffer(ptr, np.uint8, count=byte_count).reshape((height, width, 4))
+                
+                # Convert to BGR format (for OpenCV)
+                arr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
+                
+                return arr
+            except Exception as e2:
+                print(f"Fallback conversion also failed: {e2}")
+                return None
     
     def qimage_to_pil(self, qimage: QImage) -> Any:
         """Convert QImage to PIL Image for pytesseract.
@@ -456,11 +489,16 @@ class OCRWidget(QWidget):
                 # Convert QImage to numpy array
                 img_array = self.qimage_to_numpy(img)
                 
-                # Preprocess the image
-                processed_array = self.preprocess_image(img_array)
-                
-                # Convert back to PIL Image for OCR
-                pil_img = Image.fromarray(processed_array)
+                if img_array is not None:
+                    # Preprocess the image
+                    processed_array = self.preprocess_image(img_array)
+                    
+                    # Convert back to PIL Image for OCR
+                    pil_img = Image.fromarray(processed_array)
+                else:
+                    # If conversion failed, fall back to direct PIL conversion
+                    print("Warning: Image preprocessing failed, using direct conversion")
+                    pil_img = self.qimage_to_pil(img)
             else:
                 # Convert directly to PIL without preprocessing
                 pil_img = self.qimage_to_pil(img)
