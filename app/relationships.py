@@ -401,7 +401,8 @@ def initialize_relationship_types(conn: sqlite3.Connection) -> None:
 def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int, 
                        relationship_type_id: int, description: Optional[str] = None, 
                        strength: int = 3, color: str = "#FF0000", width: float = 6.0,
-                       is_custom: bool = False, custom_label: Optional[str] = None) -> int:
+                       is_custom: bool = False, custom_label: Optional[str] = None,
+                       inverse_relationship_id: Optional[int] = None) -> int:
     """Create a new relationship in the database.
     
     Args:
@@ -415,6 +416,7 @@ def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int
         width: Line width for visualization
         is_custom: Whether this is a custom relationship
         custom_label: Custom relationship label (if is_custom is True)
+        inverse_relationship_id: Optional ID of the inverse relationship
         
     Returns:
         ID of the created relationship
@@ -440,16 +442,69 @@ def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int
     INSERT INTO relationships (
         source_id, target_id, relationship_type_id, relationship_type,
         description, strength, color, width,
-        is_custom, custom_label
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_custom, custom_label, inverse_relationship_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         source_id, target_id, relationship_type_id, relationship_type_label,
         description, strength, color, width,
-        1 if is_custom else 0, custom_label
+        1 if is_custom else 0, custom_label, inverse_relationship_id
     ))
     
     conn.commit()
     return cursor.lastrowid
+
+
+def create_relationship_pair(conn: sqlite3.Connection, source_id: int, target_id: int,
+                           forward_type_id: int, backward_type_id: int,
+                           description: Optional[str] = None, strength: int = 3,
+                           color: str = "#FF0000", width: float = 6.0) -> Tuple[int, int]:
+    """Create a pair of linked relationships (forward and backward).
+    
+    Args:
+        conn: Database connection
+        source_id: ID of the source character
+        target_id: ID of the target character
+        forward_type_id: ID of the forward relationship type (source -> target)
+        backward_type_id: ID of the backward relationship type (target -> source)
+        description: Optional description
+        strength: Relationship strength (1-5)
+        color: Hex color for visualization
+        width: Line width for visualization
+        
+    Returns:
+        Tuple of (forward_relationship_id, backward_relationship_id)
+    """
+    # First, create both relationships without linking them
+    forward_id = create_relationship(
+        conn, source_id, target_id, forward_type_id,
+        description=description, strength=strength, color=color, width=width
+    )
+    
+    backward_id = create_relationship(
+        conn, target_id, source_id, backward_type_id,
+        description=description, strength=strength, color=color, width=width
+    )
+    
+    # Now update both relationships to link them bidirectionally
+    cursor = conn.cursor()
+    
+    # Update forward relationship to point to backward relationship
+    cursor.execute('''
+    UPDATE relationships 
+    SET inverse_relationship_id = ? 
+    WHERE id = ?
+    ''', (backward_id, forward_id))
+    
+    # Update backward relationship to point to forward relationship
+    cursor.execute('''
+    UPDATE relationships 
+    SET inverse_relationship_id = ? 
+    WHERE id = ?
+    ''', (forward_id, backward_id))
+    
+    conn.commit()
+    
+    return forward_id, backward_id
 
 
 def get_relationship_categories(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
@@ -891,4 +946,55 @@ def get_story_relationships(conn: sqlite3.Connection, story_id: int) -> List[Dic
             'is_custom': relationship['is_custom']
         })
     
-    return relationships 
+    return relationships
+
+
+def get_linked_relationship(conn: sqlite3.Connection, relationship_id: int) -> Optional[Dict[str, Any]]:
+    """Get the linked (inverse) relationship for a given relationship.
+    
+    Args:
+        conn: Database connection
+        relationship_id: ID of the relationship
+        
+    Returns:
+        Dictionary with the linked relationship data or None if no link exists
+    """
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    SELECT r2.* FROM relationships r1
+    JOIN relationships r2 ON r1.inverse_relationship_id = r2.id
+    WHERE r1.id = ?
+    ''', (relationship_id,))
+    
+    result = cursor.fetchone()
+    return dict(result) if result else None
+
+
+def get_relationship_pair(conn: sqlite3.Connection, relationship_id: int) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """Get both relationships in a linked pair.
+    
+    Args:
+        conn: Database connection
+        relationship_id: ID of either relationship in the pair
+        
+    Returns:
+        Tuple of (primary_relationship, linked_relationship) or (relationship, None) if not linked
+    """
+    cursor = conn.cursor()
+    
+    # Get the primary relationship
+    cursor.execute('SELECT * FROM relationships WHERE id = ?', (relationship_id,))
+    primary = cursor.fetchone()
+    
+    if not primary:
+        return None, None
+    
+    primary_dict = dict(primary)
+    
+    # Get the linked relationship if it exists
+    if primary_dict.get('inverse_relationship_id'):
+        linked = get_linked_relationship(conn, relationship_id)
+        return primary_dict, linked
+    else:
+        return primary_dict, None 
