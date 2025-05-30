@@ -576,7 +576,7 @@ class RelationshipDetailsDialog(QDialog):
         
         # Set up the dialog
         self.setWindowTitle("Relationship Details")
-        self.resize(600, 400)
+        self.resize(600, 500)
         
         self._init_ui()
         
@@ -705,7 +705,7 @@ class RelationshipDetailsDialog(QDialog):
             
             # Add existing relationships section
             existing_label = QLabel(f"Existing relationships between {self.source_name} and {self.target_name}:")
-            existing_label.setStyleSheet("font-weight: bold; font-size: 12px; color: #333;")
+            existing_label.setStyleSheet("font-weight: bold; font-size: 12px;")
             main_layout.addWidget(existing_label)
             
             # Create and add the existing relationships table
@@ -719,11 +719,7 @@ class RelationshipDetailsDialog(QDialog):
             separator = QFrame()
             separator.setFrameShape(QFrame.Shape.HLine)
             separator.setFrameShadow(QFrame.Shadow.Sunken)
-            separator.setStyleSheet("color: #ccc;")
             main_layout.addWidget(separator)
-            
-            # Add some spacing after separator
-            main_layout.addSpacing(10)
             
             # Create the forward relationship card (A -> B)
             self.forward_card = RelationshipCard(
@@ -1182,23 +1178,62 @@ class RelationshipDetailsDialog(QDialog):
         table.setColumnCount(2)
         table.setHorizontalHeaderLabels(["Relationship", "Strength"])
         
-        # Set table properties
+        # Set table properties for dark theme compatibility
         table.setAlternatingRowColors(True)
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         table.verticalHeader().setVisible(False)
+        
+        # Add dark-theme friendly styling
+        table.setStyleSheet("""
+            QTableWidget {
+                border: 1px solid palette(mid);
+                border-radius: 5px;
+                background-color: palette(base);
+                alternate-background-color: palette(alternate-base);
+                selection-background-color: palette(highlight);
+                gridline-color: palette(mid);
+            }
+            QTableWidget::item {
+                padding: 8px;
+                border: none;
+            }
+            QTableWidget::item:selected {
+                background-color: palette(highlight);
+                color: palette(highlighted-text);
+            }
+            QHeaderView::section {
+                background-color: palette(button);
+                padding: 6px;
+                border: 1px solid palette(mid);
+                font-weight: bold;
+            }
+        """)
         
         # Set column widths
         header = table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Relationship column stretches
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Strength column fits content
         
-        # Set maximum height to show about 5 rows without scrolling
-        table.setMaximumHeight(150)
-        
-        # Load and populate existing relationships
+        # Load existing relationships first to determine proper table height
         existing_relationships = self._load_existing_relationships()
         
+        # Calculate optimal table height based on content
+        row_count = len(existing_relationships) if existing_relationships else 1  # At least 1 for empty state
+        max_visible_rows = 3  # Maximum number of rows to show without scrolling
+        visible_rows = min(row_count, max_visible_rows)
+        
+        # Calculate height: header + (row height * visible rows) + margins
+        header_height = 30  # Approximate header height
+        row_height = 35     # Approximate row height with padding
+        table_margins = 10  # Small margin for borders
+        optimal_height = header_height + (row_height * visible_rows) + table_margins
+        
+        # Set the calculated height
+        table.setMaximumHeight(optimal_height)
+        table.setMinimumHeight(optimal_height)
+        
+        # Populate the table
         if existing_relationships:
             table.setRowCount(len(existing_relationships))
             
@@ -1220,6 +1255,16 @@ class RelationshipDetailsDialog(QDialog):
             empty_item = QTableWidgetItem("No existing relationships")
             empty_item.setFlags(empty_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             empty_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            # Make the empty state text slightly dimmed using palette colors
+            palette = table.palette()
+            placeholder_color = palette.color(palette.ColorRole.PlaceholderText)
+            if not placeholder_color.isValid():
+                # Fallback for older Qt versions or themes without PlaceholderText
+                text_color = palette.color(palette.ColorRole.Text)
+                text_color.setAlpha(128)  # Make it 50% transparent
+                empty_item.setForeground(text_color)
+            else:
+                empty_item.setForeground(placeholder_color)
             table.setItem(0, 0, empty_item)
             
             # Empty strength cell
@@ -1255,6 +1300,21 @@ class RelationshipDetailsDialog(QDialog):
             # Reload and repopulate
             existing_relationships = self._load_existing_relationships()
             
+            # Recalculate optimal table height based on new content
+            row_count = len(existing_relationships) if existing_relationships else 1  # At least 1 for empty state
+            max_visible_rows = 3  # Maximum number of rows to show without scrolling
+            visible_rows = min(row_count, max_visible_rows)
+            
+            # Calculate height: header + (row height * visible rows) + margins
+            header_height = 30  # Approximate header height
+            row_height = 35     # Approximate row height with padding
+            table_margins = 10  # Small margin for borders
+            optimal_height = header_height + (row_height * visible_rows) + table_margins
+            
+            # Update the table height
+            self.existing_relationships_table.setMaximumHeight(optimal_height)
+            self.existing_relationships_table.setMinimumHeight(optimal_height)
+            
             if existing_relationships:
                 self.existing_relationships_table.setRowCount(len(existing_relationships))
                 
@@ -1276,6 +1336,16 @@ class RelationshipDetailsDialog(QDialog):
                 empty_item = QTableWidgetItem("No existing relationships")
                 empty_item.setFlags(empty_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 empty_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                # Make the empty state text slightly dimmed using palette colors
+                palette = self.existing_relationships_table.palette()
+                placeholder_color = palette.color(palette.ColorRole.PlaceholderText)
+                if not placeholder_color.isValid():
+                    # Fallback for older Qt versions or themes without PlaceholderText
+                    text_color = palette.color(palette.ColorRole.Text)
+                    text_color.setAlpha(128)  # Make it 50% transparent
+                    empty_item.setForeground(text_color)
+                else:
+                    empty_item.setForeground(placeholder_color)
                 self.existing_relationships_table.setItem(0, 0, empty_item)
                 
                 # Empty strength cell
