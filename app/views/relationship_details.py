@@ -13,7 +13,8 @@ from typing import Optional, Dict, Any, List, Tuple, Set
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QPushButton, QLineEdit, QListWidget, QListWidgetItem,
-    QComboBox, QCompleter, QSizePolicy, QWidget, QMessageBox
+    QComboBox, QCompleter, QSizePolicy, QWidget, QMessageBox,
+    QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QPoint
 from PyQt6.QtGui import QPixmap, QIcon, QColor, QPainter, QPen
@@ -702,6 +703,28 @@ class RelationshipDetailsDialog(QDialog):
             self.categories = self._load_relationship_categories()
             self.relationship_types = self._load_relationship_types()
             
+            # Add existing relationships section
+            existing_label = QLabel(f"Existing relationships between {self.source_name} and {self.target_name}:")
+            existing_label.setStyleSheet("font-weight: bold; font-size: 12px; color: #333;")
+            main_layout.addWidget(existing_label)
+            
+            # Create and add the existing relationships table
+            self.existing_relationships_table = self._create_existing_relationships_table()
+            main_layout.addWidget(self.existing_relationships_table)
+            
+            # Add some spacing
+            main_layout.addSpacing(10)
+            
+            # Add a separator line
+            separator = QFrame()
+            separator.setFrameShape(QFrame.Shape.HLine)
+            separator.setFrameShadow(QFrame.Shadow.Sunken)
+            separator.setStyleSheet("color: #ccc;")
+            main_layout.addWidget(separator)
+            
+            # Add some spacing after separator
+            main_layout.addSpacing(10)
+            
             # Create the forward relationship card (A -> B)
             self.forward_card = RelationshipCard(
                 self.source_id, self.source_name, 
@@ -999,6 +1022,9 @@ class RelationshipDetailsDialog(QDialog):
             self.db_conn.commit()
             print("Relationships saved successfully")
             
+            # Refresh the existing relationships table
+            self._refresh_existing_relationships_table()
+            
         except Exception as e:
             print(f"Error saving relationships: {e}")
             import traceback
@@ -1025,4 +1051,234 @@ class RelationshipDetailsDialog(QDialog):
             main_window.story_board.refresh_board()
         
         # Close the dialog
-        super().accept() 
+        super().accept()
+
+    def _load_existing_relationships(self) -> List[Dict[str, Any]]:
+        """Load existing relationships between the two characters.
+        
+        Returns:
+            List of relationship pair dictionaries for display
+        """
+        try:
+            cursor = self.db_conn.cursor()
+            
+            # Get all relationships between these two characters (both directions)
+            cursor.execute("""
+                SELECT r.id, r.source_id, r.target_id, r.relationship_type_id, 
+                       r.relationship_type, r.strength, r.inverse_relationship_id,
+                       r.is_custom, r.custom_label, r.created_at,
+                       rt.label as type_label
+                FROM relationships r
+                LEFT JOIN relationship_types_new rt ON r.relationship_type_id = rt.type_id
+                WHERE (r.source_id = ? AND r.target_id = ?) 
+                   OR (r.source_id = ? AND r.target_id = ?)
+                ORDER BY r.created_at DESC
+            """, (self.source_id, self.target_id, self.target_id, self.source_id))
+            
+            all_relationships = [dict(row) for row in cursor.fetchall()]
+            
+            if not all_relationships:
+                return []
+            
+            # Group relationships into pairs and singles
+            relationship_pairs = []
+            processed_ids = set()
+            
+            for rel in all_relationships:
+                if rel['id'] in processed_ids:
+                    continue
+                
+                # Get the display label
+                display_label = rel['custom_label'] if rel['is_custom'] and rel['custom_label'] else rel['type_label']
+                if not display_label:
+                    display_label = rel['relationship_type']  # Fallback to legacy column
+                
+                # Check if this relationship has an inverse
+                if rel['inverse_relationship_id']:
+                    # Find the inverse relationship in our list
+                    inverse_rel = None
+                    for other_rel in all_relationships:
+                        if other_rel['id'] == rel['inverse_relationship_id']:
+                            inverse_rel = other_rel
+                            break
+                    
+                    if inverse_rel:
+                        # Get the inverse display label
+                        inverse_display_label = inverse_rel['custom_label'] if inverse_rel['is_custom'] and inverse_rel['custom_label'] else inverse_rel['type_label']
+                        if not inverse_display_label:
+                            inverse_display_label = inverse_rel['relationship_type']  # Fallback
+                        
+                        # Determine the order (source character first)
+                        if rel['source_id'] == self.source_id:
+                            # rel is source -> target, inverse_rel is target -> source
+                            pair_description = f"{self.source_name} ({display_label}) ↔ {self.target_name} ({inverse_display_label})"
+                        else:
+                            # rel is target -> source, inverse_rel is source -> target
+                            pair_description = f"{self.source_name} ({inverse_display_label}) ↔ {self.target_name} ({display_label})"
+                        
+                        relationship_pairs.append({
+                            'type': 'pair',
+                            'description': pair_description,
+                            'strength': max(rel['strength'] or 0, inverse_rel['strength'] or 0),  # Use higher strength
+                            'primary_id': rel['id'],
+                            'inverse_id': inverse_rel['id'],
+                            'created_at': rel['created_at']
+                        })
+                        
+                        # Mark both as processed
+                        processed_ids.add(rel['id'])
+                        processed_ids.add(inverse_rel['id'])
+                    else:
+                        # Inverse relationship ID exists but relationship not found (broken link)
+                        # Treat as single relationship
+                        if rel['source_id'] == self.source_id:
+                            single_description = f"{self.source_name} ({display_label})"
+                        else:
+                            single_description = f"{self.target_name} ({display_label})"
+                        
+                        relationship_pairs.append({
+                            'type': 'single',
+                            'description': single_description,
+                            'strength': rel['strength'] or 0,
+                            'primary_id': rel['id'],
+                            'inverse_id': None,
+                            'created_at': rel['created_at']
+                        })
+                        
+                        processed_ids.add(rel['id'])
+                else:
+                    # Single relationship (no inverse)
+                    if rel['source_id'] == self.source_id:
+                        single_description = f"{self.source_name} ({display_label})"
+                    else:
+                        single_description = f"{self.target_name} ({display_label})"
+                    
+                    relationship_pairs.append({
+                        'type': 'single',
+                        'description': single_description,
+                        'strength': rel['strength'] or 0,
+                        'primary_id': rel['id'],
+                        'inverse_id': None,
+                        'created_at': rel['created_at']
+                    })
+                    
+                    processed_ids.add(rel['id'])
+            
+            return relationship_pairs
+            
+        except Exception as e:
+            print(f"Error loading existing relationships: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def _create_existing_relationships_table(self) -> QTableWidget:
+        """Create and populate the existing relationships table.
+        
+        Returns:
+            QTableWidget with existing relationships
+        """
+        table = QTableWidget()
+        table.setColumnCount(2)
+        table.setHorizontalHeaderLabels(["Relationship", "Strength"])
+        
+        # Set table properties
+        table.setAlternatingRowColors(True)
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        table.verticalHeader().setVisible(False)
+        
+        # Set column widths
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Relationship column stretches
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Strength column fits content
+        
+        # Set maximum height to show about 5 rows without scrolling
+        table.setMaximumHeight(150)
+        
+        # Load and populate existing relationships
+        existing_relationships = self._load_existing_relationships()
+        
+        if existing_relationships:
+            table.setRowCount(len(existing_relationships))
+            
+            for row, rel_data in enumerate(existing_relationships):
+                # Relationship description
+                desc_item = QTableWidgetItem(rel_data['description'])
+                desc_item.setFlags(desc_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+                desc_item.setData(Qt.ItemDataRole.UserRole, rel_data)  # Store full data for later use
+                table.setItem(row, 0, desc_item)
+                
+                # Strength
+                strength_item = QTableWidgetItem(str(rel_data['strength']))
+                strength_item.setFlags(strength_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+                strength_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                table.setItem(row, 1, strength_item)
+        else:
+            # Show empty state
+            table.setRowCount(1)
+            empty_item = QTableWidgetItem("No existing relationships")
+            empty_item.setFlags(empty_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            empty_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            table.setItem(0, 0, empty_item)
+            
+            # Empty strength cell
+            empty_strength = QTableWidgetItem("")
+            empty_strength.setFlags(empty_strength.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            table.setItem(0, 1, empty_strength)
+        
+        # Connect click event for future functionality
+        table.cellClicked.connect(self._on_existing_relationship_clicked)
+        
+        return table
+    
+    def _on_existing_relationship_clicked(self, row: int, column: int) -> None:
+        """Handle clicks on existing relationship table items.
+        
+        Args:
+            row: Row index that was clicked
+            column: Column index that was clicked
+        """
+        # Get the relationship data from the first column
+        item = self.existing_relationships_table.item(row, 0)
+        if item and item.data(Qt.ItemDataRole.UserRole):
+            rel_data = item.data(Qt.ItemDataRole.UserRole)
+            print(f"Clicked on relationship: {rel_data['description']} (IDs: {rel_data['primary_id']}, {rel_data['inverse_id']})")
+            # TODO: Implement edit/delete functionality later
+    
+    def _refresh_existing_relationships_table(self) -> None:
+        """Refresh the existing relationships table with current data."""
+        if hasattr(self, 'existing_relationships_table'):
+            # Clear the current table
+            self.existing_relationships_table.setRowCount(0)
+            
+            # Reload and repopulate
+            existing_relationships = self._load_existing_relationships()
+            
+            if existing_relationships:
+                self.existing_relationships_table.setRowCount(len(existing_relationships))
+                
+                for row, rel_data in enumerate(existing_relationships):
+                    # Relationship description
+                    desc_item = QTableWidgetItem(rel_data['description'])
+                    desc_item.setFlags(desc_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    desc_item.setData(Qt.ItemDataRole.UserRole, rel_data)
+                    self.existing_relationships_table.setItem(row, 0, desc_item)
+                    
+                    # Strength
+                    strength_item = QTableWidgetItem(str(rel_data['strength']))
+                    strength_item.setFlags(strength_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    strength_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.existing_relationships_table.setItem(row, 1, strength_item)
+            else:
+                # Show empty state
+                self.existing_relationships_table.setRowCount(1)
+                empty_item = QTableWidgetItem("No existing relationships")
+                empty_item.setFlags(empty_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                empty_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.existing_relationships_table.setItem(0, 0, empty_item)
+                
+                # Empty strength cell
+                empty_strength = QTableWidgetItem("")
+                empty_strength.setFlags(empty_strength.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.existing_relationships_table.setItem(0, 1, empty_strength) 
