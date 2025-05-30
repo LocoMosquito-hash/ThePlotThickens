@@ -561,6 +561,11 @@ class RelationshipDetailsDialog(QDialog):
         self.target_id = target_id
         self.target_name = target_name
         
+        # Initialize operations queue for batch processing
+        self.pending_operations = []  # List of operations to execute on Apply
+        # Each operation will be a dict with 'type' and necessary data
+        # Types: 'add', 'edit', 'delete'
+        
         # Apply dark theme if available
         try:
             import qdarktheme
@@ -580,8 +585,9 @@ class RelationshipDetailsDialog(QDialog):
         
         self._init_ui()
         
-        # Initially disable the backward card
+        # Initially disable the backward card and Add Relationship button
         self.backward_card.setEnabled(False)
+        self._update_add_relationship_button_state()
         
         # Connect the forward card combo box's currentTextChanged signal
         self.forward_card.relationship_combo.currentIndexChanged.connect(self._on_forward_relationship_changed)
@@ -752,10 +758,45 @@ class RelationshipDetailsDialog(QDialog):
             error_label.setStyleSheet("color: red;")
             main_layout.addWidget(error_label)
         
+        # Add some spacing after the relationship cards
+        main_layout.addSpacing(16)
+        
+        # Create action buttons layout (Reset and Add Relationship)
+        action_buttons_layout = QHBoxLayout()
+        action_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        action_buttons_layout.setSpacing(10)
+        
+        # Create Reset button
+        self.reset_button = QPushButton("Reset")
+        self.reset_button.setToolTip("Reset both relationship dropdowns to their initial blank state")
+        self.reset_button.clicked.connect(self._reset_relationship_cards)
+        action_buttons_layout.addWidget(self.reset_button)
+        
+        # Create Add Relationship button
+        self.add_relationship_button = QPushButton("Add Relationship")
+        self.add_relationship_button.setToolTip("Add the selected relationship(s) to the pending changes list")
+        self.add_relationship_button.clicked.connect(self._add_relationship_to_queue)
+        self.add_relationship_button.setEnabled(False)  # Initially disabled
+        action_buttons_layout.addWidget(self.add_relationship_button)
+        
+        # Add spacer to center the action buttons
+        action_buttons_layout.addStretch()
+        
+        main_layout.addLayout(action_buttons_layout)
+        
         # Add stretch to push everything up
         main_layout.addStretch()
         
-        # Create buttons layout
+        # Add horizontal separator
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        main_layout.addWidget(separator)
+        
+        # Add some spacing after separator
+        main_layout.addSpacing(10)
+        
+        # Create buttons layout (Cancel and Apply)
         buttons_layout = QHBoxLayout()
         buttons_layout.setContentsMargins(0, 0, 0, 0)
         buttons_layout.setSpacing(10)
@@ -770,6 +811,7 @@ class RelationshipDetailsDialog(QDialog):
         
         # Create Apply button
         self.apply_button = QPushButton("Apply")
+        self.apply_button.setToolTip("Execute all pending relationship changes and close the dialog")
         self.apply_button.clicked.connect(self.accept)
         buttons_layout.addWidget(self.apply_button)
         
@@ -938,6 +980,9 @@ class RelationshipDetailsDialog(QDialog):
         enable_backward = index != -1 and index is not None
         self.backward_card.setEnabled(enable_backward)
         
+        # Update Add Relationship button state
+        self._update_add_relationship_button_state()
+        
         if enable_backward:
             # Get the selected relationship type ID
             forward_type_id = self.forward_card.get_selected_relationship_type_id()
@@ -952,86 +997,201 @@ class RelationshipDetailsDialog(QDialog):
                 # Highlight the suggested inverse relationships
                 self.backward_card.highlightSuggestions(inverse_type_ids)
                 
-                # Automatically select the first inverse relationship if any exist
-                if inverse_type_ids:
-                    combo = self.backward_card.relationship_combo
-                    
-                    # Find the first item in the combo box that matches an inverse relationship
-                    for i in range(combo.count()):
-                        type_id = combo.itemData(i, Qt.ItemDataRole.UserRole)
-                        if type_id in inverse_type_ids:
-                            combo.setCurrentIndex(i)
-                            break
+                # Auto-select if only one inverse type is available
+                if len(inverse_type_ids) == 1:
+                    self._select_relationship_type_by_id(self.backward_card.relationship_combo, inverse_type_ids[0])
+                    print(f"Auto-selected inverse relationship type ID: {inverse_type_ids[0]}")
             else:
                 print("No valid relationship type ID selected")
-                self.backward_card.highlightSuggestions([])
         else:
             # If no forward relationship is selected, clear any suggestions
             self.backward_card.highlightSuggestions([])
             
-    def save_relationships(self) -> None:
-        """Save the selected relationships to the database.
+    def _update_add_relationship_button_state(self) -> None:
+        """Update the state of the Add Relationship button based on current selections."""
+        # Enable the button only if the forward relationship type is selected
+        forward_type_id = self.forward_card.get_selected_relationship_type_id()
+        self.add_relationship_button.setEnabled(forward_type_id is not None)
+    
+    def _reset_relationship_cards(self) -> None:
+        """Reset both relationship cards to their initial blank state."""
+        # Clear selections in both combo boxes
+        self.forward_card.relationship_combo.setCurrentIndex(-1)
+        self.backward_card.relationship_combo.setCurrentIndex(-1)
         
-        Gets the selected relationship types and saves them to the database.
-        - The forward relationship is from source character to target character
-        - The backward relationship is from target character to source character
-        """
-        from app.relationships import create_relationship, create_relationship_pair
+        # Disable the backward card
+        self.backward_card.setEnabled(False)
         
+        # Update Add Relationship button state
+        self._update_add_relationship_button_state()
+        
+        print("Relationship cards reset to initial state")
+    
+    def _add_relationship_to_queue(self) -> None:
+        """Add the currently selected relationship(s) to the pending operations queue."""
         # Get the selected relationship types
         forward_type_id, backward_type_id = self.get_selected_relationships()
         
+        if forward_type_id is None:
+            QMessageBox.warning(
+                self,
+                "No Relationship Selected",
+                "Please select at least a forward relationship type before adding."
+            )
+            return
+        
+        # Create operation data
+        operation = {
+            'type': 'add',
+            'forward_type_id': forward_type_id,
+            'backward_type_id': backward_type_id,
+            'source_id': self.source_id,
+            'target_id': self.target_id,
+            'description': self._get_operation_description(forward_type_id, backward_type_id)
+        }
+        
+        # Add to queue
+        self.pending_operations.append(operation)
+        
+        # Show confirmation message
+        QMessageBox.information(
+            self,
+            "Relationship Added",
+            f"Relationship added to pending changes:\n{operation['description']}\n\n"
+            f"Total pending operations: {len(self.pending_operations)}\n\n"
+            "Click 'Apply' to save all changes to the database."
+        )
+        
+        # Reset the cards for the next relationship
+        self._reset_relationship_cards()
+        
+        print(f"Added relationship to queue: {operation['description']}")
+    
+    def _get_operation_description(self, forward_type_id: Optional[int], backward_type_id: Optional[int]) -> str:
+        """Get a human-readable description of the operation.
+        
+        Args:
+            forward_type_id: ID of the forward relationship type
+            backward_type_id: ID of the backward relationship type
+            
+        Returns:
+            Description string for the operation
+        """
+        forward_label = None
+        backward_label = None
+        
+        # Find the labels for the relationship types
+        for rel_type in self.relationship_types:
+            if rel_type['type_id'] == forward_type_id:
+                forward_label = rel_type['label']
+            if rel_type['type_id'] == backward_type_id:
+                backward_label = rel_type['label']
+        
+        if forward_label and backward_label:
+            return f"{self.source_name} ({forward_label}) ↔ {self.target_name} ({backward_label})"
+        elif forward_label:
+            return f"{self.source_name} ({forward_label})"
+        else:
+            return f"Unknown relationship type (ID: {forward_type_id})"
+    
+    def save_relationships(self) -> None:
+        """Execute all pending relationship operations from the queue.
+        
+        Processes the pending operations queue and executes all add, edit, and delete operations.
+        """
+        from app.relationships import create_relationship, create_relationship_pair
+        
+        if not self.pending_operations:
+            print("No pending operations to execute")
+            return
+        
         try:
-            # If both relationships are selected, create them as a linked pair
-            if forward_type_id is not None and backward_type_id is not None:
-                print(f"Creating linked relationship pair: forward_type_id={forward_type_id}, backward_type_id={backward_type_id}")
-                forward_id, backward_id = create_relationship_pair(
-                    self.db_conn,
-                    source_id=self.source_id,
-                    target_id=self.target_id,
-                    forward_type_id=forward_type_id,
-                    backward_type_id=backward_type_id
-                )
-                print(f"Created linked relationships: forward_id={forward_id}, backward_id={backward_id}")
+            print(f"Executing {len(self.pending_operations)} pending operations...")
+            
+            for i, operation in enumerate(self.pending_operations):
+                print(f"Processing operation {i+1}/{len(self.pending_operations)}: {operation['type']}")
                 
-            else:
-                # Create individual relationships if only one is selected
-                if forward_type_id is not None:
-                    print(f"Creating forward relationship: source_id={self.source_id}, target_id={self.target_id}, type_id={forward_type_id}")
-                    create_relationship(
-                        self.db_conn,
-                        source_id=self.source_id,
-                        target_id=self.target_id,
-                        relationship_type_id=forward_type_id
-                    )
-                
-                if backward_type_id is not None:
-                    print(f"Creating backward relationship: source_id={self.target_id}, target_id={self.source_id}, type_id={backward_type_id}")
-                    create_relationship(
-                        self.db_conn,
-                        source_id=self.target_id,
-                        target_id=self.source_id,
-                        relationship_type_id=backward_type_id
-                    )
-                
-            # Commit the changes to the database
+                if operation['type'] == 'add':
+                    self._execute_add_operation(operation)
+                elif operation['type'] == 'edit':
+                    # TODO: Implement edit operation
+                    print(f"Edit operation not implemented yet: {operation}")
+                elif operation['type'] == 'delete':
+                    # TODO: Implement delete operation
+                    print(f"Delete operation not implemented yet: {operation}")
+                else:
+                    print(f"Unknown operation type: {operation['type']}")
+            
+            # Commit all changes to the database
             self.db_conn.commit()
-            print("Relationships saved successfully")
+            print("All pending operations executed successfully")
+            
+            # Clear the queue
+            self.pending_operations.clear()
             
             # Refresh the existing relationships table
             self._refresh_existing_relationships_table()
             
         except Exception as e:
-            print(f"Error saving relationships: {e}")
+            print(f"Error executing pending operations: {e}")
             import traceback
             traceback.print_exc()
+            
+            # Rollback changes
+            self.db_conn.rollback()
+            
             # Show error message to the user
             QMessageBox.critical(
                 self,
-                "Error Saving Relationships",
-                f"An error occurred while saving relationships: {str(e)}"
+                "Error Executing Operations",
+                f"An error occurred while executing pending operations: {str(e)}\n\n"
+                "All changes have been rolled back."
             )
+    
+    def _execute_add_operation(self, operation: Dict[str, Any]) -> None:
+        """Execute an add relationship operation.
+        
+        Args:
+            operation: Operation data dictionary containing relationship details
+        """
+        from app.relationships import create_relationship, create_relationship_pair
+        
+        forward_type_id = operation['forward_type_id']
+        backward_type_id = operation['backward_type_id']
+        source_id = operation['source_id']
+        target_id = operation['target_id']
+        
+        # If both relationships are selected, create them as a linked pair
+        if forward_type_id is not None and backward_type_id is not None:
+            print(f"Creating linked relationship pair: forward_type_id={forward_type_id}, backward_type_id={backward_type_id}")
+            forward_id, backward_id = create_relationship_pair(
+                self.db_conn,
+                source_id=source_id,
+                target_id=target_id,
+                forward_type_id=forward_type_id,
+                backward_type_id=backward_type_id
+            )
+            print(f"Created linked relationships: forward_id={forward_id}, backward_id={backward_id}")
+        else:
+            # Create individual relationships if only one is selected
+            if forward_type_id is not None:
+                print(f"Creating forward relationship: source_id={source_id}, target_id={target_id}, type_id={forward_type_id}")
+                create_relationship(
+                    self.db_conn,
+                    source_id=source_id,
+                    target_id=target_id,
+                    relationship_type_id=forward_type_id
+                )
             
+            if backward_type_id is not None:
+                print(f"Creating backward relationship: source_id={target_id}, target_id={source_id}, type_id={backward_type_id}")
+                create_relationship(
+                    self.db_conn,
+                    source_id=target_id,
+                    target_id=source_id,
+                    relationship_type_id=backward_type_id
+                )
+    
     def accept(self) -> None:
         """Save the relationship and close the dialog."""
         # Save the relationship(s) to the database
@@ -1352,3 +1512,23 @@ class RelationshipDetailsDialog(QDialog):
                 empty_strength = QTableWidgetItem("")
                 empty_strength.setFlags(empty_strength.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.existing_relationships_table.setItem(0, 1, empty_strength) 
+
+    def _select_relationship_type_by_id(self, combo: SearchableComboBox, type_id: int) -> bool:
+        """Select a relationship type in the combo box by its type ID.
+        
+        Args:
+            combo: The SearchableComboBox to update
+            type_id: The relationship type ID to select
+            
+        Returns:
+            True if the type ID was found and selected, False otherwise
+        """
+        for i in range(combo.count()):
+            item_type_id = combo.itemData(i, Qt.ItemDataRole.UserRole)
+            if item_type_id == type_id:
+                combo.setCurrentIndex(i)
+                print(f"Selected relationship type ID {type_id} at index {i}")
+                return True
+        
+        print(f"Relationship type ID {type_id} not found in combo box")
+        return False 
