@@ -173,6 +173,7 @@ class Relationship(Base):
     # Relationship properties
     description = Column(Text, nullable=True)
     relationship_type = Column(String(255), nullable=False)  # Store as string instead of foreign key
+    strength = Column(Integer, default=3)  # 1-5 scale, used for visualization and relationship importance
     color = Column(String(20), default="#FF0000")  # Hex color code for visualization
     width = Column(Float, default=1.0)  # Line width for visualization
     
