@@ -3064,7 +3064,7 @@ def get_story_decision_points(conn: sqlite3.Connection, story_id: int) -> List[D
     SELECT id, created_at, updated_at, title, description, story_id, is_ordered_list
     FROM decision_points
     WHERE story_id = ?
-    ORDER BY created_at
+    ORDER BY created_at DESC
     ''', (story_id,))
     
     return [dict(row) for row in cursor.fetchall()]

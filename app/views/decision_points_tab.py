@@ -26,12 +26,13 @@ from app.views.decision_point_dialog import DecisionPointDialog
 class DecisionPointItem(QListWidgetItem):
     """A list widget item representing a decision point."""
     
-    def __init__(self, decision_point_data: Dict[str, Any], db_conn=None):
+    def __init__(self, decision_point_data: Dict[str, Any], db_conn=None, index: Optional[int] = None):
         """Initialize the decision point item.
         
         Args:
             decision_point_data: Dictionary with decision point data
             db_conn: Database connection (optional)
+            index: Index number for display (optional)
         """
         super().__init__()
         self.decision_point_data = decision_point_data
@@ -40,12 +41,18 @@ class DecisionPointItem(QListWidgetItem):
         self.description = decision_point_data.get('description', '')
         self.is_ordered_list = bool(decision_point_data.get('is_ordered_list', 0))
         self.db_conn = db_conn
+        self.index = index
         
         # Get options data for display
         self.options = self.get_options()
         
         # Set the item text with a summary
         item_text = self.title
+        
+        # Add number prefix if index is provided
+        if self.index is not None:
+            item_text = f"{self.index}. {item_text}"
+        
         if self.options:
             # Add a count of options to the display text
             type_indicator = "📋" if self.is_ordered_list else "🔘"
@@ -186,8 +193,8 @@ class DecisionPointsTab(QWidget):
         """Update the list widget with decision points."""
         self.list_widget.clear()
         
-        for dp in self.decision_points:
-            item = DecisionPointItem(dp, self.conn)
+        for i, dp in enumerate(self.decision_points, 1):  # Start numbering from 1
+            item = DecisionPointItem(dp, self.conn, index=i)
             self.list_widget.addItem(item)
     
     def add_decision_point(self):
