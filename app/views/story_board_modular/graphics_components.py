@@ -1794,8 +1794,60 @@ class RelationshipLine(QGraphicsPathItem):
             self.add_bendpoint(t)
             
         elif action == edit_action:
-            # TODO: Implement relationship editing
-            QMessageBox.information(None, "Not Implemented", "Relationship editing is not yet implemented.")
+            # Open Relationship Details dialog for these characters
+            try:
+                from app.views.relationship_details import RelationshipDetailsDialog
+                
+                # Get character information
+                source_id = self.source_card.character_id
+                source_name = self.source_card.character_data['name']
+                target_id = self.target_card.character_id
+                target_name = self.target_card.character_data['name']
+                
+                # Get database connection from the scene
+                scene = self.scene()
+                if scene and hasattr(scene, 'db_conn'):
+                    db_conn = scene.db_conn
+                    
+                    # Create and show the relationship details dialog
+                    dialog = RelationshipDetailsDialog(
+                        db_conn=db_conn,
+                        source_id=source_id,
+                        source_name=source_name,
+                        target_id=target_id,
+                        target_name=target_name
+                    )
+                    
+                    # Show the dialog
+                    if dialog.exec() == QDialog.DialogCode.Accepted:
+                        # If relationships were modified, refresh the story board
+                        # Find the story board widget and refresh it
+                        for view in scene.views():
+                            parent_widget = view.parent()
+                            while parent_widget:
+                                if hasattr(parent_widget, 'refresh_board'):
+                                    QTimer.singleShot(100, lambda: parent_widget.refresh_board())
+                                    break
+                                parent_widget = parent_widget.parent()
+                else:
+                    QMessageBox.warning(
+                        None,
+                        "Error",
+                        "Unable to access database connection. Cannot edit relationships."
+                    )
+                    
+            except ImportError as e:
+                QMessageBox.critical(
+                    None,
+                    "Import Error",
+                    f"Failed to import RelationshipDetailsDialog: {str(e)}"
+                )
+            except Exception as e:
+                QMessageBox.critical(
+                    None,
+                    "Error",
+                    f"Failed to open relationship editor: {str(e)}"
+                )
         elif action == color_action:
             # Change color
             current_color = self.pen().color()
