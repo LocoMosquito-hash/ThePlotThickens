@@ -997,4 +997,60 @@ def get_relationship_pair(conn: sqlite3.Connection, relationship_id: int) -> Tup
         linked = get_linked_relationship(conn, relationship_id)
         return primary_dict, linked
     else:
-        return primary_dict, None 
+        return primary_dict, None
+
+
+def check_relationship_linking_integrity(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """Check the integrity of relationship linking in the database.
+    
+    Args:
+        conn: Database connection
+        
+    Returns:
+        Dictionary with integrity check results
+    """
+    cursor = conn.cursor()
+    
+    # Count total relationships and linked relationships
+    cursor.execute("SELECT COUNT(*) FROM relationships")
+    total_relationships = cursor.fetchone()[0]
+    
+    cursor.execute("SELECT COUNT(*) FROM relationships WHERE inverse_relationship_id IS NOT NULL")
+    linked_relationships = cursor.fetchone()[0]
+    
+    # Check for broken links (inverse_relationship_id points to non-existent relationship)
+    cursor.execute("""
+        SELECT COUNT(*) FROM relationships r1 
+        LEFT JOIN relationships r2 ON r1.inverse_relationship_id = r2.id 
+        WHERE r1.inverse_relationship_id IS NOT NULL AND r2.id IS NULL
+    """)
+    broken_links = cursor.fetchone()[0]
+    
+    # Check for non-bidirectional links (A points to B but B doesn't point back to A)
+    cursor.execute("""
+        SELECT COUNT(*) FROM relationships r1 
+        JOIN relationships r2 ON r1.inverse_relationship_id = r2.id 
+        WHERE r2.inverse_relationship_id != r1.id
+    """)
+    non_bidirectional = cursor.fetchone()[0]
+    
+    # Get some examples of linked relationships
+    cursor.execute("""
+        SELECT r1.id, r1.relationship_type, r1.source_id, r1.target_id, 
+               r2.id as inverse_id, r2.relationship_type as inverse_type
+        FROM relationships r1 
+        JOIN relationships r2 ON r1.inverse_relationship_id = r2.id 
+        LIMIT 5
+    """)
+    examples = [dict(row) for row in cursor.fetchall()]
+    
+    return {
+        'total_relationships': total_relationships,
+        'linked_relationships': linked_relationships,
+        'unlinked_relationships': total_relationships - linked_relationships,
+        'broken_links': broken_links,
+        'non_bidirectional_links': non_bidirectional,
+        'linking_percentage': round((linked_relationships / total_relationships) * 100, 2) if total_relationships > 0 else 0,
+        'examples': examples,
+        'is_healthy': broken_links == 0 and non_bidirectional == 0
+    } 
