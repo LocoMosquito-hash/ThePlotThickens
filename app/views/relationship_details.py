@@ -957,31 +957,43 @@ class RelationshipDetailsDialog(QDialog):
         - The forward relationship is from source character to target character
         - The backward relationship is from target character to source character
         """
-        from app.relationships import create_relationship
+        from app.relationships import create_relationship, create_relationship_pair
         
         # Get the selected relationship types
         forward_type_id, backward_type_id = self.get_selected_relationships()
         
         try:
-            # Save forward relationship (if selected)
-            if forward_type_id is not None:
-                print(f"Creating forward relationship: source_id={self.source_id}, target_id={self.target_id}, type_id={forward_type_id}")
-                create_relationship(
+            # If both relationships are selected, create them as a linked pair
+            if forward_type_id is not None and backward_type_id is not None:
+                print(f"Creating linked relationship pair: forward_type_id={forward_type_id}, backward_type_id={backward_type_id}")
+                forward_id, backward_id = create_relationship_pair(
                     self.db_conn,
                     source_id=self.source_id,
                     target_id=self.target_id,
-                    relationship_type_id=forward_type_id
+                    forward_type_id=forward_type_id,
+                    backward_type_id=backward_type_id
                 )
-            
-            # Save backward relationship (if selected)
-            if backward_type_id is not None:
-                print(f"Creating backward relationship: source_id={self.target_id}, target_id={self.source_id}, type_id={backward_type_id}")
-                create_relationship(
-                    self.db_conn,
-                    source_id=self.target_id,
-                    target_id=self.source_id,
-                    relationship_type_id=backward_type_id
-                )
+                print(f"Created linked relationships: forward_id={forward_id}, backward_id={backward_id}")
+                
+            else:
+                # Create individual relationships if only one is selected
+                if forward_type_id is not None:
+                    print(f"Creating forward relationship: source_id={self.source_id}, target_id={self.target_id}, type_id={forward_type_id}")
+                    create_relationship(
+                        self.db_conn,
+                        source_id=self.source_id,
+                        target_id=self.target_id,
+                        relationship_type_id=forward_type_id
+                    )
+                
+                if backward_type_id is not None:
+                    print(f"Creating backward relationship: source_id={self.target_id}, target_id={self.source_id}, type_id={backward_type_id}")
+                    create_relationship(
+                        self.db_conn,
+                        source_id=self.target_id,
+                        target_id=self.source_id,
+                        relationship_type_id=backward_type_id
+                    )
                 
             # Commit the changes to the database
             self.db_conn.commit()
