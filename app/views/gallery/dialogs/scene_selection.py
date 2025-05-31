@@ -12,7 +12,12 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QListWidget, QListWidgetItem, 
     QPushButton, QHBoxLayout, QLineEdit
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QEvent
+from PyQt6.QtGui import QKeyEvent
+
+# Import character completer and database functions
+from app.utils.character_completer import CharacterCompleter, convert_mentions_to_char_refs
+from app.db_sqlite import get_story_characters
 
 class SceneSelectionDialog(QDialog):
     """Dialog for selecting a scene to move images to."""
@@ -30,10 +35,12 @@ class SceneSelectionDialog(QDialog):
         self.story_id = story_id
         self.selected_scene_id = None
         self.new_scene_name = None
+        self.characters = []  # Initialize characters list
         
         self.setWindowTitle("Move to Scene")
         self.init_ui()
         self.load_scenes()
+        self.load_characters()
         
     def init_ui(self) -> None:
         """Initialize the UI."""
@@ -59,6 +66,16 @@ class SceneSelectionDialog(QDialog):
         
         layout.addLayout(new_scene_layout)
         
+        # Set up character completer for the new scene input
+        self.character_completer = CharacterCompleter(self)
+        self.character_completer.character_selected.connect(self.on_character_selected)
+        self.character_completer.attach_to_widget(
+            self.new_scene_input,
+            add_shortcut=True,
+            shortcut_key="Ctrl+Space",
+            at_trigger=True
+        )
+        
         # Buttons
         button_layout = QHBoxLayout()
         self.cancel_button = QPushButton("Cancel")
@@ -74,6 +91,60 @@ class SceneSelectionDialog(QDialog):
         
         self.setLayout(layout)
         self.resize(400, 500)
+        
+    def load_characters(self) -> None:
+        """Load characters for the current story to enable character completion."""
+        try:
+            self.characters = get_story_characters(self.db_conn, self.story_id)
+            # Set characters in the completer
+            if hasattr(self, 'character_completer'):
+                self.character_completer.set_characters(self.characters)
+        except Exception as e:
+            print(f"Error loading characters: {e}")
+            self.characters = []
+        
+    def on_character_selected(self, character_name: str) -> None:
+        """Handle character selection from the completer.
+        
+        Args:
+            character_name: Name of the selected character
+        """
+        # Let the character completer handle the tag insertion
+        self.character_completer.insert_character_tag(character_name)
+        
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Handle key press events for the dialog.
+        
+        Args:
+            event: Key event
+        """
+        key = event.key()
+        
+        # Handle Escape key to close dialog
+        if key == Qt.Key.Key_Escape:
+            self.reject()
+            event.accept()
+            return
+            
+        # Handle Enter key when new scene input has focus
+        if (key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter):
+            # Check if the new scene input has focus and has text
+            if (self.new_scene_input.hasFocus() and 
+                self.new_scene_input.text().strip() and 
+                self.move_button.isEnabled()):
+                self.on_move_to_scene()
+                event.accept()
+                return
+            # If scene list has focus or selection, also allow Enter to trigger move
+            elif (self.scene_list.hasFocus() and 
+                  self.scene_list.selectedItems() and 
+                  self.move_button.isEnabled()):
+                self.on_move_to_scene()
+                event.accept()
+                return
+        
+        # Let parent handle other events
+        super().keyPressEvent(event)
         
     def load_scenes(self) -> None:
         """Load the scenes from the database."""
@@ -122,7 +193,12 @@ class SceneSelectionDialog(QDialog):
         """Handle the move button click."""
         if self.new_scene_input.text().strip():
             # Create a new scene
-            self.new_scene_name = self.new_scene_input.text().strip()
+            scene_name = self.new_scene_input.text().strip()
+            
+            # Convert character mentions to references before saving
+            processed_scene_name = convert_mentions_to_char_refs(scene_name, self.characters)
+            
+            self.new_scene_name = processed_scene_name
             cursor = self.db_conn.cursor()
             
             # Get the next sequence number for scenes
@@ -138,7 +214,7 @@ class SceneSelectionDialog(QDialog):
             cursor.execute("""
                 INSERT INTO events (story_id, title, event_type, sequence_number, created_at, updated_at)
                 VALUES (?, ?, 'SCENE', ?, datetime('now'), datetime('now'))
-            """, (self.story_id, self.new_scene_name, next_seq))
+            """, (self.story_id, processed_scene_name, next_seq))
             
             self.db_conn.commit()
             
@@ -147,7 +223,7 @@ class SceneSelectionDialog(QDialog):
                 SELECT id FROM events 
                 WHERE story_id = ? AND event_type = 'SCENE' AND title = ?
                 ORDER BY id DESC LIMIT 1
-            """, (self.story_id, self.new_scene_name))
+            """, (self.story_id, processed_scene_name))
             
             result = cursor.fetchone()
             if result:
