@@ -358,8 +358,13 @@ class StoryBoardWidget(QWidget):
             # Create relationship data
             relationship_data = {
                 'relationship_type': relationship['relationship_type'],
+                'type': relationship['type'],  # Use 'type' for smart labeling compatibility
                 'color': relationship['color'],
-                'width': relationship['width']
+                'width': relationship['width'],
+                'source_id': relationship['source_id'],
+                'target_id': relationship['target_id'],
+                'is_primary_relationship': relationship.get('is_primary_relationship', False),
+                'inverse_relationship_id': relationship.get('inverse_relationship_id')
             }
             
             # Add relationship line - this will automatically group with existing lines
