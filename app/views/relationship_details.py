@@ -792,6 +792,27 @@ class RelationshipDetailsDialog(QDialog):
         
         main_layout.addLayout(primary_checkbox_layout)
         
+        # Add relationship prefix dropdown
+        prefix_layout = QHBoxLayout()
+        prefix_layout.setContentsMargins(0, 0, 0, 10)
+        
+        prefix_label = QLabel("Relationship prefix:")
+        prefix_label.setMinimumWidth(140)  # Align with checkbox above
+        prefix_layout.addWidget(prefix_label)
+        
+        self.relationship_prefix_combo = QComboBox()
+        self.relationship_prefix_combo.addItem("(none)", None)
+        self.relationship_prefix_combo.addItem("former", "former")
+        self.relationship_prefix_combo.addItem("future", "future")
+        self.relationship_prefix_combo.addItem("temporary", "temporary")
+        self.relationship_prefix_combo.setToolTip(
+            "Optional temporal context for the relationship (e.g., former boss, future victim)"
+        )
+        prefix_layout.addWidget(self.relationship_prefix_combo)
+        prefix_layout.addStretch()  # Push dropdown to the left
+        
+        main_layout.addLayout(prefix_layout)
+        
         # Create action buttons layout (Reset and Add Relationship)
         action_buttons_layout = QHBoxLayout()
         action_buttons_layout.setContentsMargins(0, 0, 0, 0)
@@ -1081,6 +1102,9 @@ class RelationshipDetailsDialog(QDialog):
         # Reset primary checkbox
         self.primary_relationship_checkbox.setChecked(False)
         
+        # Reset relationship prefix dropdown
+        self.relationship_prefix_combo.setCurrentIndex(0)  # Reset to "(none)"
+        
         # Update Add Relationship button state
         self._update_add_relationship_button_state()
         
@@ -1106,6 +1130,9 @@ class RelationshipDetailsDialog(QDialog):
             )
             return
         
+        # Get the selected prefix
+        prefix_data = self.relationship_prefix_combo.currentData()
+        
         # Create operation data
         operation = {
             'type': 'add',
@@ -1114,7 +1141,8 @@ class RelationshipDetailsDialog(QDialog):
             'source_id': self.source_id,
             'target_id': self.target_id,
             'is_primary': self.primary_relationship_checkbox.isChecked(),
-            'description': self._get_operation_description(forward_type_id, backward_type_id)
+            'relationship_prefix': prefix_data,
+            'description': self._get_operation_description(forward_type_id, backward_type_id, prefix_data)
         }
         
         # Add to queue
@@ -1134,12 +1162,13 @@ class RelationshipDetailsDialog(QDialog):
         
         print(f"Added relationship to queue: {operation['description']}")
     
-    def _get_operation_description(self, forward_type_id: Optional[int], backward_type_id: Optional[int]) -> str:
+    def _get_operation_description(self, forward_type_id: Optional[int], backward_type_id: Optional[int], prefix_data: Optional[str] = None) -> str:
         """Get a human-readable description of the operation.
         
         Args:
             forward_type_id: ID of the forward relationship type
             backward_type_id: ID of the backward relationship type
+            prefix_data: Optional prefix for the relationship
             
         Returns:
             Description string for the operation
@@ -1154,10 +1183,13 @@ class RelationshipDetailsDialog(QDialog):
             if rel_type['type_id'] == backward_type_id:
                 backward_label = rel_type['label']
         
+        # Format the prefix if present
+        prefix_str = f"({prefix_data}) " if prefix_data else ""
+        
         if forward_label and backward_label:
-            return f"{self.source_name} ({forward_label}) ↔ {self.target_name} ({backward_label})"
+            return f"{prefix_str}{self.source_name} ({forward_label}) ↔ {self.target_name} ({backward_label})"
         elif forward_label:
-            return f"{self.source_name} ({forward_label})"
+            return f"{prefix_str}{self.source_name} ({forward_label})"
         else:
             return f"Unknown relationship type (ID: {forward_type_id})"
     
@@ -1389,10 +1421,11 @@ class RelationshipDetailsDialog(QDialog):
         source_id = operation['source_id']
         target_id = operation['target_id']
         is_primary = operation.get('is_primary', False)
+        relationship_prefix = operation.get('relationship_prefix')
         
         # If both relationships are selected, create them as a linked pair
         if forward_type_id is not None and backward_type_id is not None:
-            print(f"Creating linked relationship pair: forward_type_id={forward_type_id}, backward_type_id={backward_type_id}, primary={is_primary}")
+            print(f"Creating linked relationship pair: forward_type_id={forward_type_id}, backward_type_id={backward_type_id}, primary={is_primary}, prefix={relationship_prefix}")
             
             # Clear existing primary relationships if this one is being set as primary
             if is_primary:
@@ -1404,7 +1437,8 @@ class RelationshipDetailsDialog(QDialog):
                 target_id=target_id,
                 forward_type_id=forward_type_id,
                 backward_type_id=backward_type_id,
-                is_primary_relationship=is_primary
+                is_primary_relationship=is_primary,
+                relationship_prefix=relationship_prefix
             )
             print(f"Created linked relationships: forward_id={forward_id}, backward_id={backward_id}")
         else:
@@ -1414,23 +1448,25 @@ class RelationshipDetailsDialog(QDialog):
             
             # Create individual relationships if only one is selected
             if forward_type_id is not None:
-                print(f"Creating forward relationship: source_id={source_id}, target_id={target_id}, type_id={forward_type_id}, primary={is_primary}")
+                print(f"Creating forward relationship: source_id={source_id}, target_id={target_id}, type_id={forward_type_id}, primary={is_primary}, prefix={relationship_prefix}")
                 create_relationship(
                     self.db_conn,
                     source_id=source_id,
                     target_id=target_id,
                     relationship_type_id=forward_type_id,
-                    is_primary_relationship=is_primary
+                    is_primary_relationship=is_primary,
+                    relationship_prefix=relationship_prefix
                 )
             
             if backward_type_id is not None:
-                print(f"Creating backward relationship: source_id={target_id}, target_id={source_id}, type_id={backward_type_id}, primary={is_primary}")
+                print(f"Creating backward relationship: source_id={target_id}, target_id={source_id}, type_id={backward_type_id}, primary={is_primary}, prefix={relationship_prefix}")
                 create_relationship(
                     self.db_conn,
                     source_id=target_id,
                     target_id=source_id,
                     relationship_type_id=backward_type_id,
-                    is_primary_relationship=is_primary
+                    is_primary_relationship=is_primary,
+                    relationship_prefix=relationship_prefix
                 )
     
     def _clear_existing_primary_relationships(self) -> None:
@@ -1459,8 +1495,9 @@ class RelationshipDetailsDialog(QDialog):
         new_forward_type_id = operation['new_forward_type_id']
         new_backward_type_id = operation['new_backward_type_id']
         is_primary = operation.get('is_primary', False)
+        relationship_prefix = operation.get('relationship_prefix')
         
-        print(f"Executing edit operation for relationship {rel_data['description']} (primary: {is_primary})")
+        print(f"Executing edit operation for relationship {rel_data['description']} (primary: {is_primary}, prefix: {relationship_prefix})")
         
         try:
             # Get the current relationship details from the database
@@ -1496,7 +1533,8 @@ class RelationshipDetailsDialog(QDialog):
                     target_id=self.target_id,
                     forward_type_id=new_forward_type_id,
                     backward_type_id=new_backward_type_id,
-                    is_primary_relationship=is_primary
+                    is_primary_relationship=is_primary,
+                    relationship_prefix=relationship_prefix
                 )
                 print(f"Created new linked relationship pair: {forward_id}, {backward_id}")
                 
@@ -1512,9 +1550,10 @@ class RelationshipDetailsDialog(QDialog):
                 if forward_rel:
                     cursor.execute("""
                         UPDATE relationships 
-                        SET relationship_type_id = ?, inverse_relationship_id = NULL, is_primary_relationship = ?
+                        SET relationship_type_id = ?, inverse_relationship_id = NULL, 
+                            is_primary_relationship = ?, relationship_prefix = ?
                         WHERE id = ?
-                    """, (new_forward_type_id, 1 if is_primary else 0, forward_rel['id']))
+                    """, (new_forward_type_id, 1 if is_primary else 0, relationship_prefix, forward_rel['id']))
                 else:
                     from app.relationships import create_relationship
                     create_relationship(
@@ -1522,14 +1561,15 @@ class RelationshipDetailsDialog(QDialog):
                         source_id=self.source_id,
                         target_id=self.target_id,
                         relationship_type_id=new_forward_type_id,
-                        is_primary_relationship=is_primary
+                        is_primary_relationship=is_primary,
+                        relationship_prefix=relationship_prefix
                     )
                 
                 # Remove backward relationship if it exists
                 if backward_rel:
                     cursor.execute("DELETE FROM relationships WHERE id = ?", (backward_rel['id'],))
                 
-                print(f"Updated forward relationship to type {new_forward_type_id} (primary: {is_primary})")
+                print(f"Updated forward relationship to type {new_forward_type_id} (primary: {is_primary}, prefix: {relationship_prefix})")
             
             print(f"Successfully executed edit operation")
             
@@ -1635,6 +1675,9 @@ class RelationshipDetailsDialog(QDialog):
             )
             return
         
+        # Get the selected prefix
+        prefix_data = self.relationship_prefix_combo.currentData()
+        
         # Create edit operation
         operation = {
             'type': 'edit',
@@ -1642,7 +1685,8 @@ class RelationshipDetailsDialog(QDialog):
             'new_forward_type_id': forward_type_id,
             'new_backward_type_id': backward_type_id,
             'is_primary': self.primary_relationship_checkbox.isChecked(),
-            'description': self._get_operation_description(forward_type_id, backward_type_id) + " (EDITED)"
+            'relationship_prefix': prefix_data,
+            'description': self._get_operation_description(forward_type_id, backward_type_id, prefix_data) + " (EDITED)"
         }
         
         # Add to queue
@@ -1892,10 +1936,24 @@ class RelationshipDetailsDialog(QDialog):
             is_primary = rel_data.get('is_primary', False)
             self.primary_relationship_checkbox.setChecked(is_primary)
             
+            # Set prefix dropdown based on current prefix
+            # Get the prefix from the relationship details (should be the same for both forward and backward)
+            current_prefix = None
+            if forward_rel and forward_rel.get('relationship_prefix'):
+                current_prefix = forward_rel['relationship_prefix']
+            elif backward_rel and backward_rel.get('relationship_prefix'):
+                current_prefix = backward_rel['relationship_prefix']
+            
+            # Find and select the appropriate prefix in the dropdown
+            for i in range(self.relationship_prefix_combo.count()):
+                if self.relationship_prefix_combo.itemData(i) == current_prefix:
+                    self.relationship_prefix_combo.setCurrentIndex(i)
+                    break
+            
             # Update button states
             self._update_add_relationship_button_state()
             
-            print(f"Successfully loaded relationship pair for editing (primary: {is_primary})")
+            print(f"Successfully loaded relationship pair for editing (primary: {is_primary}, prefix: {current_prefix})")
             
         except Exception as e:
             print(f"Error loading relationship for editing: {e}")
@@ -1922,6 +1980,7 @@ class RelationshipDetailsDialog(QDialog):
                 SELECT r.id, r.source_id, r.target_id, r.relationship_type_id, 
                        r.relationship_type, r.strength, r.inverse_relationship_id,
                        r.is_custom, r.custom_label, r.created_at, r.is_primary_relationship,
+                       r.relationship_prefix,
                        rt.label as type_label
                 FROM relationships r
                 LEFT JOIN relationship_types_new rt ON r.relationship_type_id = rt.type_id
@@ -1948,6 +2007,10 @@ class RelationshipDetailsDialog(QDialog):
                 if not display_label:
                     display_label = rel['relationship_type']  # Fallback to legacy column
                 
+                # Apply prefix if present
+                if rel['relationship_prefix']:
+                    display_label = f"({rel['relationship_prefix']}) {display_label}"
+                
                 # Check if this relationship has an inverse
                 if rel['inverse_relationship_id']:
                     # Find the inverse relationship in our list
@@ -1962,6 +2025,10 @@ class RelationshipDetailsDialog(QDialog):
                         inverse_display_label = inverse_rel['custom_label'] if inverse_rel['is_custom'] and inverse_rel['custom_label'] else inverse_rel['type_label']
                         if not inverse_display_label:
                             inverse_display_label = inverse_rel['relationship_type']  # Fallback
+                        
+                        # Apply prefix to inverse if present (should be the same as the main relationship)
+                        if inverse_rel['relationship_prefix']:
+                            inverse_display_label = f"({inverse_rel['relationship_prefix']}) {inverse_display_label}"
                         
                         # Determine the order (source character first)
                         if rel['source_id'] == self.source_id:
