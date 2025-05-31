@@ -1219,13 +1219,15 @@ class RelationshipLine(QGraphicsPathItem):
     """A graphical item representing a relationship between characters on the story board."""
     
     def __init__(self, relationships: List[Dict[str, Any]], 
-                source_card: CharacterCard, target_card: CharacterCard) -> None:
+                source_card: CharacterCard, target_card: CharacterCard,
+                smart_label: Optional[str] = None) -> None:
         """Initialize the relationship line.
         
         Args:
             relationships: List of relationship data dictionaries, each containing 'id', 'relationship_type', 'color', 'width'
             source_card: Source character card
             target_card: Target character card
+            smart_label: Optional pre-computed smart label to use instead of simple concatenation
         """
         super().__init__()
         
@@ -1263,8 +1265,11 @@ class RelationshipLine(QGraphicsPathItem):
         doc.setDefaultFont(QFont("Courier New", 21, QFont.Weight.Bold))
         
         # Create label text from all relationships
-        relationship_types = [rel['relationship_type'] for rel in relationships]
-        label_text = " / ".join(relationship_types)  # Join multiple relationships with " / "
+        if smart_label:
+            label_text = smart_label
+        else:
+            relationship_types = [rel['relationship_type'] for rel in relationships]
+            label_text = " / ".join(relationship_types)  # Join multiple relationships with " / "
         
         # Apply CSS-like styling to the text document
         # We need to escape the text content for HTML

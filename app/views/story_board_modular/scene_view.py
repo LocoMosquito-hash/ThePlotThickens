@@ -717,9 +717,16 @@ class StoryBoardScene(QGraphicsScene):
             # Add this relationship to the existing line
             existing_line.relationships.append(relationship_data)
             
-            # Update the label to show all relationships
-            relationship_types = [rel['relationship_type'] for rel in existing_line.relationships]
-            label_text = " / ".join(relationship_types)
+            # Update the label using smart labeling
+            from app.relationships import create_smart_relationship_label
+            
+            try:
+                label_text = create_smart_relationship_label(existing_line.relationships, self.db_conn)
+            except Exception as e:
+                print(f"Error creating smart label, falling back to simple concatenation: {e}")
+                # Fallback to the original concatenation method
+                relationship_types = [rel['relationship_type'] for rel in existing_line.relationships]
+                label_text = " / ".join(relationship_types)
             
             # Update the label
             doc = existing_line.label.document()
@@ -755,7 +762,16 @@ class StoryBoardScene(QGraphicsScene):
             source_card = self.character_cards[source_id]
             target_card = self.character_cards[target_id]
             
-            line = RelationshipLine([relationship_data], source_card, target_card)
+            # Create smart label for the new line
+            from app.relationships import create_smart_relationship_label
+            
+            try:
+                smart_label = create_smart_relationship_label([relationship_data], self.db_conn)
+            except Exception as e:
+                print(f"Error creating smart label for new line, falling back to simple label: {e}")
+                smart_label = relationship_data['relationship_type']
+            
+            line = RelationshipLine([relationship_data], source_card, target_card, smart_label)
             self.addItem(line)
             
             # Store the line with this relationship_id

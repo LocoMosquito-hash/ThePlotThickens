@@ -912,6 +912,153 @@ def suggest_relationship_type(conn: sqlite3.Connection, source_id: int, target_i
     return [dict(row) for row in cursor.fetchall()]
 
 
+def create_smart_relationship_label(relationships: List[Dict[str, Any]], 
+                                   db_conn: sqlite3.Connection) -> str:
+    """Create a smart relationship label based on relationship pairs and primary status.
+    
+    Groups relationships by pairs (using inverse_relationship_id) and creates a label
+    that shows the primary relationship pair first, with a count of additional pairs.
+    
+    Args:
+        relationships: List of relationship dictionaries for the same character pair
+        db_conn: Database connection for querying inverse relationships
+        
+    Returns:
+        Smart label string (e.g., "client / vendor +3" or "coworker / coworker")
+    """
+    if not relationships:
+        return ""
+    
+    print(f"SMART LABEL: Processing {len(relationships)} relationships")
+    for rel in relationships:
+        print(f"  - {rel.get('type', 'Unknown')} (ID: {rel.get('id')}, Primary: {rel.get('is_primary_relationship', False)})")
+    
+    # Group relationships into pairs and singles
+    pairs = []  # List of (forward_rel, backward_rel) tuples
+    singles = []  # List of individual relationships
+    processed_ids = set()
+    
+    cursor = db_conn.cursor()
+    
+    for rel in relationships:
+        rel_id = rel['id']
+        
+        if rel_id in processed_ids:
+            continue
+            
+        # Check if this relationship has an inverse
+        inverse_id = rel.get('inverse_relationship_id')
+        
+        if inverse_id:
+            # Find the inverse relationship in our list
+            inverse_rel = None
+            for other_rel in relationships:
+                if other_rel['id'] == inverse_id:
+                    inverse_rel = other_rel
+                    break
+            
+            if inverse_rel:
+                # We have a pair - determine forward/backward based on source/target
+                source_id = rel['source_id']
+                target_id = rel['target_id']
+                inverse_source_id = inverse_rel['source_id']
+                inverse_target_id = inverse_rel['target_id']
+                
+                # Normalize the pair (always put the lower character ID first)
+                if source_id < target_id:
+                    # rel is forward direction
+                    forward_rel = rel
+                    backward_rel = inverse_rel
+                else:
+                    # inverse_rel is forward direction
+                    forward_rel = inverse_rel
+                    backward_rel = rel
+                
+                # Check if either relationship in the pair is primary
+                is_primary = (rel.get('is_primary_relationship', False) or 
+                             inverse_rel.get('is_primary_relationship', False))
+                
+                pairs.append({
+                    'forward': forward_rel,
+                    'backward': backward_rel,
+                    'is_primary': is_primary
+                })
+                
+                print(f"SMART LABEL: Found pair - {forward_rel.get('type')} / {backward_rel.get('type')} (Primary: {is_primary})")
+                
+                processed_ids.add(rel_id)
+                processed_ids.add(inverse_id)
+            else:
+                # Inverse relationship exists in DB but not in our current list
+                # Treat as single relationship
+                singles.append(rel)
+                processed_ids.add(rel_id)
+                print(f"SMART LABEL: Single relationship (missing inverse) - {rel.get('type')}")
+        else:
+            # No inverse relationship - single relationship
+            singles.append(rel)
+            processed_ids.add(rel_id)
+            print(f"SMART LABEL: Single relationship - {rel.get('type')}")
+    
+    # Now create the smart label
+    total_relationships = len(pairs) + len(singles)
+    
+    print(f"SMART LABEL: Total relationships: {total_relationships} ({len(pairs)} pairs, {len(singles)} singles)")
+    
+    if total_relationships == 0:
+        return ""
+    elif total_relationships == 1:
+        # Only one relationship or pair - show it normally
+        if pairs:
+            pair = pairs[0]
+            forward_type = pair['forward']['type'] or ''
+            backward_type = pair['backward']['type'] or ''
+            result = f"{forward_type} / {backward_type}"
+            print(f"SMART LABEL: Single pair result: {result}")
+            return result
+        else:
+            result = singles[0]['type'] or ''
+            print(f"SMART LABEL: Single relationship result: {result}")
+            return result
+    else:
+        # Multiple relationships - use smart labeling
+        
+        # First, look for a primary pair
+        primary_pair = None
+        for pair in pairs:
+            if pair['is_primary']:
+                primary_pair = pair
+                break
+        
+        if primary_pair:
+            # Show primary pair + count of additional relationships
+            forward_type = primary_pair['forward']['type'] or ''
+            backward_type = primary_pair['backward']['type'] or ''
+            additional_count = total_relationships - 1
+            
+            result = f"{forward_type} / {backward_type} +{additional_count}"
+            print(f"SMART LABEL: Primary pair result: {result}")
+            return result
+        else:
+            # No primary found - concatenate all relationships as before
+            # This indicates to the user that they need to set a primary
+            all_types = []
+            
+            # Add pair types
+            for pair in pairs:
+                forward_type = pair['forward']['type'] or ''
+                backward_type = pair['backward']['type'] or ''
+                all_types.append(f"{forward_type} / {backward_type}")
+            
+            # Add single types
+            for single in singles:
+                all_types.append(single['type'] or '')
+            
+            result = " / ".join(all_types)
+            print(f"SMART LABEL: No primary, concatenated result: {result}")
+            return result
+
+
 def get_story_relationships(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
     """Get all relationships for a story with detailed information.
     
@@ -950,7 +1097,9 @@ def get_story_relationships(conn: sqlite3.Connection, story_id: int) -> List[Dic
             'strength': relationship['strength'],
             'color': relationship['color'],
             'width': relationship['width'],
-            'is_custom': relationship['is_custom']
+            'is_custom': relationship['is_custom'],
+            'is_primary_relationship': relationship.get('is_primary_relationship', False),
+            'inverse_relationship_id': relationship.get('inverse_relationship_id')
         })
     
     return relationships
