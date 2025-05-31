@@ -14,7 +14,8 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QPushButton, QLineEdit, QListWidget, QListWidgetItem,
     QComboBox, QCompleter, QSizePolicy, QWidget, QMessageBox,
-    QTableWidget, QTableWidgetItem, QHeaderView, QMenu
+    QTableWidget, QTableWidgetItem, QHeaderView, QMenu, QCheckBox,
+    QRadioButton, QButtonGroup
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QPoint
 from PyQt6.QtGui import QPixmap, QIcon, QColor, QPainter, QPen, QAction
@@ -801,6 +802,19 @@ class RelationshipDetailsDialog(QDialog):
         
         main_layout.addLayout(action_buttons_layout)
         
+        # Add primary relationship checkbox
+        primary_checkbox_layout = QHBoxLayout()
+        primary_checkbox_layout.setContentsMargins(0, 10, 0, 10)
+        
+        self.primary_relationship_checkbox = QCheckBox("Mark as Primary Relationship")
+        self.primary_relationship_checkbox.setToolTip(
+            "Mark this relationship pair as the most defining relationship between these characters"
+        )
+        primary_checkbox_layout.addWidget(self.primary_relationship_checkbox)
+        primary_checkbox_layout.addStretch()  # Push checkbox to the left
+        
+        main_layout.addLayout(primary_checkbox_layout)
+        
         # Add stretch to push everything up
         main_layout.addStretch()
         
@@ -1064,6 +1078,9 @@ class RelationshipDetailsDialog(QDialog):
         self.edit_relationship_button.setEnabled(False)
         self.existing_relationships_table.clearSelection()
         
+        # Reset primary checkbox
+        self.primary_relationship_checkbox.setChecked(False)
+        
         # Update Add Relationship button state
         self._update_add_relationship_button_state()
         
@@ -1096,6 +1113,7 @@ class RelationshipDetailsDialog(QDialog):
             'backward_type_id': backward_type_id,
             'source_id': self.source_id,
             'target_id': self.target_id,
+            'is_primary': self.primary_relationship_checkbox.isChecked(),
             'description': self._get_operation_description(forward_type_id, backward_type_id)
         }
         
@@ -1154,6 +1172,10 @@ class RelationshipDetailsDialog(QDialog):
             print("No pending operations to execute")
             return
         
+        # Validate primary relationships before executing
+        if not self._validate_primary_relationships():
+            return  # Validation failed, don't proceed
+        
         try:
             print(f"Executing {len(self.pending_operations)} pending operations...")
             
@@ -1196,6 +1218,164 @@ class RelationshipDetailsDialog(QDialog):
                 "All changes have been rolled back."
             )
     
+    def _validate_primary_relationships(self) -> bool:
+        """Validate primary relationship constraints before executing operations.
+        
+        Returns:
+            True if validation passes, False if validation fails
+        """
+        # Get current existing relationships
+        existing_relationships = self._load_existing_relationships()
+        
+        # Count how many relationship pairs will exist after all operations
+        # Start with existing pairs
+        all_pairs = [rel for rel in existing_relationships if rel['type'] == 'pair']
+        
+        # Add new pairs from pending operations
+        for operation in self.pending_operations:
+            if operation['type'] == 'add':
+                # This will create a new pair
+                if operation.get('forward_type_id') and operation.get('backward_type_id'):
+                    all_pairs.append({
+                        'type': 'pair',
+                        'description': operation['description'],
+                        'is_primary': operation.get('is_primary', False),
+                        'is_pending': True
+                    })
+                # Note: Single relationships are not considered pairs
+        
+        # Remove pairs that will be deleted/replaced by edit operations
+        for operation in self.pending_operations:
+            if operation['type'] == 'edit':
+                rel_data = operation['relationship_data']
+                # Remove the existing pair being edited
+                all_pairs = [pair for pair in all_pairs if pair.get('primary_id') != rel_data['primary_id']]
+                
+                # Add the edited pair if it will be a pair
+                if operation.get('new_forward_type_id') and operation.get('new_backward_type_id'):
+                    all_pairs.append({
+                        'type': 'pair',
+                        'description': operation['description'],
+                        'is_primary': operation.get('is_primary', False),
+                        'is_pending': True
+                    })
+        
+        # Check if we'll have multiple pairs
+        if len(all_pairs) < 2:
+            return True  # No validation needed for 0 or 1 pairs
+        
+        # Count primary relationships
+        primary_count = sum(1 for pair in all_pairs if pair.get('is_primary', False))
+        
+        # Validation rules:
+        # 1. Must have exactly one primary if there are 2+ pairs
+        if primary_count == 0:
+            # No primary set - show dialog to choose one
+            return self._show_primary_selection_dialog(all_pairs)
+        elif primary_count > 1:
+            # Multiple primaries - this shouldn't happen but handle it
+            QMessageBox.critical(
+                self,
+                "Multiple Primary Relationships",
+                f"Multiple relationships are marked as primary ({primary_count}). "
+                "Only one relationship pair can be marked as primary between two characters.\n\n"
+                "Please review your changes and ensure only one relationship is marked as primary."
+            )
+            return False
+        
+        # Exactly one primary - validation passes
+        return True
+    
+    def _show_primary_selection_dialog(self, all_pairs: List[Dict[str, Any]]) -> bool:
+        """Show dialog to select which relationship should be primary.
+        
+        Args:
+            all_pairs: List of all relationship pairs that will exist after operations
+            
+        Returns:
+            True if user selected a primary, False if cancelled
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select Primary Relationship")
+        dialog.setModal(True)
+        dialog.resize(500, 300)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Instruction label
+        instruction = QLabel(
+            "Multiple relationship pairs will exist between these characters.\n"
+            "Please select which relationship should be marked as the primary (most defining) relationship:"
+        )
+        instruction.setWordWrap(True)
+        layout.addWidget(instruction)
+        
+        # Radio button group
+        button_group = QButtonGroup()
+        radio_buttons = []
+        
+        for i, pair in enumerate(all_pairs):
+            radio = QRadioButton(pair['description'])
+            if pair.get('is_pending'):
+                radio.setText(f"{pair['description']} (NEW)")
+            
+            button_group.addButton(radio, i)
+            radio_buttons.append(radio)
+            layout.addWidget(radio)
+        
+        # Set the first one as default
+        if radio_buttons:
+            radio_buttons[0].setChecked(True)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        cancel_btn = QPushButton("Cancel")
+        ok_btn = QPushButton("Set Primary")
+        
+        cancel_btn.clicked.connect(dialog.reject)
+        ok_btn.clicked.connect(dialog.accept)
+        
+        button_layout.addStretch()
+        button_layout.addWidget(cancel_btn)
+        button_layout.addWidget(ok_btn)
+        layout.addLayout(button_layout)
+        
+        # Show dialog
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Get selected index
+            selected_id = button_group.checkedId()
+            if selected_id >= 0:
+                selected_pair = all_pairs[selected_id]
+                
+                # Update pending operations to mark the selected relationship as primary
+                if selected_pair.get('is_pending'):
+                    # This is a new/edited relationship - update the operation
+                    for operation in self.pending_operations:
+                        if operation.get('description') == selected_pair['description'].replace(' (NEW)', ''):
+                            operation['is_primary'] = True
+                        else:
+                            operation['is_primary'] = False
+                else:
+                    # This is an existing relationship - create an edit operation to mark it as primary
+                    # First, unmark all pending operations as primary
+                    for operation in self.pending_operations:
+                        operation['is_primary'] = False
+                    
+                    # Then create an edit operation for the existing relationship
+                    # Note: This is a simplified approach - in a full implementation,
+                    # we'd need to track which existing relationship was selected
+                    QMessageBox.information(
+                        self,
+                        "Manual Update Required",
+                        f"Please manually edit the existing relationship '{selected_pair['description']}' "
+                        "to mark it as primary, then try this operation again."
+                    )
+                    return False
+                
+                return True
+        
+        return False  # User cancelled
+    
     def _execute_add_operation(self, operation: Dict[str, Any]) -> None:
         """Execute an add relationship operation.
         
@@ -1208,37 +1388,64 @@ class RelationshipDetailsDialog(QDialog):
         backward_type_id = operation['backward_type_id']
         source_id = operation['source_id']
         target_id = operation['target_id']
+        is_primary = operation.get('is_primary', False)
         
         # If both relationships are selected, create them as a linked pair
         if forward_type_id is not None and backward_type_id is not None:
-            print(f"Creating linked relationship pair: forward_type_id={forward_type_id}, backward_type_id={backward_type_id}")
+            print(f"Creating linked relationship pair: forward_type_id={forward_type_id}, backward_type_id={backward_type_id}, primary={is_primary}")
+            
+            # Clear existing primary relationships if this one is being set as primary
+            if is_primary:
+                self._clear_existing_primary_relationships()
+            
             forward_id, backward_id = create_relationship_pair(
                 self.db_conn,
                 source_id=source_id,
                 target_id=target_id,
                 forward_type_id=forward_type_id,
-                backward_type_id=backward_type_id
+                backward_type_id=backward_type_id,
+                is_primary_relationship=is_primary
             )
             print(f"Created linked relationships: forward_id={forward_id}, backward_id={backward_id}")
         else:
+            # Clear existing primary relationships if this one is being set as primary
+            if is_primary:
+                self._clear_existing_primary_relationships()
+            
             # Create individual relationships if only one is selected
             if forward_type_id is not None:
-                print(f"Creating forward relationship: source_id={source_id}, target_id={target_id}, type_id={forward_type_id}")
+                print(f"Creating forward relationship: source_id={source_id}, target_id={target_id}, type_id={forward_type_id}, primary={is_primary}")
                 create_relationship(
                     self.db_conn,
                     source_id=source_id,
                     target_id=target_id,
-                    relationship_type_id=forward_type_id
+                    relationship_type_id=forward_type_id,
+                    is_primary_relationship=is_primary
                 )
             
             if backward_type_id is not None:
-                print(f"Creating backward relationship: source_id={target_id}, target_id={source_id}, type_id={backward_type_id}")
+                print(f"Creating backward relationship: source_id={target_id}, target_id={source_id}, type_id={backward_type_id}, primary={is_primary}")
                 create_relationship(
                     self.db_conn,
                     source_id=target_id,
                     target_id=source_id,
-                    relationship_type_id=backward_type_id
+                    relationship_type_id=backward_type_id,
+                    is_primary_relationship=is_primary
                 )
+    
+    def _clear_existing_primary_relationships(self) -> None:
+        """Clear existing primary relationship status for this character pair."""
+        cursor = self.db_conn.cursor()
+        
+        # Clear primary status for all relationships between these two characters
+        cursor.execute("""
+            UPDATE relationships 
+            SET is_primary_relationship = 0 
+            WHERE (source_id = ? AND target_id = ?) 
+               OR (source_id = ? AND target_id = ?)
+        """, (self.source_id, self.target_id, self.target_id, self.source_id))
+        
+        print(f"Cleared existing primary relationships between {self.source_name} and {self.target_name}")
     
     def _execute_edit_operation(self, operation: Dict[str, Any]) -> None:
         """Execute an edit relationship operation.
@@ -1251,8 +1458,9 @@ class RelationshipDetailsDialog(QDialog):
         rel_data = operation['relationship_data']
         new_forward_type_id = operation['new_forward_type_id']
         new_backward_type_id = operation['new_backward_type_id']
+        is_primary = operation.get('is_primary', False)
         
-        print(f"Executing edit operation for relationship {rel_data['description']}")
+        print(f"Executing edit operation for relationship {rel_data['description']} (primary: {is_primary})")
         
         try:
             # Get the current relationship details from the database
@@ -1268,6 +1476,10 @@ class RelationshipDetailsDialog(QDialog):
             
             # If we have both new type IDs, handle as a pair
             if new_forward_type_id and new_backward_type_id:
+                # Clear existing primary relationships if this one is being set as primary
+                if is_primary:
+                    self._clear_existing_primary_relationships()
+                
                 # Delete old relationships if they exist
                 cursor = self.db_conn.cursor()
                 
@@ -1283,11 +1495,16 @@ class RelationshipDetailsDialog(QDialog):
                     source_id=self.source_id,
                     target_id=self.target_id,
                     forward_type_id=new_forward_type_id,
-                    backward_type_id=new_backward_type_id
+                    backward_type_id=new_backward_type_id,
+                    is_primary_relationship=is_primary
                 )
                 print(f"Created new linked relationship pair: {forward_id}, {backward_id}")
                 
             elif new_forward_type_id:
+                # Clear existing primary relationships if this one is being set as primary
+                if is_primary:
+                    self._clear_existing_primary_relationships()
+                
                 # Only forward relationship selected
                 cursor = self.db_conn.cursor()
                 
@@ -1295,23 +1512,24 @@ class RelationshipDetailsDialog(QDialog):
                 if forward_rel:
                     cursor.execute("""
                         UPDATE relationships 
-                        SET relationship_type_id = ?, inverse_relationship_id = NULL
+                        SET relationship_type_id = ?, inverse_relationship_id = NULL, is_primary_relationship = ?
                         WHERE id = ?
-                    """, (new_forward_type_id, forward_rel['id']))
+                    """, (new_forward_type_id, 1 if is_primary else 0, forward_rel['id']))
                 else:
                     from app.relationships import create_relationship
                     create_relationship(
                         self.db_conn,
                         source_id=self.source_id,
                         target_id=self.target_id,
-                        relationship_type_id=new_forward_type_id
+                        relationship_type_id=new_forward_type_id,
+                        is_primary_relationship=is_primary
                     )
                 
                 # Remove backward relationship if it exists
                 if backward_rel:
                     cursor.execute("DELETE FROM relationships WHERE id = ?", (backward_rel['id'],))
                 
-                print(f"Updated forward relationship to type {new_forward_type_id}")
+                print(f"Updated forward relationship to type {new_forward_type_id} (primary: {is_primary})")
             
             print(f"Successfully executed edit operation")
             
@@ -1423,6 +1641,7 @@ class RelationshipDetailsDialog(QDialog):
             'relationship_data': self.editing_relationship_data,
             'new_forward_type_id': forward_type_id,
             'new_backward_type_id': backward_type_id,
+            'is_primary': self.primary_relationship_checkbox.isChecked(),
             'description': self._get_operation_description(forward_type_id, backward_type_id) + " (EDITED)"
         }
         
@@ -1502,6 +1721,12 @@ class RelationshipDetailsDialog(QDialog):
                     strength_item.setFlags(strength_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     strength_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                     self.existing_relationships_table.setItem(row, 1, strength_item)
+                    
+                    # Primary status
+                    primary_item = QTableWidgetItem("✓" if rel_data.get('is_primary', False) else "")
+                    primary_item.setFlags(primary_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    primary_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.existing_relationships_table.setItem(row, 2, primary_item)
             else:
                 # Show empty state
                 self.existing_relationships_table.setRowCount(1)
@@ -1524,6 +1749,10 @@ class RelationshipDetailsDialog(QDialog):
                 empty_strength = QTableWidgetItem("")
                 empty_strength.setFlags(empty_strength.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.existing_relationships_table.setItem(0, 1, empty_strength)
+                
+                empty_primary = QTableWidgetItem("")
+                empty_primary.setFlags(empty_primary.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.existing_relationships_table.setItem(0, 2, empty_primary)
         
         # Connect click event for future functionality
         self.existing_relationships_table.cellClicked.connect(self._on_existing_relationship_clicked)
@@ -1659,10 +1888,14 @@ class RelationshipDetailsDialog(QDialog):
                             backward_rel['relationship_type_id']
                         )
             
+            # Set primary checkbox based on current primary status
+            is_primary = rel_data.get('is_primary', False)
+            self.primary_relationship_checkbox.setChecked(is_primary)
+            
             # Update button states
             self._update_add_relationship_button_state()
             
-            print(f"Successfully loaded relationship pair for editing")
+            print(f"Successfully loaded relationship pair for editing (primary: {is_primary})")
             
         except Exception as e:
             print(f"Error loading relationship for editing: {e}")
@@ -1688,7 +1921,7 @@ class RelationshipDetailsDialog(QDialog):
             cursor.execute("""
                 SELECT r.id, r.source_id, r.target_id, r.relationship_type_id, 
                        r.relationship_type, r.strength, r.inverse_relationship_id,
-                       r.is_custom, r.custom_label, r.created_at,
+                       r.is_custom, r.custom_label, r.created_at, r.is_primary_relationship,
                        rt.label as type_label
                 FROM relationships r
                 LEFT JOIN relationship_types_new rt ON r.relationship_type_id = rt.type_id
@@ -1738,13 +1971,17 @@ class RelationshipDetailsDialog(QDialog):
                             # rel is target -> source, inverse_rel is source -> target
                             pair_description = f"{self.source_name} ({inverse_display_label}) ↔ {self.target_name} ({display_label})"
                         
+                        # Check if this is a primary relationship (either relationship in the pair can indicate primary status)
+                        is_primary = rel['is_primary_relationship'] or inverse_rel['is_primary_relationship']
+                        
                         relationship_pairs.append({
                             'type': 'pair',
                             'description': pair_description,
                             'strength': max(rel['strength'] or 0, inverse_rel['strength'] or 0),  # Use higher strength
                             'primary_id': rel['id'],
                             'inverse_id': inverse_rel['id'],
-                            'created_at': rel['created_at']
+                            'created_at': rel['created_at'],
+                            'is_primary': is_primary
                         })
                         
                         # Mark both as processed
@@ -1764,7 +2001,8 @@ class RelationshipDetailsDialog(QDialog):
                             'strength': rel['strength'] or 0,
                             'primary_id': rel['id'],
                             'inverse_id': None,
-                            'created_at': rel['created_at']
+                            'created_at': rel['created_at'],
+                            'is_primary': rel['is_primary_relationship']
                         })
                         
                         processed_ids.add(rel['id'])
@@ -1781,7 +2019,8 @@ class RelationshipDetailsDialog(QDialog):
                         'strength': rel['strength'] or 0,
                         'primary_id': rel['id'],
                         'inverse_id': None,
-                        'created_at': rel['created_at']
+                        'created_at': rel['created_at'],
+                        'is_primary': rel['is_primary_relationship']
                     })
                     
                     processed_ids.add(rel['id'])
@@ -1801,8 +2040,8 @@ class RelationshipDetailsDialog(QDialog):
             QTableWidget with existing relationships
         """
         table = QTableWidget()
-        table.setColumnCount(2)
-        table.setHorizontalHeaderLabels(["Relationship", "Strength"])
+        table.setColumnCount(3)  # Added Primary column
+        table.setHorizontalHeaderLabels(["Relationship", "Strength", "Primary"])
         
         # Set table properties for dark theme compatibility
         table.setAlternatingRowColors(True)
@@ -1840,6 +2079,7 @@ class RelationshipDetailsDialog(QDialog):
         header = table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Relationship column stretches
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Strength column fits content
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Primary column fits content
         
         # Load existing relationships first to determine proper table height
         existing_relationships = self._load_existing_relationships()
@@ -1875,6 +2115,12 @@ class RelationshipDetailsDialog(QDialog):
                 strength_item.setFlags(strength_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
                 strength_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 table.setItem(row, 1, strength_item)
+                
+                # Primary status
+                primary_item = QTableWidgetItem("✓" if rel_data.get('is_primary', False) else "")
+                primary_item.setFlags(primary_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+                primary_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                table.setItem(row, 2, primary_item)
         else:
             # Show empty state
             table.setRowCount(1)
@@ -1893,10 +2139,14 @@ class RelationshipDetailsDialog(QDialog):
                 empty_item.setForeground(placeholder_color)
             table.setItem(0, 0, empty_item)
             
-            # Empty strength cell
+            # Empty strength and primary cells
             empty_strength = QTableWidgetItem("")
             empty_strength.setFlags(empty_strength.flags() & ~Qt.ItemFlag.ItemIsEditable)
             table.setItem(0, 1, empty_strength)
+            
+            empty_primary = QTableWidgetItem("")
+            empty_primary.setFlags(empty_primary.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            table.setItem(0, 2, empty_primary)
         
         # Connect click event for future functionality
         table.cellClicked.connect(self._on_existing_relationship_clicked)
@@ -1960,6 +2210,100 @@ class RelationshipDetailsDialog(QDialog):
         # Show the menu
         context_menu.exec(self.existing_relationships_table.mapToGlobal(position))
     
+    def _edit_selected_relationship(self) -> None:
+        """Edit the currently selected relationship from the table."""
+        current_row = self.existing_relationships_table.currentRow()
+        if current_row < 0:
+            QMessageBox.information(
+                self,
+                "No Relationship Selected",
+                "Please select a relationship from the list to edit."
+            )
+            return
+        
+        # Get the relationship data from the table
+        item = self.existing_relationships_table.item(current_row, 0)
+        if not item or not item.data(Qt.ItemDataRole.UserRole):
+            QMessageBox.warning(
+                self,
+                "Invalid Selection",
+                "The selected item does not contain valid relationship data."
+            )
+            return
+        
+        rel_data = item.data(Qt.ItemDataRole.UserRole)
+        self._load_relationship_for_editing(rel_data)
+    
+    def _load_relationship_for_editing(self, rel_data: Dict[str, Any]) -> None:
+        """Load a relationship into the cards for editing.
+        
+        Args:
+            rel_data: Relationship data dictionary from the table
+        """
+        print(f"Loading relationship for editing: {rel_data}")
+        
+        # Store the relationship data being edited
+        self.editing_relationship_data = rel_data
+        
+        # Enter edit mode
+        self.is_edit_mode = True
+        
+        try:
+            # Get the actual relationship details from the database
+            relationship_details = self._get_relationship_details(rel_data)
+            
+            if not relationship_details:
+                QMessageBox.warning(
+                    self,
+                    "Error Loading Relationship",
+                    "Could not load relationship details from the database."
+                )
+                return
+            
+            # Load relationship data into the cards
+            forward_rel = relationship_details.get('forward')
+            backward_rel = relationship_details.get('backward')
+            
+            # Reset cards first
+            self.forward_card.relationship_combo.setCurrentIndex(-1)
+            self.backward_card.relationship_combo.setCurrentIndex(-1)
+            
+            # Load forward relationship
+            if forward_rel:
+                success = self._select_relationship_type_by_id(
+                    self.forward_card.relationship_combo,
+                    forward_rel['relationship_type_id']
+                )
+                if success:
+                    # Enable backward card and load backward relationship if exists
+                    self.backward_card.setEnabled(True)
+                    
+                    if backward_rel:
+                        self._select_relationship_type_by_id(
+                            self.backward_card.relationship_combo,
+                            backward_rel['relationship_type_id']
+                        )
+            
+            # Set primary checkbox based on current primary status
+            is_primary = rel_data.get('is_primary', False)
+            self.primary_relationship_checkbox.setChecked(is_primary)
+            
+            # Update button states
+            self._update_add_relationship_button_state()
+            
+            print(f"Successfully loaded relationship pair for editing (primary: {is_primary})")
+            
+        except Exception as e:
+            print(f"Error loading relationship for editing: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"An error occurred while loading the relationship: {str(e)}"
+            )
+
     def accept(self) -> None:
         """Save the relationship and close the dialog."""
         # Save the relationship(s) to the database
