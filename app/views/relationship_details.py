@@ -14,10 +14,10 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QPushButton, QLineEdit, QListWidget, QListWidgetItem,
     QComboBox, QCompleter, QSizePolicy, QWidget, QMessageBox,
-    QTableWidget, QTableWidgetItem, QHeaderView
+    QTableWidget, QTableWidgetItem, QHeaderView, QMenu
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QPoint
-from PyQt6.QtGui import QPixmap, QIcon, QColor, QPainter, QPen
+from PyQt6.QtGui import QPixmap, QIcon, QColor, QPainter, QPen, QAction
 
 # Removed the deprecated import
 # from app.db_sqlite import get_relationship_types, get_used_relationship_types
@@ -566,6 +566,10 @@ class RelationshipDetailsDialog(QDialog):
         # Each operation will be a dict with 'type' and necessary data
         # Types: 'add', 'edit', 'delete'
         
+        # Edit mode state management
+        self.is_edit_mode = False
+        self.editing_relationship_data = None  # Store data of relationship being edited
+        
         # Apply dark theme if available
         try:
             import qdarktheme
@@ -718,6 +722,19 @@ class RelationshipDetailsDialog(QDialog):
             self.existing_relationships_table = self._create_existing_relationships_table()
             main_layout.addWidget(self.existing_relationships_table)
             
+            # Add Edit Relationship button below the table
+            edit_button_layout = QHBoxLayout()
+            edit_button_layout.setContentsMargins(0, 5, 0, 5)
+            
+            self.edit_relationship_button = QPushButton("Edit Relationship")
+            self.edit_relationship_button.setToolTip("Edit the selected relationship from the list above")
+            self.edit_relationship_button.clicked.connect(self._edit_selected_relationship)
+            self.edit_relationship_button.setEnabled(False)  # Initially disabled
+            edit_button_layout.addWidget(self.edit_relationship_button)
+            edit_button_layout.addStretch()  # Push button to the left
+            
+            main_layout.addLayout(edit_button_layout)
+            
             # Add some spacing
             main_layout.addSpacing(10)
             
@@ -775,7 +792,7 @@ class RelationshipDetailsDialog(QDialog):
         # Create Add Relationship button
         self.add_relationship_button = QPushButton("Add Relationship")
         self.add_relationship_button.setToolTip("Add the selected relationship(s) to the pending changes list")
-        self.add_relationship_button.clicked.connect(self._add_relationship_to_queue)
+        self.add_relationship_button.clicked.connect(self._add_or_save_relationship)
         self.add_relationship_button.setEnabled(False)  # Initially disabled
         action_buttons_layout.addWidget(self.add_relationship_button)
         
@@ -1016,10 +1033,19 @@ class RelationshipDetailsDialog(QDialog):
             self.backward_card.highlightSuggestions([])
             
     def _update_add_relationship_button_state(self) -> None:
-        """Update the state of the Add Relationship button based on current selections."""
-        # Enable the button only if the forward relationship type is selected
-        forward_type_id = self.forward_card.get_selected_relationship_type_id()
-        self.add_relationship_button.setEnabled(forward_type_id is not None)
+        """Update the state of the Add Relationship button based on selections."""
+        forward_selected = self.forward_card.get_selected_relationship_type_id() is not None
+        
+        # Update button text based on edit mode
+        if self.is_edit_mode:
+            self.add_relationship_button.setText("Save Changes")
+            self.add_relationship_button.setToolTip("Save the changes to the relationship being edited")
+        else:
+            self.add_relationship_button.setText("Add Relationship")
+            self.add_relationship_button.setToolTip("Add the selected relationship(s) to the pending changes list")
+        
+        # Enable button if forward relationship is selected
+        self.add_relationship_button.setEnabled(forward_selected)
     
     def _reset_relationship_cards(self) -> None:
         """Reset both relationship cards to their initial blank state."""
@@ -1030,10 +1056,25 @@ class RelationshipDetailsDialog(QDialog):
         # Disable the backward card
         self.backward_card.setEnabled(False)
         
+        # Exit edit mode and clear editing data
+        self.is_edit_mode = False
+        self.editing_relationship_data = None
+        
+        # Reset edit relationship button state
+        self.edit_relationship_button.setEnabled(False)
+        self.existing_relationships_table.clearSelection()
+        
         # Update Add Relationship button state
         self._update_add_relationship_button_state()
         
         print("Relationship cards reset to initial state")
+    
+    def _add_or_save_relationship(self) -> None:
+        """Add a new relationship or save changes to an existing relationship."""
+        if self.is_edit_mode:
+            self._save_relationship_changes()
+        else:
+            self._add_relationship_to_queue()
     
     def _add_relationship_to_queue(self) -> None:
         """Add the currently selected relationship(s) to the pending operations queue."""
@@ -1122,8 +1163,7 @@ class RelationshipDetailsDialog(QDialog):
                 if operation['type'] == 'add':
                     self._execute_add_operation(operation)
                 elif operation['type'] == 'edit':
-                    # TODO: Implement edit operation
-                    print(f"Edit operation not implemented yet: {operation}")
+                    self._execute_edit_operation(operation)
                 elif operation['type'] == 'delete':
                     # TODO: Implement delete operation
                     print(f"Delete operation not implemented yet: {operation}")
@@ -1200,22 +1240,440 @@ class RelationshipDetailsDialog(QDialog):
                     relationship_type_id=backward_type_id
                 )
     
-    def accept(self) -> None:
-        """Save the relationship and close the dialog."""
-        # Save the relationship(s) to the database
-        self.save_relationships()
+    def _execute_edit_operation(self, operation: Dict[str, Any]) -> None:
+        """Execute an edit relationship operation.
         
-        # Look for any open Story Board and trigger a refresh
-        main_window = self.window()
-        while main_window and not hasattr(main_window, 'story_board'):
-            main_window = main_window.parent() if hasattr(main_window, 'parent') else None
+        Args:
+            operation: Operation data dictionary containing relationship details
+        """
+        from app.relationships import create_relationship, create_relationship_pair
         
-        # If we found the main window with a story board, refresh it
-        if main_window and hasattr(main_window, 'story_board'):
-            main_window.story_board.refresh_board()
+        rel_data = operation['relationship_data']
+        new_forward_type_id = operation['new_forward_type_id']
+        new_backward_type_id = operation['new_backward_type_id']
         
-        # Close the dialog
-        super().accept()
+        print(f"Executing edit operation for relationship {rel_data['description']}")
+        
+        try:
+            # Get the current relationship details from the database
+            relationship_details = self._get_relationship_details(rel_data)
+            
+            if not relationship_details:
+                print(f"Could not load relationship details for editing")
+                return
+            
+            # Update or create the forward relationship
+            forward_rel = relationship_details.get('forward')
+            backward_rel = relationship_details.get('backward')
+            
+            # If we have both new type IDs, handle as a pair
+            if new_forward_type_id and new_backward_type_id:
+                # Delete old relationships if they exist
+                cursor = self.db_conn.cursor()
+                
+                if forward_rel:
+                    cursor.execute("DELETE FROM relationships WHERE id = ?", (forward_rel['id'],))
+                if backward_rel:
+                    cursor.execute("DELETE FROM relationships WHERE id = ?", (backward_rel['id'],))
+                
+                # Create new linked pair
+                from app.relationships import create_relationship_pair
+                forward_id, backward_id = create_relationship_pair(
+                    self.db_conn,
+                    source_id=self.source_id,
+                    target_id=self.target_id,
+                    forward_type_id=new_forward_type_id,
+                    backward_type_id=new_backward_type_id
+                )
+                print(f"Created new linked relationship pair: {forward_id}, {backward_id}")
+                
+            elif new_forward_type_id:
+                # Only forward relationship selected
+                cursor = self.db_conn.cursor()
+                
+                # Update or create forward relationship
+                if forward_rel:
+                    cursor.execute("""
+                        UPDATE relationships 
+                        SET relationship_type_id = ?, inverse_relationship_id = NULL
+                        WHERE id = ?
+                    """, (new_forward_type_id, forward_rel['id']))
+                else:
+                    from app.relationships import create_relationship
+                    create_relationship(
+                        self.db_conn,
+                        source_id=self.source_id,
+                        target_id=self.target_id,
+                        relationship_type_id=new_forward_type_id
+                    )
+                
+                # Remove backward relationship if it exists
+                if backward_rel:
+                    cursor.execute("DELETE FROM relationships WHERE id = ?", (backward_rel['id'],))
+                
+                print(f"Updated forward relationship to type {new_forward_type_id}")
+            
+            print(f"Successfully executed edit operation")
+            
+        except Exception as e:
+            print(f"Error executing edit operation: {e}")
+            import traceback
+            traceback.print_exc()
+            raise  # Re-raise to trigger rollback in the calling method
+    
+    def _get_relationship_details(self, rel_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Get detailed relationship information from the database.
+        
+        Args:
+            rel_data: Basic relationship data from the table
+            
+        Returns:
+            Dictionary with forward and backward relationship details
+        """
+        try:
+            cursor = self.db_conn.cursor()
+            
+            # Get the primary relationship
+            cursor.execute("""
+                SELECT id, source_id, target_id, relationship_type_id, strength,
+                       inverse_relationship_id, is_custom, custom_label
+                FROM relationships
+                WHERE id = ?
+            """, (rel_data['primary_id'],))
+            
+            primary_rel = cursor.fetchone()
+            if not primary_rel:
+                print(f"Primary relationship {rel_data['primary_id']} not found")
+                return None
+            
+            primary_dict = dict(primary_rel)
+            
+            result = {}
+            
+            # Determine which relationship is forward and which is backward
+            if primary_dict['source_id'] == self.source_id and primary_dict['target_id'] == self.target_id:
+                # Primary is forward direction
+                result['forward'] = primary_dict
+                
+                # Get inverse if it exists
+                if rel_data['inverse_id']:
+                    cursor.execute("""
+                        SELECT id, source_id, target_id, relationship_type_id, strength,
+                               inverse_relationship_id, is_custom, custom_label
+                        FROM relationships
+                        WHERE id = ?
+                    """, (rel_data['inverse_id'],))
+                    
+                    inverse_rel = cursor.fetchone()
+                    if inverse_rel:
+                        result['backward'] = dict(inverse_rel)
+                        
+            elif primary_dict['source_id'] == self.target_id and primary_dict['target_id'] == self.source_id:
+                # Primary is backward direction
+                result['backward'] = primary_dict
+                
+                # Get inverse if it exists (which would be the forward direction)
+                if rel_data['inverse_id']:
+                    cursor.execute("""
+                        SELECT id, source_id, target_id, relationship_type_id, strength,
+                               inverse_relationship_id, is_custom, custom_label
+                        FROM relationships
+                        WHERE id = ?
+                    """, (rel_data['inverse_id'],))
+                    
+                    inverse_rel = cursor.fetchone()
+                    if inverse_rel:
+                        result['forward'] = dict(inverse_rel)
+            else:
+                print(f"Relationship direction doesn't match expected characters")
+                return None
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error getting relationship details: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def _save_relationship_changes(self) -> None:
+        """Save changes to the relationship being edited."""
+        if not self.is_edit_mode or not self.editing_relationship_data:
+            QMessageBox.warning(
+                self,
+                "Not in Edit Mode",
+                "No relationship is currently being edited."
+            )
+            return
+        
+        # Get the current selections
+        forward_type_id, backward_type_id = self.get_selected_relationships()
+        
+        if forward_type_id is None:
+            QMessageBox.warning(
+                self,
+                "No Relationship Selected",
+                "Please select at least a forward relationship type."
+            )
+            return
+        
+        # Create edit operation
+        operation = {
+            'type': 'edit',
+            'relationship_data': self.editing_relationship_data,
+            'new_forward_type_id': forward_type_id,
+            'new_backward_type_id': backward_type_id,
+            'description': self._get_operation_description(forward_type_id, backward_type_id) + " (EDITED)"
+        }
+        
+        # Add to queue
+        self.pending_operations.append(operation)
+        
+        # Show confirmation message
+        QMessageBox.information(
+            self,
+            "Relationship Changes Queued",
+            f"Relationship changes added to pending operations:\n{operation['description']}\n\n"
+            f"Total pending operations: {len(self.pending_operations)}\n\n"
+            "Click 'Apply' to save all changes to the database."
+        )
+        
+        # Reset the cards and exit edit mode
+        self._reset_relationship_cards()
+        
+        print(f"Queued relationship edit: {operation['description']}")
+    
+    def _select_relationship_type_by_id(self, combo: SearchableComboBox, type_id: int) -> bool:
+        """Select a relationship type in the combo box by its type ID.
+        
+        Args:
+            combo: The SearchableComboBox to update
+            type_id: The relationship type ID to select
+            
+        Returns:
+            True if the type ID was found and selected, False otherwise
+        """
+        for i in range(combo.count()):
+            item_type_id = combo.itemData(i, Qt.ItemDataRole.UserRole)
+            if item_type_id == type_id:
+                combo.setCurrentIndex(i)
+                print(f"Selected relationship type ID {type_id} at index {i}")
+                return True
+        
+        print(f"Relationship type ID {type_id} not found in combo box")
+        return False
+
+    def _refresh_existing_relationships_table(self) -> None:
+        """Refresh the existing relationships table with current data."""
+        if hasattr(self, 'existing_relationships_table'):
+            # Clear the current table
+            self.existing_relationships_table.setRowCount(0)
+            
+            # Reload and repopulate
+            existing_relationships = self._load_existing_relationships()
+            
+            # Recalculate optimal table height based on new content
+            row_count = len(existing_relationships) if existing_relationships else 1  # At least 1 for empty state
+            max_visible_rows = 3  # Maximum number of rows to show without scrolling
+            visible_rows = min(row_count, max_visible_rows)
+            
+            # Calculate height: header + (row height * visible rows) + margins
+            header_height = 30  # Approximate header height
+            row_height = 35     # Approximate row height with padding
+            table_margins = 10  # Small margin for borders
+            optimal_height = header_height + (row_height * visible_rows) + table_margins
+            
+            # Update the table height
+            self.existing_relationships_table.setMaximumHeight(optimal_height)
+            self.existing_relationships_table.setMinimumHeight(optimal_height)
+            
+            if existing_relationships:
+                self.existing_relationships_table.setRowCount(len(existing_relationships))
+                
+                for row, rel_data in enumerate(existing_relationships):
+                    # Relationship description
+                    desc_item = QTableWidgetItem(rel_data['description'])
+                    desc_item.setFlags(desc_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    desc_item.setData(Qt.ItemDataRole.UserRole, rel_data)
+                    self.existing_relationships_table.setItem(row, 0, desc_item)
+                    
+                    # Strength
+                    strength_item = QTableWidgetItem(str(rel_data['strength']))
+                    strength_item.setFlags(strength_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    strength_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.existing_relationships_table.setItem(row, 1, strength_item)
+            else:
+                # Show empty state
+                self.existing_relationships_table.setRowCount(1)
+                empty_item = QTableWidgetItem("No existing relationships")
+                empty_item.setFlags(empty_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                empty_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                # Make the empty state text slightly dimmed using palette colors
+                palette = self.existing_relationships_table.palette()
+                placeholder_color = palette.color(palette.ColorRole.PlaceholderText)
+                if not placeholder_color.isValid():
+                    # Fallback for older Qt versions or themes without PlaceholderText
+                    text_color = palette.color(palette.ColorRole.Text)
+                    text_color.setAlpha(128)  # Make it 50% transparent
+                    empty_item.setForeground(text_color)
+                else:
+                    empty_item.setForeground(placeholder_color)
+                self.existing_relationships_table.setItem(0, 0, empty_item)
+                
+                # Empty strength cell
+                empty_strength = QTableWidgetItem("")
+                empty_strength.setFlags(empty_strength.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.existing_relationships_table.setItem(0, 1, empty_strength)
+        
+        # Connect click event for future functionality
+        self.existing_relationships_table.cellClicked.connect(self._on_existing_relationship_clicked)
+        
+        # Add context menu support
+        self.existing_relationships_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.existing_relationships_table.customContextMenuRequested.connect(self._show_relationship_context_menu)
+        
+        # Connect selection change to enable/disable edit button
+        self.existing_relationships_table.itemSelectionChanged.connect(self._on_relationship_selection_changed)
+        
+    def _on_existing_relationship_clicked(self, row: int, column: int) -> None:
+        """Handle clicks on existing relationship table items.
+        
+        Args:
+            row: Row index that was clicked
+            column: Column index that was clicked
+        """
+        # Get the relationship data from the first column
+        item = self.existing_relationships_table.item(row, 0)
+        if item and item.data(Qt.ItemDataRole.UserRole):
+            rel_data = item.data(Qt.ItemDataRole.UserRole)
+            print(f"Clicked on relationship: {rel_data['description']} (IDs: {rel_data['primary_id']}, {rel_data['inverse_id']})")
+            
+            # Enable edit button when a valid relationship is selected
+            self.edit_relationship_button.setEnabled(True)
+    
+    def _on_relationship_selection_changed(self) -> None:
+        """Handle when the relationship table selection changes."""
+        current_row = self.existing_relationships_table.currentRow()
+        has_selection = current_row >= 0
+        
+        # Enable/disable edit button based on selection
+        if has_selection:
+            item = self.existing_relationships_table.item(current_row, 0)
+            has_valid_data = item and item.data(Qt.ItemDataRole.UserRole) is not None
+            self.edit_relationship_button.setEnabled(has_valid_data)
+        else:
+            self.edit_relationship_button.setEnabled(False)
+    
+    def _show_relationship_context_menu(self, position) -> None:
+        """Show context menu for relationship table.
+        
+        Args:
+            position: Position where the context menu was requested
+        """
+        item = self.existing_relationships_table.itemAt(position)
+        if not item or not item.data(Qt.ItemDataRole.UserRole):
+            return
+        
+        # Create context menu
+        context_menu = QMenu(self)
+        
+        # Add edit action
+        edit_action = QAction("Edit Relationship", self)
+        edit_action.triggered.connect(self._edit_selected_relationship)
+        context_menu.addAction(edit_action)
+        
+        # Show the menu
+        context_menu.exec(self.existing_relationships_table.mapToGlobal(position))
+    
+    def _edit_selected_relationship(self) -> None:
+        """Edit the currently selected relationship from the table."""
+        current_row = self.existing_relationships_table.currentRow()
+        if current_row < 0:
+            QMessageBox.information(
+                self,
+                "No Relationship Selected",
+                "Please select a relationship from the list to edit."
+            )
+            return
+        
+        # Get the relationship data from the table
+        item = self.existing_relationships_table.item(current_row, 0)
+        if not item or not item.data(Qt.ItemDataRole.UserRole):
+            QMessageBox.warning(
+                self,
+                "Invalid Selection",
+                "The selected item does not contain valid relationship data."
+            )
+            return
+        
+        rel_data = item.data(Qt.ItemDataRole.UserRole)
+        self._load_relationship_for_editing(rel_data)
+    
+    def _load_relationship_for_editing(self, rel_data: Dict[str, Any]) -> None:
+        """Load a relationship into the cards for editing.
+        
+        Args:
+            rel_data: Relationship data dictionary from the table
+        """
+        print(f"Loading relationship for editing: {rel_data}")
+        
+        # Store the relationship data being edited
+        self.editing_relationship_data = rel_data
+        
+        # Enter edit mode
+        self.is_edit_mode = True
+        
+        try:
+            # Get the actual relationship details from the database
+            relationship_details = self._get_relationship_details(rel_data)
+            
+            if not relationship_details:
+                QMessageBox.warning(
+                    self,
+                    "Error Loading Relationship",
+                    "Could not load relationship details from the database."
+                )
+                return
+            
+            # Load relationship data into the cards
+            forward_rel = relationship_details.get('forward')
+            backward_rel = relationship_details.get('backward')
+            
+            # Reset cards first
+            self.forward_card.relationship_combo.setCurrentIndex(-1)
+            self.backward_card.relationship_combo.setCurrentIndex(-1)
+            
+            # Load forward relationship
+            if forward_rel:
+                success = self._select_relationship_type_by_id(
+                    self.forward_card.relationship_combo,
+                    forward_rel['relationship_type_id']
+                )
+                if success:
+                    # Enable backward card and load backward relationship if exists
+                    self.backward_card.setEnabled(True)
+                    
+                    if backward_rel:
+                        self._select_relationship_type_by_id(
+                            self.backward_card.relationship_combo,
+                            backward_rel['relationship_type_id']
+                        )
+            
+            # Update button states
+            self._update_add_relationship_button_state()
+            
+            print(f"Successfully loaded relationship pair for editing")
+            
+        except Exception as e:
+            print(f"Error loading relationship for editing: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"An error occurred while loading the relationship: {str(e)}"
+            )
 
     def _load_existing_relationships(self) -> List[Dict[str, Any]]:
         """Load existing relationships between the two characters.
@@ -1443,6 +1901,13 @@ class RelationshipDetailsDialog(QDialog):
         # Connect click event for future functionality
         table.cellClicked.connect(self._on_existing_relationship_clicked)
         
+        # Add context menu support
+        table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        table.customContextMenuRequested.connect(self._show_relationship_context_menu)
+        
+        # Connect selection change to enable/disable edit button
+        table.itemSelectionChanged.connect(self._on_relationship_selection_changed)
+        
         return table
     
     def _on_existing_relationship_clicked(self, row: int, column: int) -> None:
@@ -1457,86 +1922,57 @@ class RelationshipDetailsDialog(QDialog):
         if item and item.data(Qt.ItemDataRole.UserRole):
             rel_data = item.data(Qt.ItemDataRole.UserRole)
             print(f"Clicked on relationship: {rel_data['description']} (IDs: {rel_data['primary_id']}, {rel_data['inverse_id']})")
-            # TODO: Implement edit/delete functionality later
+            
+            # Enable edit button when a valid relationship is selected
+            self.edit_relationship_button.setEnabled(True)
     
-    def _refresh_existing_relationships_table(self) -> None:
-        """Refresh the existing relationships table with current data."""
-        if hasattr(self, 'existing_relationships_table'):
-            # Clear the current table
-            self.existing_relationships_table.setRowCount(0)
-            
-            # Reload and repopulate
-            existing_relationships = self._load_existing_relationships()
-            
-            # Recalculate optimal table height based on new content
-            row_count = len(existing_relationships) if existing_relationships else 1  # At least 1 for empty state
-            max_visible_rows = 3  # Maximum number of rows to show without scrolling
-            visible_rows = min(row_count, max_visible_rows)
-            
-            # Calculate height: header + (row height * visible rows) + margins
-            header_height = 30  # Approximate header height
-            row_height = 35     # Approximate row height with padding
-            table_margins = 10  # Small margin for borders
-            optimal_height = header_height + (row_height * visible_rows) + table_margins
-            
-            # Update the table height
-            self.existing_relationships_table.setMaximumHeight(optimal_height)
-            self.existing_relationships_table.setMinimumHeight(optimal_height)
-            
-            if existing_relationships:
-                self.existing_relationships_table.setRowCount(len(existing_relationships))
-                
-                for row, rel_data in enumerate(existing_relationships):
-                    # Relationship description
-                    desc_item = QTableWidgetItem(rel_data['description'])
-                    desc_item.setFlags(desc_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    desc_item.setData(Qt.ItemDataRole.UserRole, rel_data)
-                    self.existing_relationships_table.setItem(row, 0, desc_item)
-                    
-                    # Strength
-                    strength_item = QTableWidgetItem(str(rel_data['strength']))
-                    strength_item.setFlags(strength_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    strength_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    self.existing_relationships_table.setItem(row, 1, strength_item)
-            else:
-                # Show empty state
-                self.existing_relationships_table.setRowCount(1)
-                empty_item = QTableWidgetItem("No existing relationships")
-                empty_item.setFlags(empty_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                empty_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                # Make the empty state text slightly dimmed using palette colors
-                palette = self.existing_relationships_table.palette()
-                placeholder_color = palette.color(palette.ColorRole.PlaceholderText)
-                if not placeholder_color.isValid():
-                    # Fallback for older Qt versions or themes without PlaceholderText
-                    text_color = palette.color(palette.ColorRole.Text)
-                    text_color.setAlpha(128)  # Make it 50% transparent
-                    empty_item.setForeground(text_color)
-                else:
-                    empty_item.setForeground(placeholder_color)
-                self.existing_relationships_table.setItem(0, 0, empty_item)
-                
-                # Empty strength cell
-                empty_strength = QTableWidgetItem("")
-                empty_strength.setFlags(empty_strength.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.existing_relationships_table.setItem(0, 1, empty_strength) 
-
-    def _select_relationship_type_by_id(self, combo: SearchableComboBox, type_id: int) -> bool:
-        """Select a relationship type in the combo box by its type ID.
+    def _on_relationship_selection_changed(self) -> None:
+        """Handle when the relationship table selection changes."""
+        current_row = self.existing_relationships_table.currentRow()
+        has_selection = current_row >= 0
+        
+        # Enable/disable edit button based on selection
+        if has_selection:
+            item = self.existing_relationships_table.item(current_row, 0)
+            has_valid_data = item and item.data(Qt.ItemDataRole.UserRole) is not None
+            self.edit_relationship_button.setEnabled(has_valid_data)
+        else:
+            self.edit_relationship_button.setEnabled(False)
+    
+    def _show_relationship_context_menu(self, position) -> None:
+        """Show context menu for relationship table.
         
         Args:
-            combo: The SearchableComboBox to update
-            type_id: The relationship type ID to select
-            
-        Returns:
-            True if the type ID was found and selected, False otherwise
+            position: Position where the context menu was requested
         """
-        for i in range(combo.count()):
-            item_type_id = combo.itemData(i, Qt.ItemDataRole.UserRole)
-            if item_type_id == type_id:
-                combo.setCurrentIndex(i)
-                print(f"Selected relationship type ID {type_id} at index {i}")
-                return True
+        item = self.existing_relationships_table.itemAt(position)
+        if not item or not item.data(Qt.ItemDataRole.UserRole):
+            return
         
-        print(f"Relationship type ID {type_id} not found in combo box")
-        return False 
+        # Create context menu
+        context_menu = QMenu(self)
+        
+        # Add edit action
+        edit_action = QAction("Edit Relationship", self)
+        edit_action.triggered.connect(self._edit_selected_relationship)
+        context_menu.addAction(edit_action)
+        
+        # Show the menu
+        context_menu.exec(self.existing_relationships_table.mapToGlobal(position))
+    
+    def accept(self) -> None:
+        """Save the relationship and close the dialog."""
+        # Save the relationship(s) to the database
+        self.save_relationships()
+        
+        # Look for any open Story Board and trigger a refresh
+        main_window = self.window()
+        while main_window and not hasattr(main_window, 'story_board'):
+            main_window = main_window.parent() if hasattr(main_window, 'parent') else None
+        
+        # If we found the main window with a story board, refresh it
+        if main_window and hasattr(main_window, 'story_board'):
+            main_window.story_board.refresh_board()
+        
+        # Close the dialog
+        super().accept() 
