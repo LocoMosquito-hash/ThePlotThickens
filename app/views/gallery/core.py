@@ -219,7 +219,19 @@ class GalleryWidget(QWidget):
         self.last_processed_hash = ""
         self.paste_in_progress = False
         self.character_recognition_in_progress = False
-        self.processed_content_hashes = set()  # Track processed content to prevent duplicates
+        self.processed_content_hashes = {}  # Track processed content with timestamps: {hash: timestamp}
+        
+        # Retry logic for invalid clipboard content
+        self.retry_count = 0
+        self.max_retries = 3
+        self.retry_timer = QTimer()
+        self.retry_timer.setSingleShot(True)
+        self.retry_timer.timeout.connect(self._retry_clipboard_processing)
+        
+        # Hash cleanup timer
+        self.hash_cleanup_timer = QTimer()
+        self.hash_cleanup_timer.timeout.connect(self._cleanup_old_hashes)
+        self.hash_cleanup_timer.start(10000)  # Clean up every 10 seconds
         
         # Image recognition utility for character recognition
         self.recognition_util = ImageRecognitionUtil(self.db_conn)
@@ -1309,47 +1321,75 @@ class GalleryWidget(QWidget):
         
         # Process the clipboard content
         self._process_clipboard_content()
-        
+    
     def _process_clipboard_content(self):
         """Process the current clipboard content."""
+        # Reset retry count for new paste operation
+        self.retry_count = 0
+        self._process_clipboard_content_internal()
+    
+    def _process_clipboard_content_internal(self):
+        """Internal method to process clipboard content with retry support."""
         try:
             # Get the clipboard
             clipboard = QApplication.clipboard()
             mime_data = clipboard.mimeData()
             
-            # Double-check that we have valid content before processing
+            # First, validate that we have valid content before doing anything else
             if not self._has_valid_clipboard_content(mime_data):
                 print("No valid clipboard content found during processing")
-                self.paste_in_progress = False
-                return
+                
+                # If we haven't reached max retries, try again after a delay
+                if self.retry_count < self.max_retries:
+                    print(f"Invalid content detected, scheduling retry {self.retry_count + 1}/{self.max_retries}")
+                    delay = 300 + (self.retry_count * 150)  # 300ms, 450ms, 600ms
+                    self.retry_timer.start(delay)
+                    return
+                else:
+                    print("Max retries reached, giving up on clipboard content")
+                    self.paste_in_progress = False
+                    self.retry_count = 0
+                    return
             
-            # Generate a content hash to check for duplicates
-            content_hash = self._generate_content_hash(mime_data)
-            
-            # Check if we've already processed this content
-            if content_hash in self.processed_content_hashes:
-                print(f"Skipping duplicate content (hash: {content_hash[:8]}...)")
-                self.paste_in_progress = False
-                return
-            
-            # Add to processed hashes
-            self.processed_content_hashes.add(content_hash)
+            # Content seems valid, now check for successful processing
+            success = False
+            processed_content_hash = None
             
             if mime_data.hasImage():
                 # Get the image from the clipboard
                 image = clipboard.image()
                 
                 if not image.isNull() and image.width() > 0 and image.height() > 0:
+                    # Generate hash for valid content
+                    processed_content_hash = self._generate_content_hash(mime_data)
+                    
+                    # Check if we've already processed this exact content
+                    if processed_content_hash in self.processed_content_hashes:
+                        print(f"Skipping duplicate content (hash: {processed_content_hash[:8]}...)")
+                        self.paste_in_progress = False
+                        self.retry_count = 0
+                        return
+                    
                     # Save the image to the story
                     self.save_image_to_story(image)
                     print(f"Successfully processed clipboard image: {image.width()}x{image.height()}")
+                    success = True
                 else:
                     print("Clipboard image is null or has invalid dimensions")
-                    # Don't show error dialog for this case, just silently fail
                     
             elif mime_data.hasUrls():
+                # Generate hash and check for duplicates before processing URLs
+                processed_content_hash = self._generate_content_hash(mime_data)
+                
+                if processed_content_hash in self.processed_content_hashes:
+                    print(f"Skipping duplicate URL content (hash: {processed_content_hash[:8]}...)")
+                    self.paste_in_progress = False
+                    self.retry_count = 0
+                    return
+                
                 # Handle URLs (file paths, etc.)
                 self._handle_clipboard_urls(mime_data.urls())
+                success = True
                 
             elif mime_data.hasHtml():
                 # Check the HTML for image tags
@@ -1357,22 +1397,58 @@ class GalleryWidget(QWidget):
                 urls = self._extract_image_urls_from_html(html)
                 
                 if urls:
+                    # Generate hash and check for duplicates
+                    processed_content_hash = self._generate_content_hash(mime_data)
+                    
+                    if processed_content_hash in self.processed_content_hashes:
+                        print(f"Skipping duplicate HTML content (hash: {processed_content_hash[:8]}...)")
+                        self.paste_in_progress = False
+                        self.retry_count = 0
+                        return
+                    
                     # Download the first image
                     url = QUrl(urls[0])
                     self._download_image(url)
+                    success = True
                 else:
                     print("No valid image URLs found in HTML content")
             else:
                 print("No processable content found in clipboard")
                 
+            # Only store hash if processing was successful
+            if success and processed_content_hash:
+                current_time = time.time()
+                self.processed_content_hashes[processed_content_hash] = current_time
+                print(f"Stored hash for successful processing: {processed_content_hash[:8]}...")
+            
+            # If we didn't succeed and haven't reached max retries, try again
+            if not success and self.retry_count < self.max_retries:
+                print(f"Processing failed, scheduling retry {self.retry_count + 1}/{self.max_retries}")
+                delay = 400 + (self.retry_count * 200)  # 400ms, 600ms, 800ms
+                self.retry_timer.start(delay)
+                return
+            
+            # Reset state
+            self.paste_in_progress = False
+            self.retry_count = 0
+                
         except Exception as e:
             print(f"Error processing clipboard content: {e}")
-            # Only show error dialog for unexpected exceptions
+            
+            # If we haven't reached max retries, try again
+            if self.retry_count < self.max_retries:
+                print(f"Exception occurred, scheduling retry {self.retry_count + 1}/{self.max_retries}")
+                delay = 500 + (self.retry_count * 200)  # 500ms, 700ms, 900ms
+                self.retry_timer.start(delay)
+                return
+            
+            # Only show error dialog for unexpected exceptions after all retries
             if "Could not get valid image from clipboard" not in str(e):
                 self.show_error("Clipboard Error", f"Error processing clipboard: {str(e)}")
-        finally:
-            self.paste_in_progress = False
             
+            self.paste_in_progress = False
+            self.retry_count = 0
+    
     def _handle_clipboard_urls(self, urls):
         """Handle URLs from clipboard.
         
@@ -1659,115 +1735,118 @@ class GalleryWidget(QWidget):
                 self.show_error("Error", "Story data not found")
                 return
             
-            # Get folder paths using the utility function
-            from app.db_sqlite import get_story_folder_paths, ensure_story_folders_exist
-            
-            # Ensure all story folders exist
-            ensure_story_folders_exist(story_data)
-            
-            # Get paths
-            folder_paths = get_story_folder_paths(story_data)
-            images_folder = folder_paths['images_folder']
-            thumbnails_folder = folder_paths['thumbnails_folder']
-            
-            # Create folders if they don't exist
-            os.makedirs(images_folder, exist_ok=True)
-            os.makedirs(thumbnails_folder, exist_ok=True)
-            
-            # Generate a unique file name
-            timestamp = time.strftime("%Y%m%d%H%M%S")
-            random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-            file_name = f"img_{timestamp}_{random_string}.png"
-            
-            # Define full file paths
-            image_path = os.path.join(images_folder, file_name)
-            thumbnail_path = os.path.join(thumbnails_folder, file_name)
-            
-            # Generate thumbnail
-            thumbnail_image = self._generate_thumbnail(image)
-            
-            # Save the full image
-            if not image.save(image_path, "PNG"):
-                self.show_error("Save Error", "Could not save image to file")
-                return
-            
-            # Save the thumbnail
-            if not thumbnail_image.save(thumbnail_path, "PNG"):
-                logging.warning(f"Could not save thumbnail to {thumbnail_path}")
-            
-            # Create timestamps
-            now = datetime.now().isoformat()
-            
-            # Insert into database with the columns we actually have
-            query = """
-                INSERT INTO images (story_id, title, path, created_at, updated_at, width, height, is_featured, filename)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            
-            cursor.execute(
-                query,
-                (
-                    self.story_id,
-                    "Imported Image",    # title
-                    images_folder,       # path (store folder path)
-                    now,                 # created_at
-                    now,                 # updated_at
-                    image.width(),       # width
-                    image.height(),      # height
-                    0,                   # is_featured (not NSFW)
-                    file_name            # filename
-                )
-            )
-            
-            # Get the new image ID
-            image_id = cursor.lastrowid
-            
-            # Commit changes
-            self.db_conn.commit()
-            
-            # Add the new image to our list
-            new_image = {
-                "id": image_id,
-                "title": "Imported Image",
-                "path": images_folder,
-                "timestamp": now,
-                "width": image.width(),
-                "height": image.height(),
-                "is_nsfw": False,
-                "story_id": self.story_id,
-                "filename": file_name
-            }
-            
-            self.images.insert(0, new_image)  # Add to start (newest)
-            
-            # Run character recognition on the image (only if not already in progress)
+            # Run character recognition first as approval step (only if not already in progress)
             if not self.character_recognition_in_progress:
                 self.character_recognition_in_progress = True
                 
                 try:
-                    # Show a progress dialog for the longer operation
+                    # Show a brief progress message
                     progress_dialog = QProgressDialog(
-                        "Analyzing image for character recognition...",
+                        "Preparing character recognition...",
                         "Cancel", 0, 100, self
                     )
                     progress_dialog.setWindowTitle("Character Recognition")
                     progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-                    progress_dialog.setMinimumDuration(500)  # Show after 500ms delay
-                    progress_dialog.setValue(0)
+                    progress_dialog.setMinimumDuration(100)  # Show quickly
+                    progress_dialog.setValue(50)
                     
-                    # Allow some processing before showing the dialog
+                    # Allow some processing
                     QApplication.processEvents()
                     
-                    # Open the RegionSelectionDialog for character recognition
+                    # Open the RegionSelectionDialog for character recognition - NO IMAGE_ID YET
                     from app.views.gallery.dialogs.region_selection import RegionSelectionDialog
-                    region_dialog = RegionSelectionDialog(self.db_conn, image, self.story_id, self, image_id=image_id)
+                    region_dialog = RegionSelectionDialog(self.db_conn, image, self.story_id, self, image_id=None)
                     
                     progress_dialog.setValue(100)
                     progress_dialog.close()
                     
                     # Show the dialog - this will block until it's closed
                     if region_dialog.exec():
-                        # Get selected character data and process it if needed
+                        # User clicked Apply - now we can save the image
+                        print("Character recognition approved, saving image...")
+                        
+                        # Get folder paths using the utility function
+                        from app.db_sqlite import get_story_folder_paths, ensure_story_folders_exist
+                        
+                        # Ensure all story folders exist
+                        ensure_story_folders_exist(story_data)
+                        
+                        # Get paths
+                        folder_paths = get_story_folder_paths(story_data)
+                        images_folder = folder_paths['images_folder']
+                        thumbnails_folder = folder_paths['thumbnails_folder']
+                        
+                        # Create folders if they don't exist
+                        os.makedirs(images_folder, exist_ok=True)
+                        os.makedirs(thumbnails_folder, exist_ok=True)
+                        
+                        # Generate a unique file name
+                        timestamp = time.strftime("%Y%m%d%H%M%S")
+                        random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+                        file_name = f"img_{timestamp}_{random_string}.png"
+                        
+                        # Define full file paths
+                        image_path = os.path.join(images_folder, file_name)
+                        thumbnail_path = os.path.join(thumbnails_folder, file_name)
+                        
+                        # Generate thumbnail
+                        thumbnail_image = self._generate_thumbnail(image)
+                        
+                        # Save the full image
+                        if not image.save(image_path, "PNG"):
+                            self.show_error("Save Error", "Could not save image to file")
+                            return
+                        
+                        # Save the thumbnail
+                        if not thumbnail_image.save(thumbnail_path, "PNG"):
+                            logging.warning(f"Could not save thumbnail to {thumbnail_path}")
+                        
+                        # Create timestamps
+                        now = datetime.now().isoformat()
+                        
+                        # Insert into database with the columns we actually have
+                        query = """
+                            INSERT INTO images (story_id, title, path, created_at, updated_at, width, height, is_featured, filename)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """
+                        
+                        cursor.execute(
+                            query,
+                            (
+                                self.story_id,
+                                "Imported Image",    # title
+                                images_folder,       # path (store folder path)
+                                now,                 # created_at
+                                now,                 # updated_at
+                                image.width(),       # width
+                                image.height(),      # height
+                                0,                   # is_featured (not NSFW)
+                                file_name            # filename
+                            )
+                        )
+                        
+                        # Get the new image ID
+                        image_id = cursor.lastrowid
+                        
+                        # Commit changes
+                        self.db_conn.commit()
+                        
+                        # Add the new image to our list
+                        new_image = {
+                            "id": image_id,
+                            "title": "Imported Image",
+                            "path": images_folder,
+                            "timestamp": now,
+                            "width": image.width(),
+                            "height": image.height(),
+                            "is_nsfw": False,
+                            "story_id": self.story_id,
+                            "filename": file_name
+                        }
+                        
+                        self.images.insert(0, new_image)  # Add to start (newest)
+                        
+                        # Process the character recognition data from the dialog
                         try:
                             # Get the data returned from the dialog
                             result_data = region_dialog.get_selected_character_data()
@@ -1801,6 +1880,14 @@ class GalleryWidget(QWidget):
                         except Exception as e:
                             self.show_error("Error", f"Failed to process character recognition data: {str(e)}")
                             logging.exception(f"Error processing character recognition data: {e}")
+                        
+                        # Reload images to show the new one
+                        self.load_images()
+                        
+                        print("Image saved successfully after character recognition approval")
+                    else:
+                        # User cancelled or closed the dialog - don't save the image
+                        print("Character recognition cancelled, image not saved")
                 
                 except Exception as e:
                     self.show_error("Character Recognition Error", f"Failed to open character recognition: {str(e)}")
@@ -1808,12 +1895,16 @@ class GalleryWidget(QWidget):
                 finally:
                     # Always reset the flag when done
                     self.character_recognition_in_progress = False
-            
-            # Reload images
-            self.load_images()
+            else:
+                # Character recognition already in progress, just show a message
+                self.show_error("Character Recognition", "Character recognition is already in progress for another image")
+                
         except Exception as e:
-            self.show_error("Save Error", f"Could not save image: {str(e)}")
-            logging.exception(f"Error saving image to story: {e}")
+            self.show_error("Save Error", f"Could not process image: {str(e)}")
+            logging.exception(f"Error processing image: {e}")
+            # Reset the flag on any error
+            if hasattr(self, 'character_recognition_in_progress'):
+                self.character_recognition_in_progress = False
     
     def associate_quick_event_with_image(self, image_id: int, quick_event_id: int) -> None:
         """Associate a quick event with an image.
@@ -2821,3 +2912,37 @@ class GalleryWidget(QWidget):
                 filtered_images.append(image)
         
         return filtered_images
+    
+    def _cleanup_old_hashes(self):
+        """Remove hashes older than 1 minute."""
+        current_time = time.time()
+        cutoff_time = current_time - 120  # 1 minute ago
+        
+        # Remove old hashes
+        old_hashes = [hash_key for hash_key, timestamp in self.processed_content_hashes.items() 
+                     if timestamp < cutoff_time]
+        
+        for hash_key in old_hashes:
+            del self.processed_content_hashes[hash_key]
+        
+        if old_hashes:
+            print(f"Cleaned up {len(old_hashes)} old clipboard hashes")
+
+    def _retry_clipboard_processing(self):
+        """Retry clipboard processing after a delay."""
+        print(f"Retrying clipboard processing (attempt {self.retry_count + 1}/{self.max_retries})")
+        self.retry_count += 1
+        
+        try:
+            # Try processing again
+            self._process_clipboard_content_internal()
+        except Exception as e:
+            print(f"Retry {self.retry_count} failed: {e}")
+            if self.retry_count < self.max_retries:
+                # Try again after a short delay
+                delay = 500 + (self.retry_count * 200)  # Increasing delay: 500ms, 700ms, 900ms
+                self.retry_timer.start(delay)
+            else:
+                print("Max retries reached for clipboard processing")
+                self.paste_in_progress = False
+                self.retry_count = 0
