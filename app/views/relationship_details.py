@@ -779,6 +779,19 @@ class RelationshipDetailsDialog(QDialog):
         # Add some spacing after the relationship cards
         main_layout.addSpacing(16)
         
+        # Add primary relationship checkbox BEFORE the action buttons
+        primary_checkbox_layout = QHBoxLayout()
+        primary_checkbox_layout.setContentsMargins(0, 0, 0, 10)
+        
+        self.primary_relationship_checkbox = QCheckBox("Mark as Primary Relationship")
+        self.primary_relationship_checkbox.setToolTip(
+            "Mark this relationship pair as the most defining relationship between these characters"
+        )
+        primary_checkbox_layout.addWidget(self.primary_relationship_checkbox)
+        primary_checkbox_layout.addStretch()  # Push checkbox to the left
+        
+        main_layout.addLayout(primary_checkbox_layout)
+        
         # Create action buttons layout (Reset and Add Relationship)
         action_buttons_layout = QHBoxLayout()
         action_buttons_layout.setContentsMargins(0, 0, 0, 0)
@@ -801,19 +814,6 @@ class RelationshipDetailsDialog(QDialog):
         action_buttons_layout.addStretch()
         
         main_layout.addLayout(action_buttons_layout)
-        
-        # Add primary relationship checkbox
-        primary_checkbox_layout = QHBoxLayout()
-        primary_checkbox_layout.setContentsMargins(0, 10, 0, 10)
-        
-        self.primary_relationship_checkbox = QCheckBox("Mark as Primary Relationship")
-        self.primary_relationship_checkbox.setToolTip(
-            "Mark this relationship pair as the most defining relationship between these characters"
-        )
-        primary_checkbox_layout.addWidget(self.primary_relationship_checkbox)
-        primary_checkbox_layout.addStretch()  # Push checkbox to the left
-        
-        main_layout.addLayout(primary_checkbox_layout)
         
         # Add stretch to push everything up
         main_layout.addStretch()
