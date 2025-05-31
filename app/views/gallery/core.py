@@ -19,6 +19,7 @@ import random
 import string
 import json
 import hashlib
+import gc
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -316,6 +317,22 @@ class GalleryWidget(QWidget):
         clear_filters_btn.clicked.connect(self.clear_filters)
         control_layout.addWidget(clear_filters_btn)
         
+        # Add emergency force clear filters button (for debugging)
+        force_clear_btn = QPushButton("FORCE Clear All")
+        force_clear_btn.setIcon(icon_manager.get_icon("alert-triangle"))
+        force_clear_btn.clicked.connect(self.force_clear_all_filters)
+        force_clear_btn.setStyleSheet("QPushButton { background-color: #e74c3c; color: white; font-weight: bold; }")
+        force_clear_btn.setToolTip("Emergency filter clear - use if images are not showing")
+        control_layout.addWidget(force_clear_btn)
+        
+        # Add UI diagnosis button (for debugging)
+        diagnose_btn = QPushButton("Diagnose UI")
+        diagnose_btn.setIcon(icon_manager.get_icon("search"))
+        diagnose_btn.clicked.connect(self.diagnose_ui_state)
+        diagnose_btn.setStyleSheet("QPushButton { background-color: #f39c12; color: white; font-weight: bold; }")
+        diagnose_btn.setToolTip("Check what widgets are actually visible in the UI")
+        control_layout.addWidget(diagnose_btn)
+        
         # Add rebuild recognition database button
         rebuild_db_btn = QPushButton("Rebuild Recognition DB")
         rebuild_db_btn.setIcon(icon_manager.get_icon("database"))
@@ -584,18 +601,29 @@ class GalleryWidget(QWidget):
     
     def clear_thumbnails(self) -> None:
         """Clear all thumbnails from the display."""
+        print(f"[DEBUG] clear_thumbnails called. Current state:")
+        print(f"[DEBUG] - Thumbnails dict size: {len(self.thumbnails)}")
+        print(f"[DEBUG] - Layout item count: {self.thumbnails_layout.count()}")
+        print(f"[DEBUG] - Selected images: {len(self.selected_images)}")
+        
         # First, delete all thumbnail widgets
-        for thumbnail in self.thumbnails.values():
+        for image_id, thumbnail in self.thumbnails.items():
+            print(f"[DEBUG] Removing thumbnail widget for image {image_id}")
             # Remove from layout
             self.thumbnails_layout.removeWidget(thumbnail)
             # Delete the widget
             thumbnail.deleteLater()
         
         # Clear any lingering layout items (including separators and spacers)
+        items_cleared = 0
         while self.thumbnails_layout.count() > 0:
             item = self.thumbnails_layout.takeAt(0)
             if item.widget():
+                print(f"[DEBUG] Clearing remaining widget: {type(item.widget()).__name__}")
                 item.widget().deleteLater()
+                items_cleared += 1
+        
+        print(f"[DEBUG] Cleared {items_cleared} additional layout items")
         
         # Clear the dictionary and pixmap cache
         self.thumbnails.clear()
@@ -603,6 +631,16 @@ class GalleryWidget(QWidget):
         
         # Clear selected images set
         self.selected_images.clear()
+        
+        print(f"[DEBUG] clear_thumbnails completed. Final state:")
+        print(f"[DEBUG] - Thumbnails dict size: {len(self.thumbnails)}")
+        print(f"[DEBUG] - Layout item count: {self.thumbnails_layout.count()}")
+        print(f"[DEBUG] - Selected images: {len(self.selected_images)}")
+        
+        # Force layout update
+        self.thumbnails_layout.update()
+        self.thumbnails_widget.updateGeometry()
+        self.scroll_area.updateGeometry()
     
     def clear_thumbnails_preserve_cache(self) -> None:
         """Clear thumbnails but preserve data caches for performance."""
@@ -662,9 +700,13 @@ class GalleryWidget(QWidget):
         self.story_id = story_id
         self.story_data = story_data
         
-        # Clear ALL filters when switching stories to prevent contamination
+        # FORCE clear ALL filters when switching stories to prevent contamination
+        # Use explicit assignment to ensure no lingering references
         self.character_filters = []
         self.context_filters = []
+        
+        print(f"[DEBUG] FORCE CLEARED - Character filters: {self.character_filters}")
+        print(f"[DEBUG] FORCE CLEARED - Context filters: {self.context_filters}")
         
         # Clear ALL caches to prevent data contamination from previous stories
         self.story_characters = {}
@@ -724,7 +766,8 @@ class GalleryWidget(QWidget):
                 "title": row[1],
                 "path": row[2],
                 "filename": row[3],  # Include the filename in the dictionary
-                "timestamp": row[4],  # We'll keep the name timestamp in our dict for compatibility
+                "created_at": row[4],  # Use consistent field name
+                "timestamp": row[4],  # Keep for backward compatibility
                 "width": row[5],
                 "height": row[6],
                 "is_nsfw": False,  # Using is_featured as is_nsfw is not available
@@ -777,18 +820,29 @@ class GalleryWidget(QWidget):
         Args:
             images: List of image data dictionaries
         """
+        print(f"[DEBUG] _display_images_classic_view called with {len(images)} images")
+        
         # Clear existing thumbnails
         self.clear_thumbnails()
         
         # Filter images based on all active filters
         filtered_images = self._filter_images(images)
+        print(f"[DEBUG] Classic view: after filtering, {len(filtered_images)} images remaining")
+        
+        if not filtered_images:
+            print("[DEBUG] Classic view: No images to display after filtering")
+            return
         
         # Display all filtered images in a grid
         current_row = 0
         current_col = 0
         columns = 4  # Number of columns in the grid
         
-        for image in filtered_images:
+        print(f"[DEBUG] Classic view: Displaying {len(filtered_images)} images in {columns}-column grid")
+        
+        for i, image in enumerate(filtered_images):
+            print(f"[DEBUG] Classic view: Processing image {i+1}/{len(filtered_images)}: ID {image['id']} at position ({current_row}, {current_col})")
+            
             # Get the pixmap for this image
             pixmap = self._get_image_thumbnail_pixmap(image)
             
@@ -817,6 +871,9 @@ class GalleryWidget(QWidget):
                 current_col = 0
                 current_row += 1
         
+        print(f"[DEBUG] Classic view: Layout completed. Final grid size: {current_row + 1} rows x {columns} columns")
+        print(f"[DEBUG] Classic view: Created {len(self.thumbnails)} thumbnail widgets")
+        
         # Update visibility based on nsfw setting
         self.update_thumbnail_visibility()
     
@@ -826,20 +883,28 @@ class GalleryWidget(QWidget):
         Args:
             images: List of image data dictionaries
         """
+        print(f"[DEBUG] _display_images_with_scene_grouping called with {len(images)} images")
+        
         # Clear existing thumbnails
         self.clear_thumbnails()
         
         if not images:
+            print("[DEBUG] No images provided to scene grouping display")
             return
         
-        # Convert images from sqlite3.Row objects to dictionaries
+        # Convert images from sqlite3.Row objects to dictionaries if needed
         images_dict = []
         for image in images:
-            image_dict = dict(image)
+            if hasattr(image, 'keys'):  # Check if it's a Row object
+                image_dict = dict(image)
+            else:
+                image_dict = image  # Already a dictionary
             images_dict.append(image_dict)
         
         # Replace the original images list with our dictionary version
         images = images_dict
+        
+        print(f"[DEBUG] Converted {len(images)} images to dictionaries")
         
         # Get all scenes in this story
         cursor = self.db_conn.cursor()
@@ -852,33 +917,22 @@ class GalleryWidget(QWidget):
         for scene in scenes:
             print(f"[DEBUG] Scene: {scene['id']} - {scene['title']} (seq: {scene['sequence_number']})")
         
-        # First, obtain creation timestamps for all images
+        # Ensure all images have created_at field
         for image in images:
-            cursor.execute(
-                "SELECT created_at FROM images WHERE id = ?",
-                (image['id'],)
-            )
-            result = cursor.fetchone()
-            if result:
-                image['created_at'] = result['created_at']
-            else:
-                image['created_at'] = '1970-01-01 00:00:00'  # Default fallback
+            if 'created_at' not in image or image['created_at'] is None:
+                cursor.execute(
+                    "SELECT created_at FROM images WHERE id = ?",
+                    (image['id'],)
+                )
+                result = cursor.fetchone()
+                if result:
+                    image['created_at'] = result['created_at']
+                else:
+                    image['created_at'] = '1970-01-01 00:00:00'  # Default fallback
         
         # Sort images by creation timestamp (newest first)
-        images.sort(key=lambda x: x['created_at'], reverse=True)
-        
-        # If we have no scenes defined, treat all images as orphans
-        if not scenes:
-            # Apply all filters to images
-            filtered_images = self._filter_images(images)
-            
-            row = 0
-            separator = SeparatorWidget("Ungrouped")
-            self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
-            row += 1
-            
-            self._display_image_list(filtered_images, row)
-            return
+        images.sort(key=lambda x: x.get('created_at', '1970-01-01 00:00:00'), reverse=True)
+        print(f"[DEBUG] Sorted {len(images)} images by created_at")
         
         # Get all quick event associations for all images
         image_ids = [image['id'] for image in images]
@@ -887,6 +941,8 @@ class GalleryWidget(QWidget):
             quick_events = get_image_quick_events(self.db_conn, image_id)
             if quick_events:
                 image_quick_events[image_id] = quick_events
+        
+        print(f"[DEBUG] Found quick events for {len(image_quick_events)} images")
         
         # Find scenes for each image through:
         # 1. Quick events associated with the image that are in scenes
@@ -913,8 +969,11 @@ class GalleryWidget(QWidget):
                 for scene in direct_scenes:
                     image_scenes[image_id].add((scene['id'], scene['title'], scene['sequence_number']))
         
+        print(f"[DEBUG] Found scene associations for {len(image_scenes)} images")
+        
         # Apply all filters to images first
         filtered_images = self._filter_images(images)
+        print(f"[DEBUG] After filtering: {len(filtered_images)} images (from {len(images)} total)")
         
         # Group filtered images by scene
         scene_images = {}
@@ -937,94 +996,90 @@ class GalleryWidget(QWidget):
                 # Image not associated with a scene
                 orphan_images.append(image)
         
-        # If we have no images in any scenes, treat all filtered images as orphans
-        if not scene_images:
+        print(f"[DEBUG] Scene images: {len(scene_images)} scenes, Orphan images: {len(orphan_images)}")
+        for scene_id, scene_data in scene_images.items():
+            print(f"[DEBUG] Scene {scene_id} ({scene_data['title']}): {len(scene_data['images'])} images")
+        
+        # Handle the case where we have orphan images but scenes exist
+        # This is the common case when images have unassigned quick events
+        if orphan_images:
+            print(f"[DEBUG] Displaying orphan images section with {len(orphan_images)} images")
+            # Sort orphaned images by creation timestamp (newest first)
+            orphan_images.sort(key=lambda x: x.get('created_at', '1970-01-01 00:00:00'), reverse=True)
+            
+            # Start with ungrouped section
             row = 0
             separator = SeparatorWidget("Ungrouped")
             self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
+            print(f"[DEBUG] Added 'Ungrouped' separator at row {row}")
             row += 1
             
-            self._display_image_list(orphan_images, row)
-            return
-        
-        # Now create a chronological display order with scenes and ungrouped images interspersed
-        # Create a new display order with scenes only
-        display_order = []
-        
-        # Sort scenes by sequence number (highest first = newest scenes first)
-        sorted_scenes = sorted(
-            scene_images.items(),
-            key=lambda x: x[1]['sequence_number'],
-            reverse=True
-        )
-        
-        # Track scene IDs to prevent duplicates
-        added_scene_ids = set()
-        
-        # Add all scenes in order of sequence number (highest first)
-        for scene_id, scene_data in sorted_scenes:
-            # Only add each scene ID once to prevent duplicates
-            if scene_id not in added_scene_ids:
-                display_order.append(('scene', scene_id))
-                added_scene_ids.add(scene_id)
-        
-        # Now, place unassigned images in a separate group at the top
-        if orphan_images:
-            # Sort orphaned images by creation timestamp (newest first)
-            orphan_images.sort(key=lambda x: x['created_at'], reverse=True)
-            # Insert the ungrouped section at the beginning of display_order
-            display_order.insert(0, ('ungrouped', orphan_images))
-        
-        # Now display everything according to our calculated order
-        row = 0
-        
-        # Clear any lingering layout spacers or empty cells
-        while self.thumbnails_layout.count() > 0:
-            item = self.thumbnails_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        
-        for item_type, item_data in display_order:
-            if item_type == 'scene':
-                scene_id = item_data
-                scene_data = scene_images[scene_id]
-                
-                # Add a separator for this scene
-                separator = SeparatorWidget(scene_data['title'])
-                self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
-                
-                row += 1
-                
-                # Only proceed if there are images to display
-                if scene_data['images']:
-                    # Display this scene's images and get the next row
-                    next_row = self._display_image_list(scene_data['images'], row)
-                    
-                    # Update row to the row after the last image
-                    row = next_row
-                
-                # No need for extra spacing here - _display_image_list already returns the correct next row
+            # Display orphan images
+            next_row = self._display_image_list(orphan_images, row)
+            print(f"[DEBUG] Displayed {len(orphan_images)} orphan images from row {row} to {next_row-1}")
+            row = next_row
             
-            elif item_type == 'ungrouped':
-                ungrouped_images = item_data
-                if ungrouped_images:
-                    # Add separator for ungrouped images
-                    separator = SeparatorWidget("Ungrouped")
+            # Only add scene sections if they have images
+            if scene_images:
+                print(f"[DEBUG] Displaying {len(scene_images)} scene sections")
+                # Sort scenes by sequence number (highest first = newest scenes first)
+                sorted_scenes = sorted(
+                    scene_images.items(),
+                    key=lambda x: x[1]['sequence_number'],
+                    reverse=True
+                )
+                
+                for scene_id, scene_data in sorted_scenes:
+                    if scene_data['images']:  # Only display scenes with images
+                        print(f"[DEBUG] Adding scene section '{scene_data['title']}' with {len(scene_data['images'])} images at row {row}")
+                        # Add a separator for this scene
+                        separator = SeparatorWidget(scene_data['title'])
+                        self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
+                        row += 1
+                        
+                        # Display this scene's images
+                        next_row = self._display_image_list(scene_data['images'], row)
+                        print(f"[DEBUG] Displayed scene images from row {row} to {next_row-1}")
+                        row = next_row
+        
+        # Handle the case where we only have scene images (no orphans)
+        elif scene_images:
+            print(f"[DEBUG] Displaying only scene images - {len(scene_images)} scenes")
+            # Sort scenes by sequence number (highest first = newest scenes first)
+            sorted_scenes = sorted(
+                scene_images.items(),
+                key=lambda x: x[1]['sequence_number'],
+                reverse=True
+            )
+            
+            row = 0
+            for scene_id, scene_data in sorted_scenes:
+                if scene_data['images']:  # Only display scenes with images
+                    print(f"[DEBUG] Adding scene section '{scene_data['title']}' with {len(scene_data['images'])} images at row {row}")
+                    # Add a separator for this scene
+                    separator = SeparatorWidget(scene_data['title'])
                     self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
-                    
                     row += 1
                     
-                    # Display ungrouped images and get the next row
-                    next_row = self._display_image_list(ungrouped_images, row)
-                    
-                    # Update row to the row after the last image 
+                    # Display this scene's images
+                    next_row = self._display_image_list(scene_data['images'], row)
+                    print(f"[DEBUG] Displayed scene images from row {row} to {next_row-1}")
                     row = next_row
-                
-                # No need for extra spacing here - _display_image_list already returns the correct next row
         
+        # Handle the case where we have no images to display at all
+        else:
+            print("[DEBUG] No images to display after filtering")
+            # Add a simple message or empty state
+            row = 0
+            separator = SeparatorWidget("No Images to Display")
+            self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)
+            print(f"[DEBUG] Added 'No Images to Display' separator at row {row}")
+            
         # Ensure columns have equal width
         for col in range(4):
             self.thumbnails_layout.setColumnStretch(col, 1)
+        
+        print(f"[DEBUG] Scene grouping display completed")
         
         # Update visibility based on nsfw setting
         self.update_thumbnail_visibility()
@@ -1042,14 +1097,23 @@ class GalleryWidget(QWidget):
         current_row = start_row
         cols = 4  # Number of thumbnails per row
         
+        print(f"[DEBUG] _display_image_list: Displaying {len(images)} images starting at row {start_row}")
+        
         for i, image in enumerate(images):
             col = i % cols
             row = current_row + (i // cols)
             
             image_id = image['id']
             
+            print(f"[DEBUG] Creating thumbnail for image {image_id} at grid position ({row}, {col})")
+            
             # Get thumbnail pixmap
             pixmap = self._get_image_thumbnail_pixmap(image)
+            
+            if pixmap.isNull():
+                print(f"[WARNING] Pixmap is null for image {image_id}")
+            else:
+                print(f"[DEBUG] Pixmap created successfully for image {image_id}: {pixmap.width()}x{pixmap.height()}")
             
             # Create thumbnail widget
             thumbnail = ThumbnailWidget(image_id, pixmap)
@@ -1065,10 +1129,28 @@ class GalleryWidget(QWidget):
             
             # Add to layout
             self.thumbnails_layout.addWidget(thumbnail, row, col)
+            
+            # Force show the widget
+            thumbnail.setVisible(True)
+            thumbnail.show()
+            
+            print(f"[DEBUG] Added thumbnail {image_id} to layout at ({row}, {col}). Widget visible: {thumbnail.isVisible()}")
         
-        # Return the next row after the last one we used
-        return current_row + ((len(images) - 1) // cols) + 1
+        final_row = current_row + ((len(images) - 1) // cols) + 1 if images else current_row
+        print(f"[DEBUG] _display_image_list completed. Final row: {final_row}")
         
+        # Force layout update
+        self.thumbnails_layout.update()
+        self.thumbnails_widget.updateGeometry()
+        self.scroll_area.updateGeometry()
+        
+        print(f"[DEBUG] Layout item count after display: {self.thumbnails_layout.count()}")
+        print(f"[DEBUG] Thumbnails dictionary size: {len(self.thumbnails)}")
+        print(f"[DEBUG] Scroll area widget size: {self.scroll_area.widget().size()}")
+        print(f"[DEBUG] Thumbnails widget size: {self.thumbnails_widget.size()}")
+        
+        return final_row
+    
     def _get_image_thumbnail_pixmap(self, image: Dict[str, Any]) -> QPixmap:
         """Get the thumbnail pixmap for an image.
         
@@ -2670,14 +2752,46 @@ class GalleryWidget(QWidget):
     
     def clear_filters(self) -> None:
         """Clear all active filters and refresh the gallery."""
+        print(f"[DEBUG] clear_filters called")
+        print(f"[DEBUG] Before clear - Character filters: {self.character_filters}")
+        print(f"[DEBUG] Before clear - Context filters: {self.context_filters}")
+        
         self.character_filters = []
         self.context_filters = []
+        
+        print(f"[DEBUG] After clear - Character filters: {self.character_filters}")
+        print(f"[DEBUG] After clear - Context filters: {self.context_filters}")
         
         # Reload all images with progress indicator
         self.refresh_gallery_with_progress()
         
         # Update status
         self.update_filter_status()
+    
+    def force_clear_all_filters(self) -> None:
+        """Force clear all filters and completely reset filter state."""
+        print(f"[DEBUG] force_clear_all_filters called - EMERGENCY CLEAR")
+        print(f"[DEBUG] Before force clear - Character filters: {self.character_filters}")
+        print(f"[DEBUG] Before force clear - Context filters: {self.context_filters}")
+        
+        # Force clear with explicit assignments
+        self.character_filters = []
+        self.context_filters = []
+        
+        # Force garbage collection of any lingering references
+        import gc
+        gc.collect()
+        
+        print(f"[DEBUG] After force clear - Character filters: {self.character_filters}")
+        print(f"[DEBUG] After force clear - Context filters: {self.context_filters}")
+        
+        # Reload all images with progress indicator
+        self.refresh_gallery_with_progress()
+        
+        # Update status
+        self.update_filter_status()
+        
+        print(f"[DEBUG] force_clear_all_filters completed")
     
     def update_filter_status(self) -> None:
         """Update the filter status label."""
@@ -2859,17 +2973,44 @@ class GalleryWidget(QWidget):
         Returns:
             Filtered list of images
         """
+        print(f"[DEBUG] _filter_images called with {len(images)} images")
+        print(f"[DEBUG] Character filters state: {self.character_filters} (length: {len(self.character_filters)})")
+        print(f"[DEBUG] Context filters state: {self.context_filters} (length: {len(self.context_filters)})")
+        
+        # SAFETY CHECK: If filters are somehow corrupted or invalid, clear them
+        if not isinstance(self.character_filters, list):
+            print(f"[WARNING] character_filters is not a list: {type(self.character_filters)}, clearing...")
+            self.character_filters = []
+        
+        if not isinstance(self.context_filters, list):
+            print(f"[WARNING] context_filters is not a list: {type(self.context_filters)}, clearing...")
+            self.context_filters = []
+        
+        # Clean up any invalid filter entries
+        self.character_filters = [f for f in self.character_filters if isinstance(f, (list, tuple)) and len(f) == 2]
+        self.context_filters = [f for f in self.context_filters if isinstance(f, (list, tuple)) and len(f) == 2]
+        
+        print(f"[DEBUG] After safety checks - Character filters: {self.character_filters}")
+        print(f"[DEBUG] After safety checks - Context filters: {self.context_filters}")
+        
         if not self.character_filters and not self.context_filters:
             # No filters, return all images
+            print(f"[DEBUG] No filters active, returning all {len(images)} images")
             return images
+        
+        print(f"[DEBUG] Applying filters to {len(images)} images")
+        print(f"[DEBUG] Character filters: {self.character_filters}")
+        print(f"[DEBUG] Context filters: {self.context_filters}")
         
         filtered_images = []
         
-        for image in images:
+        for i, image in enumerate(images):
             image_id = image["id"]
             
             # Check if this image should be included
             include_image = True
+            
+            print(f"[DEBUG] Processing image {i+1}/{len(images)}: ID {image_id}")
             
             # Check character filters
             if self.character_filters:
@@ -2877,40 +3018,59 @@ class GalleryWidget(QWidget):
                 tags = self.image_character_tags_cache.get(image_id, [])
                 character_ids = set(tag["character_id"] for tag in tags)
                 
+                print(f"[DEBUG] Image {image_id} has character tags: {character_ids}")
+                
                 for character_id, include in self.character_filters:
+                    print(f"[DEBUG] Checking character filter: character_id={character_id}, include={include}")
                     if include:
                         # If this filter is to include, then the image must have this character
                         if character_id not in character_ids:
+                            print(f"[DEBUG] Image {image_id} excluded: doesn't have required character {character_id}")
                             include_image = False
                             break
                     else:
                         # If this filter is to exclude, then the image must not have this character
                         if character_id in character_ids:
+                            print(f"[DEBUG] Image {image_id} excluded: has excluded character {character_id}")
                             include_image = False
                             break
             
             # Check context filters (only if character filters passed)
             if include_image and self.context_filters:
-                # Get context tags for this image
-                from app.db_sqlite import get_image_contexts
-                contexts = get_image_contexts(self.db_conn, image_id)
-                context_ids = set(context["id"] for context in contexts)
-                
-                for context_id, include in self.context_filters:
-                    if include:
-                        # If this filter is to include, then the image must have this context
-                        if context_id not in context_ids:
-                            include_image = False
-                            break
-                    else:
-                        # If this filter is to exclude, then the image must not have this context
-                        if context_id in context_ids:
-                            include_image = False
-                            break
+                try:
+                    # Get context tags for this image
+                    from app.db_sqlite import get_image_contexts
+                    contexts = get_image_contexts(self.db_conn, image_id)
+                    context_ids = set(context["id"] for context in contexts)
+                    
+                    print(f"[DEBUG] Image {image_id} has context tags: {context_ids}")
+                    
+                    for context_id, include in self.context_filters:
+                        print(f"[DEBUG] Checking context filter: context_id={context_id}, include={include}")
+                        if include:
+                            # If this filter is to include, then the image must have this context
+                            if context_id not in context_ids:
+                                print(f"[DEBUG] Image {image_id} excluded: doesn't have required context {context_id}")
+                                include_image = False
+                                break
+                        else:
+                            # If this filter is to exclude, then the image must not have this context
+                            if context_id in context_ids:
+                                print(f"[DEBUG] Image {image_id} excluded: has excluded context {context_id}")
+                                include_image = False
+                                break
+                except Exception as e:
+                    print(f"[DEBUG] Error checking context filters for image {image_id}: {e}")
+                    # In case of error, include the image to be safe
+                    pass
             
             if include_image:
+                print(f"[DEBUG] Image {image_id} INCLUDED")
                 filtered_images.append(image)
+            else:
+                print(f"[DEBUG] Image {image_id} EXCLUDED")
         
+        print(f"[DEBUG] After filtering: {len(filtered_images)} images remaining (from {len(images)} total)")
         return filtered_images
     
     def _cleanup_old_hashes(self):
@@ -2927,7 +3087,7 @@ class GalleryWidget(QWidget):
         
         if old_hashes:
             print(f"Cleaned up {len(old_hashes)} old clipboard hashes")
-
+    
     def _retry_clipboard_processing(self):
         """Retry clipboard processing after a delay."""
         print(f"Retrying clipboard processing (attempt {self.retry_count + 1}/{self.max_retries})")
@@ -2946,3 +3106,83 @@ class GalleryWidget(QWidget):
                 print("Max retries reached for clipboard processing")
                 self.paste_in_progress = False
                 self.retry_count = 0
+    
+    def diagnose_ui_state(self) -> None:
+        """Diagnose the current UI state to understand visibility issues."""
+        print("\n" + "="*60)
+        print("[UI DIAGNOSIS] Starting UI state diagnosis...")
+        print("="*60)
+        
+        # Check basic widget state
+        print(f"[UI DIAGNOSIS] Gallery Widget visible: {self.isVisible()}")
+        print(f"[UI DIAGNOSIS] Scroll area visible: {self.scroll_area.isVisible()}")
+        print(f"[UI DIAGNOSIS] Thumbnails widget visible: {self.thumbnails_widget.isVisible()}")
+        
+        # Check layout state
+        print(f"[UI DIAGNOSIS] Layout item count: {self.thumbnails_layout.count()}")
+        print(f"[UI DIAGNOSIS] Thumbnails dictionary size: {len(self.thumbnails)}")
+        print(f"[UI DIAGNOSIS] Images list size: {len(self.images)}")
+        
+        # Check widget sizes
+        print(f"[UI DIAGNOSIS] Gallery widget size: {self.size()}")
+        print(f"[UI DIAGNOSIS] Scroll area size: {self.scroll_area.size()}")
+        print(f"[UI DIAGNOSIS] Thumbnails widget size: {self.thumbnails_widget.size()}")
+        
+        # Check scroll area state
+        print(f"[UI DIAGNOSIS] Scroll area widget: {self.scroll_area.widget()}")
+        if self.scroll_area.widget():
+            print(f"[UI DIAGNOSIS] Scroll area widget size: {self.scroll_area.widget().size()}")
+        
+        # Check first few layout items
+        print(f"[UI DIAGNOSIS] First 10 layout items:")
+        for i in range(min(10, self.thumbnails_layout.count())):
+            item = self.thumbnails_layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                print(f"[UI DIAGNOSIS]   Item {i}: {type(widget).__name__}, visible: {widget.isVisible()}, size: {widget.size()}")
+        
+        # Check first few thumbnails
+        print(f"[UI DIAGNOSIS] First 5 thumbnails from dictionary:")
+        for i, (image_id, thumbnail) in enumerate(list(self.thumbnails.items())[:5]):
+            print(f"[UI DIAGNOSIS]   Thumbnail {image_id}: visible: {thumbnail.isVisible()}, size: {thumbnail.size()}")
+        
+        # Check if there are any separators
+        separator_count = 0
+        for i in range(self.thumbnails_layout.count()):
+            item = self.thumbnails_layout.itemAt(i)
+            if item and item.widget() and isinstance(item.widget(), SeparatorWidget):
+                separator_count += 1
+        print(f"[UI DIAGNOSIS] Separator widgets found: {separator_count}")
+        
+        # Check current story
+        print(f"[UI DIAGNOSIS] Current story ID: {self.story_id}")
+        print(f"[UI DIAGNOSIS] Scene grouping enabled: {self.scene_grouping}")
+        print(f"[UI DIAGNOSIS] Show NSFW: {self.show_nsfw}")
+        
+        # Check filters
+        print(f"[UI DIAGNOSIS] Character filters: {self.character_filters}")
+        print(f"[UI DIAGNOSIS] Context filters: {self.context_filters}")
+        
+        print("="*60)
+        print("[UI DIAGNOSIS] Diagnosis completed")
+        print("="*60 + "\n")
+        
+        # Show a message box with key info
+        from PyQt6.QtWidgets import QMessageBox
+        msg = f"""UI State Diagnosis:
+        
+Layout Items: {self.thumbnails_layout.count()}
+Thumbnails Dict: {len(self.thumbnails)}
+Images List: {len(self.images)}
+Story ID: {self.story_id}
+Scene Grouping: {self.scene_grouping}
+
+Gallery Visible: {self.isVisible()}
+Scroll Area Visible: {self.scroll_area.isVisible()}
+Thumbnails Widget Visible: {self.thumbnails_widget.isVisible()}
+
+Separators Found: {separator_count}
+
+Check console for detailed output."""
+        
+        QMessageBox.information(self, "UI Diagnosis", msg)
