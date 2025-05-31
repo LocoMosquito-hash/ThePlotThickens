@@ -997,12 +997,20 @@ class RelationshipDetailsDialog(QDialog):
                 # Highlight the suggested inverse relationships
                 self.backward_card.highlightSuggestions(inverse_type_ids)
                 
-                # Auto-select if only one inverse type is available
-                if len(inverse_type_ids) == 1:
-                    self._select_relationship_type_by_id(self.backward_card.relationship_combo, inverse_type_ids[0])
-                    print(f"Auto-selected inverse relationship type ID: {inverse_type_ids[0]}")
+                # Automatically select the first inverse relationship if any exist
+                if inverse_type_ids:
+                    combo = self.backward_card.relationship_combo
+                    
+                    # Find the first item in the combo box that matches an inverse relationship
+                    for i in range(combo.count()):
+                        type_id = combo.itemData(i, Qt.ItemDataRole.UserRole)
+                        if type_id in inverse_type_ids:
+                            combo.setCurrentIndex(i)
+                            print(f"Auto-selected inverse relationship type ID: {type_id}")
+                            break
             else:
                 print("No valid relationship type ID selected")
+                self.backward_card.highlightSuggestions([])
         else:
             # If no forward relationship is selected, clear any suggestions
             self.backward_card.highlightSuggestions([])
