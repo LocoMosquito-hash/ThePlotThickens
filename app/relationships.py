@@ -403,7 +403,8 @@ def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int
                        strength: int = 3, color: str = "#FF0000", width: float = 6.0,
                        is_custom: bool = False, custom_label: Optional[str] = None,
                        inverse_relationship_id: Optional[int] = None,
-                       is_primary_relationship: bool = False) -> int:
+                       is_primary_relationship: bool = False,
+                       relationship_prefix: Optional[str] = None) -> int:
     """Create a new relationship in the database.
     
     Args:
@@ -419,6 +420,7 @@ def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int
         custom_label: Custom relationship label (if is_custom is True)
         inverse_relationship_id: Optional ID of the inverse relationship
         is_primary_relationship: Whether this is the primary relationship for this character pair
+        relationship_prefix: Optional temporal prefix (former, future, temporary)
         
     Returns:
         ID of the created relationship
@@ -444,13 +446,14 @@ def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int
     INSERT INTO relationships (
         source_id, target_id, relationship_type_id, relationship_type,
         description, strength, color, width,
-        is_custom, custom_label, inverse_relationship_id, is_primary_relationship
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_custom, custom_label, inverse_relationship_id, is_primary_relationship,
+        relationship_prefix
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         source_id, target_id, relationship_type_id, relationship_type_label,
         description, strength, color, width,
         1 if is_custom else 0, custom_label, inverse_relationship_id,
-        1 if is_primary_relationship else 0
+        1 if is_primary_relationship else 0, relationship_prefix
     ))
     
     conn.commit()
@@ -461,7 +464,8 @@ def create_relationship_pair(conn: sqlite3.Connection, source_id: int, target_id
                            forward_type_id: int, backward_type_id: int,
                            description: Optional[str] = None, strength: int = 3,
                            color: str = "#FF0000", width: float = 6.0,
-                           is_primary_relationship: bool = False) -> Tuple[int, int]:
+                           is_primary_relationship: bool = False,
+                           relationship_prefix: Optional[str] = None) -> Tuple[int, int]:
     """Create a pair of linked relationships (forward and backward).
     
     Args:
@@ -475,6 +479,7 @@ def create_relationship_pair(conn: sqlite3.Connection, source_id: int, target_id
         color: Hex color for visualization
         width: Line width for visualization
         is_primary_relationship: Whether this is the primary relationship for this character pair
+        relationship_prefix: Optional temporal prefix (former, future, temporary) applied to both relationships
         
     Returns:
         Tuple of (forward_relationship_id, backward_relationship_id)
@@ -483,13 +488,15 @@ def create_relationship_pair(conn: sqlite3.Connection, source_id: int, target_id
     forward_id = create_relationship(
         conn, source_id, target_id, forward_type_id,
         description=description, strength=strength, color=color, width=width,
-        is_primary_relationship=is_primary_relationship
+        is_primary_relationship=is_primary_relationship,
+        relationship_prefix=relationship_prefix
     )
     
     backward_id = create_relationship(
         conn, target_id, source_id, backward_type_id,
         description=description, strength=strength, color=color, width=width,
-        is_primary_relationship=is_primary_relationship
+        is_primary_relationship=is_primary_relationship,
+        relationship_prefix=relationship_prefix
     )
     
     # Now update both relationships to link them bidirectionally
@@ -763,7 +770,8 @@ def update_relationship(conn: sqlite3.Connection, relationship_id: int,
                       color: Optional[str] = None,
                       width: Optional[float] = None,
                       is_custom: Optional[bool] = None,
-                      custom_label: Optional[str] = None) -> bool:
+                      custom_label: Optional[str] = None,
+                      relationship_prefix: Optional[str] = None) -> bool:
     """Update a relationship.
     
     Args:
@@ -776,6 +784,7 @@ def update_relationship(conn: sqlite3.Connection, relationship_id: int,
         width: Optional new width
         is_custom: Optional new custom flag
         custom_label: Optional new custom label
+        relationship_prefix: Optional new temporal prefix (former, future, temporary)
         
     Returns:
         True if successful, False otherwise
@@ -828,6 +837,10 @@ def update_relationship(conn: sqlite3.Connection, relationship_id: int,
         if is_custom or (is_custom is None and cursor.execute("SELECT is_custom FROM relationships WHERE id = ?", (relationship_id,)).fetchone()[0]):
             updates.append('relationship_type = ?')
             params.append(custom_label)
+    
+    if relationship_prefix is not None:
+        updates.append('relationship_prefix = ?')
+        params.append(relationship_prefix)
     
     # Always update the timestamp
     updates.append('updated_at = CURRENT_TIMESTAMP')
@@ -1087,19 +1100,38 @@ def get_story_relationships(conn: sqlite3.Connection, story_id: int) -> List[Dic
     relationships = []
     for row in cursor.fetchall():
         relationship = dict(row)
+        
+        # Start with the base type name
+        type_name = relationship['relationship_name']
+        
+        # Only apply prefix logic for linked relationships (pairs)
+        if relationship.get('relationship_prefix') and relationship.get('inverse_relationship_id'):
+            # For linked relationships, only show prefix on the "forward" relationship
+            # (the one where source_id < target_id to ensure consistency)
+            source_id = relationship['source_id']
+            target_id = relationship['target_id']
+            
+            # Only apply prefix if this is the "forward" direction of the pair
+            if source_id < target_id:
+                type_name = f"({relationship['relationship_prefix']}) {type_name}"
+        elif relationship.get('relationship_prefix') and not relationship.get('inverse_relationship_id'):
+            # For single relationships (no pair), always show the prefix
+            type_name = f"({relationship['relationship_prefix']}) {type_name}"
+        
         relationships.append({
             'id': relationship['id'],
             'source_id': relationship['source_id'],
             'source_name': relationship['source_name'],
             'target_id': relationship['target_id'],
             'target_name': relationship['target_name'],
-            'type': relationship['relationship_name'],
+            'type': type_name,
             'strength': relationship['strength'],
             'color': relationship['color'],
             'width': relationship['width'],
             'is_custom': relationship['is_custom'],
             'is_primary_relationship': relationship.get('is_primary_relationship', False),
-            'inverse_relationship_id': relationship.get('inverse_relationship_id')
+            'inverse_relationship_id': relationship.get('inverse_relationship_id'),
+            'relationship_prefix': relationship.get('relationship_prefix')
         })
     
     return relationships
@@ -1209,4 +1241,44 @@ def check_relationship_linking_integrity(conn: sqlite3.Connection) -> Dict[str, 
         'linking_percentage': round((linked_relationships / total_relationships) * 100, 2) if total_relationships > 0 else 0,
         'examples': examples,
         'is_healthy': broken_links == 0 and non_bidirectional == 0
-    } 
+    }
+
+
+def update_relationship_prefix_pair(conn: sqlite3.Connection, relationship_id: int,
+                                   relationship_prefix: Optional[str]) -> bool:
+    """Update the relationship prefix for a relationship and its inverse.
+    
+    This function ensures that both relationships in a linked pair get the same prefix.
+    
+    Args:
+        conn: Database connection
+        relationship_id: ID of one of the relationships in the pair
+        relationship_prefix: New prefix to apply (None to clear)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    cursor = conn.cursor()
+    
+    # Get the relationship and its inverse
+    cursor.execute("""
+        SELECT id, inverse_relationship_id 
+        FROM relationships 
+        WHERE id = ?
+    """, (relationship_id,))
+    
+    result = cursor.fetchone()
+    if not result:
+        return False
+    
+    rel_id, inverse_id = result[0], result[1]
+    
+    # Update the primary relationship
+    success = update_relationship(conn, rel_id, relationship_prefix=relationship_prefix)
+    
+    # Update the inverse relationship if it exists
+    if inverse_id:
+        inverse_success = update_relationship(conn, inverse_id, relationship_prefix=relationship_prefix)
+        success = success and inverse_success
+    
+    return success 
