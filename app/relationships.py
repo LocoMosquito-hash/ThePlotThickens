@@ -402,7 +402,8 @@ def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int
                        relationship_type_id: int, description: Optional[str] = None, 
                        strength: int = 3, color: str = "#FF0000", width: float = 6.0,
                        is_custom: bool = False, custom_label: Optional[str] = None,
-                       inverse_relationship_id: Optional[int] = None) -> int:
+                       inverse_relationship_id: Optional[int] = None,
+                       is_primary_relationship: bool = False) -> int:
     """Create a new relationship in the database.
     
     Args:
@@ -417,6 +418,7 @@ def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int
         is_custom: Whether this is a custom relationship
         custom_label: Custom relationship label (if is_custom is True)
         inverse_relationship_id: Optional ID of the inverse relationship
+        is_primary_relationship: Whether this is the primary relationship for this character pair
         
     Returns:
         ID of the created relationship
@@ -442,12 +444,13 @@ def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int
     INSERT INTO relationships (
         source_id, target_id, relationship_type_id, relationship_type,
         description, strength, color, width,
-        is_custom, custom_label, inverse_relationship_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_custom, custom_label, inverse_relationship_id, is_primary_relationship
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         source_id, target_id, relationship_type_id, relationship_type_label,
         description, strength, color, width,
-        1 if is_custom else 0, custom_label, inverse_relationship_id
+        1 if is_custom else 0, custom_label, inverse_relationship_id,
+        1 if is_primary_relationship else 0
     ))
     
     conn.commit()
@@ -457,7 +460,8 @@ def create_relationship(conn: sqlite3.Connection, source_id: int, target_id: int
 def create_relationship_pair(conn: sqlite3.Connection, source_id: int, target_id: int,
                            forward_type_id: int, backward_type_id: int,
                            description: Optional[str] = None, strength: int = 3,
-                           color: str = "#FF0000", width: float = 6.0) -> Tuple[int, int]:
+                           color: str = "#FF0000", width: float = 6.0,
+                           is_primary_relationship: bool = False) -> Tuple[int, int]:
     """Create a pair of linked relationships (forward and backward).
     
     Args:
@@ -470,6 +474,7 @@ def create_relationship_pair(conn: sqlite3.Connection, source_id: int, target_id
         strength: Relationship strength (1-5)
         color: Hex color for visualization
         width: Line width for visualization
+        is_primary_relationship: Whether this is the primary relationship for this character pair
         
     Returns:
         Tuple of (forward_relationship_id, backward_relationship_id)
@@ -477,12 +482,14 @@ def create_relationship_pair(conn: sqlite3.Connection, source_id: int, target_id
     # First, create both relationships without linking them
     forward_id = create_relationship(
         conn, source_id, target_id, forward_type_id,
-        description=description, strength=strength, color=color, width=width
+        description=description, strength=strength, color=color, width=width,
+        is_primary_relationship=is_primary_relationship
     )
     
     backward_id = create_relationship(
         conn, target_id, source_id, backward_type_id,
-        description=description, strength=strength, color=color, width=width
+        description=description, strength=strength, color=color, width=width,
+        is_primary_relationship=is_primary_relationship
     )
     
     # Now update both relationships to link them bidirectionally
