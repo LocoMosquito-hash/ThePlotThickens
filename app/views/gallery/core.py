@@ -75,6 +75,9 @@ from app.utils.image_recognition_util import ImageRecognitionUtil
 # Import icon manager for Tabler icons
 from app.utils.icons.icon_manager import icon_manager
 
+# Import character reference conversion functions
+from app.utils.character_references import convert_char_refs_to_mentions
+
 
 class ClipboardMonitor(QThread):
     """Thread to monitor clipboard changes and detect when content stabilizes."""
@@ -1009,7 +1012,7 @@ class GalleryWidget(QWidget):
             
             # Start with ungrouped section
             row = 0
-            separator = SeparatorWidget("Ungrouped")
+            separator = SeparatorWidget("Ungrouped", len(orphan_images))
             self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
             print(f"[DEBUG] Added 'Ungrouped' separator at row {row}")
             row += 1
@@ -1033,7 +1036,9 @@ class GalleryWidget(QWidget):
                     if scene_data['images']:  # Only display scenes with images
                         print(f"[DEBUG] Adding scene section '{scene_data['title']}' with {len(scene_data['images'])} images at row {row}")
                         # Add a separator for this scene
-                        separator = SeparatorWidget(scene_data['title'])
+                        # Convert character references to names for display
+                        scene_title_display = convert_char_refs_to_mentions(scene_data['title'], list(self.story_characters.values()))
+                        separator = SeparatorWidget(scene_title_display, len(scene_data['images']))
                         self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
                         row += 1
                         
@@ -1057,7 +1062,9 @@ class GalleryWidget(QWidget):
                 if scene_data['images']:  # Only display scenes with images
                     print(f"[DEBUG] Adding scene section '{scene_data['title']}' with {len(scene_data['images'])} images at row {row}")
                     # Add a separator for this scene
-                    separator = SeparatorWidget(scene_data['title'])
+                    # Convert character references to names for display
+                    scene_title_display = convert_char_refs_to_mentions(scene_data['title'], list(self.story_characters.values()))
+                    separator = SeparatorWidget(scene_title_display, len(scene_data['images']))
                     self.thumbnails_layout.addWidget(separator, row, 0, 1, 4)  # Span all columns
                     row += 1
                     
