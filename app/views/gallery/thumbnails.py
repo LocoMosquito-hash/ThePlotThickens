@@ -48,7 +48,11 @@ class ThumbnailWidget(QFrame):
         self.setFrameShape(QFrame.Shape.Box)
         self.setFrameShadow(QFrame.Shadow.Plain)
         self.setLineWidth(1)
-        # Remove custom styling to allow ThumbnailWidget to inherit from PyQtDarkTheme
+        
+        # CRITICAL FIX: Set size policy and minimum size for the widget itself
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.setMinimumSize(160, 190)  # Minimum width x height to prevent collapsing to 0
+        self.setMaximumHeight(250)     # Prevent excessive height
         
         # Layout
         self.layout = QVBoxLayout(self)
