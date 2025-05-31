@@ -215,11 +215,12 @@ class ThumbnailWidget(QFrame):
 class SeparatorWidget(QFrame):
     """Widget for displaying a separator with a title between image groups."""
     
-    def __init__(self, title: str, parent=None) -> None:
+    def __init__(self, title: str, image_count: Optional[int] = None, parent=None) -> None:
         """Initialize the separator widget.
         
         Args:
             title: Title text to display
+            image_count: Optional image count to display in parentheses
             parent: Parent widget
         """
         super().__init__(parent)
@@ -243,8 +244,13 @@ class SeparatorWidget(QFrame):
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(10, 8, 10, 8)
         
+        # Format title with image count if provided
+        display_title = title
+        if image_count is not None:
+            display_title = f"{title} ({image_count} images)"
+        
         # Title label with better styling
-        self.title_label = QLabel(title)
+        self.title_label = QLabel(display_title)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_label.setStyleSheet("""
             color: white; 
