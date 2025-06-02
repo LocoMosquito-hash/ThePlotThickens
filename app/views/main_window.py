@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QPushButton, QLabel, QMessageBox, QFileDialog,
     QMenuBar, QMenu, QDialog, QComboBox, QTextEdit, QListWidget, 
-    QListWidgetItem, QFrame
+    QListWidgetItem, QFrame, QCheckBox
 )
 from PyQt6.QtCore import Qt, QSize, QSettings, pyqtSignal, QEvent
 from PyQt6.QtGui import QAction, QIcon, QTextCursor, QKeyEvent
@@ -330,6 +330,16 @@ class MainWindow(QMainWindow):
         gallery_refresh_btn.setToolTip("Refresh gallery contents")
         gallery_refresh_btn.clicked.connect(self.refresh_gallery)
         gallery_button_layout.addWidget(gallery_refresh_btn)
+        
+        # Add Manual Refresh checkbox
+        self.manual_refresh_checkbox = QCheckBox("Manual Refresh")
+        self.manual_refresh_checkbox.setToolTip("When checked, disable automatic refreshing - only refresh when button is clicked")
+        # Load setting from preferences
+        self.manual_refresh_checkbox.setChecked(self.settings.value("gallery/manual_refresh", False, type=bool))
+        # Save setting when changed
+        self.manual_refresh_checkbox.toggled.connect(self.on_manual_refresh_toggled)
+        gallery_button_layout.addWidget(self.manual_refresh_checkbox)
+        
         gallery_button_layout.addStretch()
         gallery_layout.addLayout(gallery_button_layout)
         
@@ -717,4 +727,24 @@ class MainWindow(QMainWindow):
                 "Error",
                 f"Error opening relationship editor: {str(e)}",
                 QMessageBox.StandardButton.Ok
-            ) 
+            )
+
+    def on_manual_refresh_toggled(self, checked: bool):
+        """Handle manual refresh checkbox toggled event.
+        
+        Args:
+            checked: True if checkbox is checked, False if unchecked
+        """
+        self.settings.setValue("gallery/manual_refresh", checked)
+        if checked:
+            self.status_bar.showMessage("Manual refresh enabled - automatic refreshing disabled", 3000)
+        else:
+            self.status_bar.showMessage("Manual refresh disabled - automatic refreshing enabled", 3000)
+    
+    def is_manual_refresh_enabled(self) -> bool:
+        """Check if manual refresh mode is enabled.
+        
+        Returns:
+            True if manual refresh is enabled, False otherwise
+        """
+        return self.manual_refresh_checkbox.isChecked() if hasattr(self, 'manual_refresh_checkbox') else False 
