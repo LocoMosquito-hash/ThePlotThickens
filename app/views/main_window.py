@@ -660,7 +660,7 @@ class MainWindow(QMainWindow):
     def refresh_gallery(self) -> None:
         """Refresh the gallery tab contents."""
         if hasattr(self, 'gallery') and self.gallery:
-            self.gallery.load_images()
+            self.gallery.refresh_gallery_with_progress()
             self.status_bar.showPermanentMessage("Gallery refreshed")
     
     def refresh_gallery_incremental(self, image_id: int = None) -> None:
@@ -675,8 +675,8 @@ class MainWindow(QMainWindow):
                 self.gallery.refresh_single_image(image_id)
                 self.status_bar.showPermanentMessage(f"Image {image_id} refreshed")
             else:
-                # Full refresh
-                self.gallery.load_images()
+                # Full refresh using optimized system
+                self.gallery.refresh_gallery_with_progress()
                 self.status_bar.showPermanentMessage("Gallery refreshed")
     
     def refresh_timeline(self) -> None:
