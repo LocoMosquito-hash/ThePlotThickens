@@ -18,6 +18,7 @@ from PyQt6.QtGui import QKeyEvent
 # Import character completer and database functions
 from app.utils.character_completer import CharacterCompleter, convert_mentions_to_char_refs
 from app.db_sqlite import get_story_characters
+from app.utils.character_references import convert_char_refs_to_mentions
 
 class SceneSelectionDialog(QDialog):
     """Dialog for selecting a scene to move images to."""
@@ -39,8 +40,8 @@ class SceneSelectionDialog(QDialog):
         
         self.setWindowTitle("Move to Scene")
         self.init_ui()
-        self.load_scenes()
-        self.load_characters()
+        self.load_characters()  # Load characters first
+        self.load_scenes()      # Then load scenes (so character conversion works)
         
     def init_ui(self) -> None:
         """Initialize the UI."""
@@ -162,7 +163,11 @@ class SceneSelectionDialog(QDialog):
         for scene in scenes:
             scene_id = scene['id']
             title = scene['title']
-            item = QListWidgetItem(title)
+            
+            # Convert character references to readable names for display
+            display_title = convert_char_refs_to_mentions(title, self.characters)
+            
+            item = QListWidgetItem(display_title)
             item.setData(Qt.ItemDataRole.UserRole, scene_id)
             self.scene_list.addItem(item)
     

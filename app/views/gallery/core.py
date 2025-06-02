@@ -3265,8 +3265,11 @@ Check console for detailed output."""
         for scene_id, scene_title, scene_images_list in scene_images:
             print(f"[PLACEHOLDER] Adding scene section '{scene_title}' with {len(scene_images_list)} images")
             
+            # Convert character references to names for display
+            scene_title_display = convert_char_refs_to_mentions(scene_title, list(self.story_characters.values()))
+            
             # Add scene separator
-            separator = SeparatorWidget(scene_title)
+            separator = SeparatorWidget(scene_title_display)
             self.thumbnails_layout.addWidget(separator, current_row, 0, 1, 4)
             current_row += 1
             
@@ -3367,7 +3370,9 @@ Check console for detailed output."""
                              key=lambda sid: scene_groups[sid]["sequence"], 
                              reverse=True):
             scene_data = scene_groups[scene_id]
-            scene_images.append((scene_id, scene_data["title"], scene_data["images"]))
+            # Convert character references to readable names for the title
+            display_title = convert_char_refs_to_mentions(scene_data["title"], list(self.story_characters.values()))
+            scene_images.append((scene_id, display_title, scene_data["images"]))
         
         return scene_images, orphaned_images
 
