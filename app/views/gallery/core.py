@@ -78,6 +78,9 @@ from app.utils.icons.icon_manager import icon_manager
 # Import character reference conversion functions
 from app.utils.character_references import convert_char_refs_to_mentions
 
+# Add import for the optimized refresh system
+from app.views.gallery.optimized_refresh import SmartRefreshManager
+
 
 class ClipboardMonitor(QThread):
     """Thread to monitor clipboard changes and detect when content stabilizes."""
@@ -242,6 +245,9 @@ class GalleryWidget(QWidget):
         
         # Load nsfw placeholder
         self.nsfw_placeholder = self._create_nsfw_placeholder()
+        
+        # Initialize optimized refresh system
+        self.smart_refresh_manager = SmartRefreshManager(self, self)
         
         # Initialize UI
         self.init_ui()
@@ -1112,15 +1118,15 @@ class GalleryWidget(QWidget):
             
             image_id = image['id']
             
-            print(f"[DEBUG] Creating thumbnail for image {image_id} at grid position ({row}, {col})")
+            # print(f"[DEBUG] Creating thumbnail for image {image_id} at grid position ({row}, {col})")
             
             # Get thumbnail pixmap
             pixmap = self._get_image_thumbnail_pixmap(image)
             
-            if pixmap.isNull():
-                print(f"[WARNING] Pixmap is null for image {image_id}")
-            else:
-                print(f"[DEBUG] Pixmap created successfully for image {image_id}: {pixmap.width()}x{pixmap.height()}")
+            # if pixmap.isNull():
+            #     print(f"[WARNING] Pixmap is null for image {image_id}")
+            # else:
+            #     print(f"[DEBUG] Pixmap created successfully for image {image_id}: {pixmap.width()}x{pixmap.height()}")
             
             # Create thumbnail widget
             thumbnail = ThumbnailWidget(image_id, pixmap)
@@ -1141,7 +1147,7 @@ class GalleryWidget(QWidget):
             thumbnail.setVisible(True)
             thumbnail.show()
             
-            print(f"[DEBUG] Added thumbnail {image_id} to layout at ({row}, {col}). Widget visible: {thumbnail.isVisible()}")
+            # print(f"[DEBUG] Added thumbnail {image_id} to layout at ({row}, {col}). Widget visible: {thumbnail.isVisible()}")
         
         final_row = current_row + ((len(images) - 1) // cols) + 1 if images else current_row
         print(f"[DEBUG] _display_image_list completed. Final row: {final_row}")
@@ -1971,7 +1977,7 @@ class GalleryWidget(QWidget):
                             logging.exception(f"Error processing character recognition data: {e}")
                         
                         # Reload images to show the new one
-                        self.load_images()
+                        self.refresh_gallery_with_progress()
                         
                         print("Image saved successfully after character recognition approval")
                     else:
@@ -2513,8 +2519,8 @@ class GalleryWidget(QWidget):
         
         dialog.exec()
         
-        # Reload images to reflect any changes
-        self.load_images()
+        # Reload images to reflect any changes using smart refresh
+        self.refresh_gallery_with_progress()
     
     def on_suggest_character_tags(self, image: QImage):
         """Suggest character tags based on face recognition.
@@ -2632,8 +2638,8 @@ class GalleryWidget(QWidget):
                 # Add to scene - this function handles checking if it's already in the scene
                 add_image_to_scene(self.db_conn, scene_id, image_id)
             
-            # Reload images to reflect the changes
-            self.load_images()
+            # Use smart refresh with scene move operation type
+            self.smart_refresh_manager.refresh_gallery_smart("scene_move")
     
     def on_batch_character_tagging(self) -> None:
         """Handle batch character tagging action."""
@@ -2654,8 +2660,8 @@ class GalleryWidget(QWidget):
         dialog.exec()
         
         # After the dialog closes, refresh the gallery to reflect any changes
-        # Show a progress indicator during refresh
-        self.refresh_gallery_with_progress()
+        # Use smart refresh with batch tagging operation type
+        self.smart_refresh_manager.refresh_gallery_smart("batch_tag")
     
     def on_batch_context_tagging(self) -> None:
         """Handle batch context tagging action."""
@@ -2675,44 +2681,13 @@ class GalleryWidget(QWidget):
         dialog.exec()
         
         # After the dialog closes, refresh the gallery to reflect any changes
-        # Show a progress indicator during refresh
-        self.refresh_gallery_with_progress()
+        # Use smart refresh with batch tagging operation type
+        self.smart_refresh_manager.refresh_gallery_smart("batch_tag")
     
     def refresh_gallery_with_progress(self) -> None:
         """Refresh the gallery with a visual progress indicator."""
-        # Create a progress dialog
-        progress = QProgressDialog(
-            "Refreshing gallery...",
-            None,  # No cancel button
-            0,
-            0,  # Indeterminate progress
-            self
-        )
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.setMinimumDuration(0)  # Show immediately
-        progress.setWindowTitle("Gallery Refresh")
-        
-        # Show the progress dialog
-        progress.show()
-        QApplication.processEvents()  # Ensure it's displayed
-        
-        try:
-            # Perform the actual refresh
-            self.load_images()
-            
-            # Brief delay to ensure user sees the progress indicator
-            QTimer.singleShot(100, progress.close)
-            
-        except Exception as e:
-            # Ensure progress dialog is closed even if there's an error
-            progress.close()
-            logging.exception(f"Error during gallery refresh: {e}")
-            self.show_error("Refresh Error", f"Failed to refresh gallery: {str(e)}")
-        
-        finally:
-            # Ensure progress dialog is always closed
-            if progress.isVisible():
-                progress.close()
+        # Use smart refresh manager for performance optimization
+        self.smart_refresh_manager.refresh_gallery_smart("general")
     
     def get_on_scene_characters(self) -> List[Dict[str, Any]]:
         """Get a list of characters that appear in the active scene.
@@ -2751,8 +2726,8 @@ class GalleryWidget(QWidget):
     
     def apply_filters(self):
         """Apply filters to the gallery view."""
-        # Reload images with current filters using progress indicator
-        self.refresh_gallery_with_progress()
+        # Use smart refresh with filter operation type for optimization
+        self.smart_refresh_manager.refresh_gallery_smart("filter")
         
         # Update filter status
         self.update_filter_status()
@@ -3193,3 +3168,248 @@ Separators Found: {separator_count}
 Check console for detailed output."""
         
         QMessageBox.information(self, "UI Diagnosis", msg)
+
+    # Add method to create placeholder thumbnails for progressive loading
+    def create_placeholder_thumbnails(self, images: List[Dict[str, Any]]) -> None:
+        """Create placeholder thumbnails for progressive loading.
+        
+        Args:
+            images: List of image data dictionaries
+        """
+        print(f"[PLACEHOLDER] Creating placeholder thumbnails for {len(images)} images")
+        
+        # Clear existing thumbnails first
+        self.clear_thumbnails()
+        
+        # Display images based on grouping option
+        if self.scene_grouping:
+            self._display_images_with_scene_grouping_placeholders(images)
+        else:
+            self._display_images_classic_view_placeholders(images)
+        
+        print(f"[PLACEHOLDER] Created {len(self.thumbnails)} placeholder thumbnails")
+
+    def _display_images_classic_view_placeholders(self, images: List[Dict[str, Any]]) -> None:
+        """Display images in classic view with placeholder thumbnails for progressive loading.
+        
+        Args:
+            images: List of image data dictionaries
+        """
+        print(f"[PLACEHOLDER] Creating classic view placeholders for {len(images)} images")
+        
+        current_row = 0
+        current_col = 0
+        columns = 4
+
+        for image in images:
+            # Create placeholder pixmap (this is fast)
+            placeholder_pixmap = self._create_placeholder_pixmap(image)
+            
+            # Create thumbnail widget with placeholder
+            thumbnail = ThumbnailWidget(image["id"], placeholder_pixmap, image.get("title"))
+            
+            # Connect signals
+            thumbnail.clicked.connect(self.on_thumbnail_clicked)
+            thumbnail.delete_requested.connect(self.on_delete_image)
+            thumbnail.checkbox_toggled.connect(self.on_thumbnail_checkbox_toggled)
+            
+            # Add to layout
+            self.thumbnails_layout.addWidget(thumbnail, current_row, current_col)
+            
+            # Add to thumbnails dictionary
+            self.thumbnails[image["id"]] = thumbnail
+            
+            # Set quick event text using cached data
+            self._set_thumbnail_quick_event_text_cached(thumbnail, image["id"])
+            
+            # Increment position
+            current_col += 1
+            if current_col >= columns:
+                current_col = 0
+                current_row += 1
+        
+        print(f"[PLACEHOLDER] Classic view placeholders created")
+
+    def _display_images_with_scene_grouping_placeholders(self, images: List[Dict[str, Any]]) -> None:
+        """Display images with scene grouping using placeholder thumbnails.
+        
+        Args:
+            images: List of image data dictionaries
+        """
+        print(f"[PLACEHOLDER] Creating scene grouping placeholders for {len(images)} images")
+        
+        # Filter images based on all active filters (already done, but ensure it's applied)
+        filtered_images = self._filter_images(images)
+        print(f"[PLACEHOLDER] After filtering: {len(filtered_images)} images")
+        
+        # Group images by scene and get scene information
+        scene_images, orphan_images = self._group_images_by_scene_fast(filtered_images)
+        
+        current_row = 0
+        
+        # Display orphan images first
+        if orphan_images:
+            print(f"[PLACEHOLDER] Creating orphan images section with {len(orphan_images)} images")
+            
+            # Add "Ungrouped" separator
+            separator = SeparatorWidget("Ungrouped")
+            self.thumbnails_layout.addWidget(separator, current_row, 0, 1, 4)
+            current_row += 1
+            
+            # Display orphan images with placeholders
+            current_row = self._display_image_list_placeholders(orphan_images, current_row)
+        
+        # Display scene sections with placeholders
+        print(f"[PLACEHOLDER] Creating {len(scene_images)} scene sections")
+        for scene_id, scene_title, scene_images_list in scene_images:
+            print(f"[PLACEHOLDER] Adding scene section '{scene_title}' with {len(scene_images_list)} images")
+            
+            # Add scene separator
+            separator = SeparatorWidget(scene_title)
+            self.thumbnails_layout.addWidget(separator, current_row, 0, 1, 4)
+            current_row += 1
+            
+            # Display scene images with placeholders
+            current_row = self._display_image_list_placeholders(scene_images_list, current_row)
+        
+        print(f"[PLACEHOLDER] Scene grouping placeholders completed")
+
+    def _group_images_by_scene_fast(self, images: List[Dict[str, Any]]) -> tuple:
+        """Fast grouping of images by scene for placeholder creation.
+        
+        Args:
+            images: List of image data dictionaries
+            
+        Returns:
+            Tuple of (scene_images, orphan_images)
+        """
+        # Get all scenes for this story (fast query)
+        cursor = self.db_conn.cursor()
+        cursor.execute("""
+            SELECT id, title, sequence_number
+            FROM events
+            WHERE story_id = ? AND event_type = 'SCENE'
+            ORDER BY sequence_number DESC
+        """, (self.story_id,))
+        
+        scenes = {row[0]: {"title": row[1], "sequence": row[2]} for row in cursor.fetchall()}
+        
+        # Get image-scene associations efficiently
+        image_ids = [img["id"] for img in images]
+        
+        # Use the same logic as the full scene grouping method
+        # Get all quick event associations for all images
+        image_quick_events = {}
+        for image_id in image_ids:
+            quick_events = self.image_quick_events_cache.get(image_id, [])
+            if quick_events:
+                image_quick_events[image_id] = quick_events
+        
+        # Find scenes for each image through:
+        # 1. Quick events associated with the image that are in scenes
+        # 2. Direct image-scene associations
+        image_scenes = {}
+        
+        # First, process indirect associations via quick events
+        for image_id, quick_events in image_quick_events.items():
+            for quick_event in quick_events:
+                scenes_for_quick_event = get_quick_event_scenes(self.db_conn, quick_event['id'])
+                if scenes_for_quick_event:
+                    # Associate image with all scenes containing the quick event
+                    if image_id not in image_scenes:
+                        image_scenes[image_id] = set()
+                    for scene in scenes_for_quick_event:
+                        image_scenes[image_id].add((scene['id'], scene['title'], scene['sequence_number']))
+        
+        # Second, process direct image-scene associations (batch query)
+        cursor.execute("""
+            SELECT si.image_id, e.id as scene_id, e.title, e.sequence_number
+            FROM scene_images si
+            JOIN events e ON si.scene_event_id = e.id
+            WHERE si.image_id IN ({}) AND e.event_type = 'SCENE'
+        """.format(','.join('?' * len(image_ids))), image_ids)
+        
+        for row in cursor.fetchall():
+            image_id = row[0]
+            scene_id = row[1]
+            scene_title = row[2]
+            sequence_number = row[3]
+            
+            if image_id not in image_scenes:
+                image_scenes[image_id] = set()
+            image_scenes[image_id].add((scene_id, scene_title, sequence_number))
+        
+        # Group images by scene
+        scene_groups = {}
+        orphaned_images = []
+        
+        for image in images:
+            image_id = image["id"]
+            if image_id in image_scenes:
+                # Use the first scene for grouping
+                first_scene = next(iter(image_scenes[image_id]))
+                scene_id = first_scene[0]
+                
+                if scene_id not in scene_groups:
+                    scene_groups[scene_id] = {
+                        "title": first_scene[1],
+                        "sequence": first_scene[2],
+                        "images": []
+                    }
+                scene_groups[scene_id]["images"].append(image)
+            else:
+                orphaned_images.append(image)
+        
+        # Convert to sorted list
+        scene_images = []
+        for scene_id in sorted(scene_groups.keys(), 
+                             key=lambda sid: scene_groups[sid]["sequence"], 
+                             reverse=True):
+            scene_data = scene_groups[scene_id]
+            scene_images.append((scene_id, scene_data["title"], scene_data["images"]))
+        
+        return scene_images, orphaned_images
+
+    def _display_image_list_placeholders(self, images: List[Dict[str, Any]], start_row: int) -> int:
+        """Display a list of images with placeholder thumbnails starting at the given row.
+        
+        Args:
+            images: List of image data dictionaries
+            start_row: Starting row for layout
+            
+        Returns:
+            Final row after displaying all images
+        """
+        cols = 4
+        current_row = start_row
+        
+        for i, image in enumerate(images):
+            col = i % cols
+            row = current_row + (i // cols)
+            
+            image_id = image['id']
+            
+            # Create placeholder pixmap (fast)
+            placeholder_pixmap = self._create_placeholder_pixmap(image)
+            
+            # Create thumbnail widget with placeholder
+            thumbnail = ThumbnailWidget(image_id, placeholder_pixmap)
+            thumbnail.clicked.connect(lambda tid=image_id: self.on_thumbnail_clicked(tid))
+            thumbnail.delete_requested.connect(lambda tid=image_id: self.on_delete_image(tid))
+            thumbnail.checkbox_toggled.connect(self.on_thumbnail_checkbox_toggled)
+            
+            # Add quick event text using cached data
+            self._set_thumbnail_quick_event_text_cached(thumbnail, image_id)
+            
+            # Add to thumbnails dictionary
+            self.thumbnails[image_id] = thumbnail
+            
+            # Add to layout
+            self.thumbnails_layout.addWidget(thumbnail, row, col)
+            
+            # Ensure visibility
+            thumbnail.setVisible(True)
+            thumbnail.show()
+        
+        final_row = current_row + ((len(images) - 1) // cols) + 1 if images else current_row
+        return final_row
