@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Set, Optional
 import time
 
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, QThread
-from PyQt6.QtWidgets import QProgressDialog, QApplication
+from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPixmap
 
 from app.views.gallery.thumbnail_loader import ThumbnailLoader
@@ -346,8 +346,31 @@ class SmartRefreshManager(QObject):
         self.optimized_refresh.refresh_completed.connect(self._on_optimized_refresh_completed)
         self.optimized_refresh.refresh_failed.connect(self._on_optimized_refresh_failed)
         
-        # Progress dialog
-        self.progress_dialog = None
+        # Status bar access (no more progress dialog)
+        self._status_bar = None
+    
+    def _get_status_bar(self):
+        """Get the main window's status bar.
+        
+        Returns:
+            Status bar or None if not available
+        """
+        if self._status_bar:
+            return self._status_bar
+            
+        # Try to get status bar from main window through gallery widget
+        try:
+            # Navigate up the widget hierarchy to find the main window
+            parent = self.gallery_widget.parent()
+            while parent:
+                if hasattr(parent, 'status_bar'):
+                    self._status_bar = parent.status_bar
+                    return self._status_bar
+                parent = parent.parent()
+        except Exception as e:
+            logging.debug(f"Could not find status bar: {e}")
+        
+        return None
     
     def refresh_gallery_smart(self, operation_type: str = "general") -> None:
         """Intelligently choose refresh strategy based on gallery size.
@@ -386,18 +409,11 @@ class SmartRefreshManager(QObject):
             self._refresh_standard()
     
     def _refresh_optimized(self, force_cache_rebuild: bool = False) -> None:
-        """Perform optimized refresh with progress dialog."""
-        # Create progress dialog
-        self.progress_dialog = QProgressDialog(
-            "Optimizing gallery refresh...",
-            "Cancel",
-            0,
-            100,
-            self.gallery_widget
-        )
-        self.progress_dialog.setWindowTitle("Gallery Refresh")
-        self.progress_dialog.setMinimumDuration(500)  # Show after 500ms
-        self.progress_dialog.canceled.connect(self._cancel_optimized_refresh)
+        """Perform optimized refresh with status bar messages."""
+        # Show status message instead of popup dialog
+        status_bar = self._get_status_bar()
+        if status_bar:
+            status_bar.showMessage("Refreshing gallery...")
         
         # Start optimized refresh
         self.optimized_refresh.refresh_gallery_optimized(
@@ -407,20 +423,22 @@ class SmartRefreshManager(QObject):
     
     def _refresh_standard(self) -> None:
         """Perform standard refresh (fallback for small galleries)."""
-        # Instead of calling the smart refresh again, call the actual legacy method
+        # Show status message for standard refresh too
+        status_bar = self._get_status_bar()
+        if status_bar:
+            status_bar.showMessage("Refreshing gallery...")
+            
+        # Call the actual legacy method
         self.gallery_widget.load_images()
-    
-    def _cancel_optimized_refresh(self) -> None:
-        """Cancel optimized refresh."""
-        self.optimized_refresh.cancel_refresh()
-        if self.progress_dialog:
-            self.progress_dialog.close()
-            self.progress_dialog = None
+        
+        # Complete status message
+        if status_bar:
+            status_bar.showMessage("Gallery refresh completed", 3000)
     
     def _on_optimized_refresh_started(self) -> None:
         """Handle optimized refresh started."""
-        if self.progress_dialog:
-            self.progress_dialog.show()
+        # Status message already shown in _refresh_optimized, nothing more needed
+        pass
     
     def _on_optimized_refresh_progress(self, stage: str, current: int, total: int) -> None:
         """Handle optimized refresh progress.
@@ -430,9 +448,11 @@ class SmartRefreshManager(QObject):
             current: Current progress
             total: Total progress
         """
-        if self.progress_dialog:
-            self.progress_dialog.setLabelText(stage)
-            self.progress_dialog.setValue(current)
+        # Show detailed progress in status bar instead of popup
+        status_bar = self._get_status_bar()
+        if status_bar:
+            percent = int((current / total) * 100) if total > 0 else 0
+            status_bar.showMessage(f"{stage} ({percent}%)")
     
     def _on_thumbnails_ready(self, thumbnails: List[tuple]) -> None:
         """Handle batch of thumbnails ready.
@@ -455,9 +475,10 @@ class SmartRefreshManager(QObject):
     
     def _on_optimized_refresh_completed(self) -> None:
         """Handle optimized refresh completion."""
-        if self.progress_dialog:
-            self.progress_dialog.close()
-            self.progress_dialog = None
+        # Show completion message in status bar
+        status_bar = self._get_status_bar()
+        if status_bar:
+            status_bar.showMessage("Gallery refresh completed", 3000)
         
         # Final UI updates
         try:
@@ -478,16 +499,22 @@ class SmartRefreshManager(QObject):
         Args:
             error: Error message
         """
-        if self.progress_dialog:
-            self.progress_dialog.close()
-            self.progress_dialog = None
+        # Show error in status bar
+        status_bar = self._get_status_bar()
+        if status_bar:
+            status_bar.showMessage(f"Gallery refresh failed: {error}", 5000)
         
         logging.error(f"Optimized refresh failed: {error}")
         
         # Fallback to standard refresh - call load_images directly to avoid recursion
         try:
             self.gallery_widget.load_images()
+            # Show fallback success message
+            if status_bar:
+                status_bar.showMessage("Gallery refresh completed (fallback mode)", 3000)
         except Exception as fallback_error:
             logging.error(f"Fallback refresh also failed: {fallback_error}")
+            if status_bar:
+                status_bar.showMessage(f"Gallery refresh failed completely", 5000)
             self.gallery_widget.show_error("Refresh Failed", 
                 f"Both optimized and standard refresh failed.\nOptimized: {error}\nStandard: {fallback_error}") 
