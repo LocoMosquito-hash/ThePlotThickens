@@ -745,6 +745,7 @@ class GalleryWidget(QWidget):
             self.parent().setWindowTitle(title)
         
         # Load images for this story with progress indicator
+        # Always refresh when setting a new story (not affected by manual refresh setting)
         self.refresh_gallery_with_progress()
     
     def load_images(self) -> None:
@@ -1976,8 +1977,8 @@ class GalleryWidget(QWidget):
                             self.show_error("Error", f"Failed to process character recognition data: {str(e)}")
                             logging.exception(f"Error processing character recognition data: {e}")
                         
-                        # Reload images to show the new one
-                        self.refresh_gallery_with_progress()
+                        # Reload images to show the new one (only if auto refresh is enabled)
+                        self.refresh_if_auto_enabled("general")
                         
                         print("Image saved successfully after character recognition approval")
                     else:
@@ -2519,8 +2520,8 @@ class GalleryWidget(QWidget):
         
         dialog.exec()
         
-        # Reload images to reflect any changes using smart refresh
-        self.refresh_gallery_with_progress()
+        # Reload images to reflect any changes using smart refresh (only if auto refresh is enabled)
+        self.refresh_if_auto_enabled("general")
     
     def on_suggest_character_tags(self, image: QImage):
         """Suggest character tags based on face recognition.
@@ -2638,8 +2639,8 @@ class GalleryWidget(QWidget):
                 # Add to scene - this function handles checking if it's already in the scene
                 add_image_to_scene(self.db_conn, scene_id, image_id)
             
-            # Use smart refresh with scene move operation type
-            self.smart_refresh_manager.refresh_gallery_smart("scene_move")
+            # Use smart refresh with scene move operation type (only if auto refresh is enabled)
+            self.refresh_if_auto_enabled("scene_move")
     
     def on_batch_character_tagging(self) -> None:
         """Handle batch character tagging action."""
@@ -2659,9 +2660,9 @@ class GalleryWidget(QWidget):
         # Show the dialog
         dialog.exec()
         
-        # After the dialog closes, refresh the gallery to reflect any changes
+        # After the dialog closes, refresh the gallery to reflect any changes (only if auto refresh is enabled)
         # Use smart refresh with batch tagging operation type
-        self.smart_refresh_manager.refresh_gallery_smart("batch_tag")
+        self.refresh_if_auto_enabled("batch_tag")
     
     def on_batch_context_tagging(self) -> None:
         """Handle batch context tagging action."""
@@ -2680,9 +2681,9 @@ class GalleryWidget(QWidget):
         # Show the dialog
         dialog.exec()
         
-        # After the dialog closes, refresh the gallery to reflect any changes
+        # After the dialog closes, refresh the gallery to reflect any changes (only if auto refresh is enabled)
         # Use smart refresh with batch tagging operation type
-        self.smart_refresh_manager.refresh_gallery_smart("batch_tag")
+        self.refresh_if_auto_enabled("batch_tag")
     
     def refresh_gallery_with_progress(self) -> None:
         """Refresh the gallery with a visual progress indicator."""
@@ -2726,8 +2727,8 @@ class GalleryWidget(QWidget):
     
     def apply_filters(self):
         """Apply filters to the gallery view."""
-        # Use smart refresh with filter operation type for optimization
-        self.smart_refresh_manager.refresh_gallery_smart("filter")
+        # Use smart refresh with filter operation type for optimization (only if auto refresh is enabled)
+        self.refresh_if_auto_enabled("filter")
         
         # Update filter status
         self.update_filter_status()
@@ -2744,8 +2745,8 @@ class GalleryWidget(QWidget):
         print(f"[DEBUG] After clear - Character filters: {self.character_filters}")
         print(f"[DEBUG] After clear - Context filters: {self.context_filters}")
         
-        # Reload all images with progress indicator
-        self.refresh_gallery_with_progress()
+        # Reload all images with progress indicator (only if auto refresh is enabled)
+        self.refresh_if_auto_enabled("general")
         
         # Update status
         self.update_filter_status()
@@ -2767,8 +2768,8 @@ class GalleryWidget(QWidget):
         print(f"[DEBUG] After force clear - Character filters: {self.character_filters}")
         print(f"[DEBUG] After force clear - Context filters: {self.context_filters}")
         
-        # Reload all images with progress indicator
-        self.refresh_gallery_with_progress()
+        # Reload all images with progress indicator (only if auto refresh is enabled)
+        self.refresh_if_auto_enabled("general")
         
         # Update status
         self.update_filter_status()
@@ -3413,3 +3414,46 @@ Check console for detailed output."""
         
         final_row = current_row + ((len(images) - 1) // cols) + 1 if images else current_row
         return final_row
+    
+    def is_manual_refresh_enabled(self) -> bool:
+        """Check if manual refresh mode is enabled.
+        
+        Returns:
+            True if manual refresh is enabled, False otherwise
+        """
+        try:
+            # Navigate up the widget hierarchy to find the main window
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, 'is_manual_refresh_enabled'):
+                    return parent.is_manual_refresh_enabled()
+                parent = parent.parent()
+        except Exception as e:
+            logging.debug(f"Could not check manual refresh setting: {e}")
+        
+        # Default to False if we can't find the setting
+        return False
+    
+    def refresh_if_auto_enabled(self, operation_type: str = "general") -> None:
+        """Refresh the gallery only if automatic refresh is enabled.
+        
+        Args:
+            operation_type: Type of operation ('filter', 'batch_tag', 'scene_move', 'general')
+        """
+        if not self.is_manual_refresh_enabled():
+            # Automatic refresh is enabled, proceed with refresh
+            if operation_type == "general":
+                self.refresh_gallery_with_progress()
+            else:
+                self.smart_refresh_manager.refresh_gallery_smart(operation_type)
+        else:
+            # Manual refresh is enabled, show a message instead
+            try:
+                parent = self.parent()
+                while parent:
+                    if hasattr(parent, 'status_bar'):
+                        parent.status_bar.showMessage("Manual refresh enabled - refresh disabled", 2000)
+                        break
+                    parent = parent.parent()
+            except Exception:
+                pass
