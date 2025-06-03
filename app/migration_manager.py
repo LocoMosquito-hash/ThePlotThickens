@@ -13,6 +13,7 @@ from typing import Optional, List, Dict, Any
 import logging
 
 from app.migrations.migrate_relationships import migrate_relationships
+from app.migrations.add_notepad_tables import migrate_add_notepad_tables, check_notepad_migration_needed
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -48,6 +49,9 @@ def check_and_run_migrations(db_path: str) -> bool:
             if migration == 'relationship_migration_v1':
                 logger.info("Running relationship migration...")
                 success = success and migrate_relationships(db_path)
+            elif migration == 'notepad_migration_v1':
+                logger.info("Running notepad migration...")
+                success = success and migrate_add_notepad_tables(db_path)
             # Add other migrations as needed
         
         conn.close()
@@ -106,10 +110,13 @@ def get_pending_migrations(conn: sqlite3.Connection) -> List[str]:
         for row in cursor.fetchall():
             if row['value'] == 'true' and row['key'] == 'relationship_migration_complete':
                 completed_migrations.add('relationship_migration_v1')
+            if row['value'] == 'true' and row['key'] == 'notepad_migration_complete':
+                completed_migrations.add('notepad_migration_v1')
     
     # Get all available migrations
     all_migrations = [
         'relationship_migration_v1',
+        'notepad_migration_v1',
         # Add other migrations as they are developed
     ]
     
@@ -120,12 +127,23 @@ def get_pending_migrations(conn: sqlite3.Connection) -> List[str]:
     if not relationship_migration_needed and 'relationship_migration_v1' not in completed_migrations:
         completed_migrations.add('relationship_migration_v1')
     
+    # Check if we need to run the notepad migration
+    notepad_migration_needed = check_notepad_migration_needed(conn)
+    
+    # If notepad migration isn't needed, mark it as completed
+    if not notepad_migration_needed and 'notepad_migration_v1' not in completed_migrations:
+        completed_migrations.add('notepad_migration_v1')
+    
     # Get list of pending migrations
     pending_migrations = [m for m in all_migrations if m not in completed_migrations]
     
     # If relationship migration is needed, ensure it's in the list
     if relationship_migration_needed and 'relationship_migration_v1' not in pending_migrations:
         pending_migrations.append('relationship_migration_v1')
+    
+    # If notepad migration is needed, ensure it's in the list
+    if notepad_migration_needed and 'notepad_migration_v1' not in pending_migrations:
+        pending_migrations.append('notepad_migration_v1')
     
     return pending_migrations
 
@@ -170,6 +188,27 @@ def check_relationship_migration_needed(conn: sqlite3.Connection) -> bool:
     
     # Migration is needed if there are relationships using the old format
     return old_format_count > 0
+
+
+def check_notepad_migration_needed(conn: sqlite3.Connection) -> bool:
+    """Check if the notepad migration is needed.
+    
+    Args:
+        conn: Database connection
+        
+    Returns:
+        True if migration is needed, False otherwise
+    """
+    cursor = conn.cursor()
+    
+    # Check if the plot_details table exists (the main table we're adding)
+    cursor.execute('''
+    SELECT name FROM sqlite_master 
+    WHERE type='table' AND name='plot_details'
+    ''')
+    
+    # Migration is needed if the table doesn't exist
+    return cursor.fetchone() is None
 
 
 def register_migration_complete(db_path: str, migration_name: str) -> bool:

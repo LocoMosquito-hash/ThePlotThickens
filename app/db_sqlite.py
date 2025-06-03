@@ -3687,3 +3687,407 @@ def search_image_contexts(conn: sqlite3.Connection, search_term: str) -> List[Di
     except sqlite3.Error as e:
         print(f"Error searching image contexts: {e}")
         return []
+
+# =================================
+# Story Notepad Database Functions
+# =================================
+
+def get_plot_details(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
+    """Get all plot details for a story.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        
+    Returns:
+        List of plot detail dictionaries
+    """
+    cursor = conn.cursor()
+    cursor.execute('''
+    SELECT id, story_id, text, is_scratched, order_index, character_refs, custom_data,
+           created_at, updated_at
+    FROM plot_details
+    WHERE story_id = ?
+    ORDER BY order_index, created_at
+    ''', (story_id,))
+    
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def create_plot_detail(conn: sqlite3.Connection, story_id: int, text: str, 
+                      is_scratched: bool = False, order_index: int = 0,
+                      character_refs: str = '', custom_data: str = '{}') -> int:
+    """Create a new plot detail.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        text: Text of the plot detail
+        is_scratched: Whether the detail is scratched out
+        order_index: Order position in the list
+        character_refs: JSON string of character IDs mentioned
+        custom_data: JSON string of additional data
+        
+    Returns:
+        ID of the created plot detail
+    """
+    cursor = conn.cursor()
+    cursor.execute('''
+    INSERT INTO plot_details (story_id, text, is_scratched, order_index, character_refs, custom_data)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ''', (story_id, text, is_scratched, order_index, character_refs, custom_data))
+    
+    conn.commit()
+    return cursor.lastrowid
+
+
+def update_plot_detail(conn: sqlite3.Connection, detail_id: int, text: str = None,
+                      is_scratched: bool = None, order_index: int = None,
+                      character_refs: str = None, custom_data: str = None) -> bool:
+    """Update a plot detail.
+    
+    Args:
+        conn: Database connection
+        detail_id: ID of the plot detail
+        text: New text (optional)
+        is_scratched: New scratched state (optional)
+        order_index: New order index (optional)
+        character_refs: New character refs (optional)
+        custom_data: New custom data (optional)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Build dynamic update query
+        updates = []
+        params = []
+        
+        if text is not None:
+            updates.append("text = ?")
+            params.append(text)
+        if is_scratched is not None:
+            updates.append("is_scratched = ?")
+            params.append(is_scratched)
+        if order_index is not None:
+            updates.append("order_index = ?")
+            params.append(order_index)
+        if character_refs is not None:
+            updates.append("character_refs = ?")
+            params.append(character_refs)
+        if custom_data is not None:
+            updates.append("custom_data = ?")
+            params.append(custom_data)
+        
+        if not updates:
+            return False
+        
+        params.append(detail_id)
+        query = f"UPDATE plot_details SET {', '.join(updates)} WHERE id = ?"
+        
+        cursor.execute(query, params)
+        conn.commit()
+        return True
+        
+    except sqlite3.Error as e:
+        print(f"Error updating plot detail: {e}")
+        return False
+
+
+def delete_plot_detail(conn: sqlite3.Connection, detail_id: int) -> bool:
+    """Delete a plot detail.
+    
+    Args:
+        conn: Database connection
+        detail_id: ID of the plot detail
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM plot_details WHERE id = ?", (detail_id,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Error deleting plot detail: {e}")
+        return False
+
+
+def reorder_plot_details(conn: sqlite3.Connection, story_id: int, detail_ids: List[int]) -> bool:
+    """Reorder plot details based on a list of IDs.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        detail_ids: List of plot detail IDs in the desired order
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        for index, detail_id in enumerate(detail_ids):
+            cursor.execute('''
+            UPDATE plot_details 
+            SET order_index = ? 
+            WHERE id = ? AND story_id = ?
+            ''', (index, detail_id, story_id))
+        
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Error reordering plot details: {e}")
+        return False
+
+
+def get_plot_questions(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
+    """Get all plot questions for a story with their answers.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        
+    Returns:
+        List of plot question dictionaries with answers included
+    """
+    cursor = conn.cursor()
+    
+    # Get questions
+    cursor.execute('''
+    SELECT id, story_id, text, is_scratched, order_index, character_refs, custom_data,
+           created_at, updated_at
+    FROM plot_questions
+    WHERE story_id = ?
+    ORDER BY order_index, created_at
+    ''', (story_id,))
+    
+    questions = [dict(row) for row in cursor.fetchall()]
+    
+    # Get answers for each question
+    for question in questions:
+        question_id = question['id']
+        cursor.execute('''
+        SELECT id, question_id, text, is_scratched, order_index, character_refs, custom_data,
+               created_at, updated_at
+        FROM plot_answers
+        WHERE question_id = ?
+        ORDER BY order_index, created_at
+        ''', (question_id,))
+        
+        question['answers'] = [dict(row) for row in cursor.fetchall()]
+    
+    return questions
+
+
+def create_plot_question(conn: sqlite3.Connection, story_id: int, text: str,
+                        is_scratched: bool = False, order_index: int = 0,
+                        character_refs: str = '', custom_data: str = '{}') -> int:
+    """Create a new plot question.
+    
+    Args:
+        conn: Database connection
+        story_id: ID of the story
+        text: Text of the plot question
+        is_scratched: Whether the question is scratched out
+        order_index: Order position in the list
+        character_refs: JSON string of character IDs mentioned
+        custom_data: JSON string of additional data
+        
+    Returns:
+        ID of the created plot question
+    """
+    cursor = conn.cursor()
+    cursor.execute('''
+    INSERT INTO plot_questions (story_id, text, is_scratched, order_index, character_refs, custom_data)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ''', (story_id, text, is_scratched, order_index, character_refs, custom_data))
+    
+    conn.commit()
+    return cursor.lastrowid
+
+
+def create_plot_answer(conn: sqlite3.Connection, question_id: int, text: str,
+                      is_scratched: bool = False, order_index: int = 0,
+                      character_refs: str = '', custom_data: str = '{}') -> int:
+    """Create a new plot answer.
+    
+    Args:
+        conn: Database connection
+        question_id: ID of the parent question
+        text: Text of the plot answer
+        is_scratched: Whether the answer is scratched out
+        order_index: Order position in the list
+        character_refs: JSON string of character IDs mentioned
+        custom_data: JSON string of additional data
+        
+    Returns:
+        ID of the created plot answer
+    """
+    cursor = conn.cursor()
+    cursor.execute('''
+    INSERT INTO plot_answers (question_id, text, is_scratched, order_index, character_refs, custom_data)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ''', (question_id, text, is_scratched, order_index, character_refs, custom_data))
+    
+    conn.commit()
+    return cursor.lastrowid
+
+
+def update_plot_question(conn: sqlite3.Connection, question_id: int, text: str = None,
+                        is_scratched: bool = None, order_index: int = None,
+                        character_refs: str = None, custom_data: str = None) -> bool:
+    """Update a plot question.
+    
+    Args:
+        conn: Database connection
+        question_id: ID of the plot question
+        text: New text (optional)
+        is_scratched: New scratched state (optional)
+        order_index: New order index (optional)
+        character_refs: New character refs (optional)
+        custom_data: New custom data (optional)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Build dynamic update query
+        updates = []
+        params = []
+        
+        if text is not None:
+            updates.append("text = ?")
+            params.append(text)
+        if is_scratched is not None:
+            updates.append("is_scratched = ?")
+            params.append(is_scratched)
+        if order_index is not None:
+            updates.append("order_index = ?")
+            params.append(order_index)
+        if character_refs is not None:
+            updates.append("character_refs = ?")
+            params.append(character_refs)
+        if custom_data is not None:
+            updates.append("custom_data = ?")
+            params.append(custom_data)
+        
+        if not updates:
+            return False
+        
+        params.append(question_id)
+        query = f"UPDATE plot_questions SET {', '.join(updates)} WHERE id = ?"
+        
+        cursor.execute(query, params)
+        conn.commit()
+        return True
+        
+    except sqlite3.Error as e:
+        print(f"Error updating plot question: {e}")
+        return False
+
+
+def update_plot_answer(conn: sqlite3.Connection, answer_id: int, text: str = None,
+                      is_scratched: bool = None, order_index: int = None,
+                      character_refs: str = None, custom_data: str = None) -> bool:
+    """Update a plot answer.
+    
+    Args:
+        conn: Database connection
+        answer_id: ID of the plot answer
+        text: New text (optional)
+        is_scratched: New scratched state (optional)
+        order_index: New order index (optional)
+        character_refs: New character refs (optional)
+        custom_data: New custom data (optional)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Build dynamic update query
+        updates = []
+        params = []
+        
+        if text is not None:
+            updates.append("text = ?")
+            params.append(text)
+        if is_scratched is not None:
+            updates.append("is_scratched = ?")
+            params.append(is_scratched)
+        if order_index is not None:
+            updates.append("order_index = ?")
+            params.append(order_index)
+        if character_refs is not None:
+            updates.append("character_refs = ?")
+            params.append(character_refs)
+        if custom_data is not None:
+            updates.append("custom_data = ?")
+            params.append(custom_data)
+        
+        if not updates:
+            return False
+        
+        params.append(answer_id)
+        query = f"UPDATE plot_answers SET {', '.join(updates)} WHERE id = ?"
+        
+        cursor.execute(query, params)
+        conn.commit()
+        return True
+        
+    except sqlite3.Error as e:
+        print(f"Error updating plot answer: {e}")
+        return False
+
+
+def delete_plot_question(conn: sqlite3.Connection, question_id: int) -> bool:
+    """Delete a plot question and all its answers.
+    
+    Args:
+        conn: Database connection
+        question_id: ID of the plot question
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        
+        # Delete answers first (due to foreign key)
+        cursor.execute("DELETE FROM plot_answers WHERE question_id = ?", (question_id,))
+        
+        # Delete the question
+        cursor.execute("DELETE FROM plot_questions WHERE id = ?", (question_id,))
+        
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Error deleting plot question: {e}")
+        return False
+
+
+def delete_plot_answer(conn: sqlite3.Connection, answer_id: int) -> bool:
+    """Delete a plot answer.
+    
+    Args:
+        conn: Database connection
+        answer_id: ID of the plot answer
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM plot_answers WHERE id = ?", (answer_id,))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Error deleting plot answer: {e}")
+        return False
