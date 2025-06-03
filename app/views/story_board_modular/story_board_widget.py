@@ -873,4 +873,7 @@ class StoryBoardWidget(QWidget):
         character_names = [char['name'] for char in characters]
         
         # Update notepad with available characters for tagging
-        self.notepad_content.set_available_characters(character_names) 
+        self.notepad_content.set_available_characters(character_names)
+        
+        # Set up database connection for notepad persistence
+        self.notepad_content.set_database(self.db_conn, self.current_story_id) 

@@ -6,10 +6,11 @@ Story Notepad Widgets for The Plot Thickens application.
 
 This module provides widgets for managing plot details and plot questions
 in the Story Notepad panel, including drag-and-drop reordering, context menus,
-and character tagging functionality.
+character tagging functionality, and database persistence.
 """
 
 import re
+import json
 from typing import Optional, List, Dict, Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
@@ -19,6 +20,15 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QTimer
 from PyQt6.QtGui import QDrag, QPixmap, QFont, QAction, QTextCharFormat, QBrush, QColor
+
+from app.db_sqlite import (
+    get_plot_details, create_plot_detail, update_plot_detail, delete_plot_detail,
+    get_plot_questions, create_plot_question, create_plot_answer,
+    update_plot_question, update_plot_answer, delete_plot_question, delete_plot_answer,
+    reorder_plot_details, get_story_characters
+)
+from app.widgets.character_input_dialog import CharacterInputDialog
+from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
 
 
 class DraggableListItem(QListWidgetItem):
@@ -119,7 +129,51 @@ class PlotDetailsWidget(QWidget):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.available_characters = []
+        self.story_id = None
+        self.db_conn = None
         self.init_ui()
+    
+    def set_database(self, db_conn, story_id: int) -> None:
+        """Set the database connection and story ID.
+        
+        Args:
+            db_conn: Database connection
+            story_id: ID of the current story
+        """
+        self.db_conn = db_conn
+        self.story_id = story_id
+        self.load_from_database()
+    
+    def load_from_database(self) -> None:
+        """Load plot details from the database."""
+        if not self.db_conn or not self.story_id:
+            return
+        
+        self.list_widget.clear()
+        details = get_plot_details(self.db_conn, self.story_id)
+        
+        for detail in details:
+            item = DraggableListItem()
+            # Convert [char:ID] back to @mentions for display
+            display_text = convert_char_refs_to_mentions(detail['text'], self._get_character_data())
+            item.setText(display_text)
+            item.set_scratched(detail['is_scratched'])
+            
+            # Store database info
+            item.set_data('db_id', detail['id'])
+            item.set_data('original_text', detail['text'])  # Store the original [char:ID] format
+            item.set_data('character_refs', detail['character_refs'])
+            item.set_data('custom_data', detail['custom_data'])
+            
+            self.list_widget.addItem(item)
+    
+    def _get_character_data(self) -> List[Dict[str, Any]]:
+        """Get character data for conversion functions."""
+        if not self.db_conn or not self.story_id:
+            return []
+        
+        characters = get_story_characters(self.db_conn, self.story_id)
+        return characters
     
     def init_ui(self) -> None:
         """Initialize the user interface."""
@@ -161,12 +215,41 @@ class PlotDetailsWidget(QWidget):
     def add_detail(self, text: str = "") -> None:
         """Add a new plot detail."""
         if not text:
-            text, ok = QInputDialog.getText(self, "New Plot Detail", "Enter plot detail:")
+            # Use the custom character input dialog
+            characters = self._get_character_data()
+            text, ok = CharacterInputDialog.get_text_input(
+                parent=self,
+                title="New Plot Detail",
+                label="Enter plot detail:",
+                characters=characters
+            )
             if not ok or not text.strip():
                 return
         
-        item = DraggableListItem(text.strip())
-        self.list_widget.addItem(item)
+        # Convert @mentions to [char:ID] for storage
+        characters = self._get_character_data()
+        storage_text = convert_mentions_to_char_refs(text.strip(), characters)
+        
+        # Save to database
+        if self.db_conn and self.story_id:
+            detail_id = create_plot_detail(
+                self.db_conn,
+                self.story_id,
+                storage_text,
+                is_scratched=False,
+                order_index=self.list_widget.count()
+            )
+            
+            # Create list item
+            item = DraggableListItem(text.strip())
+            item.set_data('db_id', detail_id)
+            item.set_data('original_text', storage_text)
+            self.list_widget.addItem(item)
+        else:
+            # Fallback for when database is not available
+            item = DraggableListItem(text.strip())
+            self.list_widget.addItem(item)
+        
         self.items_changed.emit()
     
     def show_context_menu(self, position) -> None:
@@ -198,14 +281,47 @@ class PlotDetailsWidget(QWidget):
     def edit_item(self, item: DraggableListItem) -> None:
         """Edit the text of an item."""
         current_text = item.text()
-        text, ok = QInputDialog.getText(self, "Edit Plot Detail", "Edit detail:", text=current_text)
+        characters = self._get_character_data()
+        
+        text, ok = CharacterInputDialog.get_text_input(
+            parent=self,
+            title="Edit Plot Detail",
+            label="Edit detail:",
+            text=current_text,
+            characters=characters
+        )
+        
         if ok and text.strip():
+            # Convert @mentions to [char:ID] for storage
+            storage_text = convert_mentions_to_char_refs(text.strip(), characters)
+            
+            # Update database
+            db_id = item.get_data('db_id')
+            if self.db_conn and db_id:
+                update_plot_detail(
+                    self.db_conn,
+                    db_id,
+                    text=storage_text
+                )
+                item.set_data('original_text', storage_text)
+            
             item.setText(text.strip())
             self.items_changed.emit()
     
     def toggle_scratch_item(self, item: DraggableListItem) -> None:
         """Toggle the scratched state of an item."""
-        item.set_scratched(not item.is_scratched)
+        new_scratched = not item.is_scratched
+        item.set_scratched(new_scratched)
+        
+        # Update database
+        db_id = item.get_data('db_id')
+        if self.db_conn and db_id:
+            update_plot_detail(
+                self.db_conn,
+                db_id,
+                is_scratched=new_scratched
+            )
+        
         self.items_changed.emit()
     
     def delete_item(self, item: DraggableListItem) -> None:
@@ -216,6 +332,11 @@ class PlotDetailsWidget(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
+            # Delete from database
+            db_id = item.get_data('db_id')
+            if self.db_conn and db_id:
+                delete_plot_detail(self.db_conn, db_id)
+            
             row = self.list_widget.row(item)
             self.list_widget.takeItem(row)
             self.items_changed.emit()
@@ -261,7 +382,66 @@ class PlotQuestionsWidget(QWidget):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.available_characters = []
+        self.story_id = None
+        self.db_conn = None
         self.init_ui()
+    
+    def set_database(self, db_conn, story_id: int) -> None:
+        """Set the database connection and story ID.
+        
+        Args:
+            db_conn: Database connection
+            story_id: ID of the current story
+        """
+        self.db_conn = db_conn
+        self.story_id = story_id
+        self.load_from_database()
+    
+    def load_from_database(self) -> None:
+        """Load plot questions from the database."""
+        if not self.db_conn or not self.story_id:
+            return
+        
+        self.tree_widget.clear()
+        questions = get_plot_questions(self.db_conn, self.story_id)
+        characters = self._get_character_data()
+        
+        for question_data in questions:
+            # Convert [char:ID] back to @mentions for display
+            display_text = convert_char_refs_to_mentions(question_data['text'], characters)
+            
+            question_item = DraggableTreeItem(self.tree_widget, [display_text])
+            question_item.set_scratched(question_data['is_scratched'])
+            
+            # Store database info
+            question_item.set_data_custom('db_id', question_data['id'])
+            question_item.set_data_custom('original_text', question_data['text'])
+            question_item.set_data_custom('character_refs', question_data['character_refs'])
+            question_item.set_data_custom('custom_data', question_data['custom_data'])
+            
+            # Add answers
+            for answer_data in question_data.get('answers', []):
+                answer_display_text = convert_char_refs_to_mentions(answer_data['text'], characters)
+                answer_item = DraggableTreeItem(question_item, [answer_display_text])
+                answer_item.set_scratched(answer_data['is_scratched'])
+                
+                # Store database info
+                answer_item.set_data_custom('db_id', answer_data['id'])
+                answer_item.set_data_custom('original_text', answer_data['text'])
+                answer_item.set_data_custom('character_refs', answer_data['character_refs'])
+                answer_item.set_data_custom('custom_data', answer_data['custom_data'])
+                answer_item.set_data_custom('is_answer', True)
+            
+            self.tree_widget.addTopLevelItem(question_item)
+            self.tree_widget.expandItem(question_item)
+    
+    def _get_character_data(self) -> List[Dict[str, Any]]:
+        """Get character data for conversion functions."""
+        if not self.db_conn or not self.story_id:
+            return []
+        
+        characters = get_story_characters(self.db_conn, self.story_id)
+        return characters
     
     def init_ui(self) -> None:
         """Initialize the user interface."""
@@ -301,23 +481,86 @@ class PlotQuestionsWidget(QWidget):
     def add_question(self, text: str = "") -> None:
         """Add a new plot question."""
         if not text:
-            text, ok = QInputDialog.getText(self, "New Plot Question", "Enter question:")
+            characters = self._get_character_data()
+            text, ok = CharacterInputDialog.get_text_input(
+                parent=self,
+                title="New Plot Question",
+                label="Enter question:",
+                characters=characters
+            )
             if not ok or not text.strip():
                 return
         
-        item = DraggableTreeItem(self.tree_widget, [text.strip()])
-        self.tree_widget.addTopLevelItem(item)
+        # Convert @mentions to [char:ID] for storage
+        characters = self._get_character_data()
+        storage_text = convert_mentions_to_char_refs(text.strip(), characters)
+        
+        # Save to database
+        if self.db_conn and self.story_id:
+            question_id = create_plot_question(
+                self.db_conn,
+                self.story_id,
+                storage_text,
+                is_scratched=False,
+                order_index=self.tree_widget.topLevelItemCount()
+            )
+            
+            # Create tree item
+            item = DraggableTreeItem(self.tree_widget, [text.strip()])
+            item.set_data_custom('db_id', question_id)
+            item.set_data_custom('original_text', storage_text)
+            self.tree_widget.addTopLevelItem(item)
+        else:
+            # Fallback for when database is not available
+            item = DraggableTreeItem(self.tree_widget, [text.strip()])
+            self.tree_widget.addTopLevelItem(item)
+        
         self.tree_widget.expandItem(item)
         self.items_changed.emit()
     
     def add_answer(self, parent_item: DraggableTreeItem, text: str = "") -> None:
         """Add a new answer to a question."""
         if not text:
-            text, ok = QInputDialog.getText(self, "New Answer", "Enter possible answer:")
+            characters = self._get_character_data()
+            text, ok = CharacterInputDialog.get_text_input(
+                parent=self,
+                title="New Answer",
+                label="Enter possible answer:",
+                characters=characters
+            )
             if not ok or not text.strip():
                 return
         
-        answer_item = DraggableTreeItem(parent_item, [text.strip()])
+        # Convert @mentions to [char:ID] for storage
+        characters = self._get_character_data()
+        storage_text = convert_mentions_to_char_refs(text.strip(), characters)
+        
+        # Save to database
+        if self.db_conn and self.story_id:
+            parent_db_id = parent_item.get_data_custom('db_id')
+            if parent_db_id:
+                answer_id = create_plot_answer(
+                    self.db_conn,
+                    parent_db_id,
+                    storage_text,
+                    is_scratched=False,
+                    order_index=parent_item.childCount()
+                )
+                
+                # Create tree item
+                answer_item = DraggableTreeItem(parent_item, [text.strip()])
+                answer_item.set_data_custom('db_id', answer_id)
+                answer_item.set_data_custom('original_text', storage_text)
+                answer_item.set_data_custom('is_answer', True)
+            else:
+                # Fallback for items without database ID
+                answer_item = DraggableTreeItem(parent_item, [text.strip()])
+                answer_item.set_data_custom('is_answer', True)
+        else:
+            # Fallback for when database is not available
+            answer_item = DraggableTreeItem(parent_item, [text.strip()])
+            answer_item.set_data_custom('is_answer', True)
+        
         parent_item.addChild(answer_item)
         self.tree_widget.expandItem(parent_item)
         self.items_changed.emit()
@@ -360,14 +603,61 @@ class PlotQuestionsWidget(QWidget):
         """Edit the text of an item."""
         current_text = item.text(0)
         item_type = "Question" if item.parent() is None else "Answer"
-        text, ok = QInputDialog.getText(self, f"Edit {item_type}", f"Edit {item_type.lower()}:", text=current_text)
+        characters = self._get_character_data()
+        
+        text, ok = CharacterInputDialog.get_text_input(
+            parent=self,
+            title=f"Edit {item_type}",
+            label=f"Edit {item_type.lower()}:",
+            text=current_text,
+            characters=characters
+        )
+        
         if ok and text.strip():
+            # Convert @mentions to [char:ID] for storage
+            storage_text = convert_mentions_to_char_refs(text.strip(), characters)
+            
+            # Update database
+            db_id = item.get_data_custom('db_id')
+            if self.db_conn and db_id:
+                if item.parent() is None:  # Question
+                    update_plot_question(
+                        self.db_conn,
+                        db_id,
+                        text=storage_text
+                    )
+                else:  # Answer
+                    update_plot_answer(
+                        self.db_conn,
+                        db_id,
+                        text=storage_text
+                    )
+                item.set_data_custom('original_text', storage_text)
+            
             item.setText(0, text.strip())
             self.items_changed.emit()
     
     def toggle_scratch_item(self, item: DraggableTreeItem) -> None:
         """Toggle the scratched state of an item."""
-        item.set_scratched(not item.is_scratched)
+        new_scratched = not item.is_scratched
+        item.set_scratched(new_scratched)
+        
+        # Update database
+        db_id = item.get_data_custom('db_id')
+        if self.db_conn and db_id:
+            if item.parent() is None:  # Question
+                update_plot_question(
+                    self.db_conn,
+                    db_id,
+                    is_scratched=new_scratched
+                )
+            else:  # Answer
+                update_plot_answer(
+                    self.db_conn,
+                    db_id,
+                    is_scratched=new_scratched
+                )
+        
         self.items_changed.emit()
     
     def delete_item(self, item: DraggableTreeItem) -> None:
@@ -379,6 +669,14 @@ class PlotQuestionsWidget(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
+            # Delete from database
+            db_id = item.get_data_custom('db_id')
+            if self.db_conn and db_id:
+                if item.parent() is None:  # Question
+                    delete_plot_question(self.db_conn, db_id)
+                else:  # Answer
+                    delete_plot_answer(self.db_conn, db_id)
+            
             if item.parent() is None:
                 # Top-level item
                 index = self.tree_widget.indexOfTopLevelItem(item)
@@ -448,6 +746,8 @@ class StoryNotepadContent(QWidget):
     
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
+        self.db_conn = None
+        self.story_id = None
         self.init_ui()
     
     def init_ui(self) -> None:
@@ -474,9 +774,23 @@ class StoryNotepadContent(QWidget):
         self.plot_details.items_changed.connect(self._on_content_changed)
         self.plot_questions.items_changed.connect(self._on_content_changed)
     
+    def set_database(self, db_conn, story_id: int) -> None:
+        """Set the database connection for both child widgets.
+        
+        Args:
+            db_conn: Database connection
+            story_id: ID of the current story
+        """
+        self.db_conn = db_conn
+        self.story_id = story_id
+        
+        # Pass database connection to child widgets
+        self.plot_details.set_database(db_conn, story_id)
+        self.plot_questions.set_database(db_conn, story_id)
+    
     def _on_content_changed(self) -> None:
         """Handle content changes - this can be used for auto-save functionality."""
-        # TODO: Implement auto-save or signal to parent
+        # Content is now automatically saved to database, so we don't need to do anything here
         pass
     
     def set_available_characters(self, characters: List[str]) -> None:
@@ -485,15 +799,72 @@ class StoryNotepadContent(QWidget):
         self.plot_questions.set_available_characters(characters)
     
     def get_all_data(self) -> Dict[str, Any]:
-        """Get all notepad data."""
+        """Get all notepad data from the database.
+        
+        This method is kept for compatibility but now reads from the database.
+        """
+        if not self.db_conn or not self.story_id:
+            return {'plot_details': [], 'plot_questions': []}
+        
+        # Get data from database
+        plot_details_data = get_plot_details(self.db_conn, self.story_id)
+        plot_questions_data = get_plot_questions(self.db_conn, self.story_id)
+        
+        # Convert to the expected format
+        characters = get_story_characters(self.db_conn, self.story_id)
+        
+        details = []
+        for detail in plot_details_data:
+            # Convert [char:ID] back to @mentions for display
+            display_text = convert_char_refs_to_mentions(detail['text'], characters)
+            details.append({
+                'text': display_text,
+                'is_scratched': detail['is_scratched'],
+                'character_tags': CharacterTagger.extract_character_tags(display_text),
+                'data': json.loads(detail.get('custom_data', '{}'))
+            })
+        
+        questions = []
+        for question in plot_questions_data:
+            # Convert [char:ID] back to @mentions for display
+            display_text = convert_char_refs_to_mentions(question['text'], characters)
+            question_item = {
+                'text': display_text,
+                'is_scratched': question['is_scratched'],
+                'character_tags': CharacterTagger.extract_character_tags(display_text),
+                'data': json.loads(question.get('custom_data', '{}')),
+                'answers': []
+            }
+            
+            # Process answers
+            for answer in question.get('answers', []):
+                answer_display_text = convert_char_refs_to_mentions(answer['text'], characters)
+                question_item['answers'].append({
+                    'text': answer_display_text,
+                    'is_scratched': answer['is_scratched'],
+                    'character_tags': CharacterTagger.extract_character_tags(answer_display_text),
+                    'data': json.loads(answer.get('custom_data', '{}'))
+                })
+            
+            questions.append(question_item)
+        
         return {
-            'plot_details': self.plot_details.get_all_details(),
-            'plot_questions': self.plot_questions.get_all_questions()
+            'plot_details': details,
+            'plot_questions': questions
         }
     
     def load_data(self, data: Dict[str, Any]) -> None:
-        """Load notepad data."""
-        if 'plot_details' in data:
-            self.plot_details.load_details(data['plot_details'])
-        if 'plot_questions' in data:
-            self.plot_questions.load_questions(data['plot_questions']) 
+        """Load notepad data.
+        
+        This method is kept for compatibility but data is now loaded from database automatically.
+        """
+        # If database is available, reload from database instead
+        if self.db_conn and self.story_id:
+            self.plot_details.load_from_database()
+            self.plot_questions.load_from_database()
+        else:
+            # Fallback to old method for compatibility
+            if 'plot_details' in data:
+                self.plot_details.load_details(data['plot_details'])
+            if 'plot_questions' in data:
+                self.plot_questions.load_questions(data['plot_questions']) 
