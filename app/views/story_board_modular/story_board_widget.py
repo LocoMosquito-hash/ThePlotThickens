@@ -34,6 +34,7 @@ from app.db_sqlite import (
 from .scene_view import StoryBoardScene, StoryBoardView
 from .utils import create_vertical_line, calculate_grid_layout
 from app.widgets.collapsible_panel import CollapsiblePanel
+from app.widgets.story_notepad_widgets import StoryNotepadContent
 
 
 class StoryBoardWidget(QWidget):
@@ -72,11 +73,9 @@ class StoryBoardWidget(QWidget):
         self.story_notepad = CollapsiblePanel("Story Notepad", width=300, parent=self)
         self.story_notepad.pinned_changed.connect(self._on_notepad_pinned_changed)
         
-        # Add some placeholder content to the notepad for now
-        notepad_content = QLabel("Story notes and details will go here...")
-        notepad_content.setWordWrap(True)
-        notepad_content.setStyleSheet("color: gray; font-style: italic; padding: 10px;")
-        self.story_notepad.add_content_widget(notepad_content)
+        # Add the actual notepad content
+        self.notepad_content = StoryNotepadContent()
+        self.story_notepad.add_content_widget(self.notepad_content)
         
         main_layout.addWidget(self.story_notepad)
         
@@ -245,6 +244,9 @@ class StoryBoardWidget(QWidget):
         # Update notepad title with story name
         story_name = story_data.get('title', 'Unknown Story')
         self.story_notepad.set_title(f"Story Notepad - {story_name}")
+        
+        # Update notepad with available characters for tagging
+        self._update_notepad_characters()
         
         # Enable UI controls
         self.view_selector.setEnabled(True)
@@ -859,4 +861,16 @@ class StoryBoardWidget(QWidget):
             # Show a brief status message
             main_window = self.window()
             if hasattr(main_window, 'status_bar'):
-                main_window.status_bar.showPermanentMessage("Story Board refreshed") 
+                main_window.status_bar.showPermanentMessage("Story Board refreshed")
+    
+    def _update_notepad_characters(self) -> None:
+        """Update the notepad with available characters for tagging."""
+        if not self.current_story_id or not self.current_story_data:
+            return
+        
+        # Get all characters
+        characters = get_story_characters(self.db_conn, self.current_story_id)
+        character_names = [char['name'] for char in characters]
+        
+        # Update notepad with available characters for tagging
+        self.notepad_content.set_available_characters(character_names) 
