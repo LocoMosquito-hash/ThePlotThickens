@@ -526,9 +526,9 @@ class CharacterCard(QGraphicsItemGroup):
         if not scene or not hasattr(scene, 'db_conn'):
             return
         
-        # Get the parent widget (StoryBoardWidget)
-        parent_widget = scene.views()[0].parent() if scene.views() else None
-        if not parent_widget:
+        # Get the parent widget (StoryBoardWidget) directly from the scene
+        parent_widget = scene.parent()
+        if not parent_widget or not hasattr(parent_widget, 'current_story_id'):
             return
         
         # Create and show the dialog
