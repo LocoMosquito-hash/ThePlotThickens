@@ -5,7 +5,8 @@
 Story Board Widget for The Plot Thickens application.
 
 This module contains the main StoryBoardWidget class that provides the complete
-story board interface including toolbar, view management, and scene integration.
+story board interface including toolbar, view management, scene integration,
+and the collapsible Story Notepad panel.
 """
 
 import os
@@ -32,10 +33,11 @@ from app.db_sqlite import (
 
 from .scene_view import StoryBoardScene, StoryBoardView
 from .utils import create_vertical_line, calculate_grid_layout
+from app.widgets.collapsible_panel import CollapsiblePanel
 
 
 class StoryBoardWidget(QWidget):
-    """Widget for the story board visualization."""
+    """Widget for the story board visualization with collapsible Story Notepad."""
     
     character_selected = pyqtSignal(int, dict)  # Signal emitted when a single character is selected
     selection_changed = pyqtSignal(list)  # Signal emitted with list of selected character data
@@ -61,8 +63,27 @@ class StoryBoardWidget(QWidget):
     
     def init_ui(self) -> None:
         """Set up the user interface."""
-        # Create main layout
-        main_layout = QVBoxLayout(self)
+        # Create main horizontal layout
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        # Create Story Notepad collapsible panel
+        self.story_notepad = CollapsiblePanel("Story Notepad", width=300, parent=self)
+        self.story_notepad.pinned_changed.connect(self._on_notepad_pinned_changed)
+        
+        # Add some placeholder content to the notepad for now
+        notepad_content = QLabel("Story notes and details will go here...")
+        notepad_content.setWordWrap(True)
+        notepad_content.setStyleSheet("color: gray; font-style: italic; padding: 10px;")
+        self.story_notepad.add_content_widget(notepad_content)
+        
+        main_layout.addWidget(self.story_notepad)
+        
+        # Create the main story board area
+        story_board_container = QWidget()
+        story_board_layout = QVBoxLayout(story_board_container)
+        story_board_layout.setContentsMargins(0, 0, 0, 0)
         
         # Create toolbar
         toolbar = QToolBar()
@@ -150,11 +171,14 @@ class StoryBoardWidget(QWidget):
         self.position_cards_button.setToolTip("Position cards according to saved layout")
         toolbar.addWidget(self.position_cards_button)
         
-        main_layout.addWidget(toolbar)
+        story_board_layout.addWidget(toolbar)
         
         # Create graphics view
         self.view = StoryBoardView()
-        main_layout.addWidget(self.view)
+        story_board_layout.addWidget(self.view)
+        
+        # Add the story board container to main layout
+        main_layout.addWidget(story_board_container)
         
         # Create scene
         self.scene = StoryBoardScene(self, self.db_conn)
@@ -187,6 +211,23 @@ class StoryBoardWidget(QWidget):
         self.auto_save_timer.timeout.connect(self.save_current_view)
         self.auto_save_timer.setSingleShot(True)
     
+    def _on_notepad_pinned_changed(self, pinned: bool) -> None:
+        """Handle notepad pin state change.
+        
+        Args:
+            pinned: Whether the notepad is now pinned
+        """
+        # Save the pin state to settings
+        self.settings.setValue("storyboard/notepad_pinned", pinned)
+        
+        # Optionally add any additional behavior when pin state changes
+        if pinned:
+            # Panel is now pinned - could add visual feedback or logging
+            pass
+        else:
+            # Panel is now unpinned - could add visual feedback or logging
+            pass
+    
     def set_story(self, story_id: int, story_data: Dict[str, Any]) -> None:
         """Set the current story.
         
@@ -196,6 +237,14 @@ class StoryBoardWidget(QWidget):
         """
         self.current_story_id = story_id
         self.current_story_data = story_data
+        
+        # Restore notepad pin state from settings
+        saved_pinned_state = self.settings.value("storyboard/notepad_pinned", False, type=bool)
+        self.story_notepad.set_pinned(saved_pinned_state)
+        
+        # Update notepad title with story name
+        story_name = story_data.get('title', 'Unknown Story')
+        self.story_notepad.set_title(f"Story Notepad - {story_name}")
         
         # Enable UI controls
         self.view_selector.setEnabled(True)
