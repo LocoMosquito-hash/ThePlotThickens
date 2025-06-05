@@ -33,7 +33,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import (
     QPixmap, QImage, QColor, QBrush, QPen, QPainter, 
-    QFont, QCursor, QAction, QKeySequence
+    QFont, QCursor, QAction, QKeySequence, QPolygon
 )
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 
@@ -638,7 +638,11 @@ class GalleryWidget(QWidget):
         
         # Clear the dictionary and pixmap cache
         self.thumbnails.clear()
+        
+        # Count video pixmaps before clearing
+        video_cache_count = sum(1 for pixmap in self.pixmap_cache.values() if hasattr(pixmap, 'gif_path'))
         self.pixmap_cache.clear()
+        logging.info(f"[VIDEO_DEBUG] Cleared pixmap cache including {video_cache_count} video thumbnails")
         
         # Clear selected images set
         self.selected_images.clear()
@@ -860,6 +864,13 @@ class GalleryWidget(QWidget):
             
             # Create a thumbnail widget
             thumbnail = ThumbnailWidget(image["id"], pixmap, image.get("title"))
+            
+            # Check if this is a video thumbnail with animation
+            if hasattr(pixmap, 'gif_path'):
+                logging.info(f"[VIDEO_DEBUG] Setting up animation for image {image['id']} with path: {pixmap.gif_path}")
+                # Set up animated thumbnail
+                success = thumbnail.set_animated_thumbnail(pixmap.gif_path)
+                logging.info(f"[VIDEO_DEBUG] Animation setup result: {success}")
             
             # Connect signals
             thumbnail.clicked.connect(self.on_thumbnail_clicked)
@@ -1133,6 +1144,14 @@ class GalleryWidget(QWidget):
             
             # Create thumbnail widget
             thumbnail = ThumbnailWidget(image_id, pixmap)
+            
+            # Check if this is a video thumbnail with animation
+            if hasattr(pixmap, 'gif_path'):
+                logging.info(f"[VIDEO_DEBUG] Setting up animation for image {image_id} with path: {pixmap.gif_path}")
+                # Set up animated thumbnail
+                success = thumbnail.set_animated_thumbnail(pixmap.gif_path)
+                logging.info(f"[VIDEO_DEBUG] Animation setup result: {success}")
+            
             thumbnail.clicked.connect(lambda tid=image_id: self.on_thumbnail_clicked(tid))
             thumbnail.delete_requested.connect(lambda tid=image_id: self.on_delete_image(tid))
             thumbnail.checkbox_toggled.connect(self.on_thumbnail_checkbox_toggled)
@@ -1178,8 +1197,19 @@ class GalleryWidget(QWidget):
         """
         # Check if we have a cached pixmap
         image_id = image["id"]
+        filename = image.get('filename', '')
+        
+        # Debug logging for video files
+        if filename.lower().startswith('vid_'):
+            logging.info(f"[VIDEO_DEBUG] Processing video thumbnail for image {image_id}, filename: {filename}")
+        
         if image_id in self.pixmap_cache:
-            return self.pixmap_cache[image_id]
+            # For video files, don't use cached placeholders - force regeneration
+            if filename.lower().startswith('vid_'):
+                logging.info(f"[VIDEO_DEBUG] Clearing cached pixmap for video {image_id} to force regeneration")
+                del self.pixmap_cache[image_id]
+            else:
+                return self.pixmap_cache[image_id]
         
         # Handle NSFW mode
         if image.get("is_nsfw", False) and not self.show_nsfw:
@@ -1219,7 +1249,67 @@ class GalleryWidget(QWidget):
             
             # Get paths to original image and thumbnail
             original_path = os.path.join(folder_paths['images_folder'], filename)
-            thumbnail_path = os.path.join(folder_paths['thumbnails_folder'], filename)
+            
+            # For video files, we need to check for different thumbnail extensions
+            # because videos generate .gif or .png thumbnails, not the same extension
+            if filename.lower().startswith('vid_'):
+                logging.info(f"[VIDEO_DEBUG] Processing video file: {filename}")
+                # This is a video file - check for .gif first, then .png
+                base_name = os.path.splitext(filename)[0]
+                
+                # Try multiple possible thumbnail paths in case of path mismatches
+                possible_thumbnail_dirs = [
+                    folder_paths['thumbnails_folder'],  # Standard path from database
+                    os.path.join(img_folder, 'thumbnails'),  # Alternative: thumbnails subfolder in images folder
+                    img_folder.replace('images', 'thumbnails'),  # Alternative: parallel thumbnails folder
+                ]
+                
+                # Remove duplicates while preserving order
+                unique_dirs = []
+                for dir_path in possible_thumbnail_dirs:
+                    if dir_path not in unique_dirs:
+                        unique_dirs.append(dir_path)
+                
+                gif_thumb_path = None
+                png_thumb_path = None
+                
+                # Check each possible directory
+                for thumb_dir in unique_dirs:
+                    if not thumb_dir:
+                        continue
+                        
+                    gif_candidate = os.path.join(thumb_dir, base_name + '.gif')
+                    png_candidate = os.path.join(thumb_dir, base_name + '.png')
+                    
+                    logging.info(f"[VIDEO_DEBUG] Checking directory: {thumb_dir}")
+                    if os.path.exists(gif_candidate):
+                        logging.info(f"[VIDEO_DEBUG] Found GIF: {gif_candidate}")
+                    if os.path.exists(png_candidate):
+                        logging.info(f"[VIDEO_DEBUG] Found PNG: {png_candidate}")
+                    
+                    if os.path.exists(gif_candidate) and not gif_thumb_path:
+                        gif_thumb_path = gif_candidate
+                    if os.path.exists(png_candidate) and not png_thumb_path:
+                        png_thumb_path = png_candidate
+                    
+                    # If we found both types, we can stop searching
+                    if gif_thumb_path and png_thumb_path:
+                        break
+                
+                # Prefer GIF for animated thumbnails
+                if gif_thumb_path:
+                    thumbnail_path = gif_thumb_path
+                    logging.info(f"[VIDEO_DEBUG] Using GIF thumbnail: {thumbnail_path}")
+                elif png_thumb_path:
+                    thumbnail_path = png_thumb_path
+                    logging.info(f"[VIDEO_DEBUG] Using PNG thumbnail: {thumbnail_path}")
+                else:
+                    # Neither exists, use the gif path as default for generation
+                    thumbnail_path = os.path.join(folder_paths['thumbnails_folder'], base_name + '.gif')
+                    logging.info(f"[VIDEO_DEBUG] Neither exists, defaulting to GIF: {thumbnail_path}")
+            else:
+                # Regular image file
+                thumbnail_path = os.path.join(folder_paths['thumbnails_folder'], filename)
             
             # logging.debug(f"Looking for thumbnail at: {thumbnail_path}")
             
@@ -1276,12 +1366,26 @@ class GalleryWidget(QWidget):
             else:
                 # Thumbnail exists, load it
                 # logging.debug(f"Found existing thumbnail at: {thumbnail_path}")
-                pixmap = QPixmap(thumbnail_path)
-                if not pixmap.isNull():
-                    self.pixmap_cache[image_id] = pixmap
-                    return pixmap
+                
+                # Check if this is an animated GIF thumbnail
+                if thumbnail_path.lower().endswith('.gif'):
+                    logging.info(f"[VIDEO_DEBUG] Found GIF thumbnail: {thumbnail_path}")
+                    
+                    # This is an animated GIF thumbnail - we'll handle it specially
+                    # Return a placeholder pixmap and mark it for animation
+                    placeholder = self._create_video_placeholder_pixmap(image)
+                    placeholder.gif_path = thumbnail_path  # Store the GIF path on the pixmap
+                    self.pixmap_cache[image_id] = placeholder
+                    logging.info(f"[VIDEO_DEBUG] Created placeholder with gif_path: {thumbnail_path}")
+                    return placeholder
                 else:
-                    logging.error(f"Failed to load thumbnail image: {thumbnail_path}")
+                    # Regular static thumbnail
+                    pixmap = QPixmap(thumbnail_path)
+                    if not pixmap.isNull():
+                        self.pixmap_cache[image_id] = pixmap
+                        return pixmap
+                    else:
+                        logging.error(f"Failed to load thumbnail image: {thumbnail_path}")
         except Exception as e:
             logging.exception(f"Error loading thumbnail for image {image_id}: {str(e)}")
         
@@ -1321,6 +1425,39 @@ class GalleryWidget(QWidget):
         
         # Cache the pixmap
         self.pixmap_cache[image.get("id", 0)] = pixmap
+        
+        return pixmap
+    
+    def _create_video_placeholder_pixmap(self, image: Dict[str, Any]) -> QPixmap:
+        """Create a placeholder pixmap for video thumbnails.
+        
+        Args:
+            image: Image data dictionary
+            
+        Returns:
+            Placeholder pixmap with video indicator
+        """
+        # Create a placeholder pixmap with video styling
+        pixmap = QPixmap(160, 120)
+        pixmap.fill(QColor(30, 30, 40))  # Slightly different color for videos
+        
+        # Draw video icon and text
+        painter = QPainter(pixmap)
+        painter.setPen(QColor(180, 180, 200))
+        painter.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        
+        # Draw play symbol (triangle)
+        play_triangle = QPolygon([
+            QPoint(70, 45),   # Left point
+            QPoint(90, 60),   # Right point  
+            QPoint(70, 75)    # Bottom left
+        ])
+        painter.setBrush(QColor(100, 150, 255))
+        painter.drawPolygon(play_triangle)
+        
+        # Draw "VIDEO" text
+        painter.drawText(QRect(0, 80, 160, 40), Qt.AlignmentFlag.AlignCenter, "VIDEO")
+        painter.end()
         
         return pixmap
     

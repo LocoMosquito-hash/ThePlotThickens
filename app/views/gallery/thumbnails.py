@@ -7,6 +7,7 @@ Thumbnail widgets for The Plot Thickens application's gallery.
 This module contains widgets for displaying thumbnails in the gallery.
 """
 
+import logging
 from typing import List, Dict, Any, Optional
 
 from PyQt6.QtWidgets import (
@@ -17,7 +18,7 @@ from PyQt6.QtCore import (
     Qt, QSize, pyqtSignal, QPoint
 )
 from PyQt6.QtGui import (
-    QPixmap, QFont, QPainter, QColor, QBrush, QPen, QCursor, QAction
+    QPixmap, QFont, QPainter, QColor, QBrush, QPen, QCursor, QAction, QMovie
 )
 
 class ThumbnailWidget(QFrame):
@@ -43,6 +44,11 @@ class ThumbnailWidget(QFrame):
         self.displayed_pixmap = pixmap
         self.is_nsfw = False
         self.quick_event_text = ""
+        
+        # Animated GIF support
+        self.movie = None  # QMovie object for animated GIFs
+        self.is_animated = False  # Track if this thumbnail uses animation
+        self.thumbnail_path = None  # Store the path to the thumbnail file
         
         # Visual styling
         self.setFrameShape(QFrame.Shape.Box)
@@ -113,6 +119,10 @@ class ThumbnailWidget(QFrame):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
     
+    def __del__(self):
+        """Cleanup when widget is destroyed."""
+        self.stop_animation()
+    
     def mousePressEvent(self, event) -> None:
         """Handle mouse press events."""
         # Don't trigger thumbnail click if clicking on the checkbox (let the checkbox handle it)
@@ -160,7 +170,82 @@ class ThumbnailWidget(QFrame):
             new_pixmap: New pixmap to display
         """
         self.original_pixmap = new_pixmap
-        self.update_displayed_pixmap()
+        
+        # Check if this is a video thumbnail with animation
+        if hasattr(new_pixmap, 'gif_path'):
+            logging.info(f"[VIDEO_DEBUG] update_pixmap: Setting up animation for thumbnail {self.image_id} with path: {new_pixmap.gif_path}")
+            # Set up animated thumbnail
+            success = self.set_animated_thumbnail(new_pixmap.gif_path)
+            logging.info(f"[VIDEO_DEBUG] update_pixmap: Animation setup result: {success}")
+        else:
+            # Stop any existing animation and show static pixmap
+            self.stop_animation()
+            self.update_displayed_pixmap()
+    
+    def set_animated_thumbnail(self, thumbnail_path: str) -> bool:
+        """Set an animated GIF thumbnail.
+        
+        Args:
+            thumbnail_path: Path to the GIF file
+            
+        Returns:
+            True if animation was set successfully, False otherwise
+        """
+        import os
+        
+        if not os.path.exists(thumbnail_path) or not thumbnail_path.lower().endswith('.gif'):
+            return False
+        
+        # Stop any existing animation
+        self.stop_animation()
+        
+        # Create QMovie for the GIF
+        self.movie = QMovie(thumbnail_path)
+        
+        if not self.movie.isValid():
+            self.movie = None
+            return False
+        
+        # Scale the movie to fit our thumbnail size
+        movie_size = self.movie.scaledSize()
+        if movie_size.width() > 150 or movie_size.height() > 130:
+            # Calculate scaled size maintaining aspect ratio
+            if movie_size.width() > movie_size.height():
+                # Landscape orientation
+                new_width = min(movie_size.width(), 150)
+                new_height = int((movie_size.height() * new_width) / movie_size.width())
+            else:
+                # Portrait orientation
+                new_height = min(movie_size.height(), 130)
+                new_width = int((movie_size.width() * new_height) / movie_size.height())
+            
+            self.movie.setScaledSize(QSize(new_width, new_height))
+        
+        # Connect the movie to the label
+        self.image_label.setMovie(self.movie)
+        
+        # Start the animation
+        self.movie.start()
+        
+        # Update state
+        self.is_animated = True
+        self.thumbnail_path = thumbnail_path
+        
+        return True
+    
+    def stop_animation(self):
+        """Stop any running animation and clean up resources."""
+        if self.movie:
+            self.movie.stop()
+            self.movie = None
+        
+        self.is_animated = False
+        self.image_label.setMovie(None)  # Clear the movie from the label
+    
+    def restart_animation(self):
+        """Restart the animation if this thumbnail is animated."""
+        if self.is_animated and self.thumbnail_path:
+            self.set_animated_thumbnail(self.thumbnail_path)
     
     def show_context_menu(self, position):
         """Show context menu when right-clicking on the thumbnail.
