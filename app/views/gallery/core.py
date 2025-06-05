@@ -264,16 +264,18 @@ class GalleryWidget(QWidget):
         # Control buttons at the top
         control_layout = QHBoxLayout()
         
-        # Import image button
-        import_btn = QPushButton("Import Image")
+        # Import image/video button
+        import_btn = QPushButton("Import Image/Video")
         import_btn.setIcon(icon_manager.get_icon("upload"))
         import_btn.clicked.connect(self.import_image)
+        import_btn.setToolTip("Import image or video files (MP4 supported)")
         control_layout.addWidget(import_btn)
         
-        # Paste image button
+        # Paste image/video button
         paste_btn = QPushButton("Paste from Clipboard")
         paste_btn.setIcon(icon_manager.get_icon("clipboard"))
         paste_btn.clicked.connect(self.paste_image)
+        paste_btn.setToolTip("Paste images or video file paths from clipboard")
         control_layout.addWidget(paste_btn)
         
         # Add a separator
@@ -1560,8 +1562,15 @@ class GalleryWidget(QWidget):
             # Get the local file path
             file_path = url.toLocalFile()
             
+            # Import video utilities
+            from app.utils.video_utils import is_video_file
+            
+            # Check if it's a video file first
+            if is_video_file(file_path):
+                # Import video file
+                self.import_video_file(file_path)
             # Check if it's an image file
-            if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+            elif file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
                 # Load the image
                 image = QImage(file_path)
                 
@@ -1571,7 +1580,7 @@ class GalleryWidget(QWidget):
                 else:
                     self.show_error("Image Error", f"Could not load image from {file_path}")
             else:
-                self.show_error("File Type Error", "The file in the clipboard is not a supported image format")
+                self.show_error("File Type Error", "The file in the clipboard is not a supported image or video format")
         else:
             # It's a remote URL - check if it's an image URL
             url_str = url.toString()
@@ -1612,7 +1621,11 @@ class GalleryWidget(QWidget):
                     url = urls[0]
                     if url.isLocalFile():
                         file_path = url.toLocalFile()
-                        if file_path and file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                        # Import video utilities
+                        from app.utils.video_utils import is_video_file
+                        
+                        # Check for both images and videos
+                        if file_path and (file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')) or is_video_file(file_path)):
                             return True
                     else:
                         url_str = url.toString()
@@ -1789,27 +1802,182 @@ class GalleryWidget(QWidget):
         reply.deleteLater()
     
     def import_image(self) -> None:
-        """Open a file dialog to import an image."""
-        # Get file path from dialog
+        """Open a file dialog to import an image or video."""
+        # Import video utilities
+        from app.utils.video_utils import is_video_file
+        
+        # Get file path from dialog - now supports both images and videos
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Import Image",
+            "Import Image or Video",
             "",
-            "Images (*.png *.jpg *.jpeg *.gif *.bmp)"
+            "Images and Videos (*.png *.jpg *.jpeg *.gif *.bmp *.mp4);;Images (*.png *.jpg *.jpeg *.gif *.bmp);;Videos (*.mp4);;All Files (*)"
         )
         
         if not file_path:
             return
         
-        # Load the image
-        image = QImage(file_path)
+        # Check if it's a video file
+        if is_video_file(file_path):
+            self.import_video_file(file_path)
+        else:
+            # Load the image
+            image = QImage(file_path)
+            
+            if image.isNull():
+                self.show_error("Image Error", f"Could not load image from {file_path}")
+                return
+            
+            # Save the image to the story
+            self.save_image_to_story(image)
+    
+    def import_video_file(self, video_path: str) -> None:
+        """Import a video file to the story.
         
-        if image.isNull():
-            self.show_error("Image Error", f"Could not load image from {file_path}")
+        Args:
+            video_path: Path to the video file
+        """
+        if not self.story_id:
+            self.show_error("Error", "No story selected")
             return
         
-        # Save the image to the story
-        self.save_image_to_story(image)
+        try:
+            # Import video utilities
+            from app.utils.video_utils import generate_video_thumbnail, get_video_info
+            import shutil
+            
+            # Get video info for validation
+            video_info = get_video_info(video_path)
+            if not video_info:
+                self.show_error("Video Error", f"Could not read video file: {video_path}")
+                return
+            
+            # Get the story data
+            cursor = self.db_conn.cursor()
+            cursor.execute("SELECT * FROM stories WHERE id = ?", (self.story_id,))
+            story_data = dict(cursor.fetchone())
+            
+            if not story_data:
+                self.show_error("Error", "Story data not found")
+                return
+            
+            # Get folder paths using the utility function
+            from app.db_sqlite import get_story_folder_paths, ensure_story_folders_exist
+            
+            # Ensure all story folders exist
+            ensure_story_folders_exist(story_data)
+            
+            # Get paths
+            folder_paths = get_story_folder_paths(story_data)
+            images_folder = folder_paths['images_folder']
+            thumbnails_folder = folder_paths['thumbnails_folder']
+            
+            # Create folders if they don't exist
+            os.makedirs(images_folder, exist_ok=True)
+            os.makedirs(thumbnails_folder, exist_ok=True)
+            
+            # Generate a unique file name keeping the original extension
+            timestamp = time.strftime("%Y%m%d%H%M%S")
+            random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+            original_ext = os.path.splitext(video_path)[1]
+            video_filename = f"vid_{timestamp}_{random_string}{original_ext}"
+            thumbnail_filename = f"vid_{timestamp}_{random_string}.gif"
+            
+            # Define full file paths
+            video_destination = os.path.join(images_folder, video_filename)
+            thumbnail_path = os.path.join(thumbnails_folder, thumbnail_filename)
+            
+            # Copy the video file to the story folder
+            shutil.copy2(video_path, video_destination)
+            logging.info(f"Copied video file to: {video_destination}")
+            
+            # Generate animated GIF thumbnail
+            success = generate_video_thumbnail(
+                video_path, 
+                thumbnail_path, 
+                max_dimension=320, 
+                use_gif=True
+            )
+            
+            if not success:
+                logging.warning(f"Failed to generate GIF thumbnail, trying static thumbnail")
+                # If GIF generation failed, try static PNG thumbnail
+                thumbnail_filename = f"vid_{timestamp}_{random_string}.png"
+                thumbnail_path = os.path.join(thumbnails_folder, thumbnail_filename)
+                success = generate_video_thumbnail(
+                    video_path, 
+                    thumbnail_path, 
+                    max_dimension=320, 
+                    use_gif=False
+                )
+                
+                if not success:
+                    logging.error("Failed to generate any thumbnail for video")
+                    # Create a placeholder thumbnail manually
+                    placeholder_pixmap = QPixmap(320, 240)
+                    placeholder_pixmap.fill(QColor(50, 50, 50))
+                    
+                    painter = QPainter(placeholder_pixmap)
+                    painter.setPen(Qt.GlobalColor.white)
+                    painter.setFont(QFont("Arial", 12))
+                    painter.drawText(placeholder_pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "Video\nThumbnail")
+                    painter.end()
+                    
+                    placeholder_pixmap.save(thumbnail_path, "PNG")
+            
+            # Create timestamps
+            now = datetime.now().isoformat()
+            
+            # Insert into database - we store videos in the same table as images
+            query = """
+                INSERT INTO images (story_id, title, path, created_at, updated_at, width, height, is_featured, filename)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            
+            cursor.execute(
+                query,
+                (
+                    self.story_id,
+                    "Imported Video",     # title
+                    images_folder,        # path (store folder path)
+                    now,                  # created_at
+                    now,                  # updated_at
+                    video_info['width'],  # width
+                    video_info['height'], # height
+                    0,                    # is_featured (not NSFW)
+                    video_filename        # filename
+                )
+            )
+            
+            # Get the new image ID
+            image_id = cursor.lastrowid
+            
+            # Commit changes
+            self.db_conn.commit()
+            
+            # Add the new video to our list (treat it like an image)
+            new_video = {
+                "id": image_id,
+                "title": "Imported Video",
+                "path": images_folder,
+                "timestamp": now,
+                "width": video_info['width'],
+                "height": video_info['height'],
+                "is_nsfw": False,
+                "story_id": self.story_id,
+                "filename": video_filename
+            }
+            
+            self.images.insert(0, new_video)  # Add to start (newest)
+            
+            # Reload images to show the new video
+            self.refresh_if_auto_enabled("general")
+            
+            logging.info(f"Successfully imported video: {video_filename}")
+            
+        except Exception as e:
+            self.show_error("Video Import Error", f"Failed to import video: {str(e)}")
+            logging.exception(f"Error importing video {video_path}: {e}")
     
     def save_image_to_story(self, image: QImage) -> None:
         """Save an image to the current story.
