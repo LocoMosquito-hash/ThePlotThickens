@@ -31,6 +31,8 @@ def test_video_utilities():
             "test.mp4",
             "test.avi", 
             "test.mov",
+            "test.ogg",
+            "test.ogv",
             "test.jpg",
             "test.png",
             "test.txt"

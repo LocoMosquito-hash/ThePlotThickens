@@ -15,7 +15,7 @@ The Plot Thickens now supports video files in the Gallery! This feature allows y
 Currently supported video formats:
 
 - **MP4** (primary format)
-- **AVI, MOV, MKV, WMV, FLV, WEBM, M4V** (experimental support)
+- **AVI, MOV, MKV, WMV, FLV, WEBM, M4V, OGG, OGV** (experimental support)
 
 ### **Thumbnail Generation**
 

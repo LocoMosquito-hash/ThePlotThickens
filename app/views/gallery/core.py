@@ -1948,7 +1948,7 @@ class GalleryWidget(QWidget):
             self,
             "Import Image or Video",
             "",
-            "Images and Videos (*.png *.jpg *.jpeg *.gif *.bmp *.mp4);;Images (*.png *.jpg *.jpeg *.gif *.bmp);;Videos (*.mp4);;All Files (*)"
+            "Images and Videos (*.png *.jpg *.jpeg *.gif *.bmp *.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm *.m4v *.ogg *.ogv);;Images (*.png *.jpg *.jpeg *.gif *.bmp);;Videos (*.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm *.m4v *.ogg *.ogv);;All Files (*)"
         )
         
         if not file_path:

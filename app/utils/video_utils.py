@@ -24,7 +24,7 @@ from PyQt6.QtCore import Qt
 logger = logging.getLogger(__name__)
 
 # Supported video formats
-SUPPORTED_VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v'}
+SUPPORTED_VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.ogg', '.ogv'}
 
 class VideoProcessor:
     """Utility class for video processing operations."""
