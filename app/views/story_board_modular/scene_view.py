@@ -261,8 +261,8 @@ class StoryBoardScene(QGraphicsScene):
         """
         from app.views.relationship_details import RelationshipDetailsDialog
         
-        # Get the parent widget (StoryBoardWidget)
-        parent_widget = self.views()[0].parent() if self.views() else None
+        # Get the parent widget (StoryBoardWidget) directly from the scene
+        parent_widget = self.parent()
         
         # Create and show the dialog
         dialog = RelationshipDetailsDialog(
@@ -548,8 +548,8 @@ class StoryBoardScene(QGraphicsScene):
             # Import here to avoid circular imports
             from app.views.character_dialog import CharacterDialog
             
-            # Get the parent widget (StoryBoardWidget)
-            parent_widget = self.views()[0].parent() if self.views() else None
+            # Get the parent widget (StoryBoardWidget) directly from the scene
+            parent_widget = self.parent()
             if not parent_widget or not hasattr(parent_widget, 'current_story_id'):
                 return
             
