@@ -377,7 +377,7 @@ class VideoConversionLab(QMainWindow):
     
     def is_video_file(self, file_path: str) -> bool:
         """Check if file is a video file"""
-        video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm'}
+        video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.ogg', '.ogv'}
         return Path(file_path).suffix.lower() in video_extensions
     
     def browse_file(self):
@@ -388,7 +388,7 @@ class VideoConversionLab(QMainWindow):
             self,
             "Select Video File",
             last_dir,
-            "Video Files (*.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm);;All Files (*)"
+            "Video Files (*.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm *.m4v *.ogg *.ogv);;All Files (*)"
         )
         
         if file_path:
