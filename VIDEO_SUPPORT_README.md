@@ -116,7 +116,7 @@ _Character recognition for videos is planned for future releases_
 ### **Quality Settings**
 
 - **GIF Frame Rate**: 15 FPS (good balance of quality vs file size)
-- **GIF Duration**: 2 seconds from start of video
+- **GIF Duration**: 4 seconds from start of video
 - **Max Dimensions**: 320x320 pixels (maintains aspect ratio)
 - **Color Optimization**: Custom palette generation for better quality
 
