@@ -161,8 +161,8 @@ class RelationshipTypesManager(QMainWindow):
         
         # Create the table widget
         self.inverses_table = QTableWidget()
-        self.inverses_table.setColumnCount(4)
-        self.inverses_table.setHorizontalHeaderLabels(["Relationship Type", "Inverse", "Category", "Condensed Title"])
+        self.inverses_table.setColumnCount(5)
+        self.inverses_table.setHorizontalHeaderLabels(["Relationship Type", "Inverse", "Category", "Condensed Title", "Is Weak"])
         
         # Configure table appearance
         self.inverses_table.setAlternatingRowColors(True)
@@ -176,6 +176,7 @@ class RelationshipTypesManager(QMainWindow):
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         
         # Connect cell editing events for immediate database updates
         self.inverses_table.itemChanged.connect(self.on_condensed_title_changed)
@@ -829,6 +830,7 @@ class RelationshipTypesManager(QMainWindow):
                     rt2.label as inverse_type,
                     c.name as category_name,
                     rti.condensed_title,
+                    rti.is_weak,
                     rt1.type_id,
                     rt2.type_id as inverse_type_id
                 FROM relationship_type_inverses rti
@@ -845,7 +847,7 @@ class RelationshipTypesManager(QMainWindow):
             # Populate the table
             self.inverses_table.setRowCount(len(results))
             
-            for row_index, (rel_type, inverse_type, category, condensed_title, type_id, inverse_type_id) in enumerate(results):
+            for row_index, (rel_type, inverse_type, category, condensed_title, is_weak, type_id, inverse_type_id) in enumerate(results):
                 # Relationship Type column
                 rel_type_item = QTableWidgetItem(rel_type)
                 rel_type_item.setFlags(rel_type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -866,6 +868,14 @@ class RelationshipTypesManager(QMainWindow):
                 # Store the type IDs for database updates
                 condensed_title_item.setData(Qt.ItemDataRole.UserRole, (type_id, inverse_type_id))
                 self.inverses_table.setItem(row_index, 3, condensed_title_item)
+                
+                # Is Weak column (checkbox)
+                is_weak_item = QTableWidgetItem("")
+                is_weak_item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+                is_weak_item.setCheckState(Qt.CheckState.Checked if is_weak else Qt.CheckState.Unchecked)
+                # Store the type IDs for database updates
+                is_weak_item.setData(Qt.ItemDataRole.UserRole, (type_id, inverse_type_id))
+                self.inverses_table.setItem(row_index, 4, is_weak_item)
             
             # Store original data for filtering
             self.original_inverses_data = results
@@ -892,21 +902,25 @@ class RelationshipTypesManager(QMainWindow):
             inverse_item = self.inverses_table.item(row, 1)
             category_item = self.inverses_table.item(row, 2)
             condensed_title_item = self.inverses_table.item(row, 3)
+            is_weak_item = self.inverses_table.item(row, 4)
             
-            # Check if search text matches any column
+            # Check if search text matches any column (including checkbox state)
+            is_weak_text = "weak" if is_weak_item.checkState() == Qt.CheckState.Checked else "strong"
+            
             match = (
                 search_text in rel_type_item.text().lower() or
                 search_text in inverse_item.text().lower() or
                 search_text in category_item.text().lower() or
-                search_text in condensed_title_item.text().lower()
+                search_text in condensed_title_item.text().lower() or
+                search_text in is_weak_text
             )
             
             self.inverses_table.setRowHidden(row, not match)
     
     def on_condensed_title_changed(self, item: QTableWidgetItem):
-        """Handle changes to condensed title with bidirectional updates."""
-        # Only handle changes to the condensed title column (column 3)
-        if item.column() != 3:
+        """Handle changes to condensed title and is_weak checkbox with bidirectional updates."""
+        # Handle condensed title column (column 3) and is_weak checkbox (column 4)
+        if item.column() not in [3, 4]:
             return
         
         if not self.db_conn:
@@ -919,32 +933,57 @@ class RelationshipTypesManager(QMainWindow):
                 return
             
             type_id, inverse_type_id = type_ids
-            new_condensed_title = item.text().strip() or None
-            
             cursor = self.db_conn.cursor()
             
-            # Update both directions of the relationship
-            # Update the current direction
-            cursor.execute("""
-                UPDATE relationship_type_inverses 
-                SET condensed_title = ?
-                WHERE type_id = ? AND inverse_type_id = ?
-            """, (new_condensed_title, type_id, inverse_type_id))
-            
-            # Update the reverse direction (if it exists and is different)
-            if type_id != inverse_type_id:  # Not a self-inverse relationship
+            if item.column() == 3:  # Condensed Title column
+                new_condensed_title = item.text().strip() or None
+                
+                # Update both directions of the relationship
                 cursor.execute("""
                     UPDATE relationship_type_inverses 
                     SET condensed_title = ?
                     WHERE type_id = ? AND inverse_type_id = ?
-                """, (new_condensed_title, inverse_type_id, type_id))
+                """, (new_condensed_title, type_id, inverse_type_id))
+                
+                # Update the reverse direction (if it exists and is different)
+                if type_id != inverse_type_id:  # Not a self-inverse relationship
+                    cursor.execute("""
+                        UPDATE relationship_type_inverses 
+                        SET condensed_title = ?
+                        WHERE type_id = ? AND inverse_type_id = ?
+                    """, (new_condensed_title, inverse_type_id, type_id))
+                
+                # Commit the changes
+                self.db_conn.commit()
+                
+                # If this is a bidirectional update, refresh other visible rows
+                if type_id != inverse_type_id:
+                    self.refresh_bidirectional_condensed_titles(type_id, inverse_type_id, new_condensed_title)
             
-            # Commit the changes
-            self.db_conn.commit()
-            
-            # If this is a bidirectional update, refresh other visible rows
-            if type_id != inverse_type_id:
-                self.refresh_bidirectional_condensed_titles(type_id, inverse_type_id, new_condensed_title)
+            elif item.column() == 4:  # Is Weak checkbox column
+                is_weak = item.checkState() == Qt.CheckState.Checked
+                
+                # Update both directions of the relationship
+                cursor.execute("""
+                    UPDATE relationship_type_inverses 
+                    SET is_weak = ?
+                    WHERE type_id = ? AND inverse_type_id = ?
+                """, (is_weak, type_id, inverse_type_id))
+                
+                # Update the reverse direction (if it exists and is different)
+                if type_id != inverse_type_id:  # Not a self-inverse relationship
+                    cursor.execute("""
+                        UPDATE relationship_type_inverses 
+                        SET is_weak = ?
+                        WHERE type_id = ? AND inverse_type_id = ?
+                    """, (is_weak, inverse_type_id, type_id))
+                
+                # Commit the changes
+                self.db_conn.commit()
+                
+                # If this is a bidirectional update, refresh other visible rows
+                if type_id != inverse_type_id:
+                    self.refresh_bidirectional_is_weak(type_id, inverse_type_id, is_weak)
             
         except Exception as e:
             print(f"Error updating condensed title: {e}")
@@ -970,5 +1009,27 @@ class RelationshipTypesManager(QMainWindow):
                 # Temporarily disconnect the signal to avoid recursive updates
                 self.inverses_table.itemChanged.disconnect(self.on_condensed_title_changed)
                 condensed_item.setText(new_title or "")
+                self.inverses_table.itemChanged.connect(self.on_condensed_title_changed)
+                break
+    
+    def refresh_bidirectional_is_weak(self, type_id: int, inverse_type_id: int, is_weak: bool):
+        """Refresh is_weak checkbox for the reverse relationship if visible."""
+        # Look for the reverse relationship in the current table
+        for row in range(self.inverses_table.rowCount()):
+            is_weak_item = self.inverses_table.item(row, 4)
+            if not is_weak_item:
+                continue
+                
+            stored_ids = is_weak_item.data(Qt.ItemDataRole.UserRole)
+            if not stored_ids:
+                continue
+                
+            stored_type_id, stored_inverse_id = stored_ids
+            
+            # If this is the reverse relationship, update its checkbox state
+            if stored_type_id == inverse_type_id and stored_inverse_id == type_id:
+                # Temporarily disconnect the signal to avoid recursive updates
+                self.inverses_table.itemChanged.disconnect(self.on_condensed_title_changed)
+                is_weak_item.setCheckState(Qt.CheckState.Checked if is_weak else Qt.CheckState.Unchecked)
                 self.inverses_table.itemChanged.connect(self.on_condensed_title_changed)
                 break 
