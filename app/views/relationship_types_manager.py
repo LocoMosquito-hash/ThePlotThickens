@@ -161,8 +161,8 @@ class RelationshipTypesManager(QMainWindow):
         
         # Create the table widget
         self.inverses_table = QTableWidget()
-        self.inverses_table.setColumnCount(3)
-        self.inverses_table.setHorizontalHeaderLabels(["Relationship Type", "Inverse", "Category"])
+        self.inverses_table.setColumnCount(4)
+        self.inverses_table.setHorizontalHeaderLabels(["Relationship Type", "Inverse", "Category", "Condensed Title"])
         
         # Configure table appearance
         self.inverses_table.setAlternatingRowColors(True)
@@ -175,6 +175,10 @@ class RelationshipTypesManager(QMainWindow):
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        
+        # Connect cell editing events for immediate database updates
+        self.inverses_table.itemChanged.connect(self.on_condensed_title_changed)
         
         inverses_layout.addWidget(self.inverses_table)
         
@@ -823,7 +827,10 @@ class RelationshipTypesManager(QMainWindow):
                 SELECT DISTINCT
                     rt1.label as relationship_type,
                     rt2.label as inverse_type,
-                    c.name as category_name
+                    c.name as category_name,
+                    rti.condensed_title,
+                    rt1.type_id,
+                    rt2.type_id as inverse_type_id
                 FROM relationship_type_inverses rti
                 JOIN relationship_types_new rt1 ON rti.type_id = rt1.type_id
                 JOIN relationship_types_new rt2 ON rti.inverse_type_id = rt2.type_id
@@ -838,7 +845,7 @@ class RelationshipTypesManager(QMainWindow):
             # Populate the table
             self.inverses_table.setRowCount(len(results))
             
-            for row_index, (rel_type, inverse_type, category) in enumerate(results):
+            for row_index, (rel_type, inverse_type, category, condensed_title, type_id, inverse_type_id) in enumerate(results):
                 # Relationship Type column
                 rel_type_item = QTableWidgetItem(rel_type)
                 rel_type_item.setFlags(rel_type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -853,6 +860,12 @@ class RelationshipTypesManager(QMainWindow):
                 category_item = QTableWidgetItem(category)
                 category_item.setFlags(category_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.inverses_table.setItem(row_index, 2, category_item)
+                
+                # Condensed Title column (editable)
+                condensed_title_item = QTableWidgetItem(condensed_title or "")
+                # Store the type IDs for database updates
+                condensed_title_item.setData(Qt.ItemDataRole.UserRole, (type_id, inverse_type_id))
+                self.inverses_table.setItem(row_index, 3, condensed_title_item)
             
             # Store original data for filtering
             self.original_inverses_data = results
@@ -878,12 +891,84 @@ class RelationshipTypesManager(QMainWindow):
             rel_type_item = self.inverses_table.item(row, 0)
             inverse_item = self.inverses_table.item(row, 1)
             category_item = self.inverses_table.item(row, 2)
+            condensed_title_item = self.inverses_table.item(row, 3)
             
             # Check if search text matches any column
             match = (
                 search_text in rel_type_item.text().lower() or
                 search_text in inverse_item.text().lower() or
-                search_text in category_item.text().lower()
+                search_text in category_item.text().lower() or
+                search_text in condensed_title_item.text().lower()
             )
             
-            self.inverses_table.setRowHidden(row, not match) 
+            self.inverses_table.setRowHidden(row, not match)
+    
+    def on_condensed_title_changed(self, item: QTableWidgetItem):
+        """Handle changes to condensed title with bidirectional updates."""
+        # Only handle changes to the condensed title column (column 3)
+        if item.column() != 3:
+            return
+        
+        if not self.db_conn:
+            return
+        
+        try:
+            # Get the type IDs stored in the item data
+            type_ids = item.data(Qt.ItemDataRole.UserRole)
+            if not type_ids:
+                return
+            
+            type_id, inverse_type_id = type_ids
+            new_condensed_title = item.text().strip() or None
+            
+            cursor = self.db_conn.cursor()
+            
+            # Update both directions of the relationship
+            # Update the current direction
+            cursor.execute("""
+                UPDATE relationship_type_inverses 
+                SET condensed_title = ?
+                WHERE type_id = ? AND inverse_type_id = ?
+            """, (new_condensed_title, type_id, inverse_type_id))
+            
+            # Update the reverse direction (if it exists and is different)
+            if type_id != inverse_type_id:  # Not a self-inverse relationship
+                cursor.execute("""
+                    UPDATE relationship_type_inverses 
+                    SET condensed_title = ?
+                    WHERE type_id = ? AND inverse_type_id = ?
+                """, (new_condensed_title, inverse_type_id, type_id))
+            
+            # Commit the changes
+            self.db_conn.commit()
+            
+            # If this is a bidirectional update, refresh other visible rows
+            if type_id != inverse_type_id:
+                self.refresh_bidirectional_condensed_titles(type_id, inverse_type_id, new_condensed_title)
+            
+        except Exception as e:
+            print(f"Error updating condensed title: {e}")
+            # Revert the change in the UI
+            item.setText("")
+    
+    def refresh_bidirectional_condensed_titles(self, type_id: int, inverse_type_id: int, new_title: str):
+        """Refresh condensed titles for the reverse relationship if visible."""
+        # Look for the reverse relationship in the current table
+        for row in range(self.inverses_table.rowCount()):
+            condensed_item = self.inverses_table.item(row, 3)
+            if not condensed_item:
+                continue
+                
+            stored_ids = condensed_item.data(Qt.ItemDataRole.UserRole)
+            if not stored_ids:
+                continue
+                
+            stored_type_id, stored_inverse_id = stored_ids
+            
+            # If this is the reverse relationship, update its condensed title
+            if stored_type_id == inverse_type_id and stored_inverse_id == type_id:
+                # Temporarily disconnect the signal to avoid recursive updates
+                self.inverses_table.itemChanged.disconnect(self.on_condensed_title_changed)
+                condensed_item.setText(new_title or "")
+                self.inverses_table.itemChanged.connect(self.on_condensed_title_changed)
+                break 
