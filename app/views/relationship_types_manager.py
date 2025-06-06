@@ -2,7 +2,8 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QPushButton, QListWidget, QListWidgetItem,
     QAbstractItemView, QFrame, QLineEdit, QScrollArea,
-    QRadioButton, QButtonGroup, QToolButton, QDialog, QCheckBox
+    QRadioButton, QButtonGroup, QToolButton, QDialog, QCheckBox,
+    QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QColor, QIcon
@@ -15,7 +16,7 @@ class RelationshipTypesManager(QMainWindow):
     def __init__(self, parent=None, db_conn=None):
         super().__init__(parent)
         self.setWindowTitle("Relationship Types Manager")
-        self.resize(800, 600)  # Wider window to accommodate the edit section
+        self.resize(1000, 700)  # Larger window to accommodate tabs
         
         # Store database connection
         self.db_conn = db_conn
@@ -28,10 +29,36 @@ class RelationshipTypesManager(QMainWindow):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         
-        # Use horizontal layout for main sections
-        self.main_layout = QHBoxLayout(self.central_widget)
-        self.main_layout.setContentsMargins(20, 20, 20, 20)
-        self.main_layout.setSpacing(20)
+        # Main layout to hold the tab widget
+        self.main_layout = QVBoxLayout(self.central_widget)
+        self.main_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
+        
+        # Create the tabs
+        self.create_relationships_tab()
+        self.create_inverses_tab()
+        
+        # Add tab widget to main layout
+        self.main_layout.addWidget(self.tab_widget)
+        
+        # Load data from database, or use mock data if no connection
+        if self.db_conn:
+            self.load_relationship_data()
+        else:
+            self.populate_mock_data()
+    
+    def create_relationships_tab(self):
+        """Create the Relationships tab with existing functionality."""
+        # Create relationships tab widget
+        self.relationships_tab = QWidget()
+        
+        # Use horizontal layout for main sections (same as before)
+        relationships_layout = QHBoxLayout(self.relationships_tab)
+        relationships_layout.setContentsMargins(20, 20, 20, 20)
+        relationships_layout.setSpacing(20)
         
         # Left section for list view
         self.left_section = QWidget()
@@ -92,18 +119,67 @@ class RelationshipTypesManager(QMainWindow):
         # Create the edit form
         self.create_edit_form()
         
-        # Add sections to main layout
-        self.main_layout.addWidget(self.left_section, 1)  # 1:1 ratio
-        self.main_layout.addWidget(self.right_section, 1)
+        # Add sections to relationships layout
+        relationships_layout.addWidget(self.left_section, 1)  # 1:1 ratio
+        relationships_layout.addWidget(self.right_section, 1)
         
-        # Load data from database, or use mock data if no connection
-        if self.db_conn:
-            self.load_relationship_data()
-        else:
-            self.populate_mock_data()
-            
         # Initially hide the edit section
         self.right_section.setVisible(False)
+        
+        # Add relationships tab to tab widget
+        self.tab_widget.addTab(self.relationships_tab, "Relationships")
+    
+    def create_inverses_tab(self):
+        """Create the Inverses tab for viewing relationship type inverses."""
+        # Create inverses tab widget
+        self.inverses_tab = QWidget()
+        
+        # Main layout for inverses tab
+        inverses_layout = QVBoxLayout(self.inverses_tab)
+        inverses_layout.setContentsMargins(20, 20, 20, 20)
+        inverses_layout.setSpacing(15)
+        
+        # Header label
+        header_label = QLabel("Relationship Type Inverses")
+        font = QFont()
+        font.setPointSize(12)
+        header_label.setFont(font)
+        inverses_layout.addWidget(header_label)
+        
+        # Search box
+        search_layout = QHBoxLayout()
+        search_label = QLabel("Search:")
+        self.inverses_search_input = QLineEdit()
+        self.inverses_search_input.setPlaceholderText("Search relationship types or inverses...")
+        self.inverses_search_input.textChanged.connect(self.filter_inverses_table)
+        
+        search_layout.addWidget(search_label)
+        search_layout.addWidget(self.inverses_search_input)
+        search_layout.addStretch()  # Add stretch to push search to the left
+        
+        inverses_layout.addLayout(search_layout)
+        
+        # Create the table widget
+        self.inverses_table = QTableWidget()
+        self.inverses_table.setColumnCount(3)
+        self.inverses_table.setHorizontalHeaderLabels(["Relationship Type", "Inverse", "Category"])
+        
+        # Configure table appearance
+        self.inverses_table.setAlternatingRowColors(True)
+        self.inverses_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.inverses_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.inverses_table.setSortingEnabled(True)
+        
+        # Set column sizes
+        header = self.inverses_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        
+        inverses_layout.addWidget(self.inverses_table)
+        
+        # Add inverses tab to tab widget
+        self.tab_widget.addTab(self.inverses_tab, "Inverses")
     
     def create_edit_form(self):
         """Create the form for adding/editing relationship types."""
@@ -725,4 +801,89 @@ class RelationshipTypesManager(QMainWindow):
         if type_id is not None:
             item.setData(Qt.ItemDataRole.UserRole, type_id)
         
-        self.list_widget.addItem(item) 
+        self.list_widget.addItem(item)
+
+    def on_tab_changed(self, index: int):
+        """Handle tab change events."""
+        if index == 1:  # Inverses tab (0-indexed)
+            self.load_inverses_data()
+    
+    def load_inverses_data(self):
+        """Load relationship type inverses data into the table."""
+        if not self.db_conn:
+            return
+        
+        try:
+            # Clear existing data
+            self.inverses_table.setRowCount(0)
+            
+            # Query to get relationship types with their inverses and categories
+            cursor = self.db_conn.cursor()
+            query = """
+                SELECT DISTINCT
+                    rt1.label as relationship_type,
+                    rt2.label as inverse_type,
+                    c.name as category_name
+                FROM relationship_type_inverses rti
+                JOIN relationship_types_new rt1 ON rti.type_id = rt1.type_id
+                JOIN relationship_types_new rt2 ON rti.inverse_type_id = rt2.type_id
+                JOIN relationship_categories c ON rt1.category_id = c.id
+                WHERE rt1.type_id <= rt2.type_id OR rt1.type_id = rt2.type_id
+                ORDER BY c.name, rt1.label, rt2.label
+            """
+            
+            cursor.execute(query)
+            results = cursor.fetchall()
+            
+            # Populate the table
+            self.inverses_table.setRowCount(len(results))
+            
+            for row_index, (rel_type, inverse_type, category) in enumerate(results):
+                # Relationship Type column
+                rel_type_item = QTableWidgetItem(rel_type)
+                rel_type_item.setFlags(rel_type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.inverses_table.setItem(row_index, 0, rel_type_item)
+                
+                # Inverse Type column
+                inverse_item = QTableWidgetItem(inverse_type)
+                inverse_item.setFlags(inverse_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.inverses_table.setItem(row_index, 1, inverse_item)
+                
+                # Category column
+                category_item = QTableWidgetItem(category)
+                category_item.setFlags(category_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.inverses_table.setItem(row_index, 2, category_item)
+            
+            # Store original data for filtering
+            self.original_inverses_data = results
+            
+        except Exception as e:
+            print(f"Error loading inverses data: {e}")
+    
+    def filter_inverses_table(self, search_text: str):
+        """Filter the inverses table based on search text."""
+        if not hasattr(self, 'original_inverses_data'):
+            return
+        
+        search_text = search_text.lower().strip()
+        
+        if not search_text:
+            # Show all rows if search is empty
+            for row in range(self.inverses_table.rowCount()):
+                self.inverses_table.setRowHidden(row, False)
+            return
+        
+        # Hide rows that don't match the search
+        for row in range(self.inverses_table.rowCount()):
+            rel_type_item = self.inverses_table.item(row, 0)
+            inverse_item = self.inverses_table.item(row, 1)
+            category_item = self.inverses_table.item(row, 2)
+            
+            # Check if search text matches any column
+            match = (
+                search_text in rel_type_item.text().lower() or
+                search_text in inverse_item.text().lower() or
+                search_text in category_item.text().lower()
+            )
+            
+            self.inverses_table.setRowHidden(row, not match) 
