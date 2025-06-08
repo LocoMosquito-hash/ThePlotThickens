@@ -415,7 +415,8 @@ class StoryBoardWidget(QWidget):
                 'source_id': relationship['source_id'],
                 'target_id': relationship['target_id'],
                 'is_primary_relationship': relationship.get('is_primary_relationship', False),
-                'inverse_relationship_id': relationship.get('inverse_relationship_id')
+                'inverse_relationship_id': relationship.get('inverse_relationship_id'),
+                'is_weak': relationship.get('is_weak', False)
             }
             
             # Add relationship line - this will automatically group with existing lines

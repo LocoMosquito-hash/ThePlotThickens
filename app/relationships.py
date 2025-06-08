@@ -1088,11 +1088,13 @@ def get_story_relationships(conn: sqlite3.Connection, story_id: int) -> List[Dic
     SELECT r.*, 
            s.name as source_name, s.id as source_id,
            t.name as target_name, t.id as target_id,
-           COALESCE(r.custom_label, rt.label) as relationship_name
+           COALESCE(r.custom_label, rt.label) as relationship_name,
+           rti.is_weak
     FROM relationships r
     JOIN characters s ON r.source_id = s.id
     JOIN characters t ON r.target_id = t.id
     LEFT JOIN relationship_types_new rt ON r.relationship_type_id = rt.type_id
+    LEFT JOIN relationship_type_inverses rti ON rt.type_id = rti.type_id
     WHERE s.story_id = ?
     ORDER BY r.strength DESC, r.updated_at DESC
     ''', (story_id,))
@@ -1131,7 +1133,8 @@ def get_story_relationships(conn: sqlite3.Connection, story_id: int) -> List[Dic
             'is_custom': relationship['is_custom'],
             'is_primary_relationship': relationship.get('is_primary_relationship', False),
             'inverse_relationship_id': relationship.get('inverse_relationship_id'),
-            'relationship_prefix': relationship.get('relationship_prefix')
+            'relationship_prefix': relationship.get('relationship_prefix'),
+            'is_weak': relationship.get('is_weak', False)  # Default to False if not found
         })
     
     return relationships
