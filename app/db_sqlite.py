@@ -499,7 +499,7 @@ def update_story(conn: sqlite3.Connection, story_id: int, title: str, descriptio
 
 
 # Character functions
-def create_character(conn, name, story_id, aliases=None, is_main_character=False, age_value=None, age_category=None, gender=None, avatar_path=None):
+def create_character(conn, name, story_id, aliases=None, is_main_character=False, age_value=None, age_category=None, gender=None, avatar_path=None, race=None):
     """Create a new character.
     
     Args:
@@ -512,6 +512,7 @@ def create_character(conn, name, story_id, aliases=None, is_main_character=False
         age_category: Age category
         gender: Gender
         avatar_path: Path to avatar image
+        race: Character race
         
     Returns:
         ID of the created character
@@ -524,12 +525,16 @@ def create_character(conn, name, story_id, aliases=None, is_main_character=False
         
         # Insert the character
         cursor.execute("""
-            INSERT INTO characters (name, story_id, aliases, is_main_character, age_value, age_category, gender, avatar_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (name, story_id, aliases, is_main_character, age_value, age_category, gender, avatar_path))
+            INSERT INTO characters (name, story_id, aliases, is_main_character, age_value, age_category, gender, avatar_path, race)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (name, story_id, aliases, is_main_character, age_value, age_category, gender, avatar_path, race))
         
         # Get the ID of the inserted character
         character_id = cursor.lastrowid
+        
+        # If race was provided, update race usage
+        if race and race.strip():
+            get_or_create_race(conn, race.strip())
         
         # Commit the changes
         conn.commit()
@@ -559,7 +564,7 @@ def get_story_characters(conn: sqlite3.Connection, story_id: int) -> List[Dict[s
 
 def update_character(conn: sqlite3.Connection, character_id: int, name: str, aliases: Optional[str] = None,
                     is_main_character: bool = False, age_value: Optional[int] = None, age_category: Optional[str] = None,
-                    gender: str = "NOT_SPECIFIED", avatar_path: Optional[str] = None) -> Dict[str, Any]:
+                    gender: str = "NOT_SPECIFIED", avatar_path: Optional[str] = None, race: Optional[str] = None) -> Dict[str, Any]:
     """Update an existing character in the database.
     
     Args:
@@ -572,6 +577,7 @@ def update_character(conn: sqlite3.Connection, character_id: int, name: str, ali
         age_category: Age category
         gender: Gender
         avatar_path: Path to avatar image
+        race: Character race
         
     Returns:
         Updated character data
@@ -587,9 +593,14 @@ def update_character(conn: sqlite3.Connection, character_id: int, name: str, ali
         age_category = ?,
         gender = ?,
         avatar_path = ?,
+        race = ?,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
-    ''', (name, aliases, 1 if is_main_character else 0, age_value, age_category, gender, avatar_path, character_id))
+    ''', (name, aliases, 1 if is_main_character else 0, age_value, age_category, gender, avatar_path, race, character_id))
+    
+    # If race was provided, update race usage
+    if race and race.strip():
+        get_or_create_race(conn, race.strip())
     
     conn.commit()
     
@@ -627,6 +638,97 @@ def delete_character(db_conn, character_id: int) -> bool:
         print(f"Error deleting character: {e}")
         db_conn.rollback()
         return False
+
+
+# Race functions
+def get_all_races(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+    """Get all races from the database, ordered by usage count and name.
+    
+    Args:
+        conn: Database connection
+        
+    Returns:
+        List of race dictionaries
+    """
+    cursor = conn.cursor()
+    cursor.execute('''
+    SELECT id, name, usage_count, created_at, last_used_at
+    FROM races 
+    ORDER BY usage_count DESC, name ASC
+    ''')
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def get_or_create_race(conn: sqlite3.Connection, race_name: str) -> int:
+    """Get existing race ID or create a new race.
+    
+    Args:
+        conn: Database connection
+        race_name: Name of the race
+        
+    Returns:
+        Race ID
+    """
+    if not race_name or not race_name.strip():
+        return None
+        
+    race_name = race_name.strip()
+    cursor = conn.cursor()
+    
+    # Try to find existing race (case-insensitive)
+    cursor.execute('''
+    SELECT id FROM races WHERE LOWER(name) = LOWER(?)
+    ''', (race_name,))
+    
+    result = cursor.fetchone()
+    if result:
+        race_id = result[0]
+        # Update usage count and last used timestamp
+        cursor.execute('''
+        UPDATE races SET 
+            usage_count = usage_count + 1,
+            last_used_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        ''', (race_id,))
+        conn.commit()
+        return race_id
+    else:
+        # Create new race
+        cursor.execute('''
+        INSERT INTO races (name, usage_count, created_at, last_used_at)
+        VALUES (?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ''', (race_name,))
+        conn.commit()
+        return cursor.lastrowid
+
+
+def search_races(conn: sqlite3.Connection, search_term: str) -> List[str]:
+    """Search for races that match the search term.
+    
+    Args:
+        conn: Database connection
+        search_term: Term to search for
+        
+    Returns:
+        List of race names
+    """
+    if not search_term or not search_term.strip():
+        # Return all race names if no search term
+        cursor = conn.cursor()
+        cursor.execute('''
+        SELECT name FROM races 
+        ORDER BY usage_count DESC, name ASC
+        ''')
+        return [row[0] for row in cursor.fetchall()]
+    
+    search_term = search_term.strip()
+    cursor = conn.cursor()
+    cursor.execute('''
+    SELECT name FROM races 
+    WHERE LOWER(name) LIKE LOWER(?)
+    ORDER BY usage_count DESC, name ASC
+    ''', (f'%{search_term}%',))
+    return [row[0] for row in cursor.fetchall()]
 
 
 # Relationship functions - now using the relationships module

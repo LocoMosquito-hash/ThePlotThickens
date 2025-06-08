@@ -1180,7 +1180,8 @@ class CharacterDialog(QDialog):
             'age_value': None,
             'age_category': None,
             'gender': 'NOT_SPECIFIED',
-            'avatar_path': None
+            'avatar_path': None,
+            'race': None
         }
         
         # If editing an existing character, load its data
@@ -1334,6 +1335,16 @@ class CharacterDialog(QDialog):
         # Gender icon buttons
         self.gender_group = self._create_gender_buttons()
         form_layout2.addRow("Gender:", self.gender_group)
+        
+        # Race field
+        self.race_combo = QComboBox()
+        self.race_combo.setEditable(True)
+        self.race_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.race_combo.setPlaceholderText("Type to search or add new race...")
+        self.race_combo.currentTextChanged.connect(self.on_field_changed)
+        self.race_combo.editTextChanged.connect(self.on_field_changed)
+        self._load_races()
+        form_layout2.addRow("Race:", self.race_combo)
         
         layout.addLayout(form_layout2)
         layout.addStretch()
@@ -1524,6 +1535,25 @@ class CharacterDialog(QDialog):
             # Default to "Not specified"
             self.gender_buttons["NOT_SPECIFIED"].setChecked(True)
     
+    def _load_races(self) -> None:
+        """Load races from database into the combo box."""
+        try:
+            from app.db_sqlite import get_all_races
+            races = get_all_races(self.db_conn)
+            
+            # Clear existing items
+            self.race_combo.clear()
+            
+            # Add an empty option for "no race specified"
+            self.race_combo.addItem("")
+            
+            # Add races from database
+            for race in races:
+                self.race_combo.addItem(race['name'])
+                
+        except Exception as e:
+            print(f"Error loading races: {e}")
+    
     def load_character_data(self) -> None:
         """Load character data into the form."""
         # Set name
@@ -1589,6 +1619,20 @@ class CharacterDialog(QDialog):
         
         # Set gender
         self._set_gender_selection(self.character_data['gender'])
+        
+        # Set race
+        if self.character_data.get('race'):
+            # Try to find the race in the combo box
+            index = self.race_combo.findText(self.character_data['race'])
+            if index >= 0:
+                self.race_combo.setCurrentIndex(index)
+            else:
+                # If race not found, add it and set it
+                self.race_combo.addItem(self.character_data['race'])
+                self.race_combo.setCurrentText(self.character_data['race'])
+        else:
+            # Set to empty (no race specified)
+            self.race_combo.setCurrentIndex(0)
     
     def connect_signals(self) -> None:
         """Connect signals to slots."""
@@ -1793,7 +1837,8 @@ class CharacterDialog(QDialog):
                 age_value=character_data['age_value'],
                 age_category=character_data['age_category'],
                 gender=character_data['gender'],
-                avatar_path=character_data['avatar_path']
+                avatar_path=character_data['avatar_path'],
+                race=character_data['race']
             )
             
             print(f"DEBUG: Created character with ID {self.character_id}")
@@ -1811,7 +1856,8 @@ class CharacterDialog(QDialog):
                 age_value=character_data['age_value'],
                 age_category=character_data['age_category'],
                 gender=character_data['gender'],
-                avatar_path=character_data['avatar_path']
+                avatar_path=character_data['avatar_path'],
+                race=character_data['race']
             )
             print(f"DEBUG: Character {self.character_id} updated successfully")
         
@@ -1875,6 +1921,9 @@ class CharacterDialog(QDialog):
         # Get gender
         gender = self._get_selected_gender()
         
+        # Get race
+        race = self.race_combo.currentText().strip() if self.race_combo.currentText().strip() else None
+        
         # Get avatar path - preserve existing path if not changed
         if self.avatar_changed:
             avatar_path = self.avatar_path
@@ -1889,7 +1938,8 @@ class CharacterDialog(QDialog):
             'age_value': age_value,
             'age_category': age_category,
             'gender': gender,
-            'avatar_path': avatar_path
+            'avatar_path': avatar_path,
+            'race': race
         } 
 
     def _scale_pixmap_for_avatar(self, pixmap: QPixmap) -> QPixmap:
