@@ -2296,9 +2296,9 @@ class GalleryWidget(QWidget):
                 finally:
                     # Always reset the flag when done
                     self.character_recognition_in_progress = False
-            else:
+            # else:
                 # Character recognition already in progress, just show a message
-                self.show_error("Character Recognition", "Character recognition is already in progress for another image")
+                # self.show_error("Character Recognition", "Character recognition is already in progress for another image")
                 
         except Exception as e:
             self.show_error("Save Error", f"Could not process image: {str(e)}")
