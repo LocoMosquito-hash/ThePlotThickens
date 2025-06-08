@@ -1246,8 +1246,14 @@ class RelationshipLine(QGraphicsPathItem):
         self.normal_width = float(primary_relationship['width']) if primary_relationship['width'] else 6.0  # Thicker lines but not excessive
         self.hover_width = self.normal_width * 1.5  # Thicker on hover
         
+        # Check if any relationship in this line is weak
+        self.is_weak = any(rel.get('is_weak', False) for rel in relationships)
+        
+        # Determine pen style based on whether the relationship is weak
+        pen_style = Qt.PenStyle.DashLine if self.is_weak else Qt.PenStyle.SolidLine
+        
         # Set initial pen
-        self.setPen(QPen(self.normal_color, int(self.normal_width), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        self.setPen(QPen(self.normal_color, int(self.normal_width), pen_style, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
         
         # Set flags
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
@@ -1356,6 +1362,9 @@ class RelationshipLine(QGraphicsPathItem):
         pen = self.pen()
         pen.setColor(self.hover_color)
         pen.setWidth(int(self.hover_width))  # Convert to int
+        # Maintain the correct pen style when hovering
+        pen_style = Qt.PenStyle.DashLine if self.is_weak else Qt.PenStyle.SolidLine
+        pen.setStyle(pen_style)
         self.setPen(pen)
         
         # Change label appearance - apply hover enhancements
@@ -1393,6 +1402,9 @@ class RelationshipLine(QGraphicsPathItem):
         pen = self.pen()
         pen.setColor(self.normal_color)
         pen.setWidth(int(self.normal_width))  # Convert to int
+        # Maintain the correct pen style when leaving hover
+        pen_style = Qt.PenStyle.DashLine if self.is_weak else Qt.PenStyle.SolidLine
+        pen.setStyle(pen_style)
         self.setPen(pen)
         
         # Restore label appearance to match the CSS styling
