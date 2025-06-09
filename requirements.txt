@@ -10,4 +10,5 @@ tabler-qicon==0.3.0   # Direct QIcon implementation, alternative
 # Image processing dependencies
 numpy>=1.24.0
 opencv-python>=4.8.0
-Pillow>=10.0.0 
+Pillow>=10.0.0
+rembg>=2.0.60  # Background removal from images 

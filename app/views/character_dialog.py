@@ -1287,12 +1287,17 @@ class CharacterDialog(QDialog):
         self.paste_avatar_button.setToolTip("Paste an image from the clipboard")
         self.paste_avatar_button.clicked.connect(self.paste_avatar)
         
+        self.remove_bg_button = QPushButton("Rem. Background")
+        self.remove_bg_button.setToolTip("Remove background from the current avatar")
+        self.remove_bg_button.clicked.connect(self.remove_background)
+        
         self.delete_avatar_button = QPushButton("Delete")
         self.delete_avatar_button.setToolTip("Remove the avatar")
         self.delete_avatar_button.clicked.connect(self.delete_avatar)
         
         avatar_buttons.addWidget(self.edit_avatar_button)
         avatar_buttons.addWidget(self.paste_avatar_button)
+        avatar_buttons.addWidget(self.remove_bg_button)
         avatar_buttons.addWidget(self.delete_avatar_button)
         avatar_layout.addLayout(avatar_buttons)
         
@@ -1595,12 +1600,15 @@ class CharacterDialog(QDialog):
             if not pixmap.isNull():
                 scaled_pixmap = self._scale_pixmap_for_avatar(pixmap)
                 self.avatar_preview.setPixmap(scaled_pixmap)
+                self.remove_bg_button.setEnabled(True)
                 print("DEBUG: Avatar loaded successfully")
             else:
                 self.avatar_preview.setText("No Avatar")
+                self.remove_bg_button.setEnabled(False)
                 print(f"DEBUG: Failed to load avatar from path: {avatar_path}")
         else:
             self.avatar_preview.setText("No Avatar")
+            self.remove_bg_button.setEnabled(False)
             print("DEBUG: No avatar path specified")
         
         # Set aliases
@@ -1662,6 +1670,7 @@ class CharacterDialog(QDialog):
                 self.avatar_preview.setPixmap(scaled_pixmap)
                 self.avatar_path = file_path
                 self.avatar_changed = True
+                self.remove_bg_button.setEnabled(True)
                 self.on_field_changed()
     
     def paste_avatar(self) -> None:
@@ -1680,6 +1689,7 @@ class CharacterDialog(QDialog):
                 # but we'll still have the pixmap in avatar_preview
                 self.avatar_path = None
                 self.avatar_changed = True
+                self.remove_bg_button.setEnabled(True)
                 self.on_field_changed()
                 print("DEBUG: Set pasted image as avatar")
             else:
@@ -1688,12 +1698,153 @@ class CharacterDialog(QDialog):
             print("DEBUG: No image found in clipboard")
             QMessageBox.warning(self, "Paste Failed", "No image found in clipboard.")
     
+    def remove_background(self) -> None:
+        """Remove background from the current avatar using rembg."""
+        # Check if there's an avatar to process
+        current_pixmap = self.avatar_preview.pixmap()
+        if not current_pixmap or current_pixmap.isNull():
+            QMessageBox.information(self, "No Avatar", "Please select an avatar image first before removing the background.")
+            return
+        
+        # Let user choose the model based on their image type
+        model_choice = QMessageBox.question(
+            self,
+            "Choose Background Removal Model",
+            "Choose the best model for your image type:\n\n"
+            "• YES: Portrait Mode (recommended for character faces)\n"
+            "• NO: General Mode (for any other type of image)\n\n"
+            "Portrait mode is specifically trained for human faces and handles hair details much better.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Yes
+        )
+        
+        if model_choice == QMessageBox.StandardButton.Cancel:
+            return
+        
+        try:
+            # Show progress indicator
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            
+            # Import rembg (lazy import to avoid startup delays)
+            try:
+                from rembg import remove
+                from PIL import Image
+            except ImportError:
+                QApplication.restoreOverrideCursor()
+                QMessageBox.critical(
+                    self, 
+                    "Missing Dependency", 
+                    "Background removal requires the 'rembg' library.\n\n"
+                    "Please install it using:\npip install rembg"
+                )
+                return
+            
+            # Convert QPixmap to PIL Image via numpy array
+            qimage = current_pixmap.toImage()
+            
+            # Convert QImage to numpy array format that PIL can handle
+            width = qimage.width()
+            height = qimage.height()
+            
+            # Convert to RGB format for consistency
+            from PyQt6.QtGui import QImage
+            qimage_rgb = qimage.convertToFormat(QImage.Format.Format_RGB888)
+            
+            # Get the raw data
+            ptr = qimage_rgb.bits()
+            ptr.setsize(height * width * 3)  # 3 bytes per pixel for RGB
+            
+            # Convert to numpy array
+            import numpy as np
+            arr = np.frombuffer(ptr, dtype=np.uint8).reshape((height, width, 3))
+            
+            # Create PIL Image from numpy array
+            pil_image = Image.fromarray(arr)
+            
+            # Remove background using rembg with selected model
+            try:
+                from rembg import new_session
+                if model_choice == QMessageBox.StandardButton.Yes:
+                    # Portrait mode - better for character faces
+                    session = new_session('birefnet-portrait')
+                    model_name = "Portrait Mode (birefnet-portrait)"
+                else:
+                    # General mode - fallback to u2net for general images
+                    session = new_session('u2net')
+                    model_name = "General Mode (u2net)"
+                
+                print(f"DEBUG: Using {model_name} for background removal")
+                output_image = remove(pil_image, session=session)
+            except Exception as e:
+                QApplication.restoreOverrideCursor()
+                QMessageBox.critical(
+                    self, 
+                    "Background Removal Failed", 
+                    f"Failed to remove background:\n{str(e)}\n\n"
+                    "This may be due to:\n"
+                    "• Network issues (rembg downloads models on first use)\n"
+                    "• Unsupported image format\n"
+                    "• Insufficient memory"
+                )
+                return
+            
+            # Convert PIL Image back to QPixmap via numpy array
+            # Convert PIL image to numpy array
+            import numpy as np
+            output_array = np.array(output_image)
+            
+            # Handle RGBA format (with alpha channel from background removal)
+            if output_array.shape[2] == 4:  # RGBA
+                height, width, channels = output_array.shape
+                bytes_per_line = 4 * width
+                qimage_format = QImage.Format.Format_RGBA8888
+            else:  # RGB
+                height, width, channels = output_array.shape
+                bytes_per_line = 3 * width
+                qimage_format = QImage.Format.Format_RGB888
+            
+            # Create QImage from numpy array
+            qimage = QImage(output_array.data, width, height, bytes_per_line, qimage_format)
+            
+            # Convert QImage to QPixmap
+            processed_pixmap = QPixmap.fromImage(qimage)
+            
+            # Scale and set the processed image
+            if not processed_pixmap.isNull():
+                scaled_pixmap = self._scale_pixmap_for_avatar(processed_pixmap)
+                self.avatar_preview.setPixmap(scaled_pixmap)
+                
+                # Mark as changed (this will save as a new image when saving character)
+                self.avatar_path = None  # Clear path to indicate it needs to be saved
+                self.avatar_changed = True
+                self.on_field_changed()
+                
+                QApplication.restoreOverrideCursor()
+                QMessageBox.information(
+                    self, 
+                    "Background Removed", 
+                    f"Background has been successfully removed from the avatar!\n\n"
+                    f"Model used: {model_name}"
+                )
+            else:
+                QApplication.restoreOverrideCursor()
+                QMessageBox.warning(self, "Processing Error", "Failed to process the image after background removal.")
+        
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(
+                self, 
+                "Error", 
+                f"An unexpected error occurred while removing background:\n{str(e)}"
+            )
+    
     def delete_avatar(self) -> None:
         """Delete the avatar."""
         self.avatar_preview.clear()
         self.avatar_preview.setText("No Avatar")
         self.avatar_path = None
         self.avatar_changed = True
+        self.remove_bg_button.setEnabled(False)
         self.on_field_changed()
     
     def save_avatar(self) -> str:
