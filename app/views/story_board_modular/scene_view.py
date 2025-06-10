@@ -24,7 +24,7 @@ from app.db_sqlite import (
 )
 
 from .graphics_components import CharacterCard, RelationshipLine, BendPoint, load_bendpoints
-from .utils import CARD_WIDTH, CARD_HEIGHT
+from .utils import CARD_WIDTH, CARD_HEIGHT, SCENE_WIDTH, SCENE_HEIGHT
 
 
 class StoryBoardScene(QGraphicsScene):
@@ -70,8 +70,8 @@ class StoryBoardScene(QGraphicsScene):
         self.grid_size = 50
         self.grid_visible = False
         
-        # Set scene size
-        self.setSceneRect(0, 0, 10000, 10000)
+        # Set scene size - increased for larger stories with many character relationships
+        self.setSceneRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT)
         
         # Enable key events for the scene
         self.setFocusOnTouch(True)
@@ -987,7 +987,7 @@ class StoryBoardView(QGraphicsView):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         
         # Set scene rect to be large enough to accommodate all character positions
-        self.setSceneRect(0, 0, 10000, 10000)
+        self.setSceneRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT)
     
     def wheelEvent(self, event: QWheelEvent) -> None:
         """Handle wheel events for zooming.
