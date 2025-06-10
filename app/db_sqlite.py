@@ -499,7 +499,7 @@ def update_story(conn: sqlite3.Connection, story_id: int, title: str, descriptio
 
 
 # Character functions
-def create_character(conn, name, story_id, aliases=None, is_main_character=False, age_value=None, age_category=None, gender=None, avatar_path=None, race=None):
+def create_character(conn, name, story_id, aliases=None, is_main_character=False, age_value=None, age_category=None, gender=None, avatar_path=None, race=None, love_interest=0):
     """Create a new character.
     
     Args:
@@ -513,6 +513,7 @@ def create_character(conn, name, story_id, aliases=None, is_main_character=False
         gender: Gender
         avatar_path: Path to avatar image
         race: Character race
+        love_interest: Love interest rating (0-5)
         
     Returns:
         ID of the created character
@@ -525,9 +526,9 @@ def create_character(conn, name, story_id, aliases=None, is_main_character=False
         
         # Insert the character
         cursor.execute("""
-            INSERT INTO characters (name, story_id, aliases, is_main_character, age_value, age_category, gender, avatar_path, race)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (name, story_id, aliases, is_main_character, age_value, age_category, gender, avatar_path, race))
+            INSERT INTO characters (name, story_id, aliases, is_main_character, age_value, age_category, gender, avatar_path, race, love_interest)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (name, story_id, aliases, is_main_character, age_value, age_category, gender, avatar_path, race, love_interest))
         
         # Get the ID of the inserted character
         character_id = cursor.lastrowid
@@ -564,7 +565,7 @@ def get_story_characters(conn: sqlite3.Connection, story_id: int) -> List[Dict[s
 
 def update_character(conn: sqlite3.Connection, character_id: int, name: str, aliases: Optional[str] = None,
                     is_main_character: bool = False, age_value: Optional[int] = None, age_category: Optional[str] = None,
-                    gender: str = "NOT_SPECIFIED", avatar_path: Optional[str] = None, race: Optional[str] = None) -> Dict[str, Any]:
+                    gender: str = "NOT_SPECIFIED", avatar_path: Optional[str] = None, race: Optional[str] = None, love_interest: int = 0) -> Dict[str, Any]:
     """Update an existing character in the database.
     
     Args:
@@ -578,6 +579,7 @@ def update_character(conn: sqlite3.Connection, character_id: int, name: str, ali
         gender: Gender
         avatar_path: Path to avatar image
         race: Character race
+        love_interest: Love interest rating (0-5)
         
     Returns:
         Updated character data
@@ -594,9 +596,10 @@ def update_character(conn: sqlite3.Connection, character_id: int, name: str, ali
         gender = ?,
         avatar_path = ?,
         race = ?,
+        love_interest = ?,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
-    ''', (name, aliases, 1 if is_main_character else 0, age_value, age_category, gender, avatar_path, race, character_id))
+    ''', (name, aliases, 1 if is_main_character else 0, age_value, age_category, gender, avatar_path, race, love_interest, character_id))
     
     # If race was provided, update race usage
     if race and race.strip():

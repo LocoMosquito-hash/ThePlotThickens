@@ -18,6 +18,10 @@ MIN_ZOOM = 0.1
 MAX_ZOOM = 4.0
 ZOOM_FACTOR = 1.25
 
+# Scene dimensions - increased for complex story boards with many characters
+SCENE_WIDTH = 50000
+SCENE_HEIGHT = 50000
+
 def create_vertical_line() -> QFrame:
     """Create a vertical line for use as a separator.
     

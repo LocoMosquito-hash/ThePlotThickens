@@ -12,14 +12,14 @@ import time
 from typing import Optional, Dict, Any, List, Tuple
 
 from PyQt6.QtWidgets import (
-    QDialog, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLabel, QLineEdit, QComboBox, QSpinBox, QCheckBox, QPushButton,
+    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, QTextEdit,
+    QComboBox, QPushButton, QLabel, QFrame, QTabWidget, QWidget, QScrollArea,
     QFileDialog, QMessageBox, QApplication, QGroupBox, QListWidget, 
     QListWidgetItem, QMenu, QTextEdit, QSplitter,
-    QTreeWidget, QTreeWidgetItem, QStyle, QButtonGroup, QToolButton
+    QTreeWidget, QTreeWidgetItem, QStyle, QButtonGroup, QToolButton, QSlider, QCheckBox, QSpinBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QSize
-from PyQt6.QtGui import QPixmap, QImage, QCloseEvent, QAction, QCursor, QColor
+from PyQt6.QtGui import QPixmap, QIcon, QAction, QCursor, QFont, QCloseEvent, QImage
 
 from app.utils.character_completer import CharacterCompleter
 from app.utils.icons import icon_manager
@@ -1181,7 +1181,8 @@ class CharacterDialog(QDialog):
             'age_category': None,
             'gender': 'NOT_SPECIFIED',
             'avatar_path': None,
-            'race': None
+            'race': None,
+            'love_interest': 0
         }
         
         # If editing an existing character, load its data
@@ -1350,6 +1351,10 @@ class CharacterDialog(QDialog):
         self.race_combo.editTextChanged.connect(self.on_field_changed)
         self._load_races()
         form_layout2.addRow("Race:", self.race_combo)
+        
+        # Love Interest slider
+        self.love_interest_widget = self._create_love_interest_slider()
+        form_layout2.addRow("Love Interest:", self.love_interest_widget)
         
         layout.addLayout(form_layout2)
         layout.addStretch()
@@ -1559,6 +1564,141 @@ class CharacterDialog(QDialog):
         except Exception as e:
             print(f"Error loading races: {e}")
     
+    def _create_love_interest_slider(self) -> QWidget:
+        """Create the love interest slider widget with icons and labels."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        
+        # Title
+        title_label = QLabel("Love Interest:")
+        title_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        layout.addWidget(title_label)
+        
+        # Container for slider and labels
+        slider_container = QWidget()
+        slider_layout = QVBoxLayout(slider_container)
+        slider_layout.setContentsMargins(0, 0, 0, 0)
+        slider_layout.setSpacing(4)
+        
+        # Icons and labels row
+        icons_layout = QHBoxLayout()
+        icons_layout.setSpacing(2)
+        
+        # Love interest options with Tabler icons
+        love_options = [
+            (0, "heart_off", "No", "#6B7280"),
+            (1, "heart_x", "Unlikely", "#EF4444"),
+            (2, "heart_question", "Maybe", "#F59E0B"),
+            (3, "heart", "Yes", "#EF4444"),
+            (4, "hearts", "Fulfilled", "#10B981"),
+            (5, "heart_broken", "Heartbroken", "#6366F1")
+        ]
+        
+        self.love_icons = []
+        self.love_labels = []
+        
+        for value, icon_name, label_text, color in love_options:
+            # Icon label
+            icon_label = QLabel()
+            icon = icon_manager.get_icon(icon_name)
+            icon_label.setPixmap(icon.pixmap(24, 24))
+            icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            icon_label.setFixedSize(30, 30)
+            icons_layout.addWidget(icon_label)
+            self.love_icons.append(icon_label)
+            
+            # Text label below icon
+            text_label = QLabel(label_text)
+            text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            text_label.setFont(QFont("Arial", 8))
+            text_label.setFixedWidth(50)
+            text_label.setStyleSheet(f"color: {color};")
+            self.love_labels.append(text_label)
+        
+        # Add icons to layout
+        icons_widget = QWidget()
+        icons_widget.setLayout(icons_layout)
+        slider_layout.addWidget(icons_widget)
+        
+        # Labels row
+        labels_layout = QHBoxLayout()
+        labels_layout.setSpacing(2)
+        for label in self.love_labels:
+            labels_layout.addWidget(label)
+        labels_widget = QWidget()
+        labels_widget.setLayout(labels_layout)
+        slider_layout.addWidget(labels_widget)
+        
+        # Slider
+        self.love_interest_slider = QSlider(Qt.Orientation.Horizontal)
+        self.love_interest_slider.setRange(0, 5)
+        self.love_interest_slider.setValue(0)
+        self.love_interest_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.love_interest_slider.setTickInterval(1)
+        self.love_interest_slider.valueChanged.connect(self._on_love_interest_changed)
+        slider_layout.addWidget(self.love_interest_slider)
+        
+        # Current value display
+        self.love_value_label = QLabel("Love Interest: 0 - No")
+        self.love_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.love_value_label.setFont(QFont("Arial", 9))
+        self.love_value_label.setStyleSheet("color: #6B7280; margin-top: 4px;")
+        slider_layout.addWidget(self.love_value_label)
+        
+        layout.addWidget(slider_container)
+        
+        # Update initial visual state
+        self._update_love_interest_visual(0)
+        
+        return widget
+    
+    def _on_love_interest_changed(self, value: int) -> None:
+        """Handle love interest slider value change."""
+        self._update_love_interest_visual(value)
+        self.has_changes = True
+    
+    def _update_love_interest_visual(self, value: int) -> None:
+        """Update the visual display of the love interest slider.
+        
+        Args:
+            value: The current love interest value (0-5)
+        """
+        # Love interest options mapping
+        love_options = [
+            (0, "No", "#6B7280"),
+            (1, "Unlikely", "#EF4444"),
+            (2, "Maybe", "#F59E0B"),
+            (3, "Yes", "#EF4444"),
+            (4, "Fulfilled", "#10B981"),
+            (5, "Heartbroken", "#6366F1")
+        ]
+        
+        # Get the current option
+        if 0 <= value < len(love_options):
+            _, label_text, color = love_options[value]
+        else:
+            label_text, color = "Unknown", "#6B7280"
+        
+        # Update the main value label
+        self.love_value_label.setText(f"Love Interest: {value} - {label_text}")
+        
+        # Update visual highlighting for icons and labels
+        for i, (icon_label, text_label) in enumerate(zip(self.love_icons, self.love_labels)):
+            if i == value:
+                # Highlight the active level
+                icon_label.setStyleSheet("background-color: rgba(59, 130, 246, 0.1); border-radius: 4px; padding: 2px;")
+                text_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+            else:
+                # Reset to default appearance
+                icon_label.setStyleSheet("")
+                if i < len(love_options):
+                    _, _, default_color = love_options[i]
+                    text_label.setStyleSheet(f"color: {default_color};")
+                else:
+                    text_label.setStyleSheet("color: #6B7280;")
+    
     def load_character_data(self) -> None:
         """Load character data into the form."""
         # Set name
@@ -1641,6 +1781,11 @@ class CharacterDialog(QDialog):
         else:
             # Set to empty (no race specified)
             self.race_combo.setCurrentIndex(0)
+        
+        # Set love interest
+        love_interest_value = self.character_data.get('love_interest', 0)
+        self.love_interest_slider.setValue(love_interest_value)
+        self._update_love_interest_visual(love_interest_value)
     
     def connect_signals(self) -> None:
         """Connect signals to slots."""
@@ -1989,7 +2134,8 @@ class CharacterDialog(QDialog):
                 age_category=character_data['age_category'],
                 gender=character_data['gender'],
                 avatar_path=character_data['avatar_path'],
-                race=character_data['race']
+                race=character_data['race'],
+                love_interest=character_data['love_interest']
             )
             
             print(f"DEBUG: Created character with ID {self.character_id}")
@@ -2008,7 +2154,8 @@ class CharacterDialog(QDialog):
                 age_category=character_data['age_category'],
                 gender=character_data['gender'],
                 avatar_path=character_data['avatar_path'],
-                race=character_data['race']
+                race=character_data['race'],
+                love_interest=character_data['love_interest']
             )
             print(f"DEBUG: Character {self.character_id} updated successfully")
         
@@ -2075,6 +2222,9 @@ class CharacterDialog(QDialog):
         # Get race
         race = self.race_combo.currentText().strip() if self.race_combo.currentText().strip() else None
         
+        # Get love interest
+        love_interest = self.love_interest_slider.value()
+        
         # Get avatar path - preserve existing path if not changed
         if self.avatar_changed:
             avatar_path = self.avatar_path
@@ -2090,7 +2240,8 @@ class CharacterDialog(QDialog):
             'age_category': age_category,
             'gender': gender,
             'avatar_path': avatar_path,
-            'race': race
+            'race': race,
+            'love_interest': love_interest
         } 
 
     def _scale_pixmap_for_avatar(self, pixmap: QPixmap) -> QPixmap:
