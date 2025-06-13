@@ -1,0 +1,3 @@
+PyQt6>=6.4.0
+qdarktheme>=2.1.0
+pytablericons>=2.0.0 
