@@ -16,10 +16,10 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem,
     QMenu, QInputDialog, QMessageBox, QTextEdit, QLineEdit,
-    QAbstractItemView, QFrame
+    QAbstractItemView, QFrame, QStyledItemDelegate, QStyle
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QTimer
-from PyQt6.QtGui import QDrag, QPixmap, QFont, QAction, QTextCharFormat, QBrush, QColor
+from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QTimer, QRect, QSize
+from PyQt6.QtGui import QDrag, QPixmap, QFont, QAction, QTextCharFormat, QBrush, QColor, QPainter, QFontMetrics
 
 from app.db_sqlite import (
     get_plot_details, create_plot_detail, update_plot_detail, delete_plot_detail,
@@ -29,6 +29,136 @@ from app.db_sqlite import (
 )
 from app.widgets.character_input_dialog import CharacterInputDialog
 from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
+
+
+class MultiLineListDelegate(QStyledItemDelegate):
+    """Custom delegate to handle multi-line text in QListWidget items."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+    
+    def sizeHint(self, option, index):
+        """Calculate the size hint for multi-line text."""
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if not text:
+            return super().sizeHint(option, index)
+        
+        # Get the font metrics
+        font = option.font
+        font_metrics = QFontMetrics(font)
+        
+        # Calculate available width (subtract margins and padding)
+        available_width = option.rect.width() - 20  # margin for padding
+        if available_width <= 0:
+            available_width = 250  # fallback width
+        
+        # Calculate the height needed for wrapped text
+        text_rect = font_metrics.boundingRect(
+            0, 0, available_width, 0,
+            Qt.TextFlag.TextWordWrap | Qt.TextFlag.TextWrapAnywhere,
+            text
+        )
+        
+        # Add some padding
+        height = max(text_rect.height() + 10, 25)  # minimum height of 25
+        return QSize(available_width, height)
+    
+    def paint(self, painter, option, index):
+        """Custom paint method for multi-line text."""
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if not text:
+            super().paint(painter, option, index)
+            return
+        
+        # Set up the painter
+        painter.save()
+        
+        # Draw background if selected
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, option.palette.highlight())
+            painter.setPen(option.palette.highlightedText().color())
+        else:
+            painter.setPen(option.palette.text().color())
+        
+        # Set font (including strikeout if needed)
+        painter.setFont(option.font)
+        
+        # Calculate text rectangle with padding
+        text_rect = option.rect.adjusted(5, 5, -5, -5)
+        
+        # Draw the text
+        painter.drawText(
+            text_rect,
+            Qt.TextFlag.TextWordWrap | Qt.TextFlag.TextWrapAnywhere | Qt.AlignmentFlag.AlignTop,
+            text
+        )
+        
+        painter.restore()
+
+
+class MultiLineTreeDelegate(QStyledItemDelegate):
+    """Custom delegate to handle multi-line text in QTreeWidget items."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+    
+    def sizeHint(self, option, index):
+        """Calculate the size hint for multi-line text."""
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if not text:
+            return super().sizeHint(option, index)
+        
+        # Get the font metrics
+        font = option.font
+        font_metrics = QFontMetrics(font)
+        
+        # Calculate available width (subtract margins and indentation)
+        available_width = option.rect.width() - 40  # margin for padding and indentation
+        if available_width <= 0:
+            available_width = 200  # fallback width
+        
+        # Calculate the height needed for wrapped text
+        text_rect = font_metrics.boundingRect(
+            0, 0, available_width, 0,
+            Qt.TextFlag.TextWordWrap | Qt.TextFlag.TextWrapAnywhere,
+            text
+        )
+        
+        # Add some padding
+        height = max(text_rect.height() + 8, 20)  # minimum height of 20
+        return QSize(available_width, height)
+    
+    def paint(self, painter, option, index):
+        """Custom paint method for multi-line text."""
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if not text:
+            super().paint(painter, option, index)
+            return
+        
+        # Set up the painter
+        painter.save()
+        
+        # Draw background if selected
+        if option.state & QStyle.StateFlag.State_Selected:
+            painter.fillRect(option.rect, option.palette.highlight())
+            painter.setPen(option.palette.highlightedText().color())
+        else:
+            painter.setPen(option.palette.text().color())
+        
+        # Set font (including strikeout if needed)
+        painter.setFont(option.font)
+        
+        # Calculate text rectangle with padding
+        text_rect = option.rect.adjusted(5, 2, -5, -2)
+        
+        # Draw the text
+        painter.drawText(
+            text_rect,
+            Qt.TextFlag.TextWordWrap | Qt.TextFlag.TextWrapAnywhere | Qt.AlignmentFlag.AlignTop,
+            text
+        )
+        
+        painter.restore()
 
 
 class DraggableListItem(QListWidgetItem):
@@ -166,6 +296,9 @@ class PlotDetailsWidget(QWidget):
             item.set_data('custom_data', detail['custom_data'])
             
             self.list_widget.addItem(item)
+        
+        # Update item sizes after loading all items
+        QTimer.singleShot(50, self._update_item_sizes)
     
     def _get_character_data(self) -> List[Dict[str, Any]]:
         """Get character data for conversion functions."""
@@ -199,13 +332,22 @@ class PlotDetailsWidget(QWidget):
         
         layout.addLayout(header_layout)
         
-        # List widget for details
+                # List widget for details
         self.list_widget = QListWidget()
         self.list_widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.list_widget.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_widget.customContextMenuRequested.connect(self.show_context_menu)
         self.list_widget.itemChanged.connect(self._on_item_changed)
+        
+        # Enable text wrapping for multi-line items
+        self.list_widget.setWordWrap(True)
+        self.list_widget.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.list_widget.setResizeMode(QListWidget.ResizeMode.Adjust)
+        
+        # Set custom delegate for multi-line text rendering
+        self.list_delegate = MultiLineListDelegate(self.list_widget)
+        self.list_widget.setItemDelegate(self.list_delegate)
         
         # Enable drag and drop reordering
         self.list_widget.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
@@ -250,6 +392,8 @@ class PlotDetailsWidget(QWidget):
             item = DraggableListItem(text.strip())
             self.list_widget.addItem(item)
         
+        # Update item sizes to accommodate multi-line text
+        QTimer.singleShot(0, self._update_item_sizes)
         self.items_changed.emit()
     
     def show_context_menu(self, position) -> None:
@@ -306,6 +450,8 @@ class PlotDetailsWidget(QWidget):
                 item.set_data('original_text', storage_text)
             
             item.setText(text.strip())
+            # Update item sizes to accommodate multi-line text
+            QTimer.singleShot(0, self._update_item_sizes)
             self.items_changed.emit()
     
     def toggle_scratch_item(self, item: DraggableListItem) -> None:
@@ -344,6 +490,16 @@ class PlotDetailsWidget(QWidget):
     def _on_item_changed(self, item: QListWidgetItem) -> None:
         """Handle item text changes."""
         self.items_changed.emit()
+        # Schedule a size update to accommodate new text length
+        QTimer.singleShot(0, self._update_item_sizes)
+    
+    def _update_item_sizes(self) -> None:
+        """Update all item sizes to fit their content."""
+        # Force the list widget to recalculate item sizes
+        self.list_widget.doItemsLayout()
+        self.list_widget.updateGeometries()
+        # Force a repaint to ensure proper display
+        self.list_widget.viewport().update()
     
     def set_available_characters(self, characters: List[str]) -> None:
         """Set the list of available characters for tagging."""
@@ -434,6 +590,9 @@ class PlotQuestionsWidget(QWidget):
             
             self.tree_widget.addTopLevelItem(question_item)
             self.tree_widget.expandItem(question_item)
+        
+        # Update item sizes after loading all items
+        QTimer.singleShot(50, self._update_tree_item_sizes)
     
     def _get_character_data(self) -> List[Dict[str, Any]]:
         """Get character data for conversion functions."""
@@ -476,6 +635,18 @@ class PlotQuestionsWidget(QWidget):
         self.tree_widget.customContextMenuRequested.connect(self.show_context_menu)
         self.tree_widget.itemChanged.connect(self._on_item_changed)
         
+        # Enable text wrapping for multi-line items
+        self.tree_widget.setWordWrap(True)
+        self.tree_widget.setTextElideMode(Qt.TextElideMode.ElideNone)
+        
+        # Set custom delegate for multi-line text rendering
+        self.tree_delegate = MultiLineTreeDelegate(self.tree_widget)
+        self.tree_widget.setItemDelegate(self.tree_delegate)
+        
+        # Connect to resize columns when items change
+        self.tree_widget.itemExpanded.connect(self._adjust_column_width)
+        self.tree_widget.itemCollapsed.connect(self._adjust_column_width)
+        
         layout.addWidget(self.tree_widget)
     
     def add_question(self, text: str = "") -> None:
@@ -516,6 +687,8 @@ class PlotQuestionsWidget(QWidget):
             self.tree_widget.addTopLevelItem(item)
         
         self.tree_widget.expandItem(item)
+        # Update item sizes to accommodate multi-line text
+        QTimer.singleShot(0, self._update_tree_item_sizes)
         self.items_changed.emit()
     
     def add_answer(self, parent_item: DraggableTreeItem, text: str = "") -> None:
@@ -563,6 +736,8 @@ class PlotQuestionsWidget(QWidget):
         
         parent_item.addChild(answer_item)
         self.tree_widget.expandItem(parent_item)
+        # Update item sizes to accommodate multi-line text
+        QTimer.singleShot(0, self._update_tree_item_sizes)
         self.items_changed.emit()
     
     def show_context_menu(self, position) -> None:
@@ -635,6 +810,8 @@ class PlotQuestionsWidget(QWidget):
                 item.set_data_custom('original_text', storage_text)
             
             item.setText(0, text.strip())
+            # Update item sizes to accommodate multi-line text
+            QTimer.singleShot(0, self._update_tree_item_sizes)
             self.items_changed.emit()
     
     def toggle_scratch_item(self, item: DraggableTreeItem) -> None:
@@ -689,6 +866,20 @@ class PlotQuestionsWidget(QWidget):
     def _on_item_changed(self, item: QTreeWidgetItem, column: int) -> None:
         """Handle item text changes."""
         self.items_changed.emit()
+        self._adjust_column_width()
+    
+    def _adjust_column_width(self) -> None:
+        """Adjust column width to fit content and enable proper wrapping."""
+        self.tree_widget.resizeColumnToContents(0)
+        # Schedule item size update
+        QTimer.singleShot(0, self._update_tree_item_sizes)
+    
+    def _update_tree_item_sizes(self) -> None:
+        """Update all tree item sizes to fit their content."""
+        # Force a refresh of the tree widget to update item heights
+        self.tree_widget.doItemsLayout()
+        # Update the viewport to reflect size changes
+        self.tree_widget.viewport().update()
     
     def set_available_characters(self, characters: List[str]) -> None:
         """Set the list of available characters for tagging."""
