@@ -148,7 +148,7 @@ class VideoProcessor:
             return 0.0
     
     def generate_gif_thumbnail(self, video_path: str, output_path: str, 
-                             max_dimension: int = 320, duration: float = 4.0) -> bool:
+                             max_dimension: int = 320, duration: float = 10.0) -> bool:
         """Generate an animated GIF thumbnail from a video.
         
         Args:

@@ -1667,7 +1667,7 @@ class RelationshipLine(QGraphicsPathItem):
                 path.quadTo(prev_point, end)
         else:
             # No bendpoints, use a straight line
-            print(f"UPDATE PATH: No bendpoints for relationship, using straight line from ({start.x()}, {start.y()}) to ({end.x()}, {end.y()})")
+            # print(f"UPDATE PATH: No bendpoints for relationship, using straight line from ({start.x()}, {start.y()}) to ({end.x()}, {end.y()})")
             path.lineTo(end)
         
         # Set the path
