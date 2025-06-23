@@ -217,6 +217,12 @@ class GalleryWidget(QWidget):
         self.character_filters = []  # List of (character_id, include) tuples
         self.context_filters = []   # List of (context_id, include) tuples
         
+        # Video playback settings
+        self.video_playback_mode = self.settings.value("gallery/video_playback_mode", 0, type=int)
+        # 0 = Auto-play all video thumbnails
+        # 1 = Auto-play only on-screen videos  
+        # 2 = Auto-play disabled
+        
         # Network manager for downloading images
         self.network_manager = QNetworkAccessManager()
         
@@ -871,6 +877,10 @@ class GalleryWidget(QWidget):
                 # Set up animated thumbnail
                 success = thumbnail.set_animated_thumbnail(pixmap.gif_path)
                 logging.info(f"[VIDEO_DEBUG] Animation setup result: {success}")
+                
+                # Apply video playback mode immediately after setting up animation
+                if success and not self._should_play_video_thumbnail(thumbnail):
+                    thumbnail.stop_animation()
             
             # Connect signals
             thumbnail.clicked.connect(self.on_thumbnail_clicked)
@@ -1151,6 +1161,10 @@ class GalleryWidget(QWidget):
                 # Set up animated thumbnail
                 success = thumbnail.set_animated_thumbnail(pixmap.gif_path)
                 logging.info(f"[VIDEO_DEBUG] Animation setup result: {success}")
+                
+                # Apply video playback mode immediately after setting up animation
+                if success and not self._should_play_video_thumbnail(thumbnail):
+                    thumbnail.stop_animation()
             
             thumbnail.clicked.connect(lambda tid=image_id: self.on_thumbnail_clicked(tid))
             thumbnail.delete_requested.connect(lambda tid=image_id: self.on_delete_image(tid))
@@ -3351,12 +3365,55 @@ class GalleryWidget(QWidget):
                     print(f"[DEBUG] Error checking context filters for image {image_id}: {e}")
                     # In case of error, include the image to be safe
                     pass
+    
+    def set_video_playback_mode(self, mode: int) -> None:
+        """Set the video playback mode and apply it immediately.
+        
+        Args:
+            mode: Video playback mode (0=auto-play all, 1=auto-play visible, 2=disabled)
+        """
+        self.video_playback_mode = mode
+        self.settings.setValue("gallery/video_playback_mode", mode)
+        
+        # Apply the mode to all existing video thumbnails
+        self._apply_video_playback_mode()
+    
+    def _apply_video_playback_mode(self) -> None:
+        """Apply the current video playback mode to all video thumbnails."""
+        for image_id, thumbnail in self.thumbnails.items():
+            if thumbnail.is_animated:
+                if self.video_playback_mode == 0:  # Auto-play all
+                    thumbnail.restart_animation()
+                elif self.video_playback_mode == 1:  # Auto-play visible only
+                    # For now, use simple visibility check (can be enhanced later)
+                    if thumbnail.isVisible():
+                        thumbnail.restart_animation()
+                    else:
+                        thumbnail.stop_animation()
+                elif self.video_playback_mode == 2:  # Disabled
+                    thumbnail.stop_animation()
+    
+    def _should_play_video_thumbnail(self, thumbnail: 'ThumbnailWidget') -> bool:
+        """Determine if a video thumbnail should be playing based on current mode.
+        
+        Args:
+            thumbnail: The thumbnail widget to check
             
-            if include_image:
-                print(f"[DEBUG] Image {image_id} INCLUDED")
-                filtered_images.append(image)
-            else:
-                print(f"[DEBUG] Image {image_id} EXCLUDED")
+        Returns:
+            True if the video should be playing, False otherwise
+        """
+        if not thumbnail.is_animated:
+            return False
+            
+        if self.video_playback_mode == 0:  # Auto-play all
+            return True
+        elif self.video_playback_mode == 1:  # Auto-play visible only
+            # Simple visibility check for now
+            return thumbnail.isVisible()
+        elif self.video_playback_mode == 2:  # Disabled
+            return False
+        
+        return False
         
         print(f"[DEBUG] After filtering: {len(filtered_images)} images remaining (from {len(images)} total)")
         return filtered_images
@@ -3767,3 +3824,52 @@ Check console for detailed output."""
                     parent = parent.parent()
             except Exception:
                 pass
+    
+    def set_video_playback_mode(self, mode: int) -> None:
+        """Set the video playback mode and apply it immediately.
+        
+        Args:
+            mode: Video playback mode (0=auto-play all, 1=auto-play visible, 2=disabled)
+        """
+        self.video_playback_mode = mode
+        self.settings.setValue("gallery/video_playback_mode", mode)
+        
+        # Apply the mode to all existing video thumbnails
+        self._apply_video_playback_mode()
+    
+    def _apply_video_playback_mode(self) -> None:
+        """Apply the current video playback mode to all video thumbnails."""
+        for image_id, thumbnail in self.thumbnails.items():
+            if thumbnail.is_animated:
+                if self.video_playback_mode == 0:  # Auto-play all
+                    thumbnail.restart_animation()
+                elif self.video_playback_mode == 1:  # Auto-play visible only
+                    # For now, use simple visibility check (can be enhanced later)
+                    if thumbnail.isVisible():
+                        thumbnail.restart_animation()
+                    else:
+                        thumbnail.stop_animation()
+                elif self.video_playback_mode == 2:  # Disabled
+                    thumbnail.stop_animation()
+    
+    def _should_play_video_thumbnail(self, thumbnail: 'ThumbnailWidget') -> bool:
+        """Determine if a video thumbnail should be playing based on current mode.
+        
+        Args:
+            thumbnail: The thumbnail widget to check
+            
+        Returns:
+            True if the video should be playing, False otherwise
+        """
+        if not thumbnail.is_animated:
+            return False
+            
+        if self.video_playback_mode == 0:  # Auto-play all
+            return True
+        elif self.video_playback_mode == 1:  # Auto-play visible only
+            # Simple visibility check for now
+            return thumbnail.isVisible()
+        elif self.video_playback_mode == 2:  # Disabled
+            return False
+        
+        return False

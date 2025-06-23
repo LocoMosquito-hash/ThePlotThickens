@@ -340,6 +340,25 @@ class MainWindow(QMainWindow):
         self.manual_refresh_checkbox.toggled.connect(self.on_manual_refresh_toggled)
         gallery_button_layout.addWidget(self.manual_refresh_checkbox)
         
+        # Add Video Playback dropdown
+        video_playback_label = QLabel("Video Playback:")
+        video_playback_label.setToolTip("Control how video thumbnails are played in the gallery")
+        gallery_button_layout.addWidget(video_playback_label)
+        
+        self.video_playback_combo = QComboBox()
+        self.video_playback_combo.addItems([
+            "Auto-play all video thumbnails",
+            "Auto-play only on-screen videos", 
+            "Auto-play disabled"
+        ])
+        self.video_playback_combo.setToolTip("Select video thumbnail playback mode")
+        # Load setting from preferences (default to index 0 - "Auto-play all")
+        saved_mode = self.settings.value("gallery/video_playback_mode", 0, type=int)
+        self.video_playback_combo.setCurrentIndex(saved_mode)
+        # Save setting when changed
+        self.video_playback_combo.currentIndexChanged.connect(self.on_video_playback_mode_changed)
+        gallery_button_layout.addWidget(self.video_playback_combo)
+        
         gallery_button_layout.addStretch()
         gallery_layout.addLayout(gallery_button_layout)
         
@@ -747,4 +766,35 @@ class MainWindow(QMainWindow):
         Returns:
             True if manual refresh is enabled, False otherwise
         """
-        return self.manual_refresh_checkbox.isChecked() if hasattr(self, 'manual_refresh_checkbox') else False 
+        return self.manual_refresh_checkbox.isChecked() if hasattr(self, 'manual_refresh_checkbox') else False
+    
+    def on_video_playback_mode_changed(self, index: int) -> None:
+        """Handle video playback mode change.
+        
+        Args:
+            index: Selected index (0=auto-play all, 1=auto-play visible, 2=disabled)
+        """
+        # Save the setting
+        self.settings.setValue("gallery/video_playback_mode", index)
+        
+        # Show status message
+        mode_names = [
+            "Auto-play all video thumbnails",
+            "Auto-play only on-screen videos", 
+            "Auto-play disabled"
+        ]
+        self.status_bar.showMessage(f"Video playback mode: {mode_names[index]}", 3000)
+        
+        # Apply the setting immediately to the gallery
+        if hasattr(self, 'gallery') and self.gallery:
+            self.gallery.set_video_playback_mode(index)
+    
+    def get_video_playback_mode(self) -> int:
+        """Get the current video playback mode.
+        
+        Returns:
+            Current video playback mode (0=auto-play all, 1=auto-play visible, 2=disabled)
+        """
+        if hasattr(self, 'video_playback_combo'):
+            return self.video_playback_combo.currentIndex()
+        return 0  # Default to auto-play all 
