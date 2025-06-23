@@ -121,7 +121,7 @@ class ThumbnailWidget(QFrame):
     
     def __del__(self):
         """Cleanup when widget is destroyed."""
-        self.stop_animation()
+        self.clear_animation()
     
     def mousePressEvent(self, event) -> None:
         """Handle mouse press events."""
@@ -233,19 +233,57 @@ class ThumbnailWidget(QFrame):
         
         return True
     
-    def stop_animation(self):
-        """Stop any running animation and clean up resources."""
+    def stop_animation(self, show_static_frame: bool = True):
+        """Stop any running animation and optionally show static frame.
+        
+        Args:
+            show_static_frame: If True, show the first frame as a static image
+        """
         if self.movie:
+            if show_static_frame and self.thumbnail_path:
+                # Get the first frame as a static pixmap
+                self.movie.jumpToFrame(0)
+                first_frame = self.movie.currentPixmap()
+                if not first_frame.isNull():
+                    # Scale the first frame to fit our thumbnail size
+                    scaled_frame = first_frame.scaled(
+                        150, 130,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    # Clear the movie and set the static pixmap
+                    self.image_label.setMovie(None)
+                    self.image_label.setPixmap(scaled_frame)
+                else:
+                    # Fallback to clearing movie and showing original pixmap
+                    self.image_label.setMovie(None)
+                    self.update_displayed_pixmap()
+            else:
+                # Just clear the movie
+                self.image_label.setMovie(None)
+                self.update_displayed_pixmap()
+            
             self.movie.stop()
             self.movie = None
         
-        self.is_animated = False
-        self.image_label.setMovie(None)  # Clear the movie from the label
+        # Note: Keep is_animated as True so we can restart the animation later
+        # Only set it to False when completely removing animation capability
     
     def restart_animation(self):
         """Restart the animation if this thumbnail is animated."""
         if self.is_animated and self.thumbnail_path:
             self.set_animated_thumbnail(self.thumbnail_path)
+    
+    def clear_animation(self):
+        """Completely remove animation capability and clean up resources."""
+        if self.movie:
+            self.movie.stop()
+            self.movie = None
+        
+        self.is_animated = False
+        self.thumbnail_path = None
+        self.image_label.setMovie(None)
+        self.update_displayed_pixmap()
     
     def show_context_menu(self, position):
         """Show context menu when right-clicking on the thumbnail.
