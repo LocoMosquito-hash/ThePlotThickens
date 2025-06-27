@@ -9,17 +9,112 @@ import win32process
 import win32ui
 import win32con
 import psutil
+import time
+import ctypes
+from ctypes import wintypes, Structure, Union, POINTER, c_ulong, c_ushort, c_long
 from typing import List, Tuple, Optional
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QWidget, 
     QTableWidget, QTableWidgetItem, QHeaderView,
     QPushButton, QHBoxLayout, QLabel, QTabWidget,
-    QTextEdit, QSplitter, QScrollArea
+    QTextEdit, QSplitter, QScrollArea, QCheckBox, QMessageBox
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QPixmap, QImage
 import io
 from PIL import Image
+
+# Virtual key codes
+VK_H = 0x48  # Virtual key code for 'H'
+
+# SendInput structures and constants
+INPUT_KEYBOARD = 1
+KEYEVENTF_KEYUP = 0x0002
+
+# Windows Message constants
+WM_KEYDOWN = 0x0100
+WM_KEYUP = 0x0101
+WM_CHAR = 0x0102
+
+class KEYBDINPUT(Structure):
+    _fields_ = [
+        ('wVk', wintypes.WORD),
+        ('wScan', wintypes.WORD),
+        ('dwFlags', wintypes.DWORD),
+        ('time', wintypes.DWORD),
+        ('dwExtraInfo', ctypes.POINTER(wintypes.ULONG)),
+    ]
+
+class MOUSEINPUT(Structure):
+    _fields_ = [
+        ('dx', wintypes.LONG),
+        ('dy', wintypes.LONG),
+        ('mouseData', wintypes.DWORD),
+        ('dwFlags', wintypes.DWORD),
+        ('time', wintypes.DWORD),
+        ('dwExtraInfo', ctypes.POINTER(wintypes.ULONG)),
+    ]
+
+class HARDWAREINPUT(Structure):
+    _fields_ = [
+        ('uMsg', wintypes.DWORD),
+        ('wParamL', wintypes.WORD),
+        ('wParamH', wintypes.WORD),
+    ]
+
+class INPUT_UNION(Union):
+    _fields_ = [
+        ('ki', KEYBDINPUT),
+        ('mi', MOUSEINPUT),
+        ('hi', HARDWAREINPUT),
+    ]
+
+class INPUT(Structure):
+    _fields_ = [
+        ('type', wintypes.DWORD),
+        ('union', INPUT_UNION),
+    ]
+
+
+def is_admin():
+    """Check if the current process is running with administrator privileges."""
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+
+def get_process_elevation_type(pid):
+    """Get the elevation type of a process."""
+    try:
+        # Open process handle
+        process_handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not process_handle:
+            return "Unknown"
+        
+        # Get process token
+        token_handle = wintypes.HANDLE()
+        if not ctypes.windll.advapi32.OpenProcessToken(process_handle, 0x8, ctypes.byref(token_handle)):  # TOKEN_QUERY
+            ctypes.windll.kernel32.CloseHandle(process_handle)
+            return "Unknown"
+        
+        # Query token elevation
+        elevation = wintypes.DWORD()
+        return_length = wintypes.DWORD()
+        
+        # TOKEN_ELEVATION = 20
+        if ctypes.windll.advapi32.GetTokenInformation(
+            token_handle, 20, ctypes.byref(elevation), 
+            ctypes.sizeof(elevation), ctypes.byref(return_length)):
+            result = "Elevated" if elevation.value else "Standard"
+        else:
+            result = "Unknown"
+        
+        ctypes.windll.kernel32.CloseHandle(token_handle)
+        ctypes.windll.kernel32.CloseHandle(process_handle)
+        return result
+    except:
+        return "Unknown"
 
 
 class WindowInfo:
@@ -86,11 +181,42 @@ class ScreenshotTab(QWidget):
         title_label.setFont(title_font)
         layout.addWidget(title_label)
         
+        # Elevation warning if not admin
+        if not is_admin():
+            warning_label = QLabel("⚠️ Running without administrator privileges. Keyboard automation may fail due to Windows 11 UAC security.")
+            warning_label.setStyleSheet("color: #ff9800; background-color: #fff3e0; padding: 8px; border-radius: 4px;")
+            warning_label.setWordWrap(True)
+            layout.addWidget(warning_label)
+        
+        # Renpy checkbox
+        self.hide_renpy_checkbox = QCheckBox("Hide Renpy text before and after capture")
+        self.hide_renpy_checkbox.setToolTip("Sends 'H' key to toggle Renpy dialog text before and after screenshot")
+        layout.addWidget(self.hide_renpy_checkbox)
+        
+        # Test keyboard automation button
+        test_layout = QHBoxLayout()
+        self.test_keyboard_button = QPushButton("🧪 Test Keyboard Automation (on Notepad)")
+        self.test_keyboard_button.setToolTip("Opens Notepad and tests if keyboard automation works by typing 'H'")
+        self.test_keyboard_button.clicked.connect(self.test_keyboard_automation)
+        self.test_keyboard_button.setStyleSheet("background-color: #2196f3; color: white;")
+        test_layout.addWidget(self.test_keyboard_button)
+        test_layout.addStretch()
+        layout.addLayout(test_layout)
+        
         # Capture button
         button_layout = QHBoxLayout()
         self.capture_button = QPushButton("Capture Screenshot (Client Area)")
         self.capture_button.clicked.connect(self.capture_screenshot)
         button_layout.addWidget(self.capture_button)
+        
+        # Admin restart button
+        if not is_admin():
+            self.admin_button = QPushButton("Restart as Administrator")
+            self.admin_button.setToolTip("Restart this application with administrator privileges for better keyboard automation")
+            self.admin_button.clicked.connect(self.restart_as_admin)
+            self.admin_button.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;")
+            button_layout.addWidget(self.admin_button)
+        
         button_layout.addStretch()
         layout.addLayout(button_layout)
         
@@ -112,7 +238,284 @@ class ScreenshotTab(QWidget):
         
         self.scroll_area.setWidget(self.image_label)
         layout.addWidget(self.scroll_area)
-        
+    
+    def restart_as_admin(self):
+        """Restart the application with administrator privileges."""
+        try:
+            # Show confirmation dialog
+            reply = QMessageBox.question(
+                self, 
+                'Restart as Administrator', 
+                'This will restart the application with administrator privileges, which may resolve keyboard automation issues.\n\nContinue?',
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Get current script path
+                script_path = sys.argv[0]
+                
+                # Use ShellExecute with "runas" to prompt for elevation
+                ctypes.windll.shell32.ShellExecuteW(
+                    None, 
+                    "runas", 
+                    sys.executable, 
+                    f'"{script_path}"', 
+                    None, 
+                    1  # SW_SHOWNORMAL
+                )
+                
+                # Close current instance
+                QApplication.quit()
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Restart Failed", f"Failed to restart as administrator: {str(e)}")
+    
+    def test_keyboard_automation(self):
+        """Test keyboard automation by opening Notepad and sending 'H' key."""
+        try:
+            import subprocess
+            import time
+            
+            self.status_label.setText("🧪 Opening Notepad for keyboard test...")
+            self.status_label.setStyleSheet("color: #1976d2;")
+            
+            # Open Notepad
+            process = subprocess.Popen(['notepad.exe'])
+            time.sleep(2)  # Wait for Notepad to open
+            
+            # Find Notepad window
+            notepad_hwnd = None
+            
+            def find_notepad_callback(hwnd, lparam):
+                nonlocal notepad_hwnd
+                if win32gui.IsWindowVisible(hwnd):
+                    window_text = win32gui.GetWindowText(hwnd)
+                    class_name = win32gui.GetClassName(hwnd)
+                    if 'Notepad' in window_text or class_name == 'Notepad':
+                        notepad_hwnd = hwnd
+                return True
+            
+            win32gui.EnumWindows(find_notepad_callback, None)
+            
+            if not notepad_hwnd:
+                self.status_label.setText("❌ Could not find Notepad window")
+                self.status_label.setStyleSheet("color: #d32f2f;")
+                return
+            
+            self.status_label.setText("🎯 Found Notepad window, testing keyboard methods...")
+            self.status_label.setStyleSheet("color: #1976d2;")
+            
+            # Test keyboard automation on Notepad
+            success = self.send_h_key_to_window(notepad_hwnd)
+            
+            if success:
+                self.status_label.setText("✅ Keyboard automation test SUCCESSFUL! Check Notepad for 'H' character.")
+                self.status_label.setStyleSheet("color: #4caf50;")
+                QMessageBox.information(self, "Test Result", "✅ Keyboard automation is working!\n\nCheck Notepad - you should see an 'H' character typed.\n\nThis means the keyboard methods work and the issue might be:\n1. Renpy-specific behavior\n2. Window focusing issues\n3. Timing problems")
+            else:
+                self.status_label.setText("❌ Keyboard automation test FAILED on Notepad")
+                self.status_label.setStyleSheet("color: #d32f2f;")
+                QMessageBox.warning(self, "Test Result", "❌ Keyboard automation failed even on Notepad.\n\nThis indicates a fundamental issue with keyboard automation on this system.\n\nTry:\n1. Running as Administrator\n2. Checking Windows security settings\n3. Temporarily disabling antivirus")
+                
+        except Exception as e:
+            self.status_label.setText(f"❌ Test failed: {str(e)}")
+            self.status_label.setStyleSheet("color: #d32f2f;")
+    
+    def send_h_key_to_window(self, hwnd: int) -> bool:
+        """Send 'H' key to window using multiple methods with Windows restrictions bypass."""
+        try:
+            self.status_label.setText("🔑 DEBUG: Starting keyboard automation...")
+            self.status_label.setStyleSheet("color: #1976d2;")
+            QApplication.processEvents()
+            
+            # Method 1: Advanced SetForegroundWindow with AttachThreadInput bypass
+            success = self.force_window_foreground_advanced(hwnd)
+            if success:
+                self.status_label.setText("✅ Window focused successfully using advanced method")
+                self.status_label.setStyleSheet("color: #388e3c;")
+            else:
+                self.status_label.setText("⚠️ Advanced focus failed, trying fallback methods...")
+                self.status_label.setStyleSheet("color: #ff9800;")
+            
+            QApplication.processEvents()
+            time.sleep(0.5)  # Wait for focus to settle
+            
+            # Try multiple input methods
+            methods_tried = []
+            
+            # Method A: SendInput API (works best when properly focused)
+            try:
+                if self.send_input_h_key(hwnd):
+                    methods_tried.append("SendInput: SUCCESS ✅")
+                    self.status_label.setText(f"🎯 SendInput method worked! H key sent successfully")
+                    self.status_label.setStyleSheet("color: #388e3c;")
+                    return True
+                else:
+                    methods_tried.append("SendInput: FAILED ❌")
+            except Exception as e:
+                methods_tried.append(f"SendInput: ERROR - {str(e)}")
+            
+            # Method B: PostMessage WM_KEYDOWN/WM_KEYUP
+            try:
+                result1 = ctypes.windll.user32.PostMessageW(hwnd, 0x0100, 0x48, 0x00230001)  # WM_KEYDOWN
+                time.sleep(0.1)
+                result2 = ctypes.windll.user32.PostMessageW(hwnd, 0x0101, 0x48, 0xC0230001)  # WM_KEYUP
+                
+                if result1 and result2:
+                    methods_tried.append("PostMessage: SUCCESS ✅")
+                    self.status_label.setText(f"🎯 PostMessage method worked! H key sent successfully")
+                    self.status_label.setStyleSheet("color: #388e3c;")
+                    return True
+                else:
+                    methods_tried.append("PostMessage: FAILED ❌")
+            except Exception as e:
+                methods_tried.append(f"PostMessage: ERROR - {str(e)}")
+            
+            # Method C: SendMessage (synchronous)
+            try:
+                result1 = ctypes.windll.user32.SendMessageW(hwnd, 0x0100, 0x48, 0x00230001)  # WM_KEYDOWN
+                time.sleep(0.1)
+                result2 = ctypes.windll.user32.SendMessageW(hwnd, 0x0101, 0x48, 0xC0230001)  # WM_KEYUP
+                
+                if result1 is not None and result2 is not None:
+                    methods_tried.append("SendMessage: SUCCESS ✅")
+                    self.status_label.setText(f"🎯 SendMessage method worked! H key sent successfully")
+                    self.status_label.setStyleSheet("color: #388e3c;")
+                    return True
+                else:
+                    methods_tried.append("SendMessage: FAILED ❌")
+            except Exception as e:
+                methods_tried.append(f"SendMessage: ERROR - {str(e)}")
+            
+            # Method D: WM_CHAR approach
+            try:
+                result = ctypes.windll.user32.PostMessageW(hwnd, 0x0102, ord('h'), 0)  # WM_CHAR lowercase
+                if result:
+                    methods_tried.append("WM_CHAR(h): SUCCESS ✅")
+                    self.status_label.setText(f"🎯 WM_CHAR method worked! H key sent successfully")
+                    self.status_label.setStyleSheet("color: #388e3c;")
+                    return True
+                else:
+                    methods_tried.append("WM_CHAR(h): FAILED ❌")
+                    
+                # Try uppercase H
+                result = ctypes.windll.user32.PostMessageW(hwnd, 0x0102, ord('H'), 0)  # WM_CHAR uppercase
+                if result:
+                    methods_tried.append("WM_CHAR(H): SUCCESS ✅")
+                    self.status_label.setText(f"🎯 WM_CHAR(H) method worked! H key sent successfully")
+                    self.status_label.setStyleSheet("color: #388e3c;")
+                    return True
+                else:
+                    methods_tried.append("WM_CHAR(H): FAILED ❌")
+            except Exception as e:
+                methods_tried.append(f"WM_CHAR: ERROR - {str(e)}")
+            
+            # All methods failed
+            failed_methods = "\n".join(methods_tried)
+            self.status_label.setText(f"❌ All keyboard methods failed:\n{failed_methods}")
+            self.status_label.setStyleSheet("color: #f44336;")
+            
+            return False
+            
+        except Exception as e:
+            self.status_label.setText(f"💥 Critical error in keyboard automation: {str(e)}")
+            self.status_label.setStyleSheet("color: #f44336;")
+            return False
+    
+    def force_window_foreground_advanced(self, hwnd: int) -> bool:
+        """Advanced window focusing that bypasses Windows SetForegroundWindow restrictions."""
+        try:
+            if not ctypes.windll.user32.IsWindow(hwnd):
+                return False
+            
+            # Get current foreground window and thread info
+            current_hwnd = ctypes.windll.user32.GetForegroundWindow()
+            current_thread_id = ctypes.windll.user32.GetWindowThreadProcessId(current_hwnd, None)
+            target_thread_id = ctypes.windll.user32.GetWindowThreadProcessId(hwnd, None)
+            
+            self.status_label.setText(f"🔍 Current window: {current_hwnd}, Target: {hwnd}")
+            self.status_label.setStyleSheet("color: #1976d2;")
+            QApplication.processEvents()
+            
+            # If same thread, simple SetForegroundWindow should work
+            if current_thread_id == target_thread_id:
+                result = ctypes.windll.user32.SetForegroundWindow(hwnd)
+                if result:
+                    self.status_label.setText("✅ Same thread - SetForegroundWindow worked")
+                    return True
+            
+            # Different threads - use AttachThreadInput bypass
+            self.status_label.setText("🔧 Different threads detected, using AttachThreadInput bypass...")
+            self.status_label.setStyleSheet("color: #ff9800;")
+            QApplication.processEvents()
+            
+            # Attach input processing
+            attach_result = ctypes.windll.user32.AttachThreadInput(current_thread_id, target_thread_id, True)
+            
+            try:
+                # Try to bring window to front
+                ctypes.windll.user32.BringWindowToTop(hwnd)
+                ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE or SW_SHOW
+                result = ctypes.windll.user32.SetForegroundWindow(hwnd)
+                
+                if result:
+                    self.status_label.setText("✅ AttachThreadInput bypass successful!")
+                    self.status_label.setStyleSheet("color: #388e3c;")
+                    return True
+                else:
+                    self.status_label.setText("⚠️ AttachThreadInput bypass attempted but SetForegroundWindow still failed")
+                    self.status_label.setStyleSheet("color: #ff9800;")
+                    
+            finally:
+                # Always detach threads
+                if attach_result:
+                    ctypes.windll.user32.AttachThreadInput(current_thread_id, target_thread_id, False)
+            
+            return False
+            
+        except Exception as e:
+            self.status_label.setText(f"💥 Error in advanced focus: {str(e)}")
+            self.status_label.setStyleSheet("color: #f44336;")
+            return False
+    
+    def send_input_h_key(self, hwnd: int) -> bool:
+        """Send H key using SendInput API with proper INPUT structure."""
+        try:
+            # Structures for SendInput
+            class INPUT(Structure):
+                _fields_ = [("type", ctypes.c_ulong),
+                           ("union", ctypes.c_ulong * 6)]
+            
+            # Constants
+            INPUT_KEYBOARD = 1
+            KEYEVENTF_KEYUP = 0x0002
+            VK_H = 0x48
+            
+            # Create input events
+            inputs = (INPUT * 2)()
+            
+            # Key down
+            inputs[0].type = INPUT_KEYBOARD
+            inputs[0].union[1] = VK_H  # wVk
+            inputs[0].union[2] = 0     # wScan
+            inputs[0].union[3] = 0     # dwFlags
+            
+            # Key up  
+            inputs[1].type = INPUT_KEYBOARD
+            inputs[1].union[1] = VK_H  # wVk
+            inputs[1].union[2] = 0     # wScan
+            inputs[1].union[3] = KEYEVENTF_KEYUP  # dwFlags
+            
+            # Send the input
+            result = ctypes.windll.user32.SendInput(2, inputs, ctypes.sizeof(INPUT))
+            
+            return result == 2  # Should return number of events successfully sent
+            
+        except Exception as e:
+            print(f"SendInput error: {e}")
+            return False
+    
     def capture_screenshot(self) -> None:
         """Capture screenshot of the selected window's client area."""
         # Get selected window from Window Properties tab
@@ -141,6 +544,29 @@ class ScreenshotTab(QWidget):
                 self.status_label.setText("❌ Window is not visible.")
                 self.status_label.setStyleSheet("color: #d32f2f;")
                 return
+            
+            # Handle Renpy text hiding if checkbox is checked
+            checkbox_checked = self.hide_renpy_checkbox.isChecked()
+            self.status_label.setText(f"🔍 DEBUG: Renpy checkbox is {'CHECKED' if checkbox_checked else 'UNCHECKED'}")
+            self.status_label.setStyleSheet("color: #ff9800;")
+            
+            if checkbox_checked:
+                self.status_label.setText("🎮 Checkbox CHECKED - Attempting to hide Renpy text...")
+                self.status_label.setStyleSheet("color: #1976d2;")
+                
+                # Send first 'H' key to hide text
+                hide_success = self.send_h_key_to_window(selected_window.hwnd)
+                if not hide_success:
+                    self.status_label.setText("❌ FAILED to send hide keystroke, proceeding with capture...")
+                    self.status_label.setStyleSheet("color: #ff9800;")
+                else:
+                    self.status_label.setText("✅ Hide keystroke sent successfully, waiting for UI update...")
+                    self.status_label.setStyleSheet("color: #4caf50;")
+                    # Wait for the UI to update
+                    time.sleep(1)  # 1 second delay
+            else:
+                self.status_label.setText("📝 Checkbox UNCHECKED - Skipping Renpy text hiding")
+                self.status_label.setStyleSheet("color: #666;")
             
             self.status_label.setText("📸 Capturing screenshot...")
             self.status_label.setStyleSheet("color: #1976d2;")
@@ -183,7 +609,24 @@ class ScreenshotTab(QWidget):
                 bmpstr, 'raw', 'BGRX', 0, 1
             )
             
-            # Convert PIL Image to QPixmap
+            # Handle Renpy text restoration if checkbox is checked
+            if checkbox_checked:
+                # Wait before restoring text
+                time.sleep(0.2)  # 200ms delay
+                
+                self.status_label.setText("🎮 Attempting to restore Renpy text...")
+                self.status_label.setStyleSheet("color: #1976d2;")
+                
+                # Send second 'H' key to restore text
+                restore_success = self.send_h_key_to_window(selected_window.hwnd)
+                if not restore_success:
+                    self.status_label.setText("❌ FAILED to send restore keystroke")
+                    self.status_label.setStyleSheet("color: #ff9800;")
+                else:
+                    self.status_label.setText("✅ Restore keystroke sent successfully")
+                    self.status_label.setStyleSheet("color: #4caf50;")
+            
+            # Convert PIL Image to QPixmap and display
             self.display_screenshot(pil_image, selected_window)
             
             # Clean up
@@ -228,11 +671,13 @@ class ScreenshotTab(QWidget):
             # Display the scaled image
             self.image_label.setPixmap(scaled_pixmap)
             
-            # Update status
+            # Update status with detailed Renpy info if applicable
+            checkbox_state = "CHECKED" if self.hide_renpy_checkbox.isChecked() else "UNCHECKED"
+            renpy_status = f" | Renpy checkbox: {checkbox_state}"
             self.status_label.setText(
                 f"✅ Screenshot captured successfully! "
-                f"Original size: {pixmap.width()}x{pixmap.height()} | "
-                f"Window: {window_info.title}"
+                f"Size: {pixmap.width()}x{pixmap.height()} | "
+                f"Window: {window_info.title}{renpy_status}"
             )
             self.status_label.setStyleSheet("color: #388e3c;")
             
@@ -545,7 +990,7 @@ def main():
     
     # Set application metadata
     app.setApplicationName("Window Selector")
-    app.setApplicationVersion("3.0.0")
+    app.setApplicationVersion("5.0.0")
     app.setOrganizationName("The Plot Thickens")
     
     # Create and show main window
