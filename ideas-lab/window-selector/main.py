@@ -9,6 +9,7 @@ Key Features:
 - Progressive fallback system for maximum reliability
 - Optimized for Renpy screenshot capture workflows
 - Global hotkey support for background operation
+- Image stacking system for visual novel screenshot collection
 
 Technical Innovation:
 Uses PostMessage/SendMessage APIs instead of SetForegroundWindow/SendInput to bypass
@@ -25,17 +26,21 @@ import win32con
 import psutil
 import time
 import ctypes
+import os
+import glob
+import shutil
+from datetime import datetime
 from ctypes import wintypes, Structure, Union, POINTER, c_ulong, c_ushort, c_long
 from typing import List, Tuple, Optional
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QWidget, 
     QTableWidget, QTableWidgetItem, QHeaderView,
     QPushButton, QHBoxLayout, QLabel, QTabWidget,
-    QTextEdit, QSplitter, QScrollArea, QCheckBox, QMessageBox
+    QTextEdit, QSplitter, QScrollArea, QCheckBox, QMessageBox,
+    QListWidget, QListWidgetItem
 )
-from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
-from PyQt6.QtGui import QFont, QPixmap, QImage
-import io
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize
+from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon
 from PIL import Image
 
 # Global hotkeys import
@@ -189,6 +194,10 @@ class ScreenshotTab(QWidget):
         self.parent = parent
         self.current_pixmap: Optional[QPixmap] = None
         self.current_screenshot = None
+        self.image_stack_folder = os.path.join(os.path.dirname(__file__), "image-stack")
+        
+        # Ensure image-stack folder exists
+        os.makedirs(self.image_stack_folder, exist_ok=True)
         
         # Initialize global hotkey monitor
         self.global_hotkey_monitor = GlobalHotkeyMonitor()
@@ -196,50 +205,118 @@ class ScreenshotTab(QWidget):
         self.global_hotkey_monitor.status_update.connect(self.update_hotkey_status)
         
         self.init_ui()
+        self.load_existing_images()
         
-    def init_ui(self) -> None:
-        """Initialize the Screenshots tab UI."""
-        layout = QVBoxLayout(self)
+    def init_ui(self):
+        # Main horizontal layout: thumbnails on left, main content on right
+        main_layout = QHBoxLayout()
+        self.setLayout(main_layout)
+        
+        # Left panel: Vertical thumbnail list
+        thumbnail_panel = QVBoxLayout()
+        thumbnail_label = QLabel("📸 Image Stack")
+        thumbnail_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        thumbnail_label.setStyleSheet("color: #333; padding: 5px;")
+        thumbnail_panel.addWidget(thumbnail_label)
+        
+        # Thumbnail list widget
+        self.thumbnail_list = QListWidget()
+        self.thumbnail_list.setMaximumWidth(140)
+        self.thumbnail_list.setMinimumWidth(140)
+        self.thumbnail_list.setIconSize(QSize(100, 100))
+        self.thumbnail_list.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.thumbnail_list.setSpacing(5)
+        self.thumbnail_list.setStyleSheet("""
+            QListWidget {
+                background-color: #f5f5f5;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QListWidget::item {
+                background-color: white;
+                border: 1px solid #ccc;
+                border-radius: 3px;
+                margin: 2px;
+                padding: 2px;
+            }
+            QListWidget::item:selected {
+                background-color: #2196f3;
+                border: 2px solid #1976d2;
+            }
+            QListWidget::item:hover {
+                background-color: #e3f2fd;
+                border: 1px solid #2196f3;
+            }
+        """)
+        self.thumbnail_list.itemClicked.connect(self.on_thumbnail_clicked)
+        thumbnail_panel.addWidget(self.thumbnail_list)
+        
+        # Clear all images button
+        clear_button = QPushButton("🗑️ Clear All Images")
+        clear_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                border: none;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #d32f2f;
+            }
+            QPushButton:pressed {
+                background-color: #b71c1c;
+            }
+        """)
+        clear_button.clicked.connect(self.clear_all_images)
+        thumbnail_panel.addWidget(clear_button)
+        
+        # Create thumbnail panel widget
+        thumbnail_widget = QWidget()
+        thumbnail_widget.setLayout(thumbnail_panel)
+        main_layout.addWidget(thumbnail_widget)
+        
+        # Right panel: Main screenshot interface
+        right_layout = QVBoxLayout()
         
         # Global Hotkey Controls Section
         hotkey_group = QVBoxLayout()
-        hotkey_label = QLabel("🌍 Global Hotkey Control (INSERT Key)")
-        hotkey_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        hotkey_label = QLabel("🎯 Global Hotkey Controls")
+        hotkey_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         hotkey_group.addWidget(hotkey_label)
         
-        # Hotkey control buttons
-        hotkey_buttons = QHBoxLayout()
-        self.start_hotkey_button = QPushButton("🚀 Start Global Monitoring")
-        self.start_hotkey_button.setToolTip("Start monitoring INSERT key globally for screenshot capture")
-        self.start_hotkey_button.clicked.connect(self.start_global_hotkeys)
-        self.start_hotkey_button.setStyleSheet("background-color: #4caf50; color: white; font-weight: bold;")
-        
-        self.stop_hotkey_button = QPushButton("⏹️ Stop Monitoring")
-        self.stop_hotkey_button.setToolTip("Stop global hotkey monitoring")
-        self.stop_hotkey_button.clicked.connect(self.stop_global_hotkeys)
-        self.stop_hotkey_button.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;")
-        self.stop_hotkey_button.setEnabled(False)
-        
-        hotkey_buttons.addWidget(self.start_hotkey_button)
-        hotkey_buttons.addWidget(self.stop_hotkey_button)
-        hotkey_group.addLayout(hotkey_buttons)
-        
-        # Hotkey status info
-        hotkey_info = QLabel("💡 Usage: Press INSERT while target window is active to capture screenshot")
-        hotkey_info.setStyleSheet("color: #666; font-style: italic;")
+        hotkey_info = QLabel("Press INSERT while in the target window to capture screenshots in the background.")
+        hotkey_info.setWordWrap(True)
+        hotkey_info.setStyleSheet("color: #666; padding: 5px 0;")
         hotkey_group.addWidget(hotkey_info)
         
-        layout.addLayout(hotkey_group)
+        hotkey_button_layout = QHBoxLayout()
+        self.start_monitoring_button = QPushButton("🚀 Start Global Monitoring")
+        self.start_monitoring_button.setStyleSheet("background-color: #4caf50; color: white; font-weight: bold; padding: 8px; border-radius: 4px;")
+        self.start_monitoring_button.clicked.connect(self.start_global_monitoring)
+        
+        self.stop_monitoring_button = QPushButton("⏹️ Stop Monitoring")
+        self.stop_monitoring_button.setStyleSheet("background-color: #f44336; color: white; font-weight: bold; padding: 8px; border-radius: 4px;")
+        self.stop_monitoring_button.clicked.connect(self.stop_global_monitoring)
+        self.stop_monitoring_button.setEnabled(False)
+        
+        hotkey_button_layout.addWidget(self.start_monitoring_button)
+        hotkey_button_layout.addWidget(self.stop_monitoring_button)
+        hotkey_group.addLayout(hotkey_button_layout)
+        
+        right_layout.addLayout(hotkey_group)
         
         # Separator
-        separator = QLabel("─" * 80)
-        separator.setStyleSheet("color: #ccc;")
-        layout.addWidget(separator)
+        separator = QLabel()
+        separator.setStyleSheet("border-bottom: 1px solid #ddd; margin: 10px 0;")
+        right_layout.addWidget(separator)
         
         # Renpy checkbox
         self.hide_renpy_checkbox = QCheckBox("Hide Renpy text before and after capture")
         self.hide_renpy_checkbox.setToolTip("Sends 'H' key to toggle Renpy dialog text before and after screenshot")
-        layout.addWidget(self.hide_renpy_checkbox)
+        right_layout.addWidget(self.hide_renpy_checkbox)
         
         # Screenshot button
         button_layout = QHBoxLayout()
@@ -247,24 +324,151 @@ class ScreenshotTab(QWidget):
         self.screenshot_button.setToolTip("Capture client area of selected window")
         self.screenshot_button.clicked.connect(self.capture_screenshot)
         button_layout.addWidget(self.screenshot_button)
-        layout.addLayout(button_layout)
+        right_layout.addLayout(button_layout)
         
         # Status label
-        self.status_label = QLabel("Ready for screenshot capture")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet("color: #333; font-weight: bold; padding: 5px;")
-        layout.addWidget(self.status_label)
+        self.status_label = QLabel("Select a window from the Window Picker tab to capture screenshots")
+        self.status_label.setWordWrap(True)
+        self.status_label.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 4px; margin: 10px 0;")
+        right_layout.addWidget(self.status_label)
         
-        # Image display area with scroll
-        self.scroll_area = QScrollArea()
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Image display area
+        image_layout = QVBoxLayout()
+        image_label_title = QLabel("Screenshot Preview")
+        image_label_title.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        image_layout.addWidget(image_label_title)
+        
+        self.image_label = QLabel("Screenshot will appear here")
         self.image_label.setMinimumSize(400, 300)
-        self.image_label.setStyleSheet("border: 2px dashed #ccc; background-color: #f9f9f9;")
-        self.image_label.setText("Screenshot will appear here")
-        self.scroll_area.setWidget(self.image_label)
-        self.scroll_area.setWidgetResizable(True)
-        layout.addWidget(self.scroll_area)
+        self.image_label.setStyleSheet("border: 2px dashed #ccc; background-color: #fafafa; color: #999;")
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_label.setScaledContents(False)
+        
+        # Scroll area for large images
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(self.image_label)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setMinimumSize(400, 300)
+        image_layout.addWidget(scroll_area)
+        
+        right_layout.addLayout(image_layout)
+        
+        # Create right panel widget  
+        right_widget = QWidget()
+        right_widget.setLayout(right_layout)
+        main_layout.addWidget(right_widget)
+        
+        # Set proportions: thumbnail panel takes 1/5, main content takes 4/5
+        main_layout.setStretch(0, 1)  # Thumbnail panel
+        main_layout.setStretch(1, 4)  # Main content
+    
+    def load_existing_images(self):
+        """Load existing images from the image-stack folder into thumbnails."""
+        image_files = glob.glob(os.path.join(self.image_stack_folder, "*.png"))
+        image_files.extend(glob.glob(os.path.join(self.image_stack_folder, "*.jpg")))
+        image_files.sort()  # Sort by filename (which includes timestamp)
+        
+        for image_path in image_files:
+            self.add_thumbnail_to_list(image_path)
+            
+        if image_files:
+            self.status_label.setText(f"📁 Loaded {len(image_files)} existing images from image-stack folder")
+            self.status_label.setStyleSheet("color: #2196f3;")
+    
+    def add_thumbnail_to_list(self, image_path: str):
+        """Add a thumbnail to the vertical thumbnail list."""
+        try:
+            # Generate thumbnail using PIL
+            with Image.open(image_path) as img:
+                # Create thumbnail (120x120 max size while maintaining aspect ratio)
+                img.thumbnail((120, 120), Image.Resampling.LANCZOS)
+                
+                # Convert PIL Image to QPixmap
+                img_qt = img.convert('RGBA')
+                h, w, ch = img_qt.size[1], img_qt.size[0], 4
+                bytes_per_line = ch * w
+                qt_image = QImage(img_qt.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGBA8888)
+                thumbnail_pixmap = QPixmap.fromImage(qt_image)
+            
+            # Create list widget item
+            item = QListWidgetItem()
+            scaled_pixmap = thumbnail_pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            item.setIcon(QIcon(scaled_pixmap))  # Convert QPixmap to QIcon
+            item.setData(Qt.ItemDataRole.UserRole, image_path)  # Store full path
+            item.setToolTip(f"Click to view: {os.path.basename(image_path)}")
+            
+            # Add to the top of the list (most recent first)
+            self.thumbnail_list.insertItem(0, item)
+            
+        except Exception as e:
+            print(f"Error creating thumbnail for {image_path}: {e}")
+    
+    def on_thumbnail_clicked(self, item: QListWidgetItem):
+        """Handle thumbnail click to display full image."""
+        image_path = item.data(Qt.ItemDataRole.UserRole)
+        
+        try:
+            # Load and display the full image
+            pixmap = QPixmap(image_path)
+            if not pixmap.isNull():
+                # Scale image to fit the display area while maintaining aspect ratio
+                scaled_pixmap = pixmap.scaled(
+                    self.image_label.size(), 
+                    Qt.AspectRatioMode.KeepAspectRatio, 
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                
+                self.image_label.setPixmap(scaled_pixmap)
+                self.current_pixmap = pixmap  # Store original for potential operations
+                
+                filename = os.path.basename(image_path)
+                self.status_label.setText(f"📷 Viewing: {filename} | Size: {pixmap.width()}x{pixmap.height()}")
+                self.status_label.setStyleSheet("color: #4caf50;")
+            else:
+                self.status_label.setText(f"❌ Failed to load image: {os.path.basename(image_path)}")
+                self.status_label.setStyleSheet("color: #f44336;")
+                
+        except Exception as e:
+            self.status_label.setText(f"❌ Error loading image: {str(e)}")
+            self.status_label.setStyleSheet("color: #f44336;")
+    
+    def clear_all_images(self):
+        """Clear all images from thumbnail list and delete files from image-stack folder."""
+        # Confirm with user
+        reply = QMessageBox.question(
+            self, 
+            "Clear All Images", 
+            "This will delete ALL images in the image-stack folder and clear the thumbnail list.\n\nAre you sure you want to continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                # Clear thumbnail list
+                self.thumbnail_list.clear()
+                
+                # Delete all image files in the image-stack folder
+                image_files = glob.glob(os.path.join(self.image_stack_folder, "*"))
+                deleted_count = 0
+                
+                for file_path in image_files:
+                    if os.path.isfile(file_path) and file_path.lower().endswith(('.png', '.jpg', '.jpeg')):
+                        os.remove(file_path)
+                        deleted_count += 1
+                
+                # Clear main image display
+                self.image_label.clear()
+                self.image_label.setText("Screenshot will appear here")
+                self.current_pixmap = None
+                
+                self.status_label.setText(f"🗑️ Cleared {deleted_count} images from image stack")
+                self.status_label.setStyleSheet("color: #ff5722;")
+                
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to clear images: {str(e)}")
+                self.status_label.setText(f"❌ Error clearing images: {str(e)}")
+                self.status_label.setStyleSheet("color: #f44336;")
     
     def update_hotkey_status(self, message: str, color: str):
         """Update status label with hotkey-related messages."""
@@ -393,6 +597,22 @@ class ScreenshotTab(QWidget):
                     self.status_label.setText("✅ Restore keystroke sent successfully")
                     self.status_label.setStyleSheet("color: #4caf50;")
             
+            # Save the screenshot to image-stack folder with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"screenshot_{timestamp}.png"
+            filepath = os.path.join(self.image_stack_folder, filename)
+            
+            try:
+                pil_image.save(filepath, "PNG")
+                save_msg = f"💾 Screenshot saved: {filename}"
+                print(f"[IMAGE STACK] {save_msg}")
+                
+                # Add to thumbnail list (most recent first)
+                self.add_thumbnail_to_list(filepath)
+                
+            except Exception as save_error:
+                print(f"[IMAGE STACK] Failed to save screenshot: {str(save_error)}")
+            
             # Convert PIL Image to QPixmap and display
             self.display_screenshot(pil_image, selected_window)
             
@@ -427,7 +647,7 @@ class ScreenshotTab(QWidget):
             self.current_pixmap = pixmap
             
             # Scale to fit the available space while maintaining aspect ratio
-            available_size = self.scroll_area.size()
+            available_size = self.image_label.size()
             scaled_pixmap = pixmap.scaled(
                 available_size.width() - 20,  # Account for margins
                 available_size.height() - 20,
@@ -615,7 +835,7 @@ class ScreenshotTab(QWidget):
             print(f"SendInput error: {e}")
             return False
 
-    def start_global_hotkeys(self):
+    def start_global_monitoring(self):
         """Start global hotkey monitoring."""
         # Get the selected window to monitor
         selected_window = self.parent.window_picker_tab.get_selected_window()
@@ -628,14 +848,14 @@ class ScreenshotTab(QWidget):
         self.global_hotkey_monitor.set_target_window(selected_window)
         
         if self.global_hotkey_monitor.start_monitoring():
-            self.start_hotkey_button.setEnabled(False)
-            self.stop_hotkey_button.setEnabled(True)
+            self.start_monitoring_button.setEnabled(False)
+            self.stop_monitoring_button.setEnabled(True)
         
-    def stop_global_hotkeys(self):
+    def stop_global_monitoring(self):
         """Stop global hotkey monitoring."""
         self.global_hotkey_monitor.stop_monitoring()
-        self.start_hotkey_button.setEnabled(True)
-        self.stop_hotkey_button.setEnabled(False)
+        self.start_monitoring_button.setEnabled(True)
+        self.stop_monitoring_button.setEnabled(False)
 
 
 class WindowPropertiesTab(QWidget):
