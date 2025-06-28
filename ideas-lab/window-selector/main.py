@@ -40,7 +40,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize, QEvent
-from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QKeyEvent
+from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QKeyEvent, QPainter, QColor, QPen
 from PIL import Image
 
 # Global hotkeys import
@@ -61,6 +61,102 @@ KEYEVENTF_KEYUP = 0x0002
 WM_KEYDOWN = 0x0100
 WM_KEYUP = 0x0101
 WM_CHAR = 0x0102
+
+
+class CrosshairOverlay(QWidget):
+    """
+    Overlay widget that displays green crosshair guide lines following the mouse cursor.
+    
+    This widget sits on top of the image display and shows dashed green lines
+    (horizontal and vertical) that intersect at the mouse position, similar to
+    crosshairs used in image editing software for precise alignment.
+    
+    Features:
+    - Green dashed lines (2px thickness)
+    - Only visible when mouse is hovering over the image
+    - Real-time tracking of mouse movement
+    - No interference with existing image display functionality
+    """
+    
+    def __init__(self, parent_widget):
+        super().__init__(parent_widget)
+        self.parent_widget = parent_widget
+        self.mouse_pos = None
+        self.is_hovering = False
+        
+        # Enable mouse tracking and allow mouse events to pass through when needed
+        self.setMouseTracking(True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        
+        # Make overlay fill parent completely and ensure it's on top
+        self.resize(parent_widget.size())
+        self.move(0, 0)
+        
+        # Start hidden
+        self.hide()
+    
+    def paintEvent(self, event):
+        """Draw green dashed crosshair lines at mouse position."""
+        if not self.is_hovering or not self.mouse_pos:
+            return
+            
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Set up green dashed pen (2px thickness)
+        pen = QPen(QColor(0, 255, 0))  # Pure green
+        pen.setWidth(2)
+        pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        
+        # Get widget dimensions
+        width = self.width()
+        height = self.height()
+        
+        # Mouse position
+        mouse_x = int(self.mouse_pos.x())
+        mouse_y = int(self.mouse_pos.y())
+        
+        # Draw horizontal line (across full width)
+        painter.drawLine(0, mouse_y, width, mouse_y)
+        
+        # Draw vertical line (across full height)  
+        painter.drawLine(mouse_x, 0, mouse_x, height)
+        
+        painter.end()
+    
+    def mouseMoveEvent(self, event):
+        """Update mouse position and trigger repaint."""
+        self.mouse_pos = event.position()
+        self.update()  # Trigger paintEvent
+        # Pass event to parent to maintain normal behavior
+        super().mouseMoveEvent(event)
+    
+    def enterEvent(self, event):
+        """Show crosshairs when mouse enters the image area."""
+        self.is_hovering = True
+        self.show()
+        self.update()  # Ensure immediate redraw
+        super().enterEvent(event)
+    
+    def leaveEvent(self, event):
+        """Hide crosshairs when mouse leaves the image area."""
+        self.is_hovering = False
+        self.update()  # Clear the lines first
+        self.hide()
+        super().leaveEvent(event)
+    
+    def update_position(self):
+        """Update overlay position and size to match parent widget exactly."""
+        if self.parent_widget:
+            # Ensure overlay covers the entire parent widget
+            self.resize(self.parent_widget.size())
+            self.move(0, 0)
+            self.raise_()  # Bring to front
+            
+            # Force mouse tracking update
+            self.setMouseTracking(True)
+
 
 class KEYBDINPUT(Structure):
     _fields_ = [
@@ -353,11 +449,16 @@ class ScreenshotTab(QWidget):
         self.image_label.setScaledContents(False)
         
         # Scroll area for large images
-        scroll_area = QScrollArea()
-        scroll_area.setWidget(self.image_label)
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setMinimumSize(400, 300)
-        image_layout.addWidget(scroll_area)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setWidget(self.image_label)
+        
+        # Add crosshair overlay directly to image label for proper event handling
+        self.crosshair_overlay = CrosshairOverlay(self.image_label)
+        self.crosshair_overlay.hide()  # Start hidden
+        
+        self.scroll_area.setMinimumSize(400, 300)
+        image_layout.addWidget(self.scroll_area)
         
         right_layout.addLayout(image_layout)
         
@@ -428,6 +529,10 @@ class ScreenshotTab(QWidget):
                 
                 self.image_label.setPixmap(scaled_pixmap)
                 self.current_pixmap = pixmap  # Store original for potential operations
+                
+                # Show and update crosshair overlay position
+                self.crosshair_overlay.update_position()
+                self.crosshair_overlay.show()
                 
                 filename = os.path.basename(image_path)
                 self.status_label.setText(f"📷 Viewing: {filename} | Size: {pixmap.width()}x{pixmap.height()}")
@@ -676,6 +781,10 @@ class ScreenshotTab(QWidget):
             # Display the scaled image
             self.image_label.setPixmap(scaled_pixmap)
             
+            # Show and update crosshair overlay position
+            self.crosshair_overlay.update_position()
+            self.crosshair_overlay.show()
+            
             # Update status with detailed Renpy info if applicable
             checkbox_state = "CHECKED" if self.hide_renpy_checkbox.isChecked() else "UNCHECKED"
             renpy_status = f" | Renpy checkbox: {checkbox_state}"
@@ -721,8 +830,8 @@ class ScreenshotTab(QWidget):
             bool: True if H key was successfully sent, False otherwise
             
         Methods attempted in order:
-        1. PostMessage (WM_KEYDOWN/WM_KEYUP) - Asynchronous, works without focus
-        2. SendMessage (WM_KEYDOWN/WM_KEYUP) - Synchronous, works without focus  
+        1. PostMessage WM_KEYDOWN/WM_KEYUP (works without focus)
+        2. SendMessage (synchronous, works without focus)
         3. WM_CHAR (both lowercase/uppercase) - Character-based input
         4. SendInput (last resort) - Requires window focus
         
