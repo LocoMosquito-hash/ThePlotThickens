@@ -8,6 +8,7 @@ Key Features:
 - Cross-privilege compatibility (no UAC elevation required) 
 - Progressive fallback system for maximum reliability
 - Optimized for Renpy screenshot capture workflows
+- Global hotkey support for background operation
 
 Technical Innovation:
 Uses PostMessage/SendMessage APIs instead of SetForegroundWindow/SendInput to bypass
@@ -32,10 +33,17 @@ from PyQt6.QtWidgets import (
     QPushButton, QHBoxLayout, QLabel, QTabWidget,
     QTextEdit, QSplitter, QScrollArea, QCheckBox, QMessageBox
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QPixmap, QImage
 import io
 from PIL import Image
+
+# Global hotkeys import
+try:
+    from global_hotkeys import *
+    GLOBAL_HOTKEYS_AVAILABLE = True
+except ImportError:
+    GLOBAL_HOTKEYS_AVAILABLE = False
 
 # Virtual key codes
 VK_H = 0x48  # Virtual key code for 'H'
@@ -180,26 +188,53 @@ class ScreenshotTab(QWidget):
         super().__init__()
         self.parent = parent
         self.current_pixmap: Optional[QPixmap] = None
+        self.current_screenshot = None
+        
+        # Initialize global hotkey monitor
+        self.global_hotkey_monitor = GlobalHotkeyMonitor()
+        self.global_hotkey_monitor.screenshot_requested.connect(self.capture_screenshot_from_hotkey)
+        self.global_hotkey_monitor.status_update.connect(self.update_hotkey_status)
+        
         self.init_ui()
         
     def init_ui(self) -> None:
         """Initialize the Screenshots tab UI."""
         layout = QVBoxLayout(self)
         
-        # Title
-        title_label = QLabel("Screenshots")
-        title_font = QFont()
-        title_font.setPointSize(14)
-        title_font.setBold(True)
-        title_label.setFont(title_font)
-        layout.addWidget(title_label)
+        # Global Hotkey Controls Section
+        hotkey_group = QVBoxLayout()
+        hotkey_label = QLabel("🌍 Global Hotkey Control (INSERT Key)")
+        hotkey_label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        hotkey_group.addWidget(hotkey_label)
         
-        # Elevation warning if not admin
-        if not is_admin():
-            warning_label = QLabel("⚠️ Running without administrator privileges. Keyboard automation may fail due to Windows 11 UAC security.")
-            warning_label.setStyleSheet("color: #ff9800; background-color: #fff3e0; padding: 8px; border-radius: 4px;")
-            warning_label.setWordWrap(True)
-            layout.addWidget(warning_label)
+        # Hotkey control buttons
+        hotkey_buttons = QHBoxLayout()
+        self.start_hotkey_button = QPushButton("🚀 Start Global Monitoring")
+        self.start_hotkey_button.setToolTip("Start monitoring INSERT key globally for screenshot capture")
+        self.start_hotkey_button.clicked.connect(self.start_global_hotkeys)
+        self.start_hotkey_button.setStyleSheet("background-color: #4caf50; color: white; font-weight: bold;")
+        
+        self.stop_hotkey_button = QPushButton("⏹️ Stop Monitoring")
+        self.stop_hotkey_button.setToolTip("Stop global hotkey monitoring")
+        self.stop_hotkey_button.clicked.connect(self.stop_global_hotkeys)
+        self.stop_hotkey_button.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;")
+        self.stop_hotkey_button.setEnabled(False)
+        
+        hotkey_buttons.addWidget(self.start_hotkey_button)
+        hotkey_buttons.addWidget(self.stop_hotkey_button)
+        hotkey_group.addLayout(hotkey_buttons)
+        
+        # Hotkey status info
+        hotkey_info = QLabel("💡 Usage: Press INSERT while target window is active to capture screenshot")
+        hotkey_info.setStyleSheet("color: #666; font-style: italic;")
+        hotkey_group.addWidget(hotkey_info)
+        
+        layout.addLayout(hotkey_group)
+        
+        # Separator
+        separator = QLabel("─" * 80)
+        separator.setStyleSheet("color: #ccc;")
+        layout.addWidget(separator)
         
         # Renpy checkbox
         self.hide_renpy_checkbox = QCheckBox("Hide Renpy text before and after capture")
@@ -214,24 +249,39 @@ class ScreenshotTab(QWidget):
         button_layout.addWidget(self.screenshot_button)
         layout.addLayout(button_layout)
         
-        # Status/Message label
-        self.status_label = QLabel("No window selected. Please select a window from the Window Properties tab.")
-        self.status_label.setStyleSheet("color: #666; font-style: italic;")
+        # Status label
+        self.status_label = QLabel("Ready for screenshot capture")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("color: #333; font-weight: bold; padding: 5px;")
         layout.addWidget(self.status_label)
         
         # Image display area with scroll
         self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setMinimumSize(400, 300)
-        self.image_label.setStyleSheet("border: 1px solid #ccc; background-color: #f9f9f9;")
-        self.image_label.setText("No screenshot captured")
-        
+        self.image_label.setStyleSheet("border: 2px dashed #ccc; background-color: #f9f9f9;")
+        self.image_label.setText("Screenshot will appear here")
         self.scroll_area.setWidget(self.image_label)
+        self.scroll_area.setWidgetResizable(True)
         layout.addWidget(self.scroll_area)
+    
+    def update_hotkey_status(self, message: str, color: str):
+        """Update status label with hotkey-related messages."""
+        self.status_label.setText(message)
+        self.status_label.setStyleSheet(f"color: {color};")
+    
+    def capture_screenshot_from_hotkey(self):
+        """Capture screenshot triggered by global hotkey."""
+        # Get the selected window from the parent's window picker
+        selected_window = self.parent.window_picker_tab.get_selected_window()
+        if not selected_window:
+            self.status_label.setText("❌ No window selected for hotkey capture")
+            self.status_label.setStyleSheet("color: #f44336;")
+            return
+            
+        # Capture screenshot using existing method (simulate button click)
+        self.capture_screenshot()
     
     def capture_screenshot(self) -> None:
         """Capture screenshot of the selected window's client area."""
@@ -565,6 +615,28 @@ class ScreenshotTab(QWidget):
             print(f"SendInput error: {e}")
             return False
 
+    def start_global_hotkeys(self):
+        """Start global hotkey monitoring."""
+        # Get the selected window to monitor
+        selected_window = self.parent.window_picker_tab.get_selected_window()
+        if not selected_window:
+            self.status_label.setText("❌ Please select a target window first")
+            self.status_label.setStyleSheet("color: #f44336;")
+            return
+        
+        # Set target window and start monitoring
+        self.global_hotkey_monitor.set_target_window(selected_window)
+        
+        if self.global_hotkey_monitor.start_monitoring():
+            self.start_hotkey_button.setEnabled(False)
+            self.stop_hotkey_button.setEnabled(True)
+        
+    def stop_global_hotkeys(self):
+        """Stop global hotkey monitoring."""
+        self.global_hotkey_monitor.stop_monitoring()
+        self.start_hotkey_button.setEnabled(True)
+        self.stop_hotkey_button.setEnabled(False)
+
 
 class WindowPropertiesTab(QWidget):
     """Tab for displaying selected window properties."""
@@ -727,6 +799,11 @@ class WindowPickerTab(QWidget):
         
         layout.addLayout(button_layout)
         
+        # Auto-refresh timer
+        self.refresh_timer = QTimer()
+        self.refresh_timer.timeout.connect(self.refresh_windows)
+        self.refresh_timer.start(5000)  # Refresh every 5 seconds when tab is visible
+    
     def enumerate_windows(self) -> List[WindowInfo]:
         """Enumerate all visible windows and return their information."""
         windows = []
@@ -805,11 +882,97 @@ class WindowPickerTab(QWidget):
             self.parent.tab_widget.setCurrentIndex(0)  # Switch to Properties tab
     
     def get_selected_window(self) -> Optional[WindowInfo]:
-        """Get the currently selected window information."""
+        """Get the currently selected window from the table."""
         current_row = self.table.currentRow()
         if current_row >= 0 and current_row < len(self.windows_data):
             return self.windows_data[current_row]
         return None
+
+
+class GlobalHotkeyMonitor(QThread):
+    """
+    Background thread for monitoring global hotkeys.
+    
+    This class runs in a separate thread to avoid blocking the main GUI
+    and provides system-wide hotkey monitoring using the global-hotkeys library.
+    """
+    screenshot_requested = pyqtSignal()
+    status_update = pyqtSignal(str, str)  # message, color
+    
+    def __init__(self):
+        super().__init__()
+        self.is_monitoring = False
+        self.target_window_info = None
+        self.daemon = True  # Thread will die when main program exits
+        
+    def set_target_window(self, window_info: Optional[WindowInfo]):
+        """Set the target window to monitor for hotkey activation."""
+        self.target_window_info = window_info
+        
+    def is_target_window_active(self) -> bool:
+        """Check if the target window is currently in the foreground."""
+        if not self.target_window_info:
+            return False
+            
+        try:
+            # Get the currently active window
+            active_hwnd = win32gui.GetForegroundWindow()
+            return active_hwnd == self.target_window_info.hwnd
+        except Exception:
+            return False
+    
+    def on_insert_pressed(self):
+        """Callback function when INSERT key is pressed globally."""
+        if self.is_target_window_active():
+            self.status_update.emit("🎯 INSERT detected in target window - triggering screenshot...", "#1976d2")
+            self.screenshot_requested.emit()
+        else:
+            # Optionally emit status for debugging
+            self.status_update.emit("⚪ INSERT pressed but target window not active", "#666666")
+    
+    def start_monitoring(self):
+        """Start global hotkey monitoring."""
+        if not GLOBAL_HOTKEYS_AVAILABLE:
+            self.status_update.emit("❌ Global hotkeys not available - install requirements", "#f44336")
+            return False
+            
+        try:
+            # Define hotkey binding for INSERT key
+            bindings = [
+                ["insert", None, self.on_insert_pressed, False]
+            ]
+            
+            # Register the hotkey
+            register_hotkeys(bindings)
+            start_checking_hotkeys()
+            
+            self.is_monitoring = True
+            self.status_update.emit("✅ Global hotkey monitoring active (INSERT key)", "#4caf50")
+            return True
+            
+        except Exception as e:
+            self.status_update.emit(f"❌ Failed to start global hotkeys: {str(e)}", "#f44336")
+            return False
+    
+    def stop_monitoring(self):
+        """Stop global hotkey monitoring."""
+        try:
+            if GLOBAL_HOTKEYS_AVAILABLE and self.is_monitoring:
+                stop_checking_hotkeys()
+                clear_hotkeys()
+                
+            self.is_monitoring = False
+            self.status_update.emit("⏹️ Global hotkey monitoring stopped", "#ff9800")
+            
+        except Exception as e:
+            self.status_update.emit(f"⚠️ Error stopping hotkeys: {str(e)}", "#ff9800")
+    
+    def run(self):
+        """Thread run method - not needed for global-hotkeys as it handles its own threading."""
+        # global-hotkeys handles its own background threading
+        # This method exists to satisfy QThread requirements
+        while self.is_monitoring:
+            self.msleep(100)  # Sleep 100ms
 
 
 class WindowSelectorApp(QMainWindow):
