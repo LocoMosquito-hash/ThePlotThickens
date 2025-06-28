@@ -39,13 +39,14 @@ from PyQt6.QtWidgets import (
     QTextEdit, QSplitter, QScrollArea, QCheckBox, QMessageBox,
     QListWidget, QListWidgetItem
 )
-from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize, QEvent
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize, QEvent, QRect
 from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QKeyEvent, QPainter, QColor, QPen
 from PIL import Image
+import numpy as np
 
 # Global hotkeys import
 try:
-    from global_hotkeys import *
+    from global_hotkeys import register_hotkeys, start_checking_hotkeys, stop_checking_hotkeys, clear_hotkeys
     GLOBAL_HOTKEYS_AVAILABLE = True
 except ImportError:
     GLOBAL_HOTKEYS_AVAILABLE = False
@@ -65,17 +66,17 @@ WM_CHAR = 0x0102
 
 class CrosshairOverlay(QWidget):
     """
-    Overlay widget that displays green crosshair guide lines following the mouse cursor.
+    Overlay widget that displays green crosshair guide lines and handles rectangle drawing for cropping.
     
-    This widget sits on top of the image display and shows dashed green lines
-    (horizontal and vertical) that intersect at the mouse position, similar to
-    crosshairs used in image editing software for precise alignment.
+    This widget sits on top of the image display and shows:
+    - Dashed green lines (horizontal and vertical) that intersect at the mouse position
+    - Solid green rectangle (4px thickness) when dragging with LMB for cropping
     
     Features:
-    - Green dashed lines (2px thickness)
-    - Only visible when mouse is hovering over the image
+    - Green dashed crosshair lines (2px thickness) - only when hovering
+    - Green solid rectangle drawing (4px thickness) - when dragging LMB
     - Real-time tracking of mouse movement
-    - No interference with existing image display functionality
+    - Cropping confirmation dialog
     """
     
     def __init__(self, parent_widget):
@@ -84,7 +85,13 @@ class CrosshairOverlay(QWidget):
         self.mouse_pos = None
         self.is_hovering = False
         
-        # Enable mouse tracking and allow mouse events to pass through when needed
+        # Rectangle drawing state
+        self.is_drawing_rect = False
+        self.rect_start = None
+        self.rect_end = None
+        self.crop_rect = None
+        
+        # Enable mouse tracking and allow mouse events
         self.setMouseTracking(True)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         
@@ -96,66 +103,203 @@ class CrosshairOverlay(QWidget):
         self.hide()
     
     def paintEvent(self, event):
-        """Draw green dashed crosshair lines at mouse position."""
-        if not self.is_hovering or not self.mouse_pos:
-            return
-            
+        """Draw green dashed crosshair lines at mouse position and crop rectangle."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        # Set up green dashed pen (2px thickness)
-        pen = QPen(QColor(0, 255, 0))  # Pure green
-        pen.setWidth(2)
-        pen.setStyle(Qt.PenStyle.DashLine)
-        painter.setPen(pen)
+        # Draw crosshair lines only when hovering and not drawing rectangle
+        if self.is_hovering and self.mouse_pos and not self.is_drawing_rect:
+            # Create green dashed pen for crosshairs (2px thickness)
+            crosshair_pen = QPen(QColor(0, 255, 0), 2, Qt.PenStyle.DashLine)
+            painter.setPen(crosshair_pen)
+            
+            x, y = self.mouse_pos.x(), self.mouse_pos.y()
+            
+            # Draw horizontal line (full width)
+            painter.drawLine(0, y, self.width(), y)
+            
+            # Draw vertical line (full height)
+            painter.drawLine(x, 0, x, self.height())
         
-        # Get widget dimensions
-        width = self.width()
-        height = self.height()
-        
-        # Mouse position
-        mouse_x = int(self.mouse_pos.x())
-        mouse_y = int(self.mouse_pos.y())
-        
-        # Draw horizontal line (across full width)
-        painter.drawLine(0, mouse_y, width, mouse_y)
-        
-        # Draw vertical line (across full height)  
-        painter.drawLine(mouse_x, 0, mouse_x, height)
-        
-        painter.end()
+        # Draw crop rectangle when dragging
+        if self.is_drawing_rect and self.rect_start and self.rect_end:
+            # Create green solid pen for rectangle (4px thickness, no fill)
+            rect_pen = QPen(QColor(0, 255, 0), 4, Qt.PenStyle.SolidLine)
+            painter.setPen(rect_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)  # No fill
+            
+            # Calculate rectangle from start and end points
+            x1, y1 = self.rect_start.x(), self.rect_start.y()
+            x2, y2 = self.rect_end.x(), self.rect_end.y()
+            
+            # Create rectangle (handle any dragging direction)
+            rect = QRect(min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
+            painter.drawRect(rect)
+    
+    def mousePressEvent(self, event):
+        """Start rectangle drawing on left mouse button press."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.is_drawing_rect = True
+            self.rect_start = event.position().toPoint()
+            self.rect_end = self.rect_start
+            self.update()
+        super().mousePressEvent(event)
     
     def mouseMoveEvent(self, event):
-        """Update mouse position and trigger repaint."""
-        self.mouse_pos = event.position()
-        self.update()  # Trigger paintEvent
-        # Pass event to parent to maintain normal behavior
+        """Update crosshair position or rectangle end point."""
+        self.mouse_pos = event.position().toPoint()
+        
+        if self.is_drawing_rect and self.rect_start:
+            # Update rectangle end point while dragging
+            self.rect_end = self.mouse_pos
+        
+        self.update()
         super().mouseMoveEvent(event)
     
+    def mouseReleaseEvent(self, event):
+        """Complete rectangle drawing and show crop confirmation dialog."""
+        if event.button() == Qt.MouseButton.LeftButton and self.is_drawing_rect:
+            self.is_drawing_rect = False
+            
+            # Calculate final crop rectangle
+            if self.rect_start and self.rect_end:
+                x1, y1 = self.rect_start.x(), self.rect_start.y()
+                x2, y2 = self.rect_end.x(), self.rect_end.y()
+                
+                # Create rectangle (handle any dragging direction)
+                self.crop_rect = QRect(min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
+                
+                # Only show dialog if rectangle has meaningful size (at least 10x10 pixels)
+                if self.crop_rect.width() > 10 and self.crop_rect.height() > 10:
+                    self.show_crop_confirmation()
+                else:
+                    self.clear_rectangle()
+        
+        super().mouseReleaseEvent(event)
+    
+    def show_crop_confirmation(self):
+        """Show dialog asking user if they want to crop the image."""
+        reply = QMessageBox.question(
+            self.parent_widget,
+            "Crop Image",
+            "Do you want to crop the image to the selected area?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.perform_crop()
+        else:
+            self.clear_rectangle()
+    
+    def perform_crop(self):
+        """Crop the current image and overwrite the original file."""
+        # Get the main window instance (navigate up the parent hierarchy)
+        main_window = self.parent_widget
+        while main_window and not hasattr(main_window, 'current_pixmap'):
+            main_window = main_window.parent()
+        
+        if not main_window or not hasattr(main_window, 'current_pixmap') or not main_window.current_pixmap:
+            QMessageBox.warning(self.parent_widget, "Error", "No image available for cropping.")
+            self.clear_rectangle()
+            return
+        
+        # Check if we have the original image path
+        if not hasattr(main_window, 'current_image_path') or not main_window.current_image_path:
+            QMessageBox.warning(self.parent_widget, "Error", "Cannot determine original image file for overwriting.")
+            self.clear_rectangle()
+            return
+        
+        try:
+            # Get the original pixmap and file path
+            original_pixmap = main_window.current_pixmap
+            original_image_path = main_window.current_image_path
+            
+            # Scale crop rectangle to match original image coordinates
+            display_size = main_window.image_label.size()
+            original_size = original_pixmap.size()
+            
+            # Check that we have valid crop rectangle and sizes
+            if self.crop_rect is None or display_size.isEmpty() or original_size.isEmpty():
+                QMessageBox.warning(self.parent_widget, "Error", "Invalid crop area or image size.")
+                self.clear_rectangle()
+                return
+            
+            # Calculate scale factors
+            scale_x = original_size.width() / display_size.width()
+            scale_y = original_size.height() / display_size.height()
+            
+            # Convert crop rectangle to original image coordinates
+            final_crop_rect = QRect(
+                int(self.crop_rect.x() * scale_x),
+                int(self.crop_rect.y() * scale_y),
+                int(self.crop_rect.width() * scale_x),
+                int(self.crop_rect.height() * scale_y)
+            )
+            
+            # Ensure crop rectangle is within image bounds
+            final_crop_rect = final_crop_rect.intersected(
+                QRect(0, 0, original_size.width(), original_size.height())
+            )
+            
+            # Crop the image
+            cropped_pixmap = original_pixmap.copy(final_crop_rect)
+            
+            # Overwrite the original file
+            if cropped_pixmap.save(original_image_path, "PNG"):
+                # Update the current pixmap to the cropped version
+                main_window.current_pixmap = cropped_pixmap
+                
+                # Update the display to show the cropped image
+                scaled_pixmap = cropped_pixmap.scaled(
+                    main_window.image_label.size(), 
+                    Qt.AspectRatioMode.KeepAspectRatio, 
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                main_window.image_label.setPixmap(scaled_pixmap)
+                
+                # Update the thumbnail in the list
+                main_window.update_thumbnail_after_crop(original_image_path)
+                
+                # Update status
+                filename = os.path.basename(original_image_path)
+                main_window.status_label.setText(f"✅ Image cropped and overwritten: {filename}")
+                main_window.status_label.setStyleSheet("color: #4caf50;")
+                
+                # Clear the rectangle
+                self.clear_rectangle()
+            else:
+                QMessageBox.warning(self.parent_widget, "Error", "Failed to save cropped image.")
+                
+        except Exception as e:
+            QMessageBox.critical(self.parent_widget, "Cropping Error", f"Failed to crop image: {str(e)}")
+        finally:
+            self.clear_rectangle()
+    
+    def clear_rectangle(self):
+        """Clear the crop rectangle and reset drawing state."""
+        self.crop_rect = None
+        self.rect_start = None
+        self.rect_end = None
+        self.is_drawing_rect = False
+        self.update()
+    
     def enterEvent(self, event):
-        """Show crosshairs when mouse enters the image area."""
+        """Mouse entered the overlay area - show crosshairs."""
         self.is_hovering = True
-        self.show()
-        self.update()  # Ensure immediate redraw
+        self.update()
         super().enterEvent(event)
     
     def leaveEvent(self, event):
-        """Hide crosshairs when mouse leaves the image area."""
+        """Mouse left the overlay area - hide crosshairs."""
         self.is_hovering = False
-        self.update()  # Clear the lines first
-        self.hide()
+        self.update()
         super().leaveEvent(event)
     
     def update_position(self):
-        """Update overlay position and size to match parent widget exactly."""
-        if self.parent_widget:
-            # Ensure overlay covers the entire parent widget
-            self.resize(self.parent_widget.size())
-            self.move(0, 0)
-            self.raise_()  # Bring to front
-            
-            # Force mouse tracking update
-            self.setMouseTracking(True)
+        """Update overlay position to match parent widget."""
+        self.resize(self.parent_widget.size())
+        self.move(0, 0)
 
 
 class KEYBDINPUT(Structure):
@@ -288,17 +432,14 @@ class ScreenshotTab(QWidget):
     def __init__(self, parent):
         super().__init__()
         self.parent = parent
-        self.current_pixmap: Optional[QPixmap] = None
-        self.current_screenshot = None
-        self.image_stack_folder = os.path.join(os.path.dirname(__file__), "image-stack")
+        self.current_pixmap = None
+        self.current_image_path = None  # Track current image file path for overwriting
+        self.image_stack_folder = "image-stack"
         
-        # Ensure image-stack folder exists
-        os.makedirs(self.image_stack_folder, exist_ok=True)
-        
-        # Initialize global hotkey monitor
-        self.global_hotkey_monitor = GlobalHotkeyMonitor()
-        self.global_hotkey_monitor.screenshot_requested.connect(self.capture_screenshot_from_hotkey)
-        self.global_hotkey_monitor.status_update.connect(self.update_hotkey_status)
+        # Initialize monitoring thread
+        self.hotkey_monitor = GlobalHotkeyMonitor()
+        self.hotkey_monitor.screenshot_requested.connect(self.capture_screenshot_from_hotkey)
+        self.hotkey_monitor.status_update.connect(self.update_hotkey_status)
         
         self.init_ui()
         self.load_existing_images()
@@ -512,6 +653,37 @@ class ScreenshotTab(QWidget):
         except Exception as e:
             print(f"Error creating thumbnail for {image_path}: {e}")
     
+    def update_thumbnail_after_crop(self, image_path: str):
+        """Update the thumbnail in the list after the image has been cropped."""
+        try:
+            # Find the thumbnail item with this image path
+            for i in range(self.thumbnail_list.count()):
+                item = self.thumbnail_list.item(i)
+                if item is not None and item.data(Qt.ItemDataRole.UserRole) == image_path:
+                    # Regenerate the thumbnail with the cropped image
+                    with Image.open(image_path) as img:
+                        # Create thumbnail
+                        img.thumbnail((150, 150), Image.Resampling.LANCZOS)
+                        
+                        # Convert to QPixmap
+                        img_qt = img.convert("RGB")
+                        img_array = np.array(img_qt)
+                        height, width, channel = img_array.shape
+                        bytes_per_line = 3 * width
+                        q_image = QImage(img_array.tobytes(), width, height, bytes_per_line, QImage.Format.Format_RGB888)
+                        thumbnail_pixmap = QPixmap.fromImage(q_image)
+                        
+                        # Update the icon
+                        item.setIcon(QIcon(thumbnail_pixmap))
+                        
+                        # Update tooltip
+                        item.setToolTip(f"Click to view: {os.path.basename(image_path)}\\nPress DELETE to remove")
+                        
+                        break
+                        
+        except Exception as e:
+            print(f"Error updating thumbnail for {image_path}: {e}")
+    
     def on_thumbnail_clicked(self, item: QListWidgetItem):
         """Handle thumbnail click to display full image."""
         image_path = item.data(Qt.ItemDataRole.UserRole)
@@ -529,6 +701,7 @@ class ScreenshotTab(QWidget):
                 
                 self.image_label.setPixmap(scaled_pixmap)
                 self.current_pixmap = pixmap  # Store original for potential operations
+                self.current_image_path = image_path  # Track current image file path for overwriting
                 
                 # Show and update crosshair overlay position
                 self.crosshair_overlay.update_position()
@@ -552,6 +725,7 @@ class ScreenshotTab(QWidget):
         else:
             self.image_label.clear()
             self.current_pixmap = None
+            self.current_image_path = None
             self.status_label.setText("No image selected")
             self.status_label.setStyleSheet("color: #666; font-style: italic;")
     
@@ -584,6 +758,7 @@ class ScreenshotTab(QWidget):
                 self.image_label.clear()
                 self.image_label.setText("Screenshot will appear here")
                 self.current_pixmap = None
+                self.current_image_path = None
                 
                 self.status_label.setText(f"🗑️ Cleared {deleted_count} images from image stack")
                 self.status_label.setStyleSheet("color: #ff5722;")
@@ -729,6 +904,9 @@ class ScreenshotTab(QWidget):
                 pil_image.save(filepath, "PNG")
                 save_msg = f"💾 Screenshot saved: {filename}"
                 print(f"[IMAGE STACK] {save_msg}")
+                
+                # Track current image path for cropping
+                self.current_image_path = filepath
                 
                 # Add to thumbnail list (most recent first)
                 self.add_thumbnail_to_list(filepath)
@@ -972,15 +1150,15 @@ class ScreenshotTab(QWidget):
             return
         
         # Set target window and start monitoring
-        self.global_hotkey_monitor.set_target_window(selected_window)
+        self.hotkey_monitor.set_target_window(selected_window)
         
-        if self.global_hotkey_monitor.start_monitoring():
+        if self.hotkey_monitor.start_monitoring():
             self.start_monitoring_button.setEnabled(False)
             self.stop_monitoring_button.setEnabled(True)
         
     def stop_global_monitoring(self):
         """Stop global hotkey monitoring."""
-        self.global_hotkey_monitor.stop_monitoring()
+        self.hotkey_monitor.stop_monitoring()
         self.start_monitoring_button.setEnabled(True)
         self.stop_monitoring_button.setEnabled(False)
 
@@ -1019,6 +1197,7 @@ class ScreenshotTab(QWidget):
                 self.image_label.clear()
                 self.image_label.setText("Screenshot will appear here")
                 self.current_pixmap = None
+                self.current_image_path = None
                 
         except Exception as e:
             self.status_label.setText(f"❌ Failed to delete image: {str(e)}")
