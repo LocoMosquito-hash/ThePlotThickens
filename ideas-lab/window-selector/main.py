@@ -39,8 +39,8 @@ from PyQt6.QtWidgets import (
     QTextEdit, QSplitter, QScrollArea, QCheckBox, QMessageBox,
     QListWidget, QListWidgetItem
 )
-from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize
-from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize, QEvent
+from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QKeyEvent
 from PIL import Image
 
 # Global hotkeys import
@@ -221,11 +221,12 @@ class ScreenshotTab(QWidget):
         
         # Thumbnail list widget
         self.thumbnail_list = QListWidget()
-        self.thumbnail_list.setMaximumWidth(140)
-        self.thumbnail_list.setMinimumWidth(140)
-        self.thumbnail_list.setIconSize(QSize(100, 100))
+        self.thumbnail_list.setMaximumWidth(210)
+        self.thumbnail_list.setMinimumWidth(210)
+        self.thumbnail_list.setIconSize(QSize(150, 150))
         self.thumbnail_list.setResizeMode(QListWidget.ResizeMode.Adjust)
         self.thumbnail_list.setSpacing(5)
+        self.thumbnail_list.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.thumbnail_list.setStyleSheet("""
             QListWidget {
                 background-color: #f5f5f5;
@@ -248,8 +249,15 @@ class ScreenshotTab(QWidget):
                 background-color: #e3f2fd;
                 border: 1px solid #2196f3;
             }
+            QListWidget::item:focus {
+                background-color: #bbdefb;
+                border: 2px solid #1976d2;
+                outline: none;
+            }
         """)
         self.thumbnail_list.itemClicked.connect(self.on_thumbnail_clicked)
+        self.thumbnail_list.currentItemChanged.connect(self.on_thumbnail_selection_changed)
+        self.thumbnail_list.installEventFilter(self)
         thumbnail_panel.addWidget(self.thumbnail_list)
         
         # Clear all images button
@@ -358,9 +366,9 @@ class ScreenshotTab(QWidget):
         right_widget.setLayout(right_layout)
         main_layout.addWidget(right_widget)
         
-        # Set proportions: thumbnail panel takes 1/5, main content takes 4/5
-        main_layout.setStretch(0, 1)  # Thumbnail panel
-        main_layout.setStretch(1, 4)  # Main content
+        # Set proportions: thumbnail panel takes more space now, main content takes rest
+        main_layout.setStretch(0, 2)  # Thumbnail panel (increased from 1)
+        main_layout.setStretch(1, 5)  # Main content (adjusted from 4)
     
     def load_existing_images(self):
         """Load existing images from the image-stack folder into thumbnails."""
@@ -380,8 +388,8 @@ class ScreenshotTab(QWidget):
         try:
             # Generate thumbnail using PIL
             with Image.open(image_path) as img:
-                # Create thumbnail (120x120 max size while maintaining aspect ratio)
-                img.thumbnail((120, 120), Image.Resampling.LANCZOS)
+                # Create thumbnail (180x180 max size while maintaining aspect ratio)
+                img.thumbnail((180, 180), Image.Resampling.LANCZOS)
                 
                 # Convert PIL Image to QPixmap
                 img_qt = img.convert('RGBA')
@@ -392,10 +400,10 @@ class ScreenshotTab(QWidget):
             
             # Create list widget item
             item = QListWidgetItem()
-            scaled_pixmap = thumbnail_pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            scaled_pixmap = thumbnail_pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             item.setIcon(QIcon(scaled_pixmap))  # Convert QPixmap to QIcon
             item.setData(Qt.ItemDataRole.UserRole, image_path)  # Store full path
-            item.setToolTip(f"Click to view: {os.path.basename(image_path)}")
+            item.setToolTip(f"Click to view: {os.path.basename(image_path)}\nPress DELETE to remove")
             
             # Add to the top of the list (most recent first)
             self.thumbnail_list.insertItem(0, item)
@@ -431,6 +439,16 @@ class ScreenshotTab(QWidget):
         except Exception as e:
             self.status_label.setText(f"❌ Error loading image: {str(e)}")
             self.status_label.setStyleSheet("color: #f44336;")
+    
+    def on_thumbnail_selection_changed(self, current: QListWidgetItem, previous: QListWidgetItem):
+        """Handle selection change in the thumbnail list."""
+        if current:
+            self.on_thumbnail_clicked(current)
+        else:
+            self.image_label.clear()
+            self.current_pixmap = None
+            self.status_label.setText("No image selected")
+            self.status_label.setStyleSheet("color: #666; font-style: italic;")
     
     def clear_all_images(self):
         """Clear all images from thumbnail list and delete files from image-stack folder."""
@@ -856,6 +874,46 @@ class ScreenshotTab(QWidget):
         self.global_hotkey_monitor.stop_monitoring()
         self.start_monitoring_button.setEnabled(True)
         self.stop_monitoring_button.setEnabled(False)
+
+    def eventFilter(self, obj, event):
+        """Handle keyboard events for the thumbnail list."""
+        if obj == self.thumbnail_list and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Delete:
+                # Delete the currently selected thumbnail
+                current_item = self.thumbnail_list.currentItem()
+                if current_item:
+                    self.delete_selected_thumbnail(current_item)
+                return True
+        return super().eventFilter(obj, event)
+    
+    def delete_selected_thumbnail(self, item: QListWidgetItem):
+        """Delete the selected thumbnail and its associated file."""
+        try:
+            # Get the file path from the item
+            image_path = item.data(Qt.ItemDataRole.UserRole)
+            
+            # Delete the file if it exists
+            if os.path.exists(image_path):
+                os.remove(image_path)
+                
+            # Remove from thumbnail list
+            row = self.thumbnail_list.row(item)
+            self.thumbnail_list.takeItem(row)
+            
+            # Update status
+            filename = os.path.basename(image_path)
+            self.status_label.setText(f"🗑️ Deleted: {filename}")
+            self.status_label.setStyleSheet("color: #ff5722;")
+            
+            # Clear main image if this was the selected item
+            if self.thumbnail_list.count() == 0:
+                self.image_label.clear()
+                self.image_label.setText("Screenshot will appear here")
+                self.current_pixmap = None
+                
+        except Exception as e:
+            self.status_label.setText(f"❌ Failed to delete image: {str(e)}")
+            self.status_label.setStyleSheet("color: #f44336;")
 
 
 class WindowPropertiesTab(QWidget):
