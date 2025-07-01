@@ -616,7 +616,7 @@ class ScreenshotTab(QWidget):
         """Load existing images from the image-stack folder into thumbnails."""
         image_files = glob.glob(os.path.join(self.image_stack_folder, "*.png"))
         image_files.extend(glob.glob(os.path.join(self.image_stack_folder, "*.jpg")))
-        image_files.sort()  # Sort by filename (which includes timestamp)
+        image_files.sort()  # Sort by filename (which includes timestamp) - date ascending
         
         for image_path in image_files:
             self.add_thumbnail_to_list(image_path)
@@ -647,8 +647,8 @@ class ScreenshotTab(QWidget):
             item.setData(Qt.ItemDataRole.UserRole, image_path)  # Store full path
             item.setToolTip(f"Click to view: {os.path.basename(image_path)}\nPress DELETE to remove")
             
-            # Add to the top of the list (most recent first)
-            self.thumbnail_list.insertItem(0, item)
+            # Add to the bottom of the list (date ascending - newest last)
+            self.thumbnail_list.addItem(item)
             
         except Exception as e:
             print(f"Error creating thumbnail for {image_path}: {e}")
@@ -908,7 +908,7 @@ class ScreenshotTab(QWidget):
                 # Track current image path for cropping
                 self.current_image_path = filepath
                 
-                # Add to thumbnail list (most recent first)
+                # Add to thumbnail list (date ascending - newest last)
                 self.add_thumbnail_to_list(filepath)
                 
             except Exception as save_error:

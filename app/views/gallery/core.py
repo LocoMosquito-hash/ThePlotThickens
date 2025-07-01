@@ -1721,7 +1721,7 @@ class GalleryWidget(QWidget):
                 # Import video file
                 self.import_video_file(file_path)
             # Check if it's an image file
-            elif file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+            elif file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp')):
                 # Load the image
                 image = QImage(file_path)
                 
@@ -1735,7 +1735,7 @@ class GalleryWidget(QWidget):
         else:
             # It's a remote URL - check if it's an image URL
             url_str = url.toString()
-            if any(url_str.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']):
+            if any(url_str.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']):
                 # Download the image
                 self._download_image(url)
             else:
@@ -1776,11 +1776,11 @@ class GalleryWidget(QWidget):
                         from app.utils.video_utils import is_video_file
                         
                         # Check for both images and videos
-                        if file_path and (file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')) or is_video_file(file_path)):
+                        if file_path and (file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp')) or is_video_file(file_path)):
                             return True
                     else:
                         url_str = url.toString()
-                        if any(url_str.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']):
+                        if any(url_str.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']):
                             return True
             except Exception as e:
                 print(f"Error checking clipboard URLs: {e}")
@@ -1962,7 +1962,7 @@ class GalleryWidget(QWidget):
             self,
             "Import Image or Video",
             "",
-            "Images and Videos (*.png *.jpg *.jpeg *.gif *.bmp *.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm *.m4v *.ogg *.ogv);;Images (*.png *.jpg *.jpeg *.gif *.bmp);;Videos (*.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm *.m4v *.ogg *.ogv);;All Files (*)"
+            "Images and Videos (*.png *.jpg *.jpeg *.gif *.bmp *.webp *.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm *.m4v *.ogg *.ogv);;Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp);;Videos (*.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm *.m4v *.ogg *.ogv);;All Files (*)"
         )
         
         if not file_path:
@@ -2721,7 +2721,7 @@ class GalleryWidget(QWidget):
         matches = re.findall(img_pattern, html)
         
         # Filter to only keep URLs that look like images
-        return [url for url in matches if any(url.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp'])] 
+        return [url for url in matches if any(url.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'])] 
 
     def rebuild_recognition_database(self) -> None:
         """Rebuild the character recognition database from all tagged images."""
