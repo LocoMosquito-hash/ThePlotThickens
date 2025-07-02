@@ -65,26 +65,65 @@ class RenpyParser:
     
     def __init__(self):
         """Initialize the parser with regex patterns."""
-        # Regex patterns for different Ren'Py statements
         self.patterns = {
+            # Existing patterns
             'label': re.compile(r'^\s*label\s+([a-zA-Z_][a-zA-Z0-9_]*):', re.IGNORECASE),
             'character_def': re.compile(r'^\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*Character\s*\(\s*"([^"]*)"', re.IGNORECASE),
             'dialogue': re.compile(r'^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s+"([^"]+)"', re.IGNORECASE),
             'narrator': re.compile(r'^\s*"([^"]+)"'),
             'menu': re.compile(r'^\s*menu:', re.IGNORECASE),
             'menu_choice': re.compile(r'^\s*"([^"]+)":'),
-            'scene': re.compile(r'^\s*scene\s+([a-zA-Z_][a-zA-Z0-9_\s]*)', re.IGNORECASE),
-            'show': re.compile(r'^\s*show\s+([a-zA-Z_][a-zA-Z0-9_\s]*)', re.IGNORECASE),
-            'image_def': re.compile(r'^\s*image\s+([a-zA-Z_][a-zA-Z0-9_\s]*)\s*=\s*"([^"]*)"', re.IGNORECASE),
+            
+            # Enhanced asset patterns
+            'scene': re.compile(r'^\s*scene\s+([a-zA-Z_][a-zA-Z0-9_\s\-\.]*)', re.IGNORECASE),
+            'show': re.compile(r'^\s*show\s+([a-zA-Z_][a-zA-Z0-9_\s\-\.]*)', re.IGNORECASE),
+            'hide': re.compile(r'^\s*hide\s+([a-zA-Z_][a-zA-Z0-9_\s\-\.]*)', re.IGNORECASE),
+            
+            # Image definitions and references
+            'image_def': re.compile(r'^\s*image\s+([a-zA-Z_][a-zA-Z0-9_\s\-\.]*)\s*=\s*"([^"]*)"', re.IGNORECASE),
+            'image_def_func': re.compile(r'^\s*image\s+([a-zA-Z_][a-zA-Z0-9_\s\-\.]*)\s*=\s*([a-zA-Z_][a-zA-Z0-9_\.]*)\s*\(', re.IGNORECASE),
+            
+            # Audio patterns
             'play_music': re.compile(r'^\s*play\s+music\s+"([^"]*)"', re.IGNORECASE),
             'play_sound': re.compile(r'^\s*play\s+sound\s+"([^"]*)"', re.IGNORECASE),
+            'play_audio': re.compile(r'^\s*play\s+audio\s+"([^"]*)"', re.IGNORECASE),
+            'stop_music': re.compile(r'^\s*stop\s+music', re.IGNORECASE),
+            'stop_sound': re.compile(r'^\s*stop\s+sound', re.IGNORECASE),
+            'stop_audio': re.compile(r'^\s*stop\s+audio', re.IGNORECASE),
+            'queue_music': re.compile(r'^\s*queue\s+music\s+"([^"]*)"', re.IGNORECASE),
+            'queue_sound': re.compile(r'^\s*queue\s+sound\s+"([^"]*)"', re.IGNORECASE),
+            
+            # Video patterns
+            'play_movie': re.compile(r'^\s*play\s+movie\s+"([^"]*)"', re.IGNORECASE),
+            'show_movie': re.compile(r'^\s*show\s+movie\s+"([^"]*)"', re.IGNORECASE),
+            
+            # Transform and effect patterns
+            'transform': re.compile(r'^\s*transform\s+([a-zA-Z_][a-zA-Z0-9_]*)', re.IGNORECASE),
+            'with_transition': re.compile(r'^\s*with\s+([a-zA-Z_][a-zA-Z0-9_]*)', re.IGNORECASE),
+            
+            # Navigation patterns
             'jump': re.compile(r'^\s*jump\s+([a-zA-Z_][a-zA-Z0-9_]*)', re.IGNORECASE),
             'call': re.compile(r'^\s*call\s+([a-zA-Z_][a-zA-Z0-9_]*)', re.IGNORECASE),
+            'return': re.compile(r'^\s*return', re.IGNORECASE),
+            
+            # Special patterns
             'python': re.compile(r'^\s*python:', re.IGNORECASE),
             'comment': re.compile(r'^\s*#'),
+            'init': re.compile(r'^\s*init\s+(-?\d+)', re.IGNORECASE),
+            
+            # Asset references in strings (for comprehensive detection)
+            'asset_reference': re.compile(r'"([^"]*\.(png|jpg|jpeg|gif|bmp|webp|mp3|wav|ogg|mp4|webm|avi))"', re.IGNORECASE),
         }
         
-        # Files to exclude from analysis (UI/system files)
+        # File extensions by category
+        self.asset_extensions = {
+            'images': {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.tga'},
+            'audio': {'.mp3', '.wav', '.ogg', '.m4a', '.aac'},
+            'video': {'.mp4', '.webm', '.avi', '.mov', '.mkv'},
+            'fonts': {'.ttf', '.otf', '.woff', '.woff2'},
+            'data': {'.json', '.txt', '.csv', '.xml'}
+        }
+        
         self.excluded_files = {
             'screens.rpy', 'gui.rpy', 'options.rpy', '00keymap.rpy', 
             '00action_file.rpy', '00accessibility.rpy', '00auto.rpy',
@@ -192,32 +231,112 @@ class RenpyParser:
         
         if pattern_name == 'label':
             base_line.label_name = match.group(1)
-        
         elif pattern_name == 'character_def':
-            base_line.speaker = match.group(1)  # Character code
-            base_line.dialogue_text = match.group(2)  # Character name
-        
+            base_line.speaker = match.group(1)
+            base_line.dialogue_text = match.group(2)
         elif pattern_name == 'dialogue':
             base_line.speaker = match.group(1)
             base_line.dialogue_text = match.group(2)
-        
         elif pattern_name == 'narrator':
             base_line.speaker = 'narrator'
             base_line.dialogue_text = match.group(1)
-        
-        elif pattern_name in ['scene', 'show', 'image_def']:
+        elif pattern_name in ['scene', 'show', 'hide']:
             base_line.asset_name = match.group(1).strip()
-        
-        elif pattern_name in ['play_music', 'play_sound']:
+        elif pattern_name == 'image_def':
+            base_line.asset_name = match.group(1).strip()
+            if len(match.groups()) > 1:
+                # Store the file path as additional info
+                base_line.dialogue_text = match.group(2)  # Reusing this field for file path
+        elif pattern_name == 'image_def_func':
+            base_line.asset_name = match.group(1).strip()
+            base_line.dialogue_text = match.group(2)  # Function name
+        elif pattern_name in ['play_music', 'play_sound', 'play_audio', 'queue_music', 'queue_sound']:
             base_line.asset_name = match.group(1)
-        
+        elif pattern_name in ['play_movie', 'show_movie']:
+            base_line.asset_name = match.group(1)
+        elif pattern_name in ['transform', 'with_transition']:
+            base_line.asset_name = match.group(1)
         elif pattern_name in ['jump', 'call']:
             base_line.target_label = match.group(1)
-        
         elif pattern_name == 'menu_choice':
             base_line.dialogue_text = match.group(1)
+        elif pattern_name == 'init':
+            base_line.dialogue_text = match.group(1)  # Store priority level
+        elif pattern_name == 'asset_reference':
+            base_line.asset_name = match.group(1)
         
         return base_line
+    
+    def get_asset_category(self, asset_path: str) -> str:
+        """
+        Determine the category of an asset based on its file extension.
+        
+        Args:
+            asset_path: Path or name of the asset
+            
+        Returns:
+            Category string ('images', 'audio', 'video', 'fonts', 'data', 'unknown')
+        """
+        if not asset_path:
+            return 'unknown'
+        
+        # Extract extension
+        asset_lower = asset_path.lower()
+        
+        for category, extensions in self.asset_extensions.items():
+            for ext in extensions:
+                if asset_lower.endswith(ext):
+                    return category
+        
+        return 'unknown'
+    
+    def extract_assets_from_line(self, line: RenpyLine) -> List[Dict[str, Any]]:
+        """
+        Extract asset information from a parsed line.
+        
+        Args:
+            line: Parsed RenpyLine object
+            
+        Returns:
+            List of asset dictionaries with metadata
+        """
+        assets = []
+        
+        if not line.asset_name:
+            return assets
+        
+        asset_info = {
+            'name': line.asset_name,
+            'category': self.get_asset_category(line.asset_name),
+            'usage_type': line.line_type,
+            'file': line.file_path,
+            'line_number': line.line_number,
+            'context': line.content
+        }
+        
+        # Add specific metadata based on usage type
+        if line.line_type == 'image_def' and line.dialogue_text:
+            asset_info['file_path'] = line.dialogue_text
+        elif line.line_type == 'image_def_func' and line.dialogue_text:
+            asset_info['function'] = line.dialogue_text
+        
+        assets.append(asset_info)
+        
+        # Also extract any asset references from the content using regex
+        asset_refs = self.patterns['asset_reference'].findall(line.content)
+        for asset_ref, ext in asset_refs:
+            if asset_ref != line.asset_name:  # Avoid duplicates
+                ref_info = {
+                    'name': asset_ref,
+                    'category': self.get_asset_category(asset_ref),
+                    'usage_type': 'reference',
+                    'file': line.file_path,
+                    'line_number': line.line_number,
+                    'context': line.content
+                }
+                assets.append(ref_info)
+        
+        return assets
     
     def analyze_project(self, project_path: str) -> ProjectOverview:
         """
