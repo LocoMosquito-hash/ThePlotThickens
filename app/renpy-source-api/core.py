@@ -1182,4 +1182,335 @@ class RenpyProject:
             (complexity['branching_factor'] * 15)
         ))
         
-        return complexity 
+        return complexity
+
+    def get_label_flow_analysis(self) -> Dict[str, Any]:
+        """
+        Get comprehensive analysis of label flows and scene connections.
+        
+        Returns:
+            Dictionary with detailed flow analysis and navigation patterns
+        """
+        if not self.is_analyzed:
+            self.analyze()
+        
+        try:
+            return self.parser.analyze_flow_patterns(self.project_path)
+        except Exception as e:
+            raise RenpyAnalysisError(f"Failed to analyze label flows: {str(e)}")
+    
+    def get_flow_graph(self) -> Dict[str, Any]:
+        """
+        Get the complete flow graph of all labels and their connections.
+        
+        Returns:
+            Dictionary mapping label names to their flow information
+        """
+        if not self.is_analyzed:
+            self.analyze()
+        
+        try:
+            graph = self.parser.build_flow_graph(self.project_path)
+            
+            # Convert to serializable format
+            serializable_graph = {}
+            for label_name, node in graph.items():
+                serializable_graph[label_name] = {
+                    'name': node.name,
+                    'file_path': node.file_path,
+                    'line_number': node.line_number,
+                    'has_menu': node.has_menu,
+                    'has_dialogue': node.has_dialogue,
+                    'is_reachable': node.is_reachable,
+                    'is_dead_end': node.is_dead_end,
+                    'flow_complexity': node.flow_complexity,
+                    'incoming_flows': [
+                        {
+                            'source_label': flow.source_label,
+                            'target_label': flow.target_label,
+                            'flow_type': flow.flow_type,
+                            'context': flow.context,
+                            'condition': flow.condition,
+                            'file_path': flow.file_path,
+                            'line_number': flow.line_number
+                        }
+                        for flow in node.incoming_flows
+                    ],
+                    'outgoing_flows': [
+                        {
+                            'source_label': flow.source_label,
+                            'target_label': flow.target_label,
+                            'flow_type': flow.flow_type,
+                            'context': flow.context,
+                            'condition': flow.condition,
+                            'file_path': flow.file_path,
+                            'line_number': flow.line_number
+                        }
+                        for flow in node.outgoing_flows
+                    ]
+                }
+            
+            return serializable_graph
+            
+        except Exception as e:
+            raise RenpyAnalysisError(f"Failed to get flow graph: {str(e)}")
+    
+    def get_scene_connectivity(self) -> Dict[str, Any]:
+        """
+        Analyze scene connectivity and navigation patterns.
+        
+        Returns:
+            Dictionary with scene connectivity analysis
+        """
+        flow_analysis = self.get_label_flow_analysis()
+        graph = self.parser.build_flow_graph(self.project_path)
+        
+        connectivity = {
+            'reachability_summary': {
+                'total_labels': flow_analysis['total_labels'],
+                'reachable_labels': flow_analysis['reachable_labels'],
+                'unreachable_labels': flow_analysis['unreachable_labels'],
+                'reachability_ratio': flow_analysis['reachability_ratio']
+            },
+            'navigation_patterns': {
+                'total_flows': flow_analysis['total_flows'],
+                'flow_types': flow_analysis['flow_types'],
+                'connectivity_ratio': flow_analysis['connectivity_ratio']
+            },
+            'structural_analysis': {
+                'entry_points': flow_analysis['entry_points'],
+                'dead_ends': flow_analysis['dead_end_labels'],
+                'high_complexity_scenes': flow_analysis['high_complexity_labels'],
+                'flow_clusters': flow_analysis['flow_clusters']
+            },
+            'most_connected_scenes': {
+                'most_incoming': flow_analysis['most_incoming'],
+                'most_outgoing': flow_analysis['most_outgoing']
+            },
+            'narrative_flow_quality': self._calculate_flow_quality(flow_analysis, graph)
+        }
+        
+        return connectivity
+    
+    def _calculate_flow_quality(self, flow_analysis: Dict[str, Any], graph: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate narrative flow quality metrics."""
+        total_labels = flow_analysis['total_labels']
+        
+        # Calculate quality metrics
+        quality_score = 0
+        issues = []
+        
+        # Reachability quality (80% weight)
+        reachability_score = flow_analysis['reachability_ratio'] * 80
+        quality_score += reachability_score
+        
+        if len(flow_analysis['unreachable_labels']) > 0:
+            issues.append(f"{len(flow_analysis['unreachable_labels'])} unreachable scenes")
+        
+        # Connectivity quality (20% weight)
+        connectivity_score = min(flow_analysis['connectivity_ratio'] / 3.0, 1.0) * 20
+        quality_score += connectivity_score
+        
+        if len(flow_analysis['dead_end_labels']) > total_labels * 0.3:
+            issues.append(f"High dead-end ratio: {len(flow_analysis['dead_end_labels'])}/{total_labels}")
+        
+        if flow_analysis['entry_points'] > 5:
+            issues.append(f"Many entry points: {flow_analysis['entry_points']}")
+        
+        return {
+            'overall_score': round(quality_score, 1),
+            'reachability_score': round(reachability_score, 1),
+            'connectivity_score': round(connectivity_score, 1),
+            'quality_rating': 'excellent' if quality_score >= 90 else 
+                            'good' if quality_score >= 75 else
+                            'fair' if quality_score >= 60 else 'poor',
+            'issues': issues,
+            'recommendations': self._get_flow_recommendations(flow_analysis)
+        }
+    
+    def _get_flow_recommendations(self, flow_analysis: Dict[str, Any]) -> List[str]:
+        """Generate recommendations for improving narrative flow."""
+        recommendations = []
+        
+        if len(flow_analysis['unreachable_labels']) > 0:
+            recommendations.append("Consider connecting or removing unreachable scenes")
+        
+        if len(flow_analysis['dead_end_labels']) > flow_analysis['total_labels'] * 0.3:
+            recommendations.append("Add navigation options to dead-end scenes")
+        
+        if flow_analysis['entry_points'] > 5:
+            recommendations.append("Consider consolidating multiple entry points")
+        
+        if flow_analysis['connectivity_ratio'] < 1.5:
+            recommendations.append("Increase scene interconnectivity for richer narrative")
+        
+        if flow_analysis['flow_clusters'] > flow_analysis['total_labels'] * 0.2:
+            recommendations.append("Connect isolated scene groups")
+        
+        return recommendations
+    
+    def find_narrative_paths(self, start_label: str, end_label: str = None, max_depth: int = 10) -> List[List[str]]:
+        """
+        Find all possible narrative paths from start to end label.
+        
+        Args:
+            start_label: Starting scene label
+            end_label: Target scene label (None to find all paths)
+            max_depth: Maximum path depth to explore
+            
+        Returns:
+            List of path sequences (each path is a list of labels)
+        """
+        graph = self.parser.build_flow_graph(self.project_path)
+        
+        if start_label not in graph:
+            return []
+        
+        paths = []
+        
+        def find_paths(current_label: str, current_path: List[str], depth: int):
+            if depth > max_depth or current_label in current_path:
+                return
+            
+            current_path.append(current_label)
+            
+            # If we found the target (or exploring all paths)
+            if end_label is None or current_label == end_label:
+                if len(current_path) > 1:  # Only include paths with multiple steps
+                    paths.append(current_path.copy())
+            
+            # Continue exploring if we haven't reached the target
+            if current_label != end_label:
+                for flow in graph[current_label].outgoing_flows:
+                    if flow.target_label != '<return>' and flow.target_label in graph:
+                        find_paths(flow.target_label, current_path, depth + 1)
+            
+            current_path.pop()
+        
+        find_paths(start_label, [], 0)
+        return paths
+    
+    def get_scene_timeline(self) -> List[Dict[str, Any]]:
+        """
+        Generate a timeline of scenes based on narrative flow.
+        
+        Returns:
+            List of scenes in narrative order with flow information
+        """
+        graph = self.parser.build_flow_graph(self.project_path)
+        
+        # Start from common entry points
+        start_labels = ['start', 'main', 'scene1', 'intro', 'begin']
+        timeline = []
+        visited = set()
+        
+        def build_timeline(label_name: str, depth: int = 0):
+            if label_name in visited or label_name not in graph or depth > 50:
+                return
+            
+            visited.add(label_name)
+            node = graph[label_name]
+            
+            scene_info = {
+                'label': label_name,
+                'file': node.file_path,
+                'line': node.line_number,
+                'depth': depth,
+                'has_menu': node.has_menu,
+                'has_dialogue': node.has_dialogue,
+                'flow_complexity': node.flow_complexity,
+                'next_scenes': [flow.target_label for flow in node.outgoing_flows 
+                               if flow.target_label != '<return>']
+            }
+            
+            timeline.append(scene_info)
+            
+            # Follow primary flows (prioritize jumps over calls)
+            jump_flows = [f for f in node.outgoing_flows if f.flow_type == 'jump']
+            other_flows = [f for f in node.outgoing_flows if f.flow_type != 'jump']
+            
+            for flow in jump_flows + other_flows:
+                if flow.target_label != '<return>':
+                    build_timeline(flow.target_label, depth + 1)
+        
+        # Build timeline from best starting point
+        for start_label in start_labels:
+            if start_label in graph:
+                build_timeline(start_label)
+                break
+        
+        return timeline
+    
+    def search_flow_patterns(self, pattern_type: str = "cycles") -> List[Dict[str, Any]]:
+        """
+        Search for specific flow patterns in the narrative.
+        
+        Args:
+            pattern_type: Type of pattern to search for ('cycles', 'bridges', 'hubs')
+            
+        Returns:
+            List of found patterns with details
+        """
+        graph = self.parser.build_flow_graph(self.project_path)
+        patterns = []
+        
+        if pattern_type == "cycles":
+            # Find circular paths (cycles)
+            for label_name, node in graph.items():
+                visited = set()
+                
+                def find_cycle(current: str, path: List[str]):
+                    if current in path:
+                        cycle_start = path.index(current)
+                        cycle = path[cycle_start:] + [current]
+                        if len(cycle) > 2:  # Meaningful cycles
+                            patterns.append({
+                                'type': 'cycle',
+                                'path': cycle,
+                                'length': len(cycle) - 1,
+                                'entry_point': current
+                            })
+                        return
+                    
+                    if current in visited or len(path) > 10:
+                        return
+                    
+                    visited.add(current)
+                    path.append(current)
+                    
+                    for flow in graph[current].outgoing_flows:
+                        if flow.target_label in graph:
+                            find_cycle(flow.target_label, path)
+                    
+                    path.pop()
+                
+                find_cycle(label_name, [])
+        
+        elif pattern_type == "bridges":
+            # Find bridge scenes (removing them disconnects major parts)
+            for label_name, node in graph.items():
+                if node.flow_complexity > 0 and len(node.incoming_flows) > 1:
+                    # This could be a bridge if it connects different clusters
+                    patterns.append({
+                        'type': 'bridge',
+                        'label': label_name,
+                        'incoming_count': len(node.incoming_flows),
+                        'outgoing_count': len(node.outgoing_flows),
+                        'importance': len(node.incoming_flows) * len(node.outgoing_flows)
+                    })
+        
+        elif pattern_type == "hubs":
+            # Find hub scenes (high connectivity)
+            for label_name, node in graph.items():
+                total_connections = len(node.incoming_flows) + len(node.outgoing_flows)
+                if total_connections >= 5:  # High connectivity threshold
+                    patterns.append({
+                        'type': 'hub',
+                        'label': label_name,
+                        'total_connections': total_connections,
+                        'incoming': len(node.incoming_flows),
+                        'outgoing': len(node.outgoing_flows),
+                        'has_menu': node.has_menu
+                    })
+        
+        return sorted(patterns, key=lambda x: x.get('importance', x.get('total_connections', 0)), reverse=True) 

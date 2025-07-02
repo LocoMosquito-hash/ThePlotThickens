@@ -63,6 +63,33 @@ class MenuStructure:
 
 
 @dataclass
+class LabelFlow:
+    """Represents navigation flow between labels."""
+    source_label: Optional[str] = None
+    target_label: str = ""
+    flow_type: str = ""  # 'jump', 'call', 'return', 'menu_choice'
+    file_path: str = ""
+    line_number: int = 0
+    context: Optional[str] = None  # Additional context (e.g., choice text for menu flows)
+    condition: Optional[str] = None  # Condition if it's a conditional flow
+
+
+@dataclass
+class LabelNode:
+    """Represents a label with its connections and metadata."""
+    name: str
+    file_path: str = ""
+    line_number: int = 0
+    incoming_flows: List[LabelFlow] = field(default_factory=list)
+    outgoing_flows: List[LabelFlow] = field(default_factory=list)
+    has_menu: bool = False
+    has_dialogue: bool = False
+    is_reachable: bool = False
+    is_dead_end: bool = False
+    flow_complexity: int = 0  # Number of possible paths from this label
+
+
+@dataclass
 class ProjectOverview:
     """Summary of a Ren'Py project structure."""
     project_path: str
@@ -613,4 +640,313 @@ class RenpyParser:
         except Exception as e:
             raise RenpyParseError(f"Failed to find menus: {str(e)}")
         
-        return menus 
+        return menus
+    
+    def find_all_label_flows(self, project_path: str) -> List[LabelFlow]:
+        """
+        Find all navigation flows between labels (jumps, calls, returns).
+        
+        Args:
+            project_path: Path to the Ren'Py project
+            
+        Returns:
+            List of all LabelFlow objects found
+        """
+        flows = []
+        current_label = None
+        
+        try:
+            rpy_files = self.find_rpy_files(project_path)
+            
+            for rpy_file in rpy_files:
+                file_path = os.path.join(project_path, rpy_file)
+                
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as file:
+                        lines = file.readlines()
+                except UnicodeDecodeError:
+                    try:
+                        with open(file_path, 'r', encoding='latin-1') as file:
+                            lines = file.readlines()
+                    except Exception:
+                        continue  # Skip problematic files
+                
+                for line_num, line in enumerate(lines, 1):
+                    stripped_line = line.strip()
+                    
+                    # Track current label for context
+                    label_match = self.patterns['label'].match(line)
+                    if label_match:
+                        current_label = label_match.group(1)
+                        continue
+                    
+                    # Find direct jumps and calls
+                    jump_match = self.patterns['jump'].match(line)
+                    if jump_match:
+                        flows.append(LabelFlow(
+                            source_label=current_label,
+                            target_label=jump_match.group(1),
+                            flow_type='jump',
+                            file_path=file_path,
+                            line_number=line_num
+                        ))
+                    
+                    call_match = self.patterns['call'].match(line)
+                    if call_match:
+                        flows.append(LabelFlow(
+                            source_label=current_label,
+                            target_label=call_match.group(1),
+                            flow_type='call',
+                            file_path=file_path,
+                            line_number=line_num
+                        ))
+                    
+                    # Find return statements
+                    if self.patterns['return'].match(line):
+                        flows.append(LabelFlow(
+                            source_label=current_label,
+                            target_label='<return>',
+                            flow_type='return',
+                            file_path=file_path,
+                            line_number=line_num
+                        ))
+                
+                # Add flows from menu choices
+                menus = self.find_all_menus(project_path)
+                for menu in menus:
+                    for choice in menu.choices:
+                        if choice.destination:
+                            flows.append(LabelFlow(
+                                source_label=menu.label_context,
+                                target_label=choice.destination,
+                                flow_type='menu_choice',
+                                file_path=choice.file_path,
+                                line_number=choice.line_number,
+                                context=choice.text,
+                                condition=choice.condition
+                            ))
+        
+        except Exception as e:
+            raise RenpyParseError(f"Failed to find label flows: {str(e)}")
+        
+        return flows
+    
+    def build_flow_graph(self, project_path: str) -> Dict[str, LabelNode]:
+        """
+        Build a complete flow graph of all labels and their connections.
+        
+        Args:
+            project_path: Path to the Ren'Py project
+            
+        Returns:
+            Dictionary mapping label names to LabelNode objects
+        """
+        # Get all labels first
+        all_lines = []
+        label_definitions = {}
+        
+        try:
+            rpy_files = self.find_rpy_files(project_path)
+            
+            # First pass: collect all label definitions
+            for rpy_file in rpy_files:
+                file_path = os.path.join(project_path, rpy_file)
+                
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as file:
+                        lines = file.readlines()
+                except UnicodeDecodeError:
+                    try:
+                        with open(file_path, 'r', encoding='latin-1') as file:
+                            lines = file.readlines()
+                    except Exception:
+                        continue
+                
+                for line_num, line in enumerate(lines, 1):
+                    all_lines.append((file_path, line_num, line))
+                    
+                    label_match = self.patterns['label'].match(line)
+                    if label_match:
+                        label_name = label_match.group(1)
+                        label_definitions[label_name] = (file_path, line_num)
+        
+        except Exception as e:
+            raise RenpyParseError(f"Failed to collect labels: {str(e)}")
+        
+        # Initialize all label nodes
+        graph = {}
+        for label_name, (file_path, line_num) in label_definitions.items():
+            graph[label_name] = LabelNode(
+                name=label_name,
+                file_path=file_path,
+                line_number=line_num
+            )
+        
+        # Get all flows and populate the graph
+        flows = self.find_all_label_flows(project_path)
+        
+        for flow in flows:
+            # Add to source node's outgoing flows
+            if flow.source_label and flow.source_label in graph:
+                graph[flow.source_label].outgoing_flows.append(flow)
+            
+            # Add to target node's incoming flows (if target exists)
+            if flow.target_label in graph:
+                graph[flow.target_label].incoming_flows.append(flow)
+        
+        # Analyze label properties
+        menus = self.find_all_menus(project_path)
+        menu_labels = set(menu.label_context for menu in menus if menu.label_context)
+        
+        dialogue_lines = []
+        for file_path, line_num, line in all_lines:
+            parsed_line = self._parse_line(file_path, line_num, line)
+            if parsed_line and parsed_line.line_type in ['dialogue', 'narrator']:
+                dialogue_lines.append(parsed_line)
+        
+        dialogue_labels = set()
+        current_label = None
+        for file_path, line_num, line in all_lines:
+            label_match = self.patterns['label'].match(line)
+            if label_match:
+                current_label = label_match.group(1)
+            elif current_label and any(parsed.line_type in ['dialogue', 'narrator'] 
+                                     for parsed in [self._parse_line(file_path, line_num, line)] 
+                                     if parsed):
+                dialogue_labels.add(current_label)
+        
+        # Set label properties
+        for label_name, node in graph.items():
+            node.has_menu = label_name in menu_labels
+            node.has_dialogue = label_name in dialogue_labels
+            node.is_dead_end = len(node.outgoing_flows) == 0
+            node.flow_complexity = len(node.outgoing_flows)
+        
+        # Analyze reachability from common starting points
+        start_labels = ['start', 'main', 'scene1', 'intro', 'begin']
+        reachable = set()
+        
+        def mark_reachable(label_name: str, visited: Optional[set] = None):
+            if visited is None:
+                visited = set()
+            
+            if label_name in visited or label_name not in graph:
+                return
+            
+            visited.add(label_name)
+            reachable.add(label_name)
+            
+            for flow in graph[label_name].outgoing_flows:
+                if flow.target_label != '<return>':
+                    mark_reachable(flow.target_label, visited)
+        
+        # Mark reachability from all possible starting points
+        for start_label in start_labels:
+            if start_label in graph:
+                mark_reachable(start_label)
+        
+        # Also mark from labels with no incoming flows (potential entry points)
+        for label_name, node in graph.items():
+            if len(node.incoming_flows) == 0:
+                mark_reachable(label_name)
+        
+        # Set reachability flags
+        for label_name, node in graph.items():
+            node.is_reachable = label_name in reachable
+        
+        return graph
+    
+    def analyze_flow_patterns(self, project_path: str) -> Dict[str, Any]:
+        """
+        Analyze flow patterns and narrative structure.
+        
+        Args:
+            project_path: Path to the Ren'Py project
+            
+        Returns:
+            Dictionary with flow analysis and statistics
+        """
+        graph = self.build_flow_graph(project_path)
+        flows = self.find_all_label_flows(project_path)
+        
+        # Count flow types
+        flow_type_counts = {}
+        for flow in flows:
+            flow_type = flow.flow_type
+            if flow_type not in flow_type_counts:
+                flow_type_counts[flow_type] = 0
+            flow_type_counts[flow_type] += 1
+        
+        # Analyze label categories
+        reachable_labels = [name for name, node in graph.items() if node.is_reachable]
+        unreachable_labels = [name for name, node in graph.items() if not node.is_reachable]
+        dead_end_labels = [name for name, node in graph.items() if node.is_dead_end]
+        entry_points = [name for name, node in graph.items() if len(node.incoming_flows) == 0]
+        high_complexity = [name for name, node in graph.items() if node.flow_complexity > 3]
+        
+        # Find most connected labels
+        most_incoming = sorted(graph.items(), key=lambda x: len(x[1].incoming_flows), reverse=True)
+        most_outgoing = sorted(graph.items(), key=lambda x: len(x[1].outgoing_flows), reverse=True)
+        
+        # Calculate connectivity metrics
+        total_labels = len(graph)
+        total_flows = len(flows)
+        avg_complexity = sum(node.flow_complexity for node in graph.values()) / total_labels if total_labels > 0 else 0
+        
+        # Find flow clusters (highly connected groups)
+        clusters = self._find_flow_clusters(graph)
+        
+        analysis = {
+            'total_labels': total_labels,
+            'total_flows': total_flows,
+            'flow_types': flow_type_counts,
+            'reachable_labels': len(reachable_labels),
+            'unreachable_labels': len(unreachable_labels),
+            'dead_end_labels': len(dead_end_labels),
+            'entry_points': len(entry_points),
+            'high_complexity_labels': len(high_complexity),
+            'average_complexity': round(avg_complexity, 2),
+            'connectivity_ratio': round(total_flows / total_labels, 2) if total_labels > 0 else 0,
+            'reachability_ratio': round(len(reachable_labels) / total_labels, 2) if total_labels > 0 else 0,
+            'most_incoming': [(name, len(node.incoming_flows)) for name, node in most_incoming[:10]],
+            'most_outgoing': [(name, len(node.outgoing_flows)) for name, node in most_outgoing[:10]],
+            'entry_point_labels': entry_points[:10],
+            'dead_end_labels': dead_end_labels[:10],
+            'unreachable_labels': unreachable_labels[:10],
+            'high_complexity_labels': high_complexity[:10],
+            'flow_clusters': len(clusters),
+            'largest_cluster_size': max(len(cluster) for cluster in clusters) if clusters else 0
+        }
+        
+        return analysis
+    
+    def _find_flow_clusters(self, graph: Dict[str, LabelNode]) -> List[List[str]]:
+        """Find clusters of highly connected labels."""
+        visited = set()
+        clusters = []
+        
+        def dfs_cluster(label_name: str, current_cluster: List[str]):
+            if label_name in visited or label_name not in graph:
+                return
+            
+            visited.add(label_name)
+            current_cluster.append(label_name)
+            
+            # Follow all outgoing flows
+            for flow in graph[label_name].outgoing_flows:
+                if flow.target_label != '<return>':
+                    dfs_cluster(flow.target_label, current_cluster)
+            
+            # Follow all incoming flows (bidirectional clustering)
+            for flow in graph[label_name].incoming_flows:
+                if flow.source_label:
+                    dfs_cluster(flow.source_label, current_cluster)
+        
+        for label_name in graph:
+            if label_name not in visited:
+                cluster = []
+                dfs_cluster(label_name, cluster)
+                if cluster:
+                    clusters.append(cluster)
+        
+        return clusters 
