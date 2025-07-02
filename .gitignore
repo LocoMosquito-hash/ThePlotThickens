@@ -40,3 +40,8 @@ data/
 ideas-lab/window-selector/image-stack/
 image-stack/
 app/renpy-source-api/*.json
+app/renpy-source-api/demo_flow_visualization/*.html
+app/renpy-source-api/demo_flow_visualization/*.png
+app/renpy-source-api/savior_flow_complete/*.html
+app/renpy-source-api/savior_flow_complete/*.png
+app/renpy-source-api/savior_flow_visualization/*.png
