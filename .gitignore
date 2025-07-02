@@ -39,3 +39,4 @@ Thumbs.db
 data/
 ideas-lab/window-selector/image-stack/
 image-stack/
+app/renpy-source-api/*.json

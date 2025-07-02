@@ -876,4 +876,310 @@ class RenpyProject:
     
     def __repr__(self) -> str:
         """Representation of the project."""
-        return self.__str__() 
+        return self.__str__()
+    
+    def get_all_menus(self) -> List[Any]:
+        """
+        Get all menu structures in the project.
+        
+        Returns:
+            List of all MenuStructure objects with choices and destinations
+        """
+        if not self.is_analyzed:
+            self.analyze()
+        
+        try:
+            return self.parser.find_all_menus(self.project_path)
+        except Exception as e:
+            raise RenpyAnalysisError(f"Failed to get menus: {str(e)}")
+    
+    def get_menu_analysis(self) -> Dict[str, Any]:
+        """
+        Get comprehensive analysis of all menus and choices in the project.
+        
+        Returns:
+            Dictionary with detailed menu analysis and statistics
+        """
+        menus = self.get_all_menus()
+        
+        analysis = {
+            'total_menus': len(menus),
+            'total_choices': 0,
+            'conditional_choices': 0,
+            'choices_by_destination': {},
+            'choices_by_action': {
+                'jump': 0,
+                'call': 0,
+                'return': 0,
+                'pass': 0,
+                'continue': 0,
+                'unknown': 0
+            },
+            'menus_by_label': {},
+            'decision_trees': [],
+            'branching_points': [],
+            'choice_popularity': {},
+            'menu_statistics': []
+        }
+        
+        for menu in menus:
+            menu_info = {
+                'name': menu.name,
+                'file': menu.file_path,
+                'line': menu.line_number,
+                'label_context': menu.label_context,
+                'choice_count': menu.total_choices,
+                'choices': []
+            }
+            
+            analysis['total_choices'] += menu.total_choices
+            
+            # Track menus by label context
+            if menu.label_context:
+                if menu.label_context not in analysis['menus_by_label']:
+                    analysis['menus_by_label'][menu.label_context] = []
+                analysis['menus_by_label'][menu.label_context].append(menu_info)
+            
+            # Analyze each choice
+            for choice in menu.choices:
+                choice_info = {
+                    'text': choice.text,
+                    'condition': choice.condition,
+                    'destination': choice.destination,
+                    'action_type': choice.action_type,
+                    'subsequent_lines_count': len(choice.subsequent_lines)
+                }
+                menu_info['choices'].append(choice_info)
+                
+                # Count conditional choices
+                if choice.condition:
+                    analysis['conditional_choices'] += 1
+                
+                # Track destinations
+                if choice.destination:
+                    if choice.destination not in analysis['choices_by_destination']:
+                        analysis['choices_by_destination'][choice.destination] = 0
+                    analysis['choices_by_destination'][choice.destination] += 1
+                
+                # Track action types
+                action_type = choice.action_type or 'unknown'
+                if action_type in analysis['choices_by_action']:
+                    analysis['choices_by_action'][action_type] += 1
+                
+                # Track choice popularity (simple text analysis)
+                choice_words = choice.text.lower().split()
+                for word in choice_words:
+                    if len(word) > 3:  # Skip short words
+                        if word not in analysis['choice_popularity']:
+                            analysis['choice_popularity'][word] = 0
+                        analysis['choice_popularity'][word] += 1
+            
+            # Identify branching points (menus with multiple meaningful choices)
+            if menu.total_choices > 1:
+                destinations = [choice.destination for choice in menu.choices if choice.destination]
+                if len(destinations) > 1:
+                    analysis['branching_points'].append({
+                        'label': menu.label_context,
+                        'file': menu.file_path,
+                        'line': menu.line_number,
+                        'choices': menu.total_choices,
+                        'destinations': destinations
+                    })
+            
+            analysis['menu_statistics'].append(menu_info)
+        
+        # Sort choice popularity
+        analysis['choice_popularity'] = dict(
+            sorted(analysis['choice_popularity'].items(), 
+                   key=lambda x: x[1], reverse=True)
+        )
+        
+        return analysis
+    
+    def get_decision_tree(self, start_label: str = None) -> Dict[str, Any]:
+        """
+        Build a decision tree starting from a specific label or from the beginning.
+        
+        Args:
+            start_label: Label to start building the tree from (None for project start)
+            
+        Returns:
+            Dictionary representing the decision tree structure
+        """
+        menus = self.get_all_menus()
+        labels = self.get_labels()
+        
+        # Create a mapping of labels to menus
+        label_to_menus = {}
+        for menu in menus:
+            if menu.label_context:
+                if menu.label_context not in label_to_menus:
+                    label_to_menus[menu.label_context] = []
+                label_to_menus[menu.label_context].append(menu)
+        
+        def build_tree_node(label: str, visited: set = None) -> Dict[str, Any]:
+            if visited is None:
+                visited = set()
+            
+            if label in visited:
+                return {'label': label, 'type': 'cycle_detected', 'choices': []}
+            
+            visited.add(label)
+            
+            node = {
+                'label': label,
+                'type': 'scene',
+                'choices': [],
+                'has_menu': label in label_to_menus
+            }
+            
+            if label in label_to_menus:
+                node['type'] = 'decision_point'
+                
+                for menu in label_to_menus[label]:
+                    for choice in menu.choices:
+                        choice_node = {
+                            'text': choice.text,
+                            'condition': choice.condition,
+                            'action_type': choice.action_type,
+                            'destination': choice.destination
+                        }
+                        
+                        # Recursively build subtree if there's a destination
+                        if choice.destination and choice.destination in labels:
+                            choice_node['subtree'] = build_tree_node(choice.destination, visited.copy())
+                        
+                        node['choices'].append(choice_node)
+            
+            return node
+        
+        # Start building from specified label or try common starting points
+        start_labels = [start_label] if start_label else ['start', 'main', 'scene1', 'intro']
+        
+        for label in start_labels:
+            if label and label in labels:
+                return build_tree_node(label)
+        
+        # If no starting point found, return overall structure
+        return {
+            'label': 'project_root',
+            'type': 'project',
+            'total_decision_points': len([menu for menu in menus if menu.total_choices > 1]),
+            'all_menus': len(menus),
+            'available_labels': labels[:20]  # First 20 labels
+        }
+    
+    def search_choices(self, query: str, case_sensitive: bool = False) -> List[Dict[str, Any]]:
+        """
+        Search for choices containing specific text.
+        
+        Args:
+            query: Text to search for in choice text
+            case_sensitive: Whether to perform case-sensitive search
+            
+        Returns:
+            List of matching choices with context
+        """
+        menus = self.get_all_menus()
+        matches = []
+        
+        search_term = query if case_sensitive else query.lower()
+        
+        for menu in menus:
+            for choice in menu.choices:
+                choice_text = choice.text if case_sensitive else choice.text.lower()
+                
+                if search_term in choice_text:
+                    matches.append({
+                        'text': choice.text,
+                        'condition': choice.condition,
+                        'destination': choice.destination,
+                        'action_type': choice.action_type,
+                        'menu_context': {
+                            'label': menu.label_context,
+                            'file': menu.file_path,
+                            'line': menu.line_number
+                        }
+                    })
+        
+        return matches
+    
+    def get_choice_destinations(self) -> Dict[str, List[str]]:
+        """
+        Get all choice destinations mapped to their sources.
+        
+        Returns:
+            Dictionary mapping destination labels to lists of source contexts
+        """
+        menus = self.get_all_menus()
+        destinations = {}
+        
+        for menu in menus:
+            for choice in menu.choices:
+                if choice.destination:
+                    if choice.destination not in destinations:
+                        destinations[choice.destination] = []
+                    
+                    source_info = f"{menu.label_context or 'unknown'}:{choice.text[:30]}"
+                    destinations[choice.destination].append(source_info)
+        
+        return destinations
+    
+    def get_branching_complexity(self) -> Dict[str, Any]:
+        """
+        Analyze the branching complexity of the narrative.
+        
+        Returns:
+            Dictionary with complexity metrics
+        """
+        menus = self.get_all_menus()
+        labels = self.get_labels()
+        
+        complexity = {
+            'total_decision_points': 0,
+            'average_choices_per_menu': 0,
+            'max_choices_in_menu': 0,
+            'conditional_choice_ratio': 0,
+            'branching_factor': 0,
+            'linear_sequences': 0,
+            'complexity_score': 0
+        }
+        
+        if not menus:
+            return complexity
+        
+        total_choices = 0
+        conditional_choices = 0
+        branching_menus = 0
+        max_choices = 0
+        
+        for menu in menus:
+            if menu.total_choices > 1:
+                complexity['total_decision_points'] += 1
+                branching_menus += 1
+            
+            total_choices += menu.total_choices
+            max_choices = max(max_choices, menu.total_choices)
+            
+            for choice in menu.choices:
+                if choice.condition:
+                    conditional_choices += 1
+        
+        complexity['max_choices_in_menu'] = max_choices
+        complexity['average_choices_per_menu'] = round(total_choices / len(menus), 2) if menus else 0
+        complexity['conditional_choice_ratio'] = round(conditional_choices / total_choices, 2) if total_choices else 0
+        complexity['branching_factor'] = round(branching_menus / len(menus), 2) if menus else 0
+        
+        # Estimate linear sequences (labels without menus)
+        labels_with_menus = set(menu.label_context for menu in menus if menu.label_context)
+        complexity['linear_sequences'] = len(labels) - len(labels_with_menus)
+        
+        # Calculate overall complexity score (0-100)
+        complexity['complexity_score'] = min(100, round(
+            (complexity['total_decision_points'] * 10) +
+            (complexity['average_choices_per_menu'] * 5) +
+            (complexity['conditional_choice_ratio'] * 20) +
+            (complexity['branching_factor'] * 15)
+        ))
+        
+        return complexity 

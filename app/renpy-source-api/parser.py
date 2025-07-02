@@ -13,7 +13,7 @@ import os
 import re
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple, Set
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 try:
@@ -36,6 +36,30 @@ class RenpyLine:
     label_name: Optional[str] = None
     asset_name: Optional[str] = None
     target_label: Optional[str] = None
+    condition: Optional[str] = None  # For conditional choices
+
+
+@dataclass
+class MenuChoice:
+    """Represents a choice within a menu."""
+    text: str
+    condition: Optional[str] = None
+    destination: Optional[str] = None  # jump/call target
+    action_type: Optional[str] = None  # 'jump', 'call', 'return', 'pass', 'continue'
+    file_path: str = ""
+    line_number: int = 0
+    subsequent_lines: List[str] = field(default_factory=list)  # Lines that follow this choice
+
+
+@dataclass
+class MenuStructure:
+    """Represents a complete menu structure."""
+    name: Optional[str] = None
+    file_path: str = ""
+    line_number: int = 0
+    label_context: Optional[str] = None
+    choices: List[MenuChoice] = field(default_factory=list)
+    total_choices: int = 0
 
 
 @dataclass
@@ -73,6 +97,14 @@ class RenpyParser:
             'narrator': re.compile(r'^\s*"([^"]+)"'),
             'menu': re.compile(r'^\s*menu:', re.IGNORECASE),
             'menu_choice': re.compile(r'^\s*"([^"]+)":'),
+            
+            # Enhanced menu and choice patterns
+            'menu_with_name': re.compile(r'^\s*menu\s+([a-zA-Z_][a-zA-Z0-9_]*):', re.IGNORECASE),
+            'choice_with_condition': re.compile(r'^\s*"([^"]+)"\s+if\s+(.+):', re.IGNORECASE),
+            'choice_jump': re.compile(r'^\s*jump\s+([a-zA-Z_][a-zA-Z0-9_]*)', re.IGNORECASE),
+            'choice_call': re.compile(r'^\s*call\s+([a-zA-Z_][a-zA-Z0-9_]*)', re.IGNORECASE),
+            'choice_return': re.compile(r'^\s*return', re.IGNORECASE),
+            'choice_pass': re.compile(r'^\s*pass', re.IGNORECASE),
             
             # Enhanced asset patterns
             'scene': re.compile(r'^\s*scene\s+([a-zA-Z_][a-zA-Z0-9_\s\-\.]*)', re.IGNORECASE),
@@ -113,6 +145,12 @@ class RenpyParser:
             
             # Asset references in strings (for comprehensive detection)
             'asset_reference': re.compile(r'"([^"]*\.(png|jpg|jpeg|gif|bmp|webp|mp3|wav|ogg|mp4|webm|avi))"', re.IGNORECASE),
+            
+            # Additional choice/flow patterns
+            'if_statement': re.compile(r'^\s*if\s+(.+):', re.IGNORECASE),
+            'elif_statement': re.compile(r'^\s*elif\s+(.+):', re.IGNORECASE),
+            'else_statement': re.compile(r'^\s*else:', re.IGNORECASE),
+            'while_loop': re.compile(r'^\s*while\s+(.+):', re.IGNORECASE),
         }
         
         # File extensions by category
@@ -240,6 +278,13 @@ class RenpyParser:
         elif pattern_name == 'narrator':
             base_line.speaker = 'narrator'
             base_line.dialogue_text = match.group(1)
+        elif pattern_name == 'menu_with_name':
+            base_line.label_name = match.group(1)  # Menu name
+        elif pattern_name == 'menu_choice':
+            base_line.dialogue_text = match.group(1)  # Choice text
+        elif pattern_name == 'choice_with_condition':
+            base_line.dialogue_text = match.group(1)  # Choice text
+            base_line.condition = match.group(2)  # Condition
         elif pattern_name in ['scene', 'show', 'hide']:
             base_line.asset_name = match.group(1).strip()
         elif pattern_name == 'image_def':
@@ -256,14 +301,14 @@ class RenpyParser:
             base_line.asset_name = match.group(1)
         elif pattern_name in ['transform', 'with_transition']:
             base_line.asset_name = match.group(1)
-        elif pattern_name in ['jump', 'call']:
+        elif pattern_name in ['jump', 'call', 'choice_jump', 'choice_call']:
             base_line.target_label = match.group(1)
-        elif pattern_name == 'menu_choice':
-            base_line.dialogue_text = match.group(1)
         elif pattern_name == 'init':
             base_line.dialogue_text = match.group(1)  # Store priority level
         elif pattern_name == 'asset_reference':
             base_line.asset_name = match.group(1)
+        elif pattern_name in ['if_statement', 'elif_statement', 'while_loop']:
+            base_line.condition = match.group(1)
         
         return base_line
     
@@ -408,4 +453,164 @@ class RenpyParser:
             )
             
         except Exception as e:
-            raise RenpyProjectError(f"Failed to analyze project: {str(e)}") 
+            raise RenpyProjectError(f"Failed to analyze project: {str(e)}")
+    
+    def parse_menu_structure(self, file_path: str, start_line: int, lines: List[str]) -> MenuStructure:
+        """
+        Parse a complete menu structure starting from a menu line.
+        
+        Args:
+            file_path: Path to the file containing the menu
+            start_line: Line number where the menu starts (1-indexed)
+            lines: List of all lines in the file
+            
+        Returns:
+            MenuStructure object with all choices and their destinations
+        """
+        menu = MenuStructure(
+            file_path=file_path,
+            line_number=start_line
+        )
+        
+        if start_line - 1 >= len(lines):
+            return menu
+        
+        # Check if this is a named menu
+        menu_line = lines[start_line - 1].strip()
+        menu_with_name_match = self.patterns['menu_with_name'].match(menu_line)
+        if menu_with_name_match:
+            menu.name = menu_with_name_match.group(1)
+        
+        # Parse choices and their actions
+        current_line = start_line
+        current_choice = None
+        indent_level = 0
+        
+        while current_line < len(lines):
+            line = lines[current_line]
+            stripped_line = line.strip()
+            
+            if not stripped_line:
+                current_line += 1
+                continue
+            
+            # Calculate indentation to understand structure
+            line_indent = len(line) - len(line.lstrip())
+            
+            # Check for menu choice
+            choice_match = self.patterns['menu_choice'].match(line)
+            choice_cond_match = self.patterns['choice_with_condition'].match(line)
+            
+            if choice_match:
+                # Save previous choice if exists
+                if current_choice:
+                    menu.choices.append(current_choice)
+                
+                # Create new choice
+                current_choice = MenuChoice(
+                    text=choice_match.group(1),
+                    file_path=file_path,
+                    line_number=current_line + 1
+                )
+                indent_level = line_indent
+                
+            elif choice_cond_match:
+                # Save previous choice if exists
+                if current_choice:
+                    menu.choices.append(current_choice)
+                
+                # Create new conditional choice
+                current_choice = MenuChoice(
+                    text=choice_cond_match.group(1),
+                    condition=choice_cond_match.group(2),
+                    file_path=file_path,
+                    line_number=current_line + 1
+                )
+                indent_level = line_indent
+                
+            elif current_choice and line_indent > indent_level:
+                # This line belongs to the current choice
+                parsed_line = self._parse_line(file_path, current_line + 1, line)
+                
+                if parsed_line:
+                    current_choice.subsequent_lines.append(stripped_line)
+                    
+                    # Check for action types
+                    if parsed_line.line_type in ['jump', 'choice_jump']:
+                        current_choice.action_type = 'jump'
+                        current_choice.destination = parsed_line.target_label
+                    elif parsed_line.line_type in ['call', 'choice_call']:
+                        current_choice.action_type = 'call'
+                        current_choice.destination = parsed_line.target_label
+                    elif parsed_line.line_type in ['return', 'choice_return']:
+                        current_choice.action_type = 'return'
+                    elif parsed_line.line_type in ['choice_pass']:
+                        current_choice.action_type = 'pass'
+                        
+            elif line_indent <= indent_level and current_choice:
+                # We've moved back to menu level or beyond, end current choice
+                menu.choices.append(current_choice)
+                current_choice = None
+                
+                # Check if we're out of the menu entirely
+                if not stripped_line.startswith('"') and not stripped_line.startswith('menu'):
+                    break
+            
+            current_line += 1
+        
+        # Add final choice if it exists
+        if current_choice:
+            menu.choices.append(current_choice)
+        
+        menu.total_choices = len(menu.choices)
+        return menu
+    
+    def find_all_menus(self, project_path: str) -> List[MenuStructure]:
+        """
+        Find and parse all menu structures in the project.
+        
+        Args:
+            project_path: Path to the Ren'Py project
+            
+        Returns:
+            List of all MenuStructure objects found
+        """
+        menus = []
+        current_label = None
+        
+        try:
+            rpy_files = self.find_rpy_files(project_path)
+            
+            for rpy_file in rpy_files:
+                file_path = os.path.join(project_path, rpy_file)
+                
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as file:
+                        lines = file.readlines()
+                except UnicodeDecodeError:
+                    try:
+                        with open(file_path, 'r', encoding='latin-1') as file:
+                            lines = file.readlines()
+                    except Exception:
+                        continue  # Skip problematic files
+                
+                for line_num, line in enumerate(lines, 1):
+                    stripped_line = line.strip()
+                    
+                    # Track current label for context
+                    label_match = self.patterns['label'].match(line)
+                    if label_match:
+                        current_label = label_match.group(1)
+                    
+                    # Check for menu start
+                    if (self.patterns['menu'].match(line) or 
+                        self.patterns['menu_with_name'].match(line)):
+                        
+                        menu = self.parse_menu_structure(file_path, line_num, lines)
+                        menu.label_context = current_label
+                        menus.append(menu)
+        
+        except Exception as e:
+            raise RenpyParseError(f"Failed to find menus: {str(e)}")
+        
+        return menus 
