@@ -30,6 +30,7 @@ from app.views.recognition_viewer import RecognitionDatabaseViewer
 from app.views.decision_points_tab import DecisionPointsTab
 from app.views.decision_point_dialog import DecisionPointDialog
 from app.views.relationship_editor import RelationshipEditorDialog
+from app.views.source_analysis_tab import SourceAnalysisTab
 from app.db_sqlite import (
     get_story_characters, create_quick_event, get_next_quick_event_sequence_number,
     get_character, search_quick_events
@@ -422,6 +423,14 @@ class MainWindow(QMainWindow):
         # Add "git-fork" icon to Decision Points tab
         self.tab_widget.setTabIcon(self.decision_points_tab_index, icon_manager.get_icon("git_fork"))
         
+        # Create source analysis tab (initially disabled)
+        self.source_analysis = SourceAnalysisTab(self.db_conn)
+        self.source_analysis_tab_index = self.tab_widget.addTab(self.source_analysis, "Source Analysis")
+        self.tab_widget.setTabEnabled(self.source_analysis_tab_index, False)
+        
+        # Add "code" icon to Source Analysis tab
+        self.tab_widget.setTabIcon(self.source_analysis_tab_index, icon_manager.get_icon("code"))
+        
         # Status bar
         self.status_bar = EnhancedStatusBar()
         self.setStatusBar(self.status_bar)
@@ -519,10 +528,12 @@ class MainWindow(QMainWindow):
         self.timeline.load_events()
         self.timeline.load_timeline_views()
         self.decision_points.set_story_id(story_id)
+        self.source_analysis.set_story(story_id, story_data)
         self.tab_widget.setTabEnabled(self.story_board_tab_index, True)
         self.tab_widget.setTabEnabled(self.gallery_tab_index, True)
         self.tab_widget.setTabEnabled(self.timeline_tab_index, True)
         self.tab_widget.setTabEnabled(self.decision_points_tab_index, True)
+        self.tab_widget.setTabEnabled(self.source_analysis_tab_index, True)
         self.tab_widget.setCurrentIndex(self.story_board_tab_index)
         self.status_bar.showPermanentMessage(f"Loaded story: {story_data['title']}")
     

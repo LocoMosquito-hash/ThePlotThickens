@@ -14,6 +14,7 @@ import logging
 
 from app.migrations.migrate_relationships import migrate_relationships
 from app.migrations.add_notepad_tables import migrate_add_notepad_tables, check_notepad_migration_needed
+from app.migrations.add_source_path_to_stories import migrate_up, migrate_down
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -52,6 +53,17 @@ def check_and_run_migrations(db_path: str) -> bool:
             elif migration == 'notepad_migration_v1':
                 logger.info("Running notepad migration...")
                 success = success and migrate_add_notepad_tables(db_path)
+            elif migration == 'source_path_migration_v1':
+                logger.info("Running source path migration...")
+                try:
+                    cursor = conn.cursor()
+                    migrate_up(cursor)
+                    conn.commit()
+                    register_migration_complete(db_path, migration)
+                    logger.info("Source path migration completed successfully")
+                except Exception as e:
+                    logger.error(f"Source path migration failed: {e}")
+                    success = False
             # Add other migrations as needed
         
         conn.close()
@@ -117,6 +129,7 @@ def get_pending_migrations(conn: sqlite3.Connection) -> List[str]:
     all_migrations = [
         'relationship_migration_v1',
         'notepad_migration_v1',
+        'source_path_migration_v1',
         # Add other migrations as they are developed
     ]
     
@@ -134,6 +147,13 @@ def get_pending_migrations(conn: sqlite3.Connection) -> List[str]:
     if not notepad_migration_needed and 'notepad_migration_v1' not in completed_migrations:
         completed_migrations.add('notepad_migration_v1')
     
+    # Check if we need to run the source path migration
+    source_path_migration_needed = check_source_path_migration_needed(conn)
+    
+    # If source path migration isn't needed, mark it as completed
+    if not source_path_migration_needed and 'source_path_migration_v1' not in completed_migrations:
+        completed_migrations.add('source_path_migration_v1')
+    
     # Get list of pending migrations
     pending_migrations = [m for m in all_migrations if m not in completed_migrations]
     
@@ -144,6 +164,10 @@ def get_pending_migrations(conn: sqlite3.Connection) -> List[str]:
     # If notepad migration is needed, ensure it's in the list
     if notepad_migration_needed and 'notepad_migration_v1' not in pending_migrations:
         pending_migrations.append('notepad_migration_v1')
+        
+    # If source path migration is needed, ensure it's in the list
+    if source_path_migration_needed and 'source_path_migration_v1' not in pending_migrations:
+        pending_migrations.append('source_path_migration_v1')
     
     return pending_migrations
 
@@ -188,6 +212,33 @@ def check_relationship_migration_needed(conn: sqlite3.Connection) -> bool:
     
     # Migration is needed if there are relationships using the old format
     return old_format_count > 0
+
+
+def check_source_path_migration_needed(conn: sqlite3.Connection) -> bool:
+    """Check if the source path migration is needed.
+    
+    Args:
+        conn: Database connection
+        
+    Returns:
+        True if migration is needed, False otherwise
+    """
+    cursor = conn.cursor()
+    
+    try:
+        # Check if the source_path column exists in the stories table
+        cursor.execute("PRAGMA table_info(stories)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'source_path' not in columns:
+            # source_path column doesn't exist, migration is needed
+            return True
+        else:
+            # Column exists, migration not needed
+            return False
+    except Exception:
+        # If there's an error, assume migration is needed
+        return True
 
 
 def check_notepad_migration_needed(conn: sqlite3.Connection) -> bool:
