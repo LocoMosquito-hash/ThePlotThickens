@@ -421,8 +421,8 @@ class SourceAnalysisTab(QWidget):
         self.sub_tabs.setTabIcon(1, icon_manager.get_icon("window"))
         self.sub_tabs.setTabIcon(2, icon_manager.get_icon("camera"))
         
-        # TODO: Connect window selection between Window Selector and Screenshots tabs
-        # self.window_selector_tab.window_selected.connect(self.screenshots_tab.set_selected_window)
+        # Connect window selection between Window Selector and Screenshots tabs
+        self.window_selector_tab.window_selected.connect(self.screenshots_tab.set_selected_window)
         
         # Future tabs can be added here
         # self.sub_tabs.addTab(VisualizationTab(), "Visualization")
