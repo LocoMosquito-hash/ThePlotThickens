@@ -278,8 +278,88 @@ class CrosshairOverlay(QWidget):
     
     def perform_crop(self):
         """Crop the current image and overwrite the original file."""
-        # Implementation would go here - placeholder for now
-        self.clear_rectangle()
+        # Get the screenshots tab instance (navigate up the parent hierarchy)
+        screenshots_tab = self.parent_widget
+        while screenshots_tab and not hasattr(screenshots_tab, 'current_pixmap'):
+            screenshots_tab = screenshots_tab.parent()
+        
+        if not screenshots_tab or not hasattr(screenshots_tab, 'current_pixmap') or not screenshots_tab.current_pixmap:
+            QMessageBox.warning(self.parent_widget, "Error", "No image available for cropping.")
+            self.clear_rectangle()
+            return
+        
+        # Check if we have the original image path
+        if not hasattr(screenshots_tab, 'current_image_path') or not screenshots_tab.current_image_path:
+            QMessageBox.warning(self.parent_widget, "Error", "Cannot determine original image file for overwriting.")
+            self.clear_rectangle()
+            return
+        
+        try:
+            # Get the original pixmap and file path
+            original_pixmap = screenshots_tab.current_pixmap
+            original_image_path = screenshots_tab.current_image_path
+            
+            # Scale crop rectangle to match original image coordinates
+            display_size = screenshots_tab.image_label.size()
+            original_size = original_pixmap.size()
+            
+            # Check that we have valid crop rectangle and sizes
+            if self.crop_rect is None or display_size.isEmpty() or original_size.isEmpty():
+                QMessageBox.warning(self.parent_widget, "Error", "Invalid crop area or image size.")
+                self.clear_rectangle()
+                return
+            
+            # Calculate scale factors
+            scale_x = original_size.width() / display_size.width()
+            scale_y = original_size.height() / display_size.height()
+            
+            # Convert crop rectangle to original image coordinates
+            final_crop_rect = QRect(
+                int(self.crop_rect.x() * scale_x),
+                int(self.crop_rect.y() * scale_y),
+                int(self.crop_rect.width() * scale_x),
+                int(self.crop_rect.height() * scale_y)
+            )
+            
+            # Ensure crop rectangle is within image bounds
+            final_crop_rect = final_crop_rect.intersected(
+                QRect(0, 0, original_size.width(), original_size.height())
+            )
+            
+            # Crop the image
+            cropped_pixmap = original_pixmap.copy(final_crop_rect)
+            
+            # Overwrite the original file
+            if cropped_pixmap.save(original_image_path, "PNG"):
+                # Update the current pixmap to the cropped version
+                screenshots_tab.current_pixmap = cropped_pixmap
+                
+                # Update the display to show the cropped image
+                scaled_pixmap = cropped_pixmap.scaled(
+                    screenshots_tab.image_label.size(), 
+                    Qt.AspectRatioMode.KeepAspectRatio, 
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                screenshots_tab.image_label.setPixmap(scaled_pixmap)
+                
+                # Update the thumbnail in the list if the method exists
+                if hasattr(screenshots_tab, 'update_thumbnail_after_crop'):
+                    screenshots_tab.update_thumbnail_after_crop(original_image_path)
+                
+                # Update status
+                filename = os.path.basename(original_image_path)
+                screenshots_tab.status_label.setText(f"✅ Image cropped and saved: {filename}")
+                screenshots_tab.status_label.setStyleSheet("color: #4caf50; padding: 10px; background-color: #f0f0f0; border-radius: 4px; margin: 10px 0;")
+                
+                # Clear the rectangle
+                self.clear_rectangle()
+            else:
+                QMessageBox.warning(self.parent_widget, "Error", "Failed to save cropped image.")
+                
+        except Exception as e:
+            QMessageBox.critical(self.parent_widget, "Cropping Error", f"Failed to crop image: {str(e)}")
+        finally:
+            self.clear_rectangle()
     
     def clear_rectangle(self):
         """Clear the drawn rectangle."""
