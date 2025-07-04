@@ -395,18 +395,17 @@ class ScreenshotsTab(QWidget):
                     self.current_pixmap = pixmap
                     self.current_image_path = image_path
                     
-                    # Scale to fit the available space
-                    available_size = self.image_label.size()
+                    # Scale to fit the image label size while maintaining aspect ratio (EXACT ORIGINAL APPROACH)
                     scaled_pixmap = pixmap.scaled(
-                        available_size.width() - 20,
-                        available_size.height() - 20,
+                        self.image_label.size(),
                         Qt.AspectRatioMode.KeepAspectRatio,
                         Qt.TransformationMode.SmoothTransformation
                     )
                     
                     self.image_label.setPixmap(scaled_pixmap)
                     
-                    # Show crosshair overlay
+                    # Show and update crosshair overlay position (EXACT ORIGINAL APPROACH)
+                    self.crosshair_overlay.update_position()
                     self.crosshair_overlay.show()
                     
                     self.status_label.setText(f"📷 Viewing: {os.path.basename(image_path)}")
@@ -663,11 +662,9 @@ class ScreenshotsTab(QWidget):
             pixmap = QPixmap.fromImage(qt_image)
             self.current_pixmap = pixmap
             
-            # Scale to fit the available space
-            available_size = self.image_label.size()
+            # Scale to fit the image label size while maintaining aspect ratio (EXACT ORIGINAL APPROACH)
             scaled_pixmap = pixmap.scaled(
-                available_size.width() - 20,
-                available_size.height() - 20,
+                self.image_label.size(),
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation
             )
