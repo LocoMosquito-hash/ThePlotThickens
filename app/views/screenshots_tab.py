@@ -384,6 +384,37 @@ class ScreenshotsTab(QWidget):
         except Exception as e:
             print(f"Error creating thumbnail for {image_path}: {e}")
     
+    def update_thumbnail_after_crop(self, image_path: str):
+        """Update the thumbnail in the list after the image has been cropped."""
+        try:
+            # Find the thumbnail item with this image path
+            for i in range(self.thumbnail_list.count()):
+                item = self.thumbnail_list.item(i)
+                if item is not None and item.data(Qt.ItemDataRole.UserRole) == image_path:
+                    # Regenerate the thumbnail with the cropped image
+                    with Image.open(image_path) as img:
+                        # Create thumbnail (180x180 max size while maintaining aspect ratio)
+                        img.thumbnail((180, 180), Image.Resampling.LANCZOS)
+                        
+                        # Convert PIL Image to QPixmap
+                        img_qt = img.convert('RGBA')
+                        h, w, ch = img_qt.size[1], img_qt.size[0], 4
+                        bytes_per_line = ch * w
+                        qt_image = QImage(img_qt.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGBA8888)
+                        thumbnail_pixmap = QPixmap.fromImage(qt_image)
+                        
+                        # Update the icon
+                        scaled_pixmap = thumbnail_pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                        item.setIcon(QIcon(scaled_pixmap))
+                        
+                        # Update tooltip
+                        item.setToolTip(f"Click to view: {os.path.basename(image_path)}\nPress DELETE to remove")
+                        
+                        break
+                        
+        except Exception as e:
+            print(f"Error updating thumbnail for {image_path}: {e}")
+    
     def on_thumbnail_clicked(self, item: QListWidgetItem):
         """Handle thumbnail click to display image."""
         image_path = item.data(Qt.ItemDataRole.UserRole)
