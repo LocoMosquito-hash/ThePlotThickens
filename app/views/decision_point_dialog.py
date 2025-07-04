@@ -12,10 +12,11 @@ from typing import List, Dict, Any, Optional, Tuple, Callable
 from PyQt6.QtWidgets import (
     QDialog, QTabWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QRadioButton, QWidget, QScrollArea, QFrame, 
-    QSizePolicy, QMessageBox, QInputDialog, QListWidget, QListWidgetItem
+    QSizePolicy, QMessageBox, QInputDialog, QListWidget, QListWidgetItem,
+    QTableWidget, QTableWidgetItem, QHeaderView, QGroupBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtCore import Qt, pyqtSignal, QSettings
+from PyQt6.QtGui import QKeySequence, QShortcut, QFont
 
 from app.db_sqlite import (
     create_decision_point, update_decision_point, get_decision_point,
@@ -199,6 +200,16 @@ class DecisionPointDialog(QDialog):
         
         # Add OCR tab to tab widget
         self.tab_widget.addTab(ocr_tab, "OCR Tool")
+        
+        # Create Source Lookup tab
+        source_lookup_tab = QWidget()
+        source_lookup_layout = QVBoxLayout(source_lookup_tab)
+        
+        # Create source lookup widget
+        self.create_source_lookup_widget(source_lookup_layout)
+        
+        # Add Source Lookup tab to tab widget
+        self.tab_widget.addTab(source_lookup_tab, "Source Lookup")
         
         # Add buttons
         button_layout = QHBoxLayout()
@@ -660,4 +671,158 @@ class DecisionPointDialog(QDialog):
             return result["count"] if result else 0
         except Exception as e:
             print(f"Error getting decision points count: {e}")
-            return 0 
+            return 0
+    
+    def create_source_lookup_widget(self, layout: QVBoxLayout) -> None:
+        """Create the source lookup widget.
+        
+        Args:
+            layout: Layout to add the widget to
+        """
+        # Status section
+        status_group = QGroupBox("Source Analysis Status")
+        status_layout = QVBoxLayout(status_group)
+        
+        self.source_status_label = QLabel()
+        self.source_status_label.setWordWrap(True)
+        status_layout.addWidget(self.source_status_label)
+        
+        layout.addWidget(status_group)
+        
+        # Search section
+        search_group = QGroupBox("Menu Search")
+        search_layout = QVBoxLayout(search_group)
+        
+        # Search input
+        input_layout = QHBoxLayout()
+        search_layout.addLayout(input_layout)
+        
+        input_layout.addWidget(QLabel("Search text:"))
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Enter dialogue or menu choice text to find nearby menus...")
+        input_layout.addWidget(self.search_input)
+        
+        self.search_button = QPushButton("Search")
+        self.search_button.clicked.connect(self.perform_source_search)
+        input_layout.addWidget(self.search_button)
+        
+        # Results count
+        self.results_count_label = QLabel("0 matches found")
+        self.results_count_label.setStyleSheet("color: #666; font-style: italic;")
+        search_layout.addWidget(self.results_count_label)
+        
+        # Results table
+        self.results_table = QTableWidget(0, 5)
+        self.results_table.setHorizontalHeaderLabels([
+            "Label/Scene", "File", "Menu Choices", "Distance", "Menu Type"
+        ])
+        
+        # Configure table
+        header = self.results_table.horizontalHeader()
+        if header:
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Label/Scene
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # File
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)           # Menu Choices
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Distance
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Menu Type
+        
+        self.results_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.results_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        
+        search_layout.addWidget(self.results_table)
+        
+        # Add to Options button
+        self.add_to_options_button = QPushButton("Add to Options")
+        self.add_to_options_button.clicked.connect(self.add_selected_menu_to_options)
+        self.add_to_options_button.setEnabled(False)
+        search_layout.addWidget(self.add_to_options_button)
+        
+        layout.addWidget(search_group)
+        
+        # Connect table selection to enable/disable button
+        self.results_table.selectionModel().selectionChanged.connect(
+            lambda: self.add_to_options_button.setEnabled(
+                len(self.results_table.selectionModel().selectedRows()) > 0
+            )
+        )
+        
+        # Initialize UI state
+        self.update_source_status()
+        self.update_search_ui_state()
+    
+    def update_source_status(self) -> None:
+        """Update the source analysis status indicator."""
+        settings = QSettings("ThePlotThickens", "ThePlotThickens")
+        source_path = settings.value(f"story_{self.story_id}/source_path", "")
+        
+        if source_path and source_path.strip():
+            import os
+            if os.path.exists(source_path):
+                # Check for .rpy files
+                rpy_count = 0
+                try:
+                    for root, dirs, files in os.walk(source_path):
+                        rpy_count += len([f for f in files if f.endswith('.rpy')])
+                except Exception:
+                    rpy_count = 0
+                
+                if rpy_count > 0:
+                    self.source_status_label.setText(
+                        f"✅ Source analysis available\n"
+                        f"📁 Path: {source_path}\n"
+                        f"📄 Found {rpy_count} .rpy files"
+                    )
+                    self.source_status_label.setStyleSheet("color: #2d8f2d; font-weight: bold;")
+                    self.source_analysis_available = True
+                else:
+                    self.source_status_label.setText(
+                        f"⚠️ No .rpy files found in configured path\n"
+                        f"📁 Path: {source_path}"
+                    )
+                    self.source_status_label.setStyleSheet("color: #cc7a00; font-weight: bold;")
+                    self.source_analysis_available = False
+            else:
+                self.source_status_label.setText(
+                    f"❌ Configured source path does not exist\n"
+                    f"📁 Path: {source_path}"
+                )
+                self.source_status_label.setStyleSheet("color: #cc0000; font-weight: bold;")
+                self.source_analysis_available = False
+        else:
+            self.source_status_label.setText(
+                "❌ No source code path configured\n"
+                "Please configure source path in the Source Analysis tab"
+            )
+            self.source_status_label.setStyleSheet("color: #cc0000; font-weight: bold;")
+            self.source_analysis_available = False
+    
+    def update_search_ui_state(self) -> None:
+        """Update the search UI based on source analysis availability."""
+        has_source = getattr(self, 'source_analysis_available', False)
+        self.search_input.setEnabled(has_source)
+        self.search_button.setEnabled(has_source)
+        
+        if not has_source:
+            self.search_input.setPlaceholderText("Source analysis not available - configure in Source Analysis tab")
+            self.results_count_label.setText("Source analysis required for menu search")
+    
+    def perform_source_search(self) -> None:
+        """Perform the source code search for menus."""
+        # Placeholder for Step 2 implementation
+        search_text = self.search_input.text().strip()
+        if not search_text:
+            QMessageBox.warning(self, "Search", "Please enter text to search for.")
+            return
+        
+        # TODO: Implement actual search logic in Step 2
+        QMessageBox.information(self, "Search", f"Search functionality will be implemented in Step 2.\nSearch text: '{search_text}'")
+    
+    def add_selected_menu_to_options(self) -> None:
+        """Add the selected menu choices to the options list."""
+        # Placeholder for Step 3 implementation
+        selected_rows = self.results_table.selectionModel().selectedRows()
+        if not selected_rows:
+            return
+        
+        # TODO: Implement adding menu choices to options in Step 3
+        QMessageBox.information(self, "Add to Options", "Add to Options functionality will be implemented in Step 3.")
