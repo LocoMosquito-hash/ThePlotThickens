@@ -675,7 +675,8 @@ class ScreenshotsTab(QWidget):
             # Display the scaled image
             self.image_label.setPixmap(scaled_pixmap)
             
-            # Show crosshair overlay
+            # Show and update crosshair overlay position to match the displayed image
+            self.crosshair_overlay.update_position()
             self.crosshair_overlay.show()
             
             # Update status

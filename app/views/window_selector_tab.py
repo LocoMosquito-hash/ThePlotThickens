@@ -194,13 +194,17 @@ class CrosshairOverlay(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        # Draw crosshair lines when hovering and not drawing rectangle
+        # Draw crosshair lines when hovering and not drawing rectangle  
         if self.is_hovering and self.mouse_pos and not self.is_drawing_rect:
             crosshair_pen = QPen(QColor(0, 255, 0), 2, Qt.PenStyle.DashLine)
             painter.setPen(crosshair_pen)
             
             x, y = self.mouse_pos.x(), self.mouse_pos.y()
+            
+            # Draw horizontal line (full width)
             painter.drawLine(0, y, self.width(), y)
+            
+            # Draw vertical line (full height)
             painter.drawLine(x, 0, x, self.height())
         
         # Draw crop rectangle when dragging
@@ -214,6 +218,11 @@ class CrosshairOverlay(QWidget):
             
             rect = QRect(min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
             painter.drawRect(rect)
+    
+    def update_position(self):
+        """Update overlay position to match parent widget."""
+        self.resize(self.parent_widget.size())
+        self.move(0, 0)
     
     def mousePressEvent(self, event):
         """Start rectangle drawing on left mouse button press."""
@@ -280,15 +289,15 @@ class CrosshairOverlay(QWidget):
         self.update()
     
     def enterEvent(self, event):
-        """Show crosshair when mouse enters."""
+        """Mouse entered the overlay area - show crosshairs."""
         self.is_hovering = True
-        self.show()
+        self.update()
         super().enterEvent(event)
     
     def leaveEvent(self, event):
-        """Hide crosshair when mouse leaves."""
+        """Mouse left the overlay area - hide crosshairs."""
         self.is_hovering = False
-        self.hide()
+        self.update()
         super().leaveEvent(event)
 
 
