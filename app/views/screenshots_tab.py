@@ -132,6 +132,9 @@ class GlobalHotkeyMonitor(QThread):
             self.is_monitoring = False
             self.status_update.emit("⏹️ Global hotkey monitoring stopped", "#ff9800")
             
+            # Signal the thread to stop its run loop
+            self.quit()
+            
         except Exception as e:
             self.status_update.emit(f"⚠️ Error stopping hotkeys: {str(e)}", "#ff9800")
     
@@ -470,12 +473,22 @@ class ScreenshotsTab(QWidget):
         self.hotkey_monitor.set_target_window(self.selected_window)
         
         if self.hotkey_monitor.start_monitoring():
+            # Start the QThread to keep the monitoring alive
+            if not self.hotkey_monitor.isRunning():
+                self.hotkey_monitor.start()
+            
             self.start_monitoring_button.setEnabled(False)
             self.stop_monitoring_button.setEnabled(True)
     
     def stop_global_monitoring(self):
         """Stop global hotkey monitoring."""
         self.hotkey_monitor.stop_monitoring()
+        
+        # Stop the QThread if it's running
+        if self.hotkey_monitor.isRunning():
+            self.hotkey_monitor.quit()
+            self.hotkey_monitor.wait(1000)  # Wait up to 1 second for thread to finish
+        
         self.start_monitoring_button.setEnabled(True)
         self.stop_monitoring_button.setEnabled(False)
     
