@@ -773,6 +773,9 @@ Window State:
 class WindowSelectorTab(QWidget):
     """Main Window Selector tab for the Source Analysis interface."""
     
+    # Signal emitted when a window is selected (for communication with other tabs)
+    window_selected = pyqtSignal(object)  # WindowInfo object
+    
     def __init__(self, db_conn, parent=None):
         """Initialize the Window Selector tab.
         
@@ -834,6 +837,9 @@ class WindowSelectorTab(QWidget):
         
         # Switch to properties tab to show the selection
         self.tab_widget.setCurrentWidget(self.window_properties)
+        
+        # Forward the signal to external listeners (Screenshots tab)
+        self.window_selected.emit(window_info)
     
     def set_story(self, story_id: int, story_data: Dict[str, Any]):
         """Set the current story context.
