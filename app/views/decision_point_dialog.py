@@ -884,13 +884,80 @@ class DecisionPointDialog(QDialog):
     
     def add_selected_menu_to_options(self) -> None:
         """Add the selected menu choices to the options list."""
-        # Placeholder for Step 3 implementation
-        selected_rows = self.results_table.selectionModel().selectedRows()
+        selected_rows = self.results_table.selectionModel().selectedRows() if self.results_table.selectionModel() else []
         if not selected_rows:
+            QMessageBox.warning(self, "No Selection", "Please select a menu from the results table.")
             return
         
-        # TODO: Implement adding menu choices to options in Step 3
-        QMessageBox.information(self, "Add to Options", "Add to Options functionality will be implemented in Step 3.")
+        try:
+            # Get the selected row
+            selected_row = selected_rows[0].row()
+            
+            # Get the match data from the first column (Label/Scene)
+            label_item = self.results_table.item(selected_row, 0)
+            if not label_item:
+                QMessageBox.warning(self, "Error", "Could not retrieve menu data.")
+                return
+            
+            match_data = label_item.data(Qt.ItemDataRole.UserRole)
+            if not match_data:
+                QMessageBox.warning(self, "Error", "No menu data available for the selected item.")
+                return
+            
+            # Extract menu choices
+            choices = match_data.get('choices', [])
+            if not choices:
+                QMessageBox.warning(self, "No Choices", "The selected menu has no choices to add.")
+                return
+            
+            # Ask user for confirmation
+            menu_label = match_data.get('label', 'Unknown')
+            choice_count = len(choices)
+            choice_preview = choices[:3]  # Show first 3 choices
+            preview_text = "\n".join(f"• {choice}" for choice in choice_preview)
+            if len(choices) > 3:
+                preview_text += f"\n... and {len(choices) - 3} more"
+            
+            reply = QMessageBox.question(
+                self,
+                "Add Menu Choices",
+                f"Add {choice_count} choice{'s' if choice_count != 1 else ''} from menu in '{menu_label}'?\n\n"
+                f"Choices to add:\n{preview_text}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            
+            # Add each choice as an option
+            added_count = 0
+            for choice_text in choices:
+                if choice_text.strip():  # Skip empty choices
+                    self.add_option(choice_text.strip())
+                    added_count += 1
+            
+            # Switch back to Decision Point tab
+            self.tab_widget.setCurrentIndex(0)
+            
+            # Show success message
+            if added_count > 0:
+                QMessageBox.information(
+                    self,
+                    "Options Added",
+                    f"Successfully added {added_count} option{'s' if added_count != 1 else ''} "
+                    f"from menu in '{menu_label}'."
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "No Options Added",
+                    "No valid choices were found to add."
+                )
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error adding options: {str(e)}")
+            print(f"Add to options error: {e}")  # For debugging
     
     def find_nearby_menus(self, match: Dict[str, Any], all_menus: List[Any], match_type: str) -> List[Dict[str, Any]]:
         """Find menus near a text match.
