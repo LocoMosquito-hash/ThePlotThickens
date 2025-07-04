@@ -21,6 +21,7 @@ from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont
 
 from app.utils.icons import icon_manager
+from app.views.window_selector_tab import WindowSelectorTab
 
 
 class SourceAnalysisWorker(QThread):
@@ -406,8 +407,13 @@ class SourceAnalysisTab(QWidget):
         self.setup_tab = SourceAnalysisSetupTab(self.db_conn)
         self.sub_tabs.addTab(self.setup_tab, "Setup")
         
-        # Add icon to Setup tab
+        # Window Selector tab
+        self.window_selector_tab = WindowSelectorTab(self.db_conn)
+        self.sub_tabs.addTab(self.window_selector_tab, "Window Selector")
+        
+        # Add icons to tabs
         self.sub_tabs.setTabIcon(0, icon_manager.get_icon("settings"))
+        self.sub_tabs.setTabIcon(1, icon_manager.get_icon("window"))
         
         # Future tabs can be added here
         # self.sub_tabs.addTab(VisualizationTab(), "Visualization")
@@ -421,4 +427,5 @@ class SourceAnalysisTab(QWidget):
             story_data: Story data dictionary
         """
         self.story_id = story_id
-        self.setup_tab.set_story(story_id, story_data) 
+        self.setup_tab.set_story(story_id, story_data)
+        self.window_selector_tab.set_story(story_id, story_data) 
