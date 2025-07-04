@@ -7,6 +7,7 @@ Decision Point Dialog for The Plot Thickens application.
 This module contains the dialog for creating and editing decision points.
 """
 
+import os
 from typing import List, Dict, Any, Optional, Tuple, Callable
 
 from PyQt6.QtWidgets import (
@@ -808,14 +809,78 @@ class DecisionPointDialog(QDialog):
     
     def perform_source_search(self) -> None:
         """Perform the source code search for menus."""
-        # Placeholder for Step 2 implementation
         search_text = self.search_input.text().strip()
         if not search_text:
             QMessageBox.warning(self, "Search", "Please enter text to search for.")
             return
         
-        # TODO: Implement actual search logic in Step 2
-        QMessageBox.information(self, "Search", f"Search functionality will be implemented in Step 2.\nSearch text: '{search_text}'")
+        # Clear previous results
+        self.results_table.setRowCount(0)
+        self.results_count_label.setText("Searching...")
+        
+        try:
+            # Get source path for current story
+            settings = QSettings("ThePlotThickens", "ThePlotThickens")
+            source_path = settings.value(f"story_{self.story_id}/source_path", "")
+            
+            if not source_path or not source_path.strip():
+                QMessageBox.warning(self, "Search", "No source path configured for this story.")
+                return
+            
+            # Initialize Ren'Py API
+            import sys
+            import os
+            
+            # Add the renpy-source-api directory to the Python path
+            api_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'renpy-source-api')
+            if api_dir not in sys.path:
+                sys.path.insert(0, api_dir)
+            
+            # Import and initialize the API
+            from core import RenpyProject
+            
+            # Create project instance
+            project = RenpyProject(source_path)
+            
+            # Ensure project is analyzed
+            if not project.is_analyzed:
+                project.analyze()
+            
+            # Search for matches in dialogue and choices
+            dialogue_matches = project.search_dialogue(search_text, case_sensitive=False)
+            choice_matches = project.search_choices(search_text, case_sensitive=False)
+            
+            # Get all menus for proximity analysis
+            all_menus = project.get_all_menus()
+            
+            # Process matches and find nearby menus
+            menu_matches = []
+            
+            # Process dialogue matches
+            for dialogue_match in dialogue_matches:
+                nearby_menus = self.find_nearby_menus(dialogue_match, all_menus, "dialogue")
+                menu_matches.extend(nearby_menus)
+            
+            # Process choice matches
+            for choice_match in choice_matches:
+                nearby_menus = self.find_nearby_menus(choice_match, all_menus, "choice")
+                menu_matches.extend(nearby_menus)
+            
+            # Remove duplicates and sort by distance
+            unique_matches = self.deduplicate_menu_matches(menu_matches)
+            unique_matches.sort(key=lambda x: x['distance'])
+            
+            # Populate results table
+            self.populate_results_table(unique_matches)
+            
+            # Update results count
+            count = len(unique_matches)
+            self.results_count_label.setText(f"{count} menu{'s' if count != 1 else ''} found")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Search Error", f"Error during search: {str(e)}")
+            self.results_count_label.setText("Search failed")
+            print(f"Search error details: {e}")  # For debugging
     
     def add_selected_menu_to_options(self) -> None:
         """Add the selected menu choices to the options list."""
@@ -826,3 +891,124 @@ class DecisionPointDialog(QDialog):
         
         # TODO: Implement adding menu choices to options in Step 3
         QMessageBox.information(self, "Add to Options", "Add to Options functionality will be implemented in Step 3.")
+    
+    def find_nearby_menus(self, match: Dict[str, Any], all_menus: List[Any], match_type: str) -> List[Dict[str, Any]]:
+        """Find menus near a text match.
+        
+        Args:
+            match: Match data from dialogue or choice search
+            all_menus: List of all menus in the project
+            match_type: Type of match ('dialogue' or 'choice')
+            
+        Returns:
+            List of nearby menu data
+        """
+        nearby_menus = []
+        
+        if match_type == "dialogue":
+            match_file = match.get("file", "")
+            match_line = match.get("line_number", 0)
+        else:  # choice
+            match_file = match.get("menu_context", {}).get("file", "")
+            match_line = match.get("menu_context", {}).get("line", 0)
+        
+        if not match_file or not match_line:
+            return nearby_menus
+        
+        # Find menus in the same file
+        for menu in all_menus:
+            menu_file = getattr(menu, 'file_path', '')
+            menu_line = getattr(menu, 'line_number', 0)
+            
+            # Extract just the filename for comparison
+            match_filename = os.path.basename(match_file)
+            menu_filename = os.path.basename(menu_file)
+            
+            if match_filename == menu_filename:
+                # Calculate distance
+                distance = abs(match_line - menu_line)
+                
+                # Get menu choices
+                choices = []
+                if hasattr(menu, 'choices'):
+                    choices = [choice.text for choice in menu.choices if hasattr(choice, 'text')]
+                
+                # Determine menu type
+                menu_type = "Menu"
+                if hasattr(menu, 'total_choices') and menu.total_choices == 1:
+                    menu_type = "Single Choice"
+                elif hasattr(menu, 'total_choices') and menu.total_choices > 1:
+                    menu_type = "Multiple Choice"
+                
+                nearby_menus.append({
+                    'label': getattr(menu, 'label_context', 'Unknown'),
+                    'file': menu_filename,
+                    'choices': choices,
+                    'distance': distance,
+                    'menu_type': menu_type,
+                    'match_type': match_type,
+                    'match_text': match.get("dialogue" if match_type == "dialogue" else "text", ""),
+                    'menu_line': menu_line,
+                    'match_line': match_line
+                })
+        
+        return nearby_menus
+    
+    def deduplicate_menu_matches(self, menu_matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove duplicate menu matches.
+        
+        Args:
+            menu_matches: List of menu match dictionaries
+            
+        Returns:
+            List of unique menu matches
+        """
+        seen = set()
+        unique_matches = []
+        
+        for match in menu_matches:
+            # Create a key based on file, menu line, and choices
+            key = (match['file'], match['menu_line'], tuple(match['choices']))
+            
+            if key not in seen:
+                seen.add(key)
+                unique_matches.append(match)
+        
+        return unique_matches
+    
+    def populate_results_table(self, matches: List[Dict[str, Any]]) -> None:
+        """Populate the results table with menu matches.
+        
+        Args:
+            matches: List of menu match dictionaries
+        """
+        self.results_table.setRowCount(len(matches))
+        
+        for row, match in enumerate(matches):
+            # Label/Scene
+            label_item = QTableWidgetItem(str(match.get('label', 'Unknown')))
+            self.results_table.setItem(row, 0, label_item)
+            
+            # File
+            file_item = QTableWidgetItem(match.get('file', ''))
+            self.results_table.setItem(row, 1, file_item)
+            
+            # Menu Choices
+            choices_text = " | ".join(match.get('choices', []))
+            if len(choices_text) > 100:  # Truncate long choice lists
+                choices_text = choices_text[:97] + "..."
+            choices_item = QTableWidgetItem(choices_text)
+            choices_item.setToolTip(" | ".join(match.get('choices', [])))  # Full text in tooltip
+            self.results_table.setItem(row, 2, choices_item)
+            
+            # Distance
+            distance_text = f"{match.get('distance', 0)} lines"
+            distance_item = QTableWidgetItem(distance_text)
+            self.results_table.setItem(row, 3, distance_item)
+            
+            # Menu Type
+            menu_type_item = QTableWidgetItem(match.get('menu_type', 'Unknown'))
+            self.results_table.setItem(row, 4, menu_type_item)
+            
+            # Store full match data for later use
+            label_item.setData(Qt.ItemDataRole.UserRole, match)
