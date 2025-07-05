@@ -21,6 +21,7 @@ from PyQt6.QtCore import Qt, QSize, QSettings, pyqtSignal, QEvent
 from PyQt6.QtGui import QAction, QIcon, QTextCursor, QKeyEvent
 
 from app.widgets.enhanced_status_bar import EnhancedStatusBar
+from app.widgets.collapsible_panel import SimpleCollapsibleWidget
 from app.views.story_manager import StoryManagerWidget
 from app.views.story_board_modular import StoryBoardWidget
 from app.views.settings_dialog import SettingsDialog
@@ -319,14 +320,19 @@ class MainWindow(QMainWindow):
         # Add "layout-board" icon to Story Board tab
         self.tab_widget.setTabIcon(self.story_board_tab_index, icon_manager.get_icon("layout_board"))
         
-        # Create gallery tab with refresh button (initially disabled)
+        # Create gallery tab with collapsible controls (initially disabled)
         gallery_container = QWidget()
         gallery_layout = QVBoxLayout(gallery_container)
         gallery_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Add refresh button for gallery tab
+        # Create collapsible controls section
+        self.gallery_controls = SimpleCollapsibleWidget("Gallery Controls", collapsed=True)
+        controls_layout = self.gallery_controls.get_content_layout()
+        
+        # Add refresh button and controls to collapsible section
         gallery_button_layout = QHBoxLayout()
         gallery_button_layout.setContentsMargins(5, 5, 5, 0)
+        
         gallery_refresh_btn = QPushButton("Refresh Gallery")
         gallery_refresh_btn.setToolTip("Refresh gallery contents")
         gallery_refresh_btn.clicked.connect(self.refresh_gallery)
@@ -361,7 +367,9 @@ class MainWindow(QMainWindow):
         gallery_button_layout.addWidget(self.video_playback_combo)
         
         gallery_button_layout.addStretch()
-        gallery_layout.addLayout(gallery_button_layout)
+        controls_layout.addLayout(gallery_button_layout)
+        
+        gallery_layout.addWidget(self.gallery_controls)
         
         # Add gallery widget
         self.gallery = GalleryWidget(self.db_conn)
