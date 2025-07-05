@@ -419,6 +419,7 @@ class SourceAnalysisTab(QWidget):
         
         # Dialog Search tab
         self.dialog_search_tab = DialogSearchTab(self.db_conn)
+        self.dialog_search_tab.set_parent_tab_container(self)  # Enable cross-tab communication
         self.sub_tabs.addTab(self.dialog_search_tab, "Dialog Search")
         
         # Add icons to tabs
