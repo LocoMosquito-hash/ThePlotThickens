@@ -37,17 +37,19 @@ class DialogSearchWorker(QThread):
     search_completed = pyqtSignal(list)  # Search results
     search_failed = pyqtSignal(str)  # Error message
     
-    def __init__(self, source_path: str, search_query: str, parent=None):
+    def __init__(self, source_path: str, search_query: str, search_type: str = "Dialogue Search", parent=None):
         """Initialize the worker thread.
         
         Args:
             source_path: Path to the Ren'Py source code directory
-            search_query: Text to search for in dialogue
+            search_query: Text to search for in dialogue or label name
+            search_type: Type of search - "Dialogue Search" or "Label Search"
             parent: Parent widget
         """
         super().__init__(parent)
         self.source_path = source_path
         self.search_query = search_query
+        self.search_type = search_type
         self._is_cancelled = False
         
     def run(self):
@@ -85,11 +87,15 @@ class DialogSearchWorker(QThread):
             if self._is_cancelled:
                 return
                 
-            self.status_updated.emit("Searching dialogue with context...")
-            self.progress_updated.emit(75)
-            
-            # Enhanced dialogue search with label context
-            enhanced_results = self._enhanced_dialogue_search(project, self.search_query)
+            # Perform search based on type
+            if self.search_type == "Label Search":
+                self.status_updated.emit("Searching labels...")
+                self.progress_updated.emit(75)
+                enhanced_results = self._label_search(project, self.search_query)
+            else:  # Dialogue Search
+                self.status_updated.emit("Searching dialogue with context...")
+                self.progress_updated.emit(75)
+                enhanced_results = self._enhanced_dialogue_search(project, self.search_query)
             
             if self._is_cancelled:
                 return
@@ -197,6 +203,87 @@ class DialogSearchWorker(QThread):
         
         except Exception as e:
             raise Exception(f"Enhanced search failed: {str(e)}")
+        
+        return matches
+    
+    def _label_search(self, project, query: str) -> List[Dict[str, Any]]:
+        """
+        Search for labels matching the query.
+        
+        Args:
+            project: RenpyProject instance
+            query: Label name or partial label name to search for
+            
+        Returns:
+            List of label search results formatted like dialogue results
+        """
+        matches = []
+        search_term = query.lower()
+        
+        try:
+            # Get file list from project
+            rpy_files = project.parser.find_rpy_files(project.project_path)
+            total_files = len(rpy_files)
+            
+            # Get all assets for media counting
+            self.status_updated.emit("Loading visual assets...")
+            all_assets = project.get_all_assets()
+            
+            # Search through all files for labels
+            for file_idx, rpy_file in enumerate(rpy_files):
+                if self._is_cancelled:
+                    break
+                    
+                # Update progress for each file
+                file_progress = 75 + int((file_idx / total_files) * 15)
+                self.progress_updated.emit(file_progress)
+                
+                file_path = os.path.join(project.project_path, rpy_file)
+                parsed_lines = project.parser.parse_file(file_path)
+                
+                for line in parsed_lines:
+                    if self._is_cancelled:
+                        break
+                        
+                    # Search in label lines
+                    if line.line_type == 'label' and line.label_name:
+                        label_name = line.label_name.lower()
+                        
+                        # Check if query matches label name (partial match)
+                        if search_term in label_name:
+                            # Count media assets for this label
+                            media_count = 0
+                            if all_assets:
+                                # Count all media types for this label
+                                for asset_type, assets in all_assets.items():
+                                    for asset in assets:
+                                        if asset.get('label') == line.label_name:
+                                            media_count += 1
+                            
+                            # Create formatted result to match dialogue search structure
+                            label_match = {
+                                'character': 'Label',  # Consistent character field
+                                'character_code': 'label',
+                                'dialogue': f"label {line.label_name}:",  # Show the label definition
+                                'label': line.label_name,
+                                'file': rpy_file,
+                                'line_number': line.line_number,
+                                'media_count': media_count,
+                                'match_position': label_name.find(search_term),
+                                'content': line.content,
+                                'context_info': {
+                                    'current_label': line.label_name,
+                                    'file_path': rpy_file,
+                                    'search_type': 'label'
+                                }
+                            }
+                            matches.append(label_match)
+            
+            # Sort by label name for better organization
+            matches.sort(key=lambda x: x['label'])
+            
+        except Exception as e:
+            raise Exception(f"Label search failed: {str(e)}")
         
         return matches
     
@@ -1089,13 +1176,27 @@ class DialogSearchTab(QWidget):
         Args:
             layout: Layout to add the section to
         """
-        search_group = QGroupBox("Dialogue Search")
+        search_group = QGroupBox("Script Search")
         search_layout = QVBoxLayout(search_group)
+        
+        # Search type selector row
+        type_layout = QHBoxLayout()
+        type_layout.addWidget(QLabel("Search type:"))
+        
+        self.search_type_combo = QComboBox()
+        self.search_type_combo.addItems(["Dialogue Search", "Label Search"])
+        self.search_type_combo.setToolTip("Choose between searching dialogue text or label names")
+        self.search_type_combo.currentTextChanged.connect(self._on_search_type_changed)
+        type_layout.addWidget(self.search_type_combo)
+        
+        type_layout.addStretch()  # Push to left
+        search_layout.addLayout(type_layout)
         
         # Search input row
         input_layout = QHBoxLayout()
         
-        input_layout.addWidget(QLabel("Search text:"))
+        self.search_label = QLabel("Search text:")
+        input_layout.addWidget(self.search_label)
         
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Enter dialogue text to find in the script...")
@@ -1335,8 +1436,11 @@ class DialogSearchTab(QWidget):
         self.progress_bar.setValue(0)
         self.search_status_label.setText("Searching...")
         
+        # Get search type
+        search_type = self.search_type_combo.currentText()
+        
         # Start worker thread
-        self.search_worker = DialogSearchWorker(source_path, search_text)
+        self.search_worker = DialogSearchWorker(source_path, search_text, search_type)
         self.search_worker.progress_updated.connect(self.progress_bar.setValue)
         self.search_worker.status_updated.connect(self.search_status_label.setText)
         self.search_worker.search_completed.connect(self.on_search_completed)
@@ -2076,6 +2180,31 @@ class DialogSearchTab(QWidget):
             if hasattr(self, 'search_group') and hasattr(self.search_group, 'layout'):
                 self.search_group.layout().addLayout(advanced_layout)
     
+    def _on_search_type_changed(self):
+        """Handle changes to search type (dialogue vs label)."""
+        search_type = self.search_type_combo.currentText()
+        
+        if search_type == "Label Search":
+            self.search_label.setText("Label name:")
+            self.search_input.setPlaceholderText("Enter label name to find (e.g., 'start', 'chapter1', 'ending_good')...")
+        else:  # Dialogue Search
+            self.search_label.setText("Search text:")
+            # Update placeholder based on current settings
+            self._update_search_placeholder()
+    
+    def _update_search_placeholder(self):
+        """Update search placeholder text based on current settings."""
+        if hasattr(self, 'search_input'):
+            placeholders = ["Enter dialogue text to find..."]
+            if self.search_config.get('case_sensitive', False):
+                placeholders.append("Case sensitive")
+            if self.search_config.get('whole_words_only', False):
+                placeholders.append("Whole words")
+            if self.search_config.get('regex_enabled', False):
+                placeholders.append("Regex enabled")
+            
+            self.search_input.setPlaceholderText(" | ".join(placeholders))
+    
     def _on_search_option_changed(self):
         """Handle changes to search options."""
         if hasattr(self, 'case_sensitive_cb'):
@@ -2088,17 +2217,9 @@ class DialogSearchTab(QWidget):
         # Save configuration
         self._save_configuration()
         
-        # Update search placeholder text
-        if hasattr(self, 'search_input'):
-            placeholders = ["Enter dialogue text to find..."]
-            if self.search_config.get('case_sensitive', False):
-                placeholders.append("Case sensitive")
-            if self.search_config.get('whole_words_only', False):
-                placeholders.append("Whole words")
-            if self.search_config.get('regex_enabled', False):
-                placeholders.append("Regex enabled")
-            
-            self.search_input.setPlaceholderText(" | ".join(placeholders))
+        # Update search placeholder text (only for dialogue search)
+        if hasattr(self, 'search_type_combo') and self.search_type_combo.currentText() == "Dialogue Search":
+            self._update_search_placeholder()
     
     def _enhanced_export_system(self):
         """Enhanced export system for search results."""
