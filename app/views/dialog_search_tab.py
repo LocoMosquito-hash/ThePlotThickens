@@ -1706,8 +1706,9 @@ class DialogSearchTab(QWidget):
         Args:
             media_assets: List of media asset dictionaries with 'path', 'type', 'name'
         """
-        # Limit to first 12 assets (2 rows of 6)
-        display_assets = media_assets[:12]
+        # Use configured max thumbnails (default increased to 24 for better coverage)
+        max_thumbnails = self.media_config.get('max_thumbnails', 24)
+        display_assets = media_assets[:max_thumbnails]
         
         if not display_assets:
             self._show_gallery_message("No visual assets found for this label")
@@ -1733,7 +1734,7 @@ class DialogSearchTab(QWidget):
             
             thumbnail.setToolTip(tooltip)
             
-            # Add to 6-column grid layout
+            # Add to 6-column grid layout (will create more rows as needed)
             row = idx // 6
             col = idx % 6
             self.gallery_layout.addWidget(thumbnail, row, col)
@@ -1816,7 +1817,7 @@ class DialogSearchTab(QWidget):
         self.media_config = {
             'load_thumbnails': self.settings.value("dialog_search/load_thumbnails", True, type=bool),
             'thumbnail_size': self.settings.value("dialog_search/thumbnail_size", 150, type=int),
-            'max_thumbnails': self.settings.value("dialog_search/max_thumbnails", 12, type=int),
+            'max_thumbnails': self.settings.value("dialog_search/max_thumbnails", 24, type=int),
             'preload_media': self.settings.value("dialog_search/preload_media", False, type=bool),
         }
         
