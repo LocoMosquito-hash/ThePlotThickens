@@ -18,7 +18,8 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, 
     QTableWidget, QTableWidgetItem, QGroupBox, QProgressBar, QMessageBox,
     QGridLayout, QScrollArea, QFrame, QSizePolicy, QHeaderView, QMenu, 
-    QApplication, QFileDialog
+    QApplication, QFileDialog, QDialog, QFormLayout, QCheckBox, QSpinBox,
+    QComboBox, QDialogButtonBox
 )
 from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer, QSize, QDateTime
 from PyQt6.QtGui import QFont, QPixmap
@@ -468,6 +469,9 @@ class MediaLoadingWorker(QThread):
             # Initialize project
             project = RenpyProject(self.source_path)
             
+            # Store project instance for use in other methods
+            self._project_instance = project
+            
             # Find media assets for this label
             media_assets = self._find_label_media(project, self.label_name)
             
@@ -594,50 +598,54 @@ class MediaLoadingWorker(QThread):
         return media_assets
     
     def _resolve_asset_path(self, asset_name: str, asset_type: str) -> str:
-        """Resolve the full path for an asset name.
+        """
+        Resolve a Ren'Py asset name to its actual file path using the API's image definitions.
         
         Args:
-            asset_name: Name of the asset
+            asset_name: Name of the asset from Ren'Py script (e.g., "v10_morning_cafe1_1")
             asset_type: Type of asset ('image' or 'video')
             
         Returns:
             Full path to the asset file if found, otherwise the original name
         """
-        # Common extensions by type
-        extensions = {
-            'image': ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'],
-            'video': ['.webm', '.mp4', '.avi', '.mov']
-        }
+        print(f"[DEBUG] _resolve_asset_path called with: '{asset_name}', type: '{asset_type}'")
         
-        # Common directories to search
-        search_dirs = [
-            self.source_path,
-            os.path.join(self.source_path, 'images'),
-            os.path.join(self.source_path, 'game', 'images'),
-            os.path.join(self.source_path, '..', 'images'),
-            os.path.join(self.source_path, 'videos'),
-            os.path.join(self.source_path, 'movies')
-        ]
+        if not asset_name:
+            return asset_name
         
-        # Try different combinations
-        for search_dir in search_dirs:
-            if not os.path.exists(search_dir):
-                continue
+        # Try to get the mapping from the RenpyProject if we have it
+        if hasattr(self, '_project_instance'):
+            try:
+                assets = self._project_instance.get_all_assets()
+                # Look for image definitions that map this asset name to a file path
+                for category_assets in assets.values():
+                    for asset in category_assets:
+                        if (asset['name'] == asset_name and 
+                            asset.get('usage_type') == 'image_def' and 
+                            'file_path' in asset):
+                            
+                            file_path = asset['file_path']
+                            resolved_path = os.path.join(self.source_path, file_path)
+                            resolved_path = os.path.normpath(resolved_path)
+                            
+                            print(f"[DEBUG] API found mapping: '{asset_name}' -> '{file_path}'")
+                            print(f"[DEBUG] Trying resolved path: {resolved_path}")
+                            
+                            if os.path.exists(resolved_path):
+                                print(f"[DEBUG] FOUND FILE via API: {resolved_path}")
+                                return resolved_path
+                            else:
+                                print(f"[DEBUG] API mapping found but file doesn't exist: {resolved_path}")
                 
-            # Try with different extensions
-            for ext in extensions.get(asset_type, []):
-                # Try exact name + extension
-                test_path = os.path.join(search_dir, asset_name + ext)
-                if os.path.exists(test_path):
-                    return test_path
+                print(f"[DEBUG] No API mapping found for asset: {asset_name}")
                 
-                # Try as direct filename if it already has extension
-                if '.' in asset_name:
-                    test_path = os.path.join(search_dir, asset_name)
-                    if os.path.exists(test_path):
-                        return test_path
+            except Exception as e:
+                print(f"[DEBUG] API lookup failed: {e}")
+        else:
+            print(f"[DEBUG] No project instance available for API lookup")
         
-        # Return original name if not found
+        # Return original name if not found in API
+        print(f"[DEBUG] Asset not resolved, returning original: {asset_name}")
         return asset_name
     
     def _api_based_asset_discovery(self, project, label_name: str) -> List[Dict[str, Any]]:
@@ -851,6 +859,111 @@ class MediaLoadingWorker(QThread):
         self._is_cancelled = True
 
 
+class DialogSearchConfigDialog(QDialog):
+    """Configuration dialog for dialog search settings."""
+    
+    def __init__(self, config_data, parent=None):
+        """Initialize the configuration dialog.
+        
+        Args:
+            config_data: Current configuration data
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.config_data = config_data
+        self.setWindowTitle("Dialog Search Configuration")
+        self.setModal(True)
+        self.setMinimumSize(400, 500)
+        
+        self.init_ui()
+    
+    def init_ui(self):
+        """Initialize the user interface."""
+        layout = QVBoxLayout(self)
+        
+        # Create form layout
+        form_layout = QFormLayout()
+        
+        # Search behavior settings
+        search_group = QGroupBox("Search Behavior")
+        search_form = QFormLayout(search_group)
+        
+        self.max_results_spin = QSpinBox()
+        self.max_results_spin.setRange(10, 10000)
+        self.max_results_spin.setValue(self.config_data.search_config.get('max_results', 1000))
+        search_form.addRow("Max Results:", self.max_results_spin)
+        
+        self.search_delay_spin = QSpinBox()
+        self.search_delay_spin.setRange(0, 2000)
+        self.search_delay_spin.setValue(self.config_data.search_config.get('search_delay', 500))
+        search_form.addRow("Search Delay (ms):", self.search_delay_spin)
+        
+        self.case_sensitive_cb = QCheckBox()
+        self.case_sensitive_cb.setChecked(self.config_data.search_config.get('case_sensitive', False))
+        search_form.addRow("Case Sensitive:", self.case_sensitive_cb)
+        
+        layout.addWidget(search_group)
+        
+        # Display settings
+        display_group = QGroupBox("Display Options")
+        display_form = QFormLayout(display_group)
+        
+        self.show_character_codes_cb = QCheckBox()
+        self.show_character_codes_cb.setChecked(self.config_data.display_config.get('show_character_codes', True))
+        display_form.addRow("Show Character Codes:", self.show_character_codes_cb)
+        
+        self.show_file_paths_cb = QCheckBox()
+        self.show_file_paths_cb.setChecked(self.config_data.display_config.get('show_file_paths', True))
+        display_form.addRow("Show File Paths:", self.show_file_paths_cb)
+        
+        self.highlight_matches_cb = QCheckBox()
+        self.highlight_matches_cb.setChecked(self.config_data.display_config.get('highlight_matches', True))
+        display_form.addRow("Highlight Matches:", self.highlight_matches_cb)
+        
+        layout.addWidget(display_group)
+        
+        # Media settings
+        media_group = QGroupBox("Media Settings")
+        media_form = QFormLayout(media_group)
+        
+        self.thumbnail_size_spin = QSpinBox()
+        self.thumbnail_size_spin.setRange(50, 300)
+        self.thumbnail_size_spin.setValue(self.config_data.media_config.get('thumbnail_size', 150))
+        media_form.addRow("Thumbnail Size:", self.thumbnail_size_spin)
+        
+        self.max_thumbnails_spin = QSpinBox()
+        self.max_thumbnails_spin.setRange(6, 24)
+        self.max_thumbnails_spin.setValue(self.config_data.media_config.get('max_thumbnails', 12))
+        media_form.addRow("Max Thumbnails:", self.max_thumbnails_spin)
+        
+        layout.addWidget(media_group)
+        
+        # Button box
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+    
+    def accept(self):
+        """Accept the dialog and save configuration."""
+        # Update configuration data
+        self.config_data.search_config['max_results'] = self.max_results_spin.value()
+        self.config_data.search_config['search_delay'] = self.search_delay_spin.value()
+        self.config_data.search_config['case_sensitive'] = self.case_sensitive_cb.isChecked()
+        
+        self.config_data.display_config['show_character_codes'] = self.show_character_codes_cb.isChecked()
+        self.config_data.display_config['show_file_paths'] = self.show_file_paths_cb.isChecked()
+        self.config_data.display_config['highlight_matches'] = self.highlight_matches_cb.isChecked()
+        
+        self.config_data.media_config['thumbnail_size'] = self.thumbnail_size_spin.value()
+        self.config_data.media_config['max_thumbnails'] = self.max_thumbnails_spin.value()
+        
+        # Save to settings
+        self.config_data._save_configuration()
+        
+        super().accept()
+
+
 class MinimalThumbnailWidget(QLabel):
     """A minimal thumbnail widget for displaying 320x320px images."""
     
@@ -923,6 +1036,12 @@ class DialogSearchTab(QWidget):
         # Context menu support
         self.results_context_menu = None
         self.gallery_context_menu = None
+        
+        # Stage 6: Configuration and interface preparation
+        self.config_dialog = None
+        self.screenshots_interface = None  # Prepared for future integration
+        self._load_configuration()
+        self._prepare_screenshots_interface()
         
         self.init_ui()
         self._setup_context_menus()
@@ -1003,6 +1122,10 @@ class DialogSearchTab(QWidget):
         search_layout.addWidget(self.search_status_label)
         
         layout.addWidget(search_group)
+        
+        # Add advanced search filters (Stage 6)
+        self.search_group = search_group  # Store reference for advanced filters
+        self._add_advanced_search_filters()
         
     def create_results_section(self, layout: QVBoxLayout):
         """Create the search results table section.
@@ -1661,6 +1784,385 @@ class DialogSearchTab(QWidget):
             }
         """)
         self.gallery_layout.addWidget(placeholder, 0, 0, 1, 6)  # Span 6 columns
+    
+    # ============================================================================
+    # Stage 6: Configuration, Interface Preparation & Advanced Features
+    # ============================================================================
+    
+    def _load_configuration(self):
+        """Load dialog search configuration settings."""
+        # Search behavior settings
+        self.search_config = {
+            'max_results': self.settings.value("dialog_search/max_results", 1000, type=int),
+            'search_delay': self.settings.value("dialog_search/search_delay", 500, type=int),
+            'case_sensitive': self.settings.value("dialog_search/case_sensitive", False, type=bool),
+            'whole_words_only': self.settings.value("dialog_search/whole_words_only", False, type=bool),
+            'regex_enabled': self.settings.value("dialog_search/regex_enabled", False, type=bool),
+        }
+        
+        # Display settings
+        self.display_config = {
+            'show_character_codes': self.settings.value("dialog_search/show_character_codes", True, type=bool),
+            'show_file_paths': self.settings.value("dialog_search/show_file_paths", True, type=bool),
+            'show_line_numbers': self.settings.value("dialog_search/show_line_numbers", True, type=bool),
+            'highlight_matches': self.settings.value("dialog_search/highlight_matches", True, type=bool),
+            'compact_view': self.settings.value("dialog_search/compact_view", False, type=bool),
+        }
+        
+        # Media settings
+        self.media_config = {
+            'load_thumbnails': self.settings.value("dialog_search/load_thumbnails", True, type=bool),
+            'thumbnail_size': self.settings.value("dialog_search/thumbnail_size", 150, type=int),
+            'max_thumbnails': self.settings.value("dialog_search/max_thumbnails", 12, type=int),
+            'preload_media': self.settings.value("dialog_search/preload_media", False, type=bool),
+        }
+        
+        # Performance settings
+        self.performance_config = {
+            'enable_caching': self.settings.value("dialog_search/enable_caching", True, type=bool),
+            'max_cache_size': self.settings.value("dialog_search/max_cache_size", 100, type=int),
+            'background_loading': self.settings.value("dialog_search/background_loading", True, type=bool),
+            'debounce_search': self.settings.value("dialog_search/debounce_search", True, type=bool),
+        }
+        
+        # Screenshots interface preparation (not yet connected)
+        self.screenshots_config = {
+            'auto_capture': self.settings.value("dialog_search/auto_capture", False, type=bool),
+            'capture_quality': self.settings.value("dialog_search/capture_quality", 'high', type=str),
+            'capture_format': self.settings.value("dialog_search/capture_format", 'png', type=str),
+        }
+    
+    def _save_configuration(self):
+        """Save current configuration to settings."""
+        # Save search behavior settings
+        for key, value in self.search_config.items():
+            self.settings.setValue(f"dialog_search/{key}", value)
+        
+        # Save display settings
+        for key, value in self.display_config.items():
+            self.settings.setValue(f"dialog_search/{key}", value)
+        
+        # Save media settings
+        for key, value in self.media_config.items():
+            self.settings.setValue(f"dialog_search/{key}", value)
+        
+        # Save performance settings
+        for key, value in self.performance_config.items():
+            self.settings.setValue(f"dialog_search/{key}", value)
+        
+        # Save screenshots settings
+        for key, value in self.screenshots_config.items():
+            self.settings.setValue(f"dialog_search/{key}", value)
+        
+        self.settings.sync()
+    
+    def show_configuration_dialog(self):
+        """Show the configuration dialog for dialog search settings."""
+        if not self.config_dialog:
+            self.config_dialog = DialogSearchConfigDialog(self, self)
+        
+        if self.config_dialog.exec() == QDialog.DialogCode.Accepted:
+            # Apply new configuration
+            self._load_configuration()
+            self._apply_configuration_changes()
+    
+    def _apply_configuration_changes(self):
+        """Apply configuration changes to the UI and behavior."""
+        # Update table display based on configuration
+        if hasattr(self, 'results_table') and self.results_table:
+            # Show/hide columns based on settings
+            header = self.results_table.horizontalHeader()
+            if header and hasattr(self, 'display_config') and self.display_config:
+                # Character codes visibility
+                char_col = 0
+                if not self.display_config.get('show_character_codes', True):
+                    header.hideSection(char_col)
+                else:
+                    header.showSection(char_col)
+                
+                # File paths visibility  
+                file_col = 3
+                if not self.display_config.get('show_file_paths', True):
+                    header.hideSection(file_col)
+                else:
+                    header.showSection(file_col)
+        
+        # Update search behavior
+        if hasattr(self, 'search_input'):
+            # Apply search delay for debouncing
+            if self.performance_config.get('debounce_search', True):
+                if not hasattr(self, 'search_timer'):
+                    self.search_timer = QTimer()
+                    self.search_timer.setSingleShot(True)
+                    self.search_timer.timeout.connect(self.perform_search)
+                self.search_timer.setInterval(self.search_config.get('search_delay', 500))
+        
+        # Update gallery settings
+        if hasattr(self, 'gallery_layout'):
+            # Apply thumbnail settings
+            max_thumbs = self.media_config.get('max_thumbnails', 12)
+            # This will be applied when gallery is next loaded
+    
+    def _prepare_screenshots_interface(self):
+        """Prepare interface hooks for future Screenshots integration."""
+        # Create abstract interface for Screenshots integration
+        self.screenshots_interface = {
+            'capture_enabled': False,  # Will be enabled when Screenshots tab is integrated
+            'capture_callback': None,  # Will be set during integration
+            'result_mapping': {},      # Maps search results to screenshot data
+            'capture_queue': [],       # Queue for pending captures
+            'integration_ready': False # Flag for integration status
+        }
+        
+        # Define interface methods that Screenshots tab can hook into
+        self.screenshots_hooks = {
+            'on_result_selected': self._on_result_selected_for_capture,
+            'on_search_completed': self._on_search_completed_for_capture,
+            'get_current_result': self._get_current_result_for_capture,
+            'get_media_context': self._get_media_context_for_capture,
+        }
+    
+    def _on_result_selected_for_capture(self, result: Dict[str, Any]):
+        """Interface method for Screenshots integration - called when result is selected."""
+        if not self.screenshots_interface.get('capture_enabled', False):
+            return
+        
+        # Prepare capture context
+        capture_context = {
+            'character': result.get('character', 'Unknown'),
+            'dialogue': result.get('dialogue', ''),
+            'label': result.get('label', 'Unknown'),
+            'file': result.get('file', ''),
+            'line_number': result.get('line_number', 0),
+            'media_count': result.get('media_count', 0),
+            'timestamp': QDateTime.currentDateTime().toString(),
+        }
+        
+        # Add to capture queue if auto-capture is enabled
+        if self.screenshots_config.get('auto_capture', False):
+            self.screenshots_interface['capture_queue'].append(capture_context)
+            
+        # Call Screenshots callback if available
+        callback = self.screenshots_interface.get('capture_callback')
+        if callback and callable(callback):
+            callback(capture_context)
+    
+    def _on_search_completed_for_capture(self, results: List[Dict[str, Any]]):
+        """Interface method for Screenshots integration - called when search completes."""
+        if not self.screenshots_interface.get('capture_enabled', False):
+            return
+        
+        # Update result mapping for Screenshots integration
+        self.screenshots_interface['result_mapping'] = {
+            f"{r.get('file', '')}:{r.get('line_number', 0)}": r 
+            for r in results
+        }
+    
+    def _get_current_result_for_capture(self) -> Optional[Dict[str, Any]]:
+        """Interface method to get currently selected result for Screenshots integration."""
+        selection_model = self.results_table.selectionModel()
+        if selection_model:
+            selected_rows = selection_model.selectedRows()
+            if selected_rows:
+                row = selected_rows[0].row()
+                if 0 <= row < len(self.search_results):
+                    return self.search_results[row]
+        return None
+    
+    def _get_media_context_for_capture(self) -> Dict[str, Any]:
+        """Interface method to get current media context for Screenshots integration."""
+        current_result = self._get_current_result_for_capture()
+        if not current_result:
+            return {}
+        
+        return {
+            'label': current_result.get('label', ''),
+            'expected_media_count': current_result.get('media_count', 0),
+            'character': current_result.get('character', ''),
+            'source_file': current_result.get('file', ''),
+            'dialogue_context': current_result.get('dialogue', ''),
+        }
+    
+    def enable_screenshots_integration(self, capture_callback=None):
+        """Enable Screenshots integration (called by Screenshots tab when ready)."""
+        self.screenshots_interface['capture_enabled'] = True
+        self.screenshots_interface['integration_ready'] = True
+        
+        if capture_callback:
+            self.screenshots_interface['capture_callback'] = capture_callback
+        
+        # Update UI to show Screenshots integration is available
+        if hasattr(self, 'search_status_label'):
+            current_text = self.search_status_label.text()
+            if "Screenshots integration ready" not in current_text:
+                self.search_status_label.setText(current_text + " | Screenshots integration ready")
+    
+    def disable_screenshots_integration(self):
+        """Disable Screenshots integration."""
+        self.screenshots_interface['capture_enabled'] = False
+        self.screenshots_interface['integration_ready'] = False
+        self.screenshots_interface['capture_callback'] = None
+        self.screenshots_interface['capture_queue'].clear()
+    
+    def _add_advanced_search_filters(self):
+        """Add advanced search filters and options."""
+        # This will be called during UI creation to add advanced search options
+        if hasattr(self, 'search_group'):
+            # Add advanced search options row
+            advanced_layout = QHBoxLayout()
+            
+            # Case sensitive checkbox
+            self.case_sensitive_cb = QPushButton("Case Sensitive")
+            self.case_sensitive_cb.setCheckable(True)
+            self.case_sensitive_cb.setChecked(self.search_config.get('case_sensitive', False))
+            self.case_sensitive_cb.clicked.connect(self._on_search_option_changed)
+            advanced_layout.addWidget(self.case_sensitive_cb)
+            
+            # Whole words checkbox
+            self.whole_words_cb = QPushButton("Whole Words")
+            self.whole_words_cb.setCheckable(True)
+            self.whole_words_cb.setChecked(self.search_config.get('whole_words_only', False))
+            self.whole_words_cb.clicked.connect(self._on_search_option_changed)
+            advanced_layout.addWidget(self.whole_words_cb)
+            
+            # Regex checkbox
+            self.regex_cb = QPushButton("Regex")
+            self.regex_cb.setCheckable(True)
+            self.regex_cb.setChecked(self.search_config.get('regex_enabled', False))
+            self.regex_cb.clicked.connect(self._on_search_option_changed)
+            advanced_layout.addWidget(self.regex_cb)
+            
+            # Configuration button
+            self.config_button = QPushButton("⚙️ Settings")
+            self.config_button.clicked.connect(self.show_configuration_dialog)
+            advanced_layout.addWidget(self.config_button)
+            
+            advanced_layout.addStretch()
+            
+            # Add to search group
+            if hasattr(self, 'search_group') and hasattr(self.search_group, 'layout'):
+                self.search_group.layout().addLayout(advanced_layout)
+    
+    def _on_search_option_changed(self):
+        """Handle changes to search options."""
+        if hasattr(self, 'case_sensitive_cb'):
+            self.search_config['case_sensitive'] = self.case_sensitive_cb.isChecked()
+        if hasattr(self, 'whole_words_cb'):
+            self.search_config['whole_words_only'] = self.whole_words_cb.isChecked()
+        if hasattr(self, 'regex_cb'):
+            self.search_config['regex_enabled'] = self.regex_cb.isChecked()
+        
+        # Save configuration
+        self._save_configuration()
+        
+        # Update search placeholder text
+        if hasattr(self, 'search_input'):
+            placeholders = ["Enter dialogue text to find..."]
+            if self.search_config.get('case_sensitive', False):
+                placeholders.append("Case sensitive")
+            if self.search_config.get('whole_words_only', False):
+                placeholders.append("Whole words")
+            if self.search_config.get('regex_enabled', False):
+                placeholders.append("Regex enabled")
+            
+            self.search_input.setPlaceholderText(" | ".join(placeholders))
+    
+    def _enhanced_export_system(self):
+        """Enhanced export system for search results."""
+        # This provides multiple export formats and options
+        export_formats = {
+            'txt': self._export_as_text,
+            'csv': self._export_as_csv,
+            'json': self._export_as_json,
+            'html': self._export_as_html,
+        }
+        return export_formats
+    
+    def _export_as_csv(self, results: List[Dict[str, Any]], file_path: str):
+        """Export search results as CSV."""
+        import csv
+        
+        with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+            fieldnames = ['Character', 'Dialogue', 'Label', 'File', 'Line', 'Media Count']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            writer.writeheader()
+            for result in results:
+                writer.writerow({
+                    'Character': result.get('character', ''),
+                    'Dialogue': result.get('dialogue', ''),
+                    'Label': result.get('label', ''),
+                    'File': result.get('file', ''),
+                    'Line': result.get('line_number', ''),
+                    'Media Count': result.get('media_count', ''),
+                })
+    
+    def _export_as_json(self, results: List[Dict[str, Any]], file_path: str):
+        """Export search results as JSON."""
+        import json
+        
+        export_data = {
+            'search_metadata': {
+                'export_timestamp': QDateTime.currentDateTime().toString(),
+                'total_results': len(results),
+                'search_config': self.search_config,
+            },
+            'results': results
+        }
+        
+        with open(file_path, 'w', encoding='utf-8') as jsonfile:
+            json.dump(export_data, jsonfile, indent=2, ensure_ascii=False)
+    
+    def _export_as_html(self, results: List[Dict[str, Any]], file_path: str):
+        """Export search results as HTML."""
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dialog Search Results</title>
+    <style>
+        table {{ border-collapse: collapse; width: 100%; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+        th {{ background-color: #f2f2f2; }}
+        .dialogue {{ max-width: 400px; word-wrap: break-word; }}
+    </style>
+</head>
+<body>
+    <h1>Dialog Search Results</h1>
+    <p>Exported: {QDateTime.currentDateTime().toString()}</p>
+    <p>Total Results: {len(results)}</p>
+    
+    <table>
+        <tr>
+            <th>Character</th>
+            <th>Dialogue</th>
+            <th>Label</th>
+            <th>File</th>
+            <th>Line</th>
+            <th>Media Count</th>
+        </tr>
+"""
+        
+        for result in results:
+            html_content += f"""
+        <tr>
+            <td>{result.get('character', '')}</td>
+            <td class="dialogue">{result.get('dialogue', '')}</td>
+            <td>{result.get('label', '')}</td>
+            <td>{result.get('file', '')}</td>
+            <td>{result.get('line_number', '')}</td>
+            <td>{result.get('media_count', '')}</td>
+        </tr>
+"""
+        
+        html_content += """
+    </table>
+</body>
+</html>
+"""
+        
+        with open(file_path, 'w', encoding='utf-8') as htmlfile:
+            htmlfile.write(html_content)
     
     # ============================================================================
     # Stage 5: Enhanced Error Handling, Search History & Context Menus

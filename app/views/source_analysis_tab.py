@@ -442,7 +442,7 @@ class SourceAnalysisTab(QWidget):
             story_data: Story data dictionary
         """
         self.story_id = story_id
-        self.setup_tab.set_story(story_id, story_data)
+        self.setup_tab.set_story(story_id, story_data) 
         self.window_selector_tab.set_story(story_id, story_data)
         self.screenshots_tab.set_story(story_id, story_data)
         self.dialog_search_tab.set_story(story_id, story_data) 
