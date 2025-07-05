@@ -244,10 +244,10 @@ class DialogSearchWorker(QThread):
     
     def _build_media_count_by_label(self, all_assets: Dict[str, List[Dict[str, Any]]], labels_found: set) -> Dict[str, int]:
         """
-        Build a count of visual media assets by label using realistic distribution.
+        Build a count of visual media assets by label using advanced script analysis.
         
-        Since the API's label association isn't working correctly, this method
-        distributes assets across the actual labels found during dialogue parsing.
+        This method analyzes the actual .rpy script files to find which assets
+        are referenced within each label's boundaries for accurate counting.
         
         Args:
             all_assets: Assets organized by category from Ren'Py API
@@ -255,6 +255,124 @@ class DialogSearchWorker(QThread):
             
         Returns:
             Dictionary mapping label names to visual asset counts
+        """
+        try:
+            # Try advanced script analysis first
+            return self._analyze_assets_by_script_parsing(labels_found)
+        except Exception as e:
+            # Fall back to the previous distribution method if script analysis fails
+            return self._fallback_asset_distribution(all_assets, labels_found)
+    
+    def _analyze_assets_by_script_parsing(self, labels_found: set) -> Dict[str, int]:
+        """
+        Analyze .rpy files to find actual asset usage within label boundaries.
+        
+        Args:
+            labels_found: Set of labels to analyze
+            
+        Returns:
+            Dictionary mapping label names to actual asset counts found in script
+        """
+        visual_assets_by_label = {}
+        
+        # Use the source path from the worker thread initialization
+        if not hasattr(self, 'source_path') or not self.source_path:
+            raise Exception("Source path not available")
+        
+        source_path = self.source_path
+        
+        # Import Ren'Py API for script parsing (same way as in run method)
+        api_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'renpy-source-api')
+        if api_dir not in sys.path:
+            sys.path.insert(0, api_dir)
+        
+        from core import RenpyProject
+        
+        # Initialize project for script analysis
+        project = RenpyProject(source_path)
+        
+        # Get all .rpy files
+        rpy_files = project.parser.find_rpy_files(source_path)
+        
+        # Asset reference patterns to look for
+        asset_patterns = [
+            # Image patterns
+            r'show\s+([a-zA-Z0-9_]+)',          # show character_name
+            r'scene\s+([a-zA-Z0-9_]+)',         # scene background_name  
+            r'image\s+([a-zA-Z0-9_]+)',         # image definition
+            r'hide\s+([a-zA-Z0-9_]+)',          # hide character_name
+            r'with\s+([a-zA-Z0-9_]+)',          # transition effects
+            
+            # Video patterns  
+            r'play\s+movie\s+"([^"]+)"',        # play movie "filename"
+            r'renpy\.movie_cutscene\s*\(\s*"([^"]+)"',  # movie cutscene
+            r'$ renpy\.movie_cutscene\s*\(\s*"([^"]+)"', # $ movie cutscene
+            
+            # Audio patterns (also visual content)
+            r'play\s+sound\s+"([^"]+)"',        # play sound "filename"
+            r'play\s+music\s+"([^"]+)"',        # play music "filename"
+        ]
+        
+        import re
+        
+        # Parse each file to find asset references within labels
+        for rpy_file in rpy_files:
+            file_path = os.path.join(source_path, rpy_file)
+            current_label = None
+            
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = f.readlines()
+                
+                for line_num, line in enumerate(lines, 1):
+                    line_content = line.strip()
+                    
+                    # Skip comments and empty lines
+                    if not line_content or line_content.startswith('#'):
+                        continue
+                    
+                    # Track current label
+                    if line_content.startswith('label '):
+                        # Extract label name
+                        label_match = re.match(r'label\s+([a-zA-Z0-9_]+)', line_content)
+                        if label_match:
+                            current_label = label_match.group(1)
+                            if current_label not in visual_assets_by_label:
+                                visual_assets_by_label[current_label] = 0
+                    
+                    # Only count assets if we're inside a label we care about
+                    elif current_label and current_label in labels_found:
+                        # Count all asset references
+                        for pattern in asset_patterns:
+                            matches = re.findall(pattern, line_content, re.IGNORECASE)
+                            visual_assets_by_label[current_label] += len(matches)
+            
+            except Exception as e:
+                # Skip files that can't be read
+                continue
+        
+        # Ensure all labels have at least some count for labels found
+        for label in labels_found:
+            if label not in visual_assets_by_label:
+                visual_assets_by_label[label] = 0
+        
+        # If all counts are 0, this might indicate the script parsing didn't work well
+        total_found = sum(visual_assets_by_label.values())
+        if total_found == 0:
+            raise Exception("No assets found through script parsing")
+        
+        return visual_assets_by_label
+    
+    def _fallback_asset_distribution(self, all_assets: Dict[str, List[Dict[str, Any]]], labels_found: set) -> Dict[str, int]:
+        """
+        Fallback method for asset distribution when script parsing fails.
+        
+        Args:
+            all_assets: Assets organized by category from Ren'Py API
+            labels_found: Set of actual labels found during dialogue search
+            
+        Returns:
+            Dictionary mapping label names to estimated visual asset counts
         """
         visual_categories = ['images', 'video']
         total_assets = sum(len(all_assets.get(cat, [])) for cat in visual_categories)
@@ -361,7 +479,7 @@ class MediaLoadingWorker(QThread):
                 self.loading_failed.emit(str(e))
     
     def _find_label_media(self, project, label_name: str) -> List[Dict[str, Any]]:
-        """Find media assets associated with a specific label.
+        """Find media assets associated with a specific label using enhanced discovery.
         
         Args:
             project: RenpyProject instance
@@ -373,36 +491,192 @@ class MediaLoadingWorker(QThread):
         media_assets = []
         
         try:
-            # Get all assets from the project
-            all_assets = project.get_all_assets()
-            
-            # Process images
-            if 'images' in all_assets:
-                for image_asset in all_assets['images']:
-                    if self._is_cancelled:
-                        break
-                    
-                    asset_info = self._process_media_asset(image_asset, 'image', label_name)
-                    if asset_info:
-                        media_assets.append(asset_info)
-            
-            # Process videos  
-            if 'video' in all_assets:
-                for video_asset in all_assets['video']:
-                    if self._is_cancelled:
-                        break
-                    
-                    asset_info = self._process_media_asset(video_asset, 'video', label_name)
-                    if asset_info:
-                        media_assets.append(asset_info)
-            
-            # If no assets found with exact label matching, try broader search
-            if not media_assets:
-                media_assets = self._fallback_asset_search(all_assets, label_name)
+            # Try script-based asset discovery first
+            script_assets = self._script_based_asset_discovery(project, label_name)
+            if script_assets:
+                media_assets = script_assets
+            else:
+                # Fall back to API-based discovery
+                media_assets = self._api_based_asset_discovery(project, label_name)
             
         except Exception as e:
-            # If API fails, try direct file system search as fallback
+            # If all methods fail, try direct file system search as final fallback
             media_assets = self._filesystem_media_search(label_name)
+        
+        return media_assets
+    
+    def _script_based_asset_discovery(self, project, label_name: str) -> List[Dict[str, Any]]:
+        """Discover assets by parsing script files for the specific label.
+        
+        Args:
+            project: RenpyProject instance
+            label_name: Target label name
+            
+        Returns:
+            List of asset dictionaries found in the script for this label
+        """
+        media_assets = []
+        
+        # Get all .rpy files
+        rpy_files = project.parser.find_rpy_files(self.source_path)
+        
+        # Asset reference patterns with capture groups for filenames
+        asset_patterns = [
+            # Image patterns - capture the asset name
+            (r'show\s+([a-zA-Z0-9_]+)', 'image'),
+            (r'scene\s+([a-zA-Z0-9_]+)', 'image'), 
+            (r'image\s+([a-zA-Z0-9_]+)', 'image'),
+            
+            # Video patterns - capture the filename
+            (r'play\s+movie\s+"([^"]+)"', 'video'),
+            (r'renpy\.movie_cutscene\s*\(\s*"([^"]+)"', 'video'),
+            (r'\$\s*renpy\.movie_cutscene\s*\(\s*"([^"]+)"', 'video'),
+        ]
+        
+        import re
+        
+        # Parse each file to find assets within the target label
+        for rpy_file in rpy_files:
+            if self._is_cancelled:
+                break
+                
+            file_path = os.path.join(self.source_path, rpy_file)
+            current_label = None
+            in_target_label = False
+            
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = f.readlines()
+                
+                for line_num, line in enumerate(lines, 1):
+                    if self._is_cancelled:
+                        break
+                        
+                    line_content = line.strip()
+                    
+                    # Skip comments and empty lines
+                    if not line_content or line_content.startswith('#'):
+                        continue
+                    
+                    # Track current label
+                    if line_content.startswith('label '):
+                        label_match = re.match(r'label\s+([a-zA-Z0-9_]+)', line_content)
+                        if label_match:
+                            current_label = label_match.group(1)
+                            in_target_label = (current_label == label_name)
+                    
+                    # If we're in the target label, look for asset references
+                    elif in_target_label:
+                        for pattern, asset_type in asset_patterns:
+                            matches = re.findall(pattern, line_content, re.IGNORECASE)
+                            for match in matches:
+                                # Create asset info
+                                asset_info = {
+                                    'name': match,
+                                    'type': asset_type,
+                                    'label': label_name,
+                                    'file': rpy_file,
+                                    'line': line_num,
+                                    'original_path': match
+                                }
+                                
+                                # Try to resolve full path
+                                full_path = self._resolve_asset_path(match, asset_type)
+                                asset_info['path'] = full_path
+                                
+                                media_assets.append(asset_info)
+            
+            except Exception as e:
+                # Skip files that can't be read
+                continue
+        
+        return media_assets
+    
+    def _resolve_asset_path(self, asset_name: str, asset_type: str) -> str:
+        """Resolve the full path for an asset name.
+        
+        Args:
+            asset_name: Name of the asset
+            asset_type: Type of asset ('image' or 'video')
+            
+        Returns:
+            Full path to the asset file if found, otherwise the original name
+        """
+        # Common extensions by type
+        extensions = {
+            'image': ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'],
+            'video': ['.webm', '.mp4', '.avi', '.mov']
+        }
+        
+        # Common directories to search
+        search_dirs = [
+            self.source_path,
+            os.path.join(self.source_path, 'images'),
+            os.path.join(self.source_path, 'game', 'images'),
+            os.path.join(self.source_path, '..', 'images'),
+            os.path.join(self.source_path, 'videos'),
+            os.path.join(self.source_path, 'movies')
+        ]
+        
+        # Try different combinations
+        for search_dir in search_dirs:
+            if not os.path.exists(search_dir):
+                continue
+                
+            # Try with different extensions
+            for ext in extensions.get(asset_type, []):
+                # Try exact name + extension
+                test_path = os.path.join(search_dir, asset_name + ext)
+                if os.path.exists(test_path):
+                    return test_path
+                
+                # Try as direct filename if it already has extension
+                if '.' in asset_name:
+                    test_path = os.path.join(search_dir, asset_name)
+                    if os.path.exists(test_path):
+                        return test_path
+        
+        # Return original name if not found
+        return asset_name
+    
+    def _api_based_asset_discovery(self, project, label_name: str) -> List[Dict[str, Any]]:
+        """Fall back to API-based asset discovery (original method).
+        
+        Args:
+            project: RenpyProject instance
+            label_name: Target label name
+            
+        Returns:
+            List of asset dictionaries from API
+        """
+        media_assets = []
+        
+        # Get all assets from the project
+        all_assets = project.get_all_assets()
+        
+        # Process images
+        if 'images' in all_assets:
+            for image_asset in all_assets['images']:
+                if self._is_cancelled:
+                    break
+                
+                asset_info = self._process_media_asset(image_asset, 'image', label_name)
+                if asset_info:
+                    media_assets.append(asset_info)
+        
+        # Process videos  
+        if 'video' in all_assets:
+            for video_asset in all_assets['video']:
+                if self._is_cancelled:
+                    break
+                
+                asset_info = self._process_media_asset(video_asset, 'video', label_name)
+                if asset_info:
+                    media_assets.append(asset_info)
+        
+        # If no assets found with exact label matching, try broader search
+        if not media_assets:
+            media_assets = self._fallback_asset_search(all_assets, label_name)
         
         return media_assets
     
