@@ -14,14 +14,16 @@ import sys
 import time
 import ctypes
 import glob
+import random
+import string
 from datetime import datetime
 from typing import List, Tuple, Optional, Dict, Any
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QScrollArea, QCheckBox, QListWidget, QListWidgetItem
+    QScrollArea, QCheckBox, QListWidget, QListWidgetItem, QMessageBox, QProgressDialog
 )
-from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer, QSize, QEvent
+from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer, QSize, QEvent, QPoint, QRect
 from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QPainter, QColor, QPen
 
 # Windows API imports (only on Windows)
@@ -163,6 +165,10 @@ class ScreenshotsTab(QWidget):
         self.image_stack_folder = "image-stack"
         self.selected_window: Optional[WindowInfo] = None
         
+        # Initialize story context (will be set via set_story method)
+        self.story_id: Optional[int] = None
+        self.story_data: Optional[Dict[str, Any]] = None
+        
         # Initialize monitoring thread
         self.hotkey_monitor = GlobalHotkeyMonitor()
         self.hotkey_monitor.screenshot_requested.connect(self.capture_screenshot_from_hotkey)
@@ -245,6 +251,27 @@ class ScreenshotsTab(QWidget):
         """)
         clear_button.clicked.connect(self.clear_all_images)
         thumbnail_panel.addWidget(clear_button)
+        
+        # Copy Media to Gallery button
+        copy_to_gallery_button = QPushButton("📚 Copy Media to Gallery")
+        copy_to_gallery_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2196f3;
+                color: white;
+                border: none;
+                padding: 8px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1976d2;
+            }
+            QPushButton:pressed {
+                background-color: #0d47a1;
+            }
+        """)
+        copy_to_gallery_button.clicked.connect(self.copy_media_to_gallery)
+        thumbnail_panel.addWidget(copy_to_gallery_button)
         
         # Create thumbnail panel widget
         thumbnail_widget = QWidget()
@@ -544,6 +571,10 @@ class ScreenshotsTab(QWidget):
     
     def set_story(self, story_id: int, story_data: Dict[str, Any]):
         """Set the current story context for screenshot organization."""
+        # Store story context for Gallery integration
+        self.story_id = story_id
+        self.story_data = story_data
+        
         # Update screenshot directory based on story
         story_dir = story_data.get('source_path', '')
         if story_dir:
@@ -804,4 +835,291 @@ class ScreenshotsTab(QWidget):
                 
         except Exception as e:
             self.status_label.setText(f"❌ Failed to delete image: {str(e)}")
-            self.status_label.setStyleSheet("color: #f44336; padding: 10px; background-color: #f0f0f0; border-radius: 4px; margin: 10px 0;") 
+            self.status_label.setStyleSheet("color: #f44336; padding: 10px; background-color: #f0f0f0; border-radius: 4px; margin: 10px 0;")
+    
+    def copy_media_to_gallery(self):
+        """Copy all images from the stack to the Gallery."""
+        try:
+            # Check if we have a story context
+            if not hasattr(self, 'story_id') or not self.story_id:
+                QMessageBox.warning(self, "Error", "No story selected. Please select a story first.")
+                return
+            
+            # Get all image paths from thumbnail list
+            image_paths = []
+            for i in range(self.thumbnail_list.count()):
+                item = self.thumbnail_list.item(i)
+                if item and item.data(Qt.ItemDataRole.UserRole):
+                    image_paths.append(item.data(Qt.ItemDataRole.UserRole))
+            
+            if not image_paths:
+                QMessageBox.information(self, "Info", "No images to copy to Gallery.")
+                return
+            
+            # Show confirmation dialog with count
+            reply = QMessageBox.question(
+                self,
+                "Copy Media to Gallery",
+                f"Copy {len(image_paths)} image(s) from the stack to the Gallery?\n\n"
+                f"Images will be added to the current story's gallery with automatic thumbnails.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            
+            # Show simple progress dialog
+            progress = QProgressDialog(
+                f"Copying {len(image_paths)} images to Gallery...",
+                "Cancel", 0, len(image_paths), self
+            )
+            progress.setWindowTitle("Copy to Gallery")
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+            progress.setMinimumDuration(0)  # Show immediately
+            progress.setValue(0)
+            
+            # Process each image
+            successful_copies = 0
+            failed_copies = []
+            
+            for i, image_path in enumerate(image_paths):
+                # Check if user cancelled
+                if progress.wasCanceled():
+                    progress.close()
+                    QMessageBox.information(self, "Cancelled", 
+                                          f"Copy operation cancelled. {successful_copies} images were copied successfully.")
+                    return
+                
+                # Update progress
+                progress.setLabelText(f"Copying image {i+1} of {len(image_paths)}...")
+                progress.setValue(i)
+                
+                # Copy single image to Gallery
+                try:
+                    self._copy_single_image_to_gallery(image_path)
+                    successful_copies += 1
+                except Exception as e:
+                    failed_copies.append((image_path, str(e)))
+                    print(f"Failed to copy {image_path}: {e}")
+            
+            # Close progress dialog
+            progress.setValue(len(image_paths))
+            progress.close()
+            
+            # Handle results
+            if failed_copies and successful_copies == 0:
+                # All failed
+                self._handle_copy_errors(failed_copies, image_paths)
+            elif failed_copies and successful_copies > 0:
+                # Partial success
+                QMessageBox.warning(
+                    self,
+                    "Partial Success",
+                    f"Successfully copied {successful_copies} images to Gallery.\n"
+                    f"{len(failed_copies)} images failed to copy.\n\n"
+                    f"Failed images:\n" + "\n".join([os.path.basename(path) for path, _ in failed_copies[:5]])
+                )
+            else:
+                # Complete success
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Successfully copied {successful_copies} images to Gallery!"
+                )
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to copy media to Gallery: {str(e)}")
+            print(f"Error in copy_media_to_gallery: {e}")
+    
+    def _copy_single_image_to_gallery(self, image_path: str):
+        """Copy a single image to the Gallery using the same process as Gallery's save_image_to_story."""
+        # Load the image
+        if not os.path.exists(image_path):
+            raise FileNotFoundError(f"Image file not found: {image_path}")
+        
+        # Load with PIL first, then convert to QImage for Gallery processing
+        with Image.open(image_path) as pil_image:
+            # Convert PIL to QImage
+            if pil_image.mode != 'RGB':
+                pil_image = pil_image.convert('RGB')
+            
+            h, w = pil_image.height, pil_image.width
+            bytes_per_line = 3 * w
+            qt_image = QImage(pil_image.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGB888)
+            
+            if qt_image.isNull():
+                raise ValueError(f"Could not convert image to QImage: {image_path}")
+            
+            # Get story data from database
+            cursor = self.db_conn.cursor()
+            cursor.execute("SELECT * FROM stories WHERE id = ?", (self.story_id,))
+            story_data = cursor.fetchone()
+            
+            if not story_data:
+                raise ValueError("Story data not found in database")
+            
+            story_data = dict(story_data)
+            
+            # Get folder paths using the utility function
+            from app.db_sqlite import get_story_folder_paths, ensure_story_folders_exist
+            
+            # Ensure all story folders exist
+            ensure_story_folders_exist(story_data)
+            
+            # Get paths
+            folder_paths = get_story_folder_paths(story_data)
+            images_folder = folder_paths['images_folder']
+            thumbnails_folder = folder_paths['thumbnails_folder']
+            
+            # Create folders if they don't exist
+            os.makedirs(images_folder, exist_ok=True)
+            os.makedirs(thumbnails_folder, exist_ok=True)
+            
+            # Generate unique filename with Gallery naming convention
+            timestamp = time.strftime("%Y%m%d%H%M%S")
+            random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+            file_name = f"img_{timestamp}_{random_string}.png"
+            
+            # Define full file paths
+            gallery_image_path = os.path.join(images_folder, file_name)
+            thumbnail_path = os.path.join(thumbnails_folder, file_name)
+            
+            # Generate thumbnail using Gallery's method
+            thumbnail_image = self._generate_thumbnail(qt_image)
+            
+            # Save the full image
+            if not qt_image.save(gallery_image_path, "PNG"):
+                raise IOError(f"Could not save image to {gallery_image_path}")
+            
+            # Save the thumbnail
+            if not thumbnail_image.save(thumbnail_path, "PNG"):
+                print(f"Warning: Could not save thumbnail to {thumbnail_path}")
+            
+            # Create timestamp
+            now = datetime.now().isoformat()
+            
+            # Insert into database
+            query = """
+                INSERT INTO images (story_id, title, path, created_at, updated_at, width, height, is_featured, filename)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            
+            cursor.execute(
+                query,
+                (
+                    self.story_id,
+                    "Screenshot Import",    # title
+                    images_folder,         # path (store folder path)
+                    now,                   # created_at
+                    now,                   # updated_at
+                    qt_image.width(),      # width
+                    qt_image.height(),     # height
+                    0,                     # is_featured (not NSFW)
+                    file_name              # filename
+                )
+            )
+            
+            # Commit changes
+            self.db_conn.commit()
+            
+            print(f"Successfully copied {os.path.basename(image_path)} to Gallery as {file_name}")
+    
+    def _generate_thumbnail(self, image: QImage, max_dimension: int = 320) -> QImage:
+        """Generate a thumbnail from the image (copied from Gallery's method)."""
+        if image.isNull():
+            return QImage()
+        
+        # Calculate thumbnail size while maintaining aspect ratio
+        original_width = image.width()
+        original_height = image.height()
+        
+        if original_width <= max_dimension and original_height <= max_dimension:
+            # Image is already small enough
+            return image.copy()
+        
+        # Calculate scaling factor
+        scale_factor = min(max_dimension / original_width, max_dimension / original_height)
+        
+        # Calculate new dimensions
+        new_width = int(original_width * scale_factor)
+        new_height = int(original_height * scale_factor)
+        
+        # Scale the image
+        scaled_image = image.scaled(
+            new_width, new_height,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        
+        return scaled_image
+    
+    def _handle_copy_errors(self, failed_copies, original_paths):
+        """Handle copy errors with retry/abort options."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Copy Errors")
+        msg.setText(f"Failed to copy {len(failed_copies)} images to Gallery.")
+        msg.setDetailedText("\n".join([f"{os.path.basename(path)}: {error}" for path, error in failed_copies]))
+        msg.setIcon(QMessageBox.Icon.Warning)
+        
+        # Add custom buttons
+        retry_button = msg.addButton("Retry Failed", QMessageBox.ButtonRole.ActionRole)
+        abort_button = msg.addButton("Abort", QMessageBox.ButtonRole.RejectRole)
+        msg.setDefaultButton(retry_button)
+        
+        msg.exec()
+        
+        if msg.clickedButton() == retry_button:
+            # Retry only the failed images
+            failed_paths = [path for path, _ in failed_copies]
+            self._retry_failed_copies(failed_paths)
+    
+    def _retry_failed_copies(self, failed_paths):
+        """Retry copying failed images."""
+        if not failed_paths:
+            return
+        
+        # Show progress for retry
+        progress = QProgressDialog(
+            f"Retrying {len(failed_paths)} failed images...",
+            "Cancel", 0, len(failed_paths), self
+        )
+        progress.setWindowTitle("Retry Copy")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        
+        successful_retries = 0
+        still_failed = []
+        
+        for i, image_path in enumerate(failed_paths):
+            if progress.wasCanceled():
+                break
+                
+            progress.setLabelText(f"Retrying image {i+1} of {len(failed_paths)}...")
+            progress.setValue(i)
+            
+            try:
+                self._copy_single_image_to_gallery(image_path)
+                successful_retries += 1
+            except Exception as e:
+                still_failed.append((image_path, str(e)))
+        
+        progress.setValue(len(failed_paths))
+        progress.close()
+        
+        # Show retry results
+        if still_failed:
+            QMessageBox.warning(
+                self,
+                "Retry Results",
+                f"Retry completed:\n"
+                f"• Successfully copied: {successful_retries}\n"
+                f"• Still failed: {len(still_failed)}"
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "Retry Success",
+                f"Successfully copied all {successful_retries} images on retry!"
+            ) 
