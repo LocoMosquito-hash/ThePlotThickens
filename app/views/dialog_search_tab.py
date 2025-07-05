@@ -1041,6 +1041,8 @@ class DialogSearchTab(QWidget):
         # Stage 6: Configuration and interface preparation
         self.config_dialog = None
         self.screenshots_interface = None  # Prepared for future integration
+        self.parent_tab_container = None  # Reference to SourceAnalysisTab for cross-tab communication
+        self.current_media_assets: List[Dict[str, Any]] = []  # Store current media assets
         self._load_configuration()
         self._prepare_screenshots_interface()
         
@@ -1191,6 +1193,24 @@ class DialogSearchTab(QWidget):
         self.gallery_info_label = QLabel("Select a dialogue result to view associated media")
         self.gallery_info_label.setStyleSheet("color: #666; font-style: italic;")
         gallery_layout.addWidget(self.gallery_info_label)
+        
+        # Copy to Stack controls
+        copy_controls_layout = QHBoxLayout()
+        copy_controls_layout.setContentsMargins(0, 5, 0, 5)
+        
+        self.copy_to_stack_button = QPushButton("📸 Copy to Stack")
+        self.copy_to_stack_button.setToolTip("Copy all discovered media files to the Screenshots tab's image stack")
+        self.copy_to_stack_button.setEnabled(False)  # Initially disabled
+        self.copy_to_stack_button.clicked.connect(self.copy_media_to_stack)
+        copy_controls_layout.addWidget(self.copy_to_stack_button)
+        
+        self.skip_duplicates_checkbox = QCheckBox("Skip Duplicates")
+        self.skip_duplicates_checkbox.setToolTip("Skip files that already exist in the image stack (filename-based)")
+        self.skip_duplicates_checkbox.setChecked(True)  # Default to enabled
+        copy_controls_layout.addWidget(self.skip_duplicates_checkbox)
+        
+        copy_controls_layout.addStretch()  # Push controls to the left
+        gallery_layout.addLayout(copy_controls_layout)
         
         # Scroll area for thumbnails
         self.gallery_scroll = QScrollArea()
@@ -1354,6 +1374,11 @@ class DialogSearchTab(QWidget):
                     widget.deleteLater()
         
         self.gallery_info_label.setText("Select a dialogue result to view associated media")
+        
+        # Clear current media assets and disable Copy to Stack button when gallery is cleared
+        self.current_media_assets.clear()
+        if hasattr(self, 'copy_to_stack_button'):
+            self.copy_to_stack_button.setEnabled(False)
         
     def on_search_completed(self, results: List[Dict[str, Any]]):
         """Handle successful search completion.
@@ -1756,6 +1781,10 @@ class DialogSearchTab(QWidget):
             result_text += f"\nShowing first {showing_count} assets"
         
         self.gallery_info_label.setText(result_text)
+        
+        # Store current media assets and enable Copy to Stack button when media is found
+        self.current_media_assets = media_assets.copy()
+        self.copy_to_stack_button.setEnabled(total_found > 0)
     
     def _on_media_loading_completed(self):
         """Handle completion of media loading."""
@@ -2621,3 +2650,59 @@ Result Data:
             }
         """)
         self.gallery_layout.addWidget(placeholder, 0, 0, 1, 6)  # Span 6 columns 
+    
+    def set_parent_tab_container(self, parent_tab_container):
+        """Set reference to the parent SourceAnalysisTab for cross-tab communication.
+        
+        Args:
+            parent_tab_container: Reference to SourceAnalysisTab instance
+        """
+        self.parent_tab_container = parent_tab_container
+    
+    def copy_media_to_stack(self):
+        """Copy discovered media files to the Screenshots tab's image stack.
+        
+        This method will:
+        1. Get currently loaded media assets
+        2. Copy them to the image-stack folder with proper timestamps
+        3. Refresh the Screenshots tab
+        4. Handle duplicates based on checkbox setting
+        """
+        if not self.current_media_assets:
+            QMessageBox.information(self, "No Media", "No media files available to copy. Please select a search result first.")
+            return
+            
+        # Import the media copier utility
+        from app.utils.media_copier import copy_media_to_image_stack
+        
+        # Get settings
+        skip_duplicates = self.skip_duplicates_checkbox.isChecked()
+        
+        # Define completion callback to refresh Screenshots tab
+        def on_copy_completed(copied_count: int, skipped_count: int):
+            """Callback when copy operation completes."""
+            if copied_count > 0 and self.parent_tab_container:
+                # Refresh Screenshots tab thumbnails
+                screenshots_tab = getattr(self.parent_tab_container, 'screenshots_tab', None)
+                if screenshots_tab and hasattr(screenshots_tab, 'load_existing_images'):
+                    screenshots_tab.load_existing_images()
+        
+        # Start copy operation
+        try:
+            success = copy_media_to_image_stack(
+                media_assets=self.current_media_assets,
+                skip_duplicates=skip_duplicates,
+                image_stack_folder="image-stack",
+                parent=self,
+                completion_callback=on_copy_completed
+            )
+            
+            if success:
+                # Operation completed successfully (callback already called)
+                pass
+            else:
+                # Operation was cancelled or failed (error already shown)
+                pass
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Copy Failed", f"An unexpected error occurred:\n\n{str(e)}")
