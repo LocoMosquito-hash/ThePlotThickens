@@ -11,7 +11,7 @@ with auto-hide functionality, pin button, and focus awareness.
 from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QFrame, QSizePolicy, QApplication
+    QFrame, QSizePolicy, QApplication, QGroupBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QPalette
@@ -359,4 +359,323 @@ class CollapsiblePanel(QWidget):
             title: New title text
         """
         self.title = title
-        self.title_label.setText(title) 
+        self.title_label.setText(title)
+
+class SimpleCollapsibleWidget(QWidget):
+    """A simple, reliable collapsible widget with visible controls."""
+    
+    # Signals
+    expanded = pyqtSignal()  # Emitted when content is expanded
+    collapsed = pyqtSignal()  # Emitted when content is collapsed
+    
+    def __init__(self, title: str = "Section", collapsed: bool = False, parent: Optional[QWidget] = None) -> None:
+        """Initialize the simple collapsible widget.
+        
+        Args:
+            title: Title text to display
+            collapsed: Whether to start in collapsed state
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        
+        self._is_collapsed = collapsed
+        self._title = title
+        
+        # Main layout
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
+        
+        # Header with toggle button
+        self.header_widget = QWidget()
+        self.header_widget.setStyleSheet("""
+            QWidget {
+                background-color: palette(button);
+                border: 1px solid palette(mid);
+                border-radius: 3px;
+                margin: 1px;
+            }
+            QWidget:hover {
+                background-color: palette(light);
+            }
+        """)
+        
+        header_layout = QHBoxLayout(self.header_widget)
+        header_layout.setContentsMargins(8, 4, 8, 4)
+        
+        # Toggle button - make it very visible
+        self.toggle_button = QPushButton()
+        self.toggle_button.setFixedSize(20, 20)
+        self.toggle_button.clicked.connect(self.toggle)
+        self.toggle_button.setStyleSheet("""
+            QPushButton {
+                border: 1px solid palette(dark);
+                background-color: palette(button);
+                border-radius: 3px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: palette(highlight);
+                color: palette(highlighted-text);
+            }
+            QPushButton:pressed {
+                background-color: palette(dark);
+            }
+        """)
+        
+        # Title label
+        self.title_label = QLabel(self._title)
+        font = QFont()
+        font.setBold(True)
+        self.title_label.setFont(font)
+        
+        header_layout.addWidget(self.toggle_button)
+        header_layout.addWidget(self.title_label)
+        header_layout.addStretch()
+        
+        self.main_layout.addWidget(self.header_widget)
+        
+        # Content widget
+        self.content_widget = QWidget()
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(5, 5, 5, 5)
+        
+        self.main_layout.addWidget(self.content_widget)
+        
+        # Set initial state
+        self._update_button_appearance()
+        if self._is_collapsed:
+            self.collapse()
+        else:
+            self.expand()
+    
+    def _update_button_appearance(self) -> None:
+        """Update the toggle button appearance."""
+        if self._is_collapsed:
+            self.toggle_button.setText("▼")  # Down arrow when collapsed
+            self.toggle_button.setToolTip(f"Expand {self._title}")
+        else:
+            self.toggle_button.setText("▲")  # Up arrow when expanded
+            self.toggle_button.setToolTip(f"Collapse {self._title}")
+    
+    def toggle(self) -> None:
+        """Toggle between expanded and collapsed states."""
+        if self._is_collapsed:
+            self.expand()
+        else:
+            self.collapse()
+    
+    def expand(self) -> None:
+        """Expand the content widget."""
+        if not self._is_collapsed:
+            return
+            
+        self._is_collapsed = False
+        self.content_widget.setVisible(True)
+        self._update_button_appearance()
+        self.expanded.emit()
+    
+    def collapse(self) -> None:
+        """Collapse the content widget."""
+        if self._is_collapsed:
+            return
+            
+        self._is_collapsed = True
+        self.content_widget.setVisible(False)
+        self._update_button_appearance()
+        self.collapsed.emit()
+    
+    def is_collapsed(self) -> bool:
+        """Check if the widget is currently collapsed.
+        
+        Returns:
+            True if collapsed, False if expanded
+        """
+        return self._is_collapsed
+    
+    def get_content_layout(self) -> QVBoxLayout:
+        """Get the content layout for adding widgets.
+        
+        Returns:
+            The content layout where widgets should be added
+        """
+        return self.content_layout
+    
+    def add_content_widget(self, widget: QWidget) -> None:
+        """Add a widget to the content area.
+        
+        Args:
+            widget: Widget to add to the content
+        """
+        self.content_layout.addWidget(widget)
+    
+    def set_title(self, title: str) -> None:
+        """Set the title text.
+        
+        Args:
+            title: New title text
+        """
+        self._title = title
+        self.title_label.setText(title)
+        self._update_button_appearance()
+
+# Keep the old CollapsibleGroupBox for compatibility but it's buggy
+class CollapsibleGroupBox(QGroupBox):
+    """A simple collapsible group box widget for inline content."""
+    
+    # Signals
+    expanded = pyqtSignal()  # Emitted when content is expanded
+    collapsed = pyqtSignal()  # Emitted when content is collapsed
+    
+    def __init__(self, title: str = "Group", collapsed: bool = False, parent: Optional[QWidget] = None) -> None:
+        """Initialize the collapsible group box.
+        
+        Args:
+            title: Title text to display in the group header
+            collapsed: Whether to start in collapsed state
+            parent: Parent widget
+        """
+        super().__init__(title, parent)
+        
+        self._is_collapsed = collapsed
+        self._original_title = title
+        
+        # Create toggle button and integrate into title
+        self.toggle_button = QPushButton()
+        self.toggle_button.setFixedSize(16, 16)
+        self.toggle_button.clicked.connect(self.toggle)
+        self.toggle_button.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background-color: transparent;
+                font-weight: bold;
+                color: palette(text);
+            }
+            QPushButton:hover {
+                background-color: palette(highlight);
+                color: palette(highlighted-text);
+                border-radius: 2px;
+            }
+        """)
+        
+        # Main layout
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(10, 20, 10, 10)  # Leave space for title
+        
+        # Title layout to include toggle button
+        self.title_layout = QHBoxLayout()
+        self.title_layout.setContentsMargins(0, 0, 0, 5)
+        
+        # Content widget that will be shown/hidden
+        self.content_widget = QWidget()
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.main_layout.addLayout(self.title_layout)
+        self.main_layout.addWidget(self.content_widget)
+        
+        # Set up the custom title with toggle button
+        self._setup_custom_title()
+        
+        # Set initial state
+        if self._is_collapsed:
+            self.collapse()
+        else:
+            self.expand()
+        
+        self._update_button_appearance()
+    
+    def _setup_custom_title(self) -> None:
+        """Set up custom title layout with toggle button."""
+        # Clear any existing title layout
+        for i in reversed(range(self.title_layout.count())):
+            item = self.title_layout.itemAt(i)
+            if item and item.widget():
+                item.widget().setParent(None)
+        
+        # Add toggle button
+        self.title_layout.addWidget(self.toggle_button)
+        
+        # Add title label
+        self.title_label = QLabel(self._original_title)
+        font = QFont()
+        font.setBold(True)
+        self.title_label.setFont(font)
+        self.title_layout.addWidget(self.title_label)
+        
+        # Add stretch to push everything to the left
+        self.title_layout.addStretch()
+        
+        # Remove the default QGroupBox title since we're using custom layout
+        super().setTitle("")
+    
+    def _update_button_appearance(self) -> None:
+        """Update the toggle button appearance."""
+        if self._is_collapsed:
+            self.toggle_button.setText("▶")
+            self.toggle_button.setToolTip(f"Expand {self._original_title}")
+        else:
+            self.toggle_button.setText("▼")
+            self.toggle_button.setToolTip(f"Collapse {self._original_title}")
+    
+    def toggle(self) -> None:
+        """Toggle between expanded and collapsed states."""
+        if self._is_collapsed:
+            self.expand()
+        else:
+            self.collapse()
+    
+    def expand(self) -> None:
+        """Expand the content widget."""
+        if not self._is_collapsed:
+            return
+            
+        self._is_collapsed = False
+        self.content_widget.setVisible(True)
+        self._update_button_appearance()
+        self.expanded.emit()
+    
+    def collapse(self) -> None:
+        """Collapse the content widget."""
+        if self._is_collapsed:
+            return
+            
+        self._is_collapsed = True
+        self.content_widget.setVisible(False)
+        self._update_button_appearance()
+        self.collapsed.emit()
+    
+    def is_collapsed(self) -> bool:
+        """Check if the group box is currently collapsed.
+        
+        Returns:
+            True if collapsed, False if expanded
+        """
+        return self._is_collapsed
+    
+    def get_content_layout(self) -> QVBoxLayout:
+        """Get the content layout for adding widgets.
+        
+        Returns:
+            The content layout where widgets should be added
+        """
+        return self.content_layout
+    
+    def add_content_widget(self, widget: QWidget) -> None:
+        """Add a widget to the content area.
+        
+        Args:
+            widget: Widget to add to the content
+        """
+        self.content_layout.addWidget(widget)
+    
+    def set_title(self, title: str) -> None:
+        """Set the title text.
+        
+        Args:
+            title: New title text
+        """
+        self._original_title = title
+        self.title_label.setText(title)
+        self._update_button_appearance() 

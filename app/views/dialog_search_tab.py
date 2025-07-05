@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QApplication, QFileDialog, QDialog, QFormLayout, QCheckBox, QSpinBox,
     QComboBox, QDialogButtonBox
 )
+from app.widgets.collapsible_panel import SimpleCollapsibleWidget
 from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer, QSize, QDateTime
 from PyQt6.QtGui import QFont, QPixmap
 
@@ -1133,8 +1134,9 @@ class DialogSearchTab(QWidget):
         Args:
             layout: Layout to add the section to
         """
-        results_group = QGroupBox("Search Results")
-        results_layout = QVBoxLayout(results_group)
+        # Create collapsible group for search results
+        self.results_group = SimpleCollapsibleWidget("Search Results", collapsed=False)
+        results_layout = self.results_group.get_content_layout()
         
         # Results count
         self.results_count_label = QLabel("0 matches found")
@@ -1173,7 +1175,7 @@ class DialogSearchTab(QWidget):
         self.results_table.itemDoubleClicked.connect(self.on_result_double_clicked)
         
         results_layout.addWidget(self.results_table)
-        layout.addWidget(results_group)
+        layout.addWidget(self.results_group)
         
     def create_minimal_gallery_section(self, layout: QVBoxLayout):
         """Create the minimal thumbnail gallery section.
@@ -1181,8 +1183,9 @@ class DialogSearchTab(QWidget):
         Args:
             layout: Layout to add the section to
         """
-        gallery_group = QGroupBox("Associated Media")
-        gallery_layout = QVBoxLayout(gallery_group)
+        # Create collapsible group for associated media
+        self.gallery_group = SimpleCollapsibleWidget("Associated Media", collapsed=False)
+        gallery_layout = self.gallery_group.get_content_layout()
         
         # Gallery info
         self.gallery_info_label = QLabel("Select a dialogue result to view associated media")
@@ -1204,7 +1207,7 @@ class DialogSearchTab(QWidget):
         self.gallery_scroll.setWidget(self.gallery_widget)
         gallery_layout.addWidget(self.gallery_scroll)
         
-        layout.addWidget(gallery_group)
+        layout.addWidget(self.gallery_group)
         
     def set_story(self, story_id: int, story_data: Dict[str, Any]):
         """Set the current story for analysis.
