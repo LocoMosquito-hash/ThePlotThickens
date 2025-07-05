@@ -359,6 +359,13 @@ class ScreenshotsTab(QWidget):
     def add_thumbnail_to_list(self, image_path: str):
         """Add a thumbnail to the vertical thumbnail list."""
         try:
+            # Check if image path already exists in the list to prevent duplicates
+            for i in range(self.thumbnail_list.count()):
+                existing_item = self.thumbnail_list.item(i)
+                if existing_item and existing_item.data(Qt.ItemDataRole.UserRole) == image_path:
+                    # Image already exists in the list, skip adding
+                    return
+            
             # Generate thumbnail using PIL
             with Image.open(image_path) as img:
                 # Create thumbnail (180x180 max size while maintaining aspect ratio)
@@ -551,6 +558,9 @@ class ScreenshotsTab(QWidget):
         # Ensure directory exists and reload images
         if not os.path.exists(self.image_stack_folder):
             os.makedirs(self.image_stack_folder)
+        
+        # Clear existing thumbnails before reloading to prevent duplicates
+        self.thumbnail_list.clear()
         
         self.load_existing_images()
     
