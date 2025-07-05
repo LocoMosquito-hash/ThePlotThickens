@@ -372,8 +372,13 @@ class ScreenshotsTab(QWidget):
         if not os.path.exists(self.image_stack_folder):
             os.makedirs(self.image_stack_folder)
             
-        image_files = glob.glob(os.path.join(self.image_stack_folder, "*.png"))
-        image_files.extend(glob.glob(os.path.join(self.image_stack_folder, "*.jpg")))
+        # Support common image formats including those from RenPy games
+        image_extensions = ['*.png', '*.jpg', '*.jpeg', '*.webp', '*.gif', '*.bmp', '*.tiff']
+        image_files = []
+        
+        for ext in image_extensions:
+            image_files.extend(glob.glob(os.path.join(self.image_stack_folder, ext)))
+            
         image_files.sort()  # Sort by filename (which includes timestamp) - date ascending
         
         for image_path in image_files:
@@ -499,9 +504,10 @@ class ScreenshotsTab(QWidget):
         
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                # Remove all PNG files
+                # Remove all supported image files
+                supported_extensions = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff')
                 for filename in os.listdir(self.image_stack_folder):
-                    if filename.lower().endswith('.png') or filename.lower().endswith('.jpg'):
+                    if filename.lower().endswith(supported_extensions):
                         os.remove(os.path.join(self.image_stack_folder, filename))
                 
                 # Clear the list and display
