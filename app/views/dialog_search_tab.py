@@ -17,9 +17,10 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit, 
     QTableWidget, QTableWidgetItem, QGroupBox, QProgressBar, QMessageBox,
-    QGridLayout, QScrollArea, QFrame, QSizePolicy, QHeaderView
+    QGridLayout, QScrollArea, QFrame, QSizePolicy, QHeaderView, QMenu, 
+    QApplication, QFileDialog
 )
-from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer, QSize
+from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer, QSize, QDateTime
 from PyQt6.QtGui import QFont, QPixmap
 
 from app.utils.icons import icon_manager
@@ -908,7 +909,25 @@ class DialogSearchTab(QWidget):
         self.search_worker: Optional[DialogSearchWorker] = None
         self.search_results: List[Dict[str, Any]] = []
         
+        # Enhanced error handling
+        self.error_count = 0
+        self.max_retries = 3
+        self.last_error_time = None
+        self.error_recovery_delay = 5000  # 5 seconds
+        
+        # Search history functionality
+        self.search_history: List[str] = []
+        self.max_history_items = 50
+        self.current_history_index = -1
+        
+        # Context menu support
+        self.results_context_menu = None
+        self.gallery_context_menu = None
+        
         self.init_ui()
+        self._setup_context_menus()
+        self._load_search_history()
+        self._setup_keyboard_shortcuts()
         
     def init_ui(self):
         """Initialize the user interface."""
@@ -1138,7 +1157,7 @@ class DialogSearchTab(QWidget):
             self.search_status_label.setText("Ready to search")
     
     def perform_search(self):
-        """Perform the dialogue search."""
+        """Perform the dialogue search with enhanced error handling and history."""
         search_text = self.search_input.text().strip()
         if not search_text:
             QMessageBox.warning(self, "Search", "Please enter text to search for.")
@@ -1154,8 +1173,15 @@ class DialogSearchTab(QWidget):
             QMessageBox.warning(self, "Search", "No source path configured for this story.")
             return
         
+        # Add to search history
+        self._add_to_search_history(search_text)
+        
         # Clear previous results
         self.clear_results()
+        
+        # Reset error tracking for new search
+        self.error_count = 0
+        self.last_error_time = None
         
         # Update UI
         self.search_button.setEnabled(False)
@@ -1257,13 +1283,25 @@ class DialogSearchTab(QWidget):
         return stats
         
     def on_search_failed(self, error_message: str):
-        """Handle search failure.
+        """Handle search failure with enhanced error handling.
         
         Args:
             error_message: Error message to display
         """
-        QMessageBox.critical(self, "Search Failed", error_message)
-        self.search_status_label.setText("Search failed")
+        # Use enhanced error handling
+        should_retry = self._enhanced_error_handling(error_message, "search")
+        
+        if should_retry:
+            self.search_status_label.setText("Retrying search...")
+            # Retry the search automatically
+            QTimer.singleShot(self.error_recovery_delay, self._retry_last_search)
+        else:
+            self.search_status_label.setText("Search failed")
+    
+    def _retry_last_search(self):
+        """Retry the last search operation."""
+        if self.search_input.text().strip():
+            self.perform_search()
         
     def on_search_finished(self):
         """Handle search thread finishing (success or failure)."""
@@ -1623,6 +1661,441 @@ class DialogSearchTab(QWidget):
             }
         """)
         self.gallery_layout.addWidget(placeholder, 0, 0, 1, 6)  # Span 6 columns
+    
+    # ============================================================================
+    # Stage 5: Enhanced Error Handling, Search History & Context Menus
+    # ============================================================================
+    
+    def _load_search_history(self):
+        """Load search history from settings."""
+        try:
+            # Load history from QSettings
+            history_list = self.settings.value("dialog_search/history", [])
+            if isinstance(history_list, list):
+                self.search_history = history_list[:self.max_history_items]
+            else:
+                self.search_history = []
+            
+            # Reset history index
+            self.current_history_index = -1
+            
+        except Exception as e:
+            print(f"Error loading search history: {e}")
+            self.search_history = []
+    
+    def _save_search_history(self):
+        """Save search history to settings."""
+        try:
+            self.settings.setValue("dialog_search/history", self.search_history)
+            self.settings.sync()
+        except Exception as e:
+            print(f"Error saving search history: {e}")
+    
+    def _add_to_search_history(self, search_term: str):
+        """Add search term to history.
+        
+        Args:
+            search_term: The search term to add
+        """
+        if not search_term or search_term.isspace():
+            return
+        
+        search_term = search_term.strip()
+        
+        # Remove if already exists (move to top)
+        if search_term in self.search_history:
+            self.search_history.remove(search_term)
+        
+        # Add to beginning
+        self.search_history.insert(0, search_term)
+        
+        # Limit history size
+        if len(self.search_history) > self.max_history_items:
+            self.search_history = self.search_history[:self.max_history_items]
+        
+        # Save to settings
+        self._save_search_history()
+        
+        # Reset history navigation
+        self.current_history_index = -1
+    
+    def _setup_context_menus(self):
+        """Set up context menus for results table and gallery."""
+        # Results table context menu
+        self.results_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.results_table.customContextMenuRequested.connect(self._show_results_context_menu)
+        
+        # Gallery context menu
+        self.gallery_scroll.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.gallery_scroll.customContextMenuRequested.connect(self._show_gallery_context_menu)
+    
+    def _show_results_context_menu(self, position):
+        """Show context menu for results table.
+        
+        Args:
+            position: Click position
+        """
+        if not self.search_results:
+            return
+        
+        # Get clicked item
+        item = self.results_table.itemAt(position)
+        if not item:
+            return
+        
+        row = item.row()
+        if row < 0 or row >= len(self.search_results):
+            return
+        
+        selected_result = self.search_results[row]
+        
+        # Create context menu
+        context_menu = QMenu(self)
+        
+        # Copy actions
+        copy_character_action = context_menu.addAction("📋 Copy Character Name")
+        copy_dialogue_action = context_menu.addAction("📋 Copy Dialogue")
+        copy_label_action = context_menu.addAction("📋 Copy Label")
+        copy_file_action = context_menu.addAction("📋 Copy File Path")
+        
+        context_menu.addSeparator()
+        
+        # View actions
+        view_details_action = context_menu.addAction("🔍 View Details")
+        load_media_action = context_menu.addAction("🖼️ Load Media")
+        
+        context_menu.addSeparator()
+        
+        # Export actions
+        export_result_action = context_menu.addAction("💾 Export Result")
+        
+        # Show menu and handle selection
+        action = context_menu.exec(self.results_table.mapToGlobal(position))
+        
+        if action == copy_character_action:
+            self._copy_to_clipboard(selected_result.get('character', ''))
+        elif action == copy_dialogue_action:
+            self._copy_to_clipboard(selected_result.get('dialogue', ''))
+        elif action == copy_label_action:
+            self._copy_to_clipboard(selected_result.get('label', ''))
+        elif action == copy_file_action:
+            self._copy_to_clipboard(selected_result.get('file', ''))
+        elif action == view_details_action:
+            self.on_result_double_clicked(item)
+        elif action == load_media_action:
+            self.update_gallery(selected_result)
+        elif action == export_result_action:
+            self._export_search_result(selected_result)
+    
+    def _show_gallery_context_menu(self, position):
+        """Show context menu for gallery area.
+        
+        Args:
+            position: Click position
+        """
+        context_menu = QMenu(self)
+        
+        # Refresh action
+        refresh_action = context_menu.addAction("🔄 Refresh Gallery")
+        
+        context_menu.addSeparator()
+        
+        # View actions
+        if self.search_results:
+            view_all_action = context_menu.addAction("👁️ View All Results")
+            export_gallery_action = context_menu.addAction("💾 Export Gallery Info")
+        
+        clear_action = context_menu.addAction("🗑️ Clear Gallery")
+        
+        # Show menu and handle selection
+        action = context_menu.exec(self.gallery_scroll.mapToGlobal(position))
+        
+        if action == refresh_action:
+            # Refresh current gallery if selection exists
+            selection_model = self.results_table.selectionModel()
+            if selection_model:
+                selected_rows = selection_model.selectedRows()
+                if selected_rows:
+                    row = selected_rows[0].row()
+                    if 0 <= row < len(self.search_results):
+                        self.update_gallery(self.search_results[row])
+        elif action == clear_action:
+            self.clear_gallery()
+        elif hasattr(locals(), 'view_all_action') and action == view_all_action:
+            self._show_all_results_summary()
+        elif hasattr(locals(), 'export_gallery_action') and action == export_gallery_action:
+            self._export_gallery_info()
+    
+    def _copy_to_clipboard(self, text: str):
+        """Copy text to clipboard.
+        
+        Args:
+            text: Text to copy
+        """
+        if text:
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(str(text))
+    
+    def _export_search_result(self, result: Dict[str, Any]):
+        """Export a single search result.
+        
+        Args:
+            result: Search result to export
+        """
+        try:
+            from PyQt6.QtWidgets import QFileDialog
+            
+            # Get export file path
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export Search Result",
+                f"dialogue_result_{result.get('label', 'unknown')}.txt",
+                "Text Files (*.txt);;All Files (*)"
+            )
+            
+            if not file_path:
+                return
+            
+            # Format result for export
+            character = result.get('character', 'Unknown')
+            label = result.get('label', 'Unknown')
+            file_name = result.get('file', 'Unknown')
+            line_number = result.get('line_number', 0)
+            dialogue = result.get('dialogue', '')
+            media_count = result.get('media_count', 0)
+            
+            export_text = f"""Dialog Search Result Export
+Generated: {QDateTime.currentDateTime().toString()}
+
+Character: {character}
+Label: {label}
+File: {file_name}
+Line: {line_number}
+Media Count: {media_count}
+
+Dialogue:
+{dialogue}
+
+Result Data:
+{result}
+"""
+            
+            # Write to file
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(export_text)
+            
+            QMessageBox.information(self, "Export Complete", f"Result exported to:\n{file_path}")
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Export Failed", f"Failed to export result:\n{str(e)}")
+    
+    def _show_all_results_summary(self):
+        """Show summary of all search results."""
+        if not self.search_results:
+            return
+        
+        # Create summary
+        summary = f"Search Results Summary\n"
+        summary += f"{'=' * 50}\n\n"
+        summary += f"Total Results: {len(self.search_results)}\n\n"
+        
+        # Character breakdown
+        characters = {}
+        labels = {}
+        files = {}
+        total_media = 0
+        
+        for result in self.search_results:
+            char = result.get('character', 'Unknown')
+            label = result.get('label', 'Unknown')
+            file_name = result.get('file', 'Unknown')
+            media_count = result.get('media_count', 0)
+            
+            characters[char] = characters.get(char, 0) + 1
+            labels[label] = labels.get(label, 0) + 1
+            files[file_name] = files.get(file_name, 0) + 1
+            total_media += media_count
+        
+        # Add breakdowns to summary
+        summary += f"Characters ({len(characters)}):\n"
+        for char, count in sorted(characters.items(), key=lambda x: x[1], reverse=True)[:10]:
+            summary += f"  {char}: {count} lines\n"
+        
+        summary += f"\nLabels ({len(labels)}):\n"
+        for label, count in sorted(labels.items(), key=lambda x: x[1], reverse=True)[:10]:
+            summary += f"  {label}: {count} lines\n"
+        
+        summary += f"\nFiles ({len(files)}):\n"
+        for file_name, count in sorted(files.items(), key=lambda x: x[1], reverse=True)[:10]:
+            summary += f"  {file_name}: {count} lines\n"
+        
+        summary += f"\nTotal Visual Assets: {total_media}\n"
+        
+        # Show in dialog
+        msg_box = QMessageBox()
+        msg_box.setWindowTitle("Search Results Summary")
+        msg_box.setText(summary)
+        msg_box.setDetailedText("Full search results data available in table")
+        msg_box.exec()
+    
+    def _export_gallery_info(self):
+        """Export current gallery information."""
+        selection_model = self.results_table.selectionModel()
+        if not selection_model:
+            return
+        
+        selected_rows = selection_model.selectedRows()
+        if not selected_rows:
+            QMessageBox.information(self, "No Selection", "Please select a result first")
+            return
+        
+        row = selected_rows[0].row()
+        if 0 <= row < len(self.search_results):
+            self._export_search_result(self.search_results[row])
+    
+    def _enhanced_error_handling(self, error_message: str, error_type: str = "general") -> bool:
+        """Enhanced error handling with retry logic and user-friendly messages.
+        
+        Args:
+            error_message: The error message
+            error_type: Type of error for categorization
+            
+        Returns:
+            True if retry should be attempted, False otherwise
+        """
+        import time
+        from datetime import datetime, timedelta
+        
+        current_time = time.time()
+        
+        # Check if we're in a rapid error loop
+        if self.last_error_time and (current_time - self.last_error_time) < 2:
+            self.error_count += 1
+        else:
+            self.error_count = 1
+        
+        self.last_error_time = current_time
+        
+        # Categorize errors and provide user-friendly messages
+        user_message = self._categorize_error(error_message, error_type)
+        
+        # Determine if retry is appropriate
+        should_retry = self.error_count <= self.max_retries and error_type != "critical"
+        
+        if should_retry:
+            retry_msg = f"\n\nRetrying... (Attempt {self.error_count}/{self.max_retries})"
+            QMessageBox.warning(self, f"Operation Failed", user_message + retry_msg)
+            
+            # Add delay before retry
+            QTimer.singleShot(self.error_recovery_delay, lambda: None)
+        else:
+            # Max retries reached or critical error
+            if self.error_count > self.max_retries:
+                user_message += f"\n\nMax retries ({self.max_retries}) reached. Please check your configuration."
+            
+            QMessageBox.critical(self, "Operation Failed", user_message)
+            self.error_count = 0  # Reset for next operation
+        
+        return should_retry
+    
+    def _categorize_error(self, error_message: str, error_type: str) -> str:
+        """Categorize error and return user-friendly message.
+        
+        Args:
+            error_message: Raw error message
+            error_type: Error type
+            
+        Returns:
+            User-friendly error message
+        """
+        error_lower = error_message.lower()
+        
+        # File/Path related errors
+        if "path" in error_lower or "directory" in error_lower or "file" in error_lower:
+            return ("📁 File Access Error\n\n"
+                   "The system cannot access the required files or directories. "
+                   "Please check that:\n"
+                   "• Source path is correctly configured\n"
+                   "• Files are not locked by another application\n"
+                   "• You have proper file permissions\n\n"
+                   f"Technical details: {error_message}")
+        
+        # Network/Connection errors
+        elif "connection" in error_lower or "network" in error_lower:
+            return ("🌐 Connection Error\n\n"
+                   "Unable to establish required connections. "
+                   "Please check your network connectivity.\n\n"
+                   f"Technical details: {error_message}")
+        
+        # Memory errors
+        elif "memory" in error_lower or "ram" in error_lower:
+            return ("💾 Memory Error\n\n"
+                   "The system is running low on memory. "
+                   "Try closing other applications or reducing the search scope.\n\n"
+                   f"Technical details: {error_message}")
+        
+        # Permission errors
+        elif "permission" in error_lower or "access" in error_lower:
+            return ("🔒 Permission Error\n\n"
+                   "The application doesn't have sufficient permissions. "
+                   "Try running as administrator or check file permissions.\n\n"
+                   f"Technical details: {error_message}")
+        
+        # API/Import errors
+        elif "import" in error_lower or "module" in error_lower:
+            return ("⚙️ System Configuration Error\n\n"
+                   "Required system components are missing or incorrectly configured. "
+                   "Please check your installation.\n\n"
+                   f"Technical details: {error_message}")
+        
+        # Generic error
+        else:
+            return ("❌ Unexpected Error\n\n"
+                   "An unexpected error occurred during the operation.\n\n"
+                   f"Technical details: {error_message}")
+    
+    def _setup_keyboard_shortcuts(self):
+        """Set up enhanced keyboard shortcuts for search history navigation."""
+        # Install event filter for history navigation
+        self.search_input.installEventFilter(self)
+    
+    def eventFilter(self, source, event):
+        """Filter events for search history navigation.
+        
+        Args:
+            source: Event source
+            event: Event
+            
+        Returns:
+            True if event was handled, False otherwise
+        """
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtGui import QKeyEvent
+        
+        if (source == self.search_input and 
+            event.type() == QEvent.Type.KeyPress and 
+            isinstance(event, QKeyEvent)):
+            
+            if event.key() == Qt.Key.Key_Up:
+                # Navigate backwards in history
+                if self.search_history and self.current_history_index < len(self.search_history) - 1:
+                    self.current_history_index += 1
+                    self.search_input.setText(self.search_history[self.current_history_index])
+                    return True
+            elif event.key() == Qt.Key.Key_Down:
+                # Navigate forwards in history
+                if self.search_history and self.current_history_index > 0:
+                    self.current_history_index -= 1
+                    self.search_input.setText(self.search_history[self.current_history_index])
+                    return True
+                elif self.current_history_index == 0:
+                    self.current_history_index = -1
+                    self.search_input.clear()
+                    return True
+        
+        # Default handling
+        return super().eventFilter(source, event)
     
     def _show_gallery_error(self, error_message: str):
         """Show an error message in the gallery area.
