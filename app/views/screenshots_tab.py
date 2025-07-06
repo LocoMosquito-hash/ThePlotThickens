@@ -59,7 +59,7 @@ except ImportError:
 from app.views.window_selector_tab import WindowInfo, CrosshairOverlay
 
 # Import video utilities for video thumbnail generation
-from app.utils.video_utils import is_video_file, generate_video_thumbnail
+from app.utils.video_utils import is_video_file, generate_video_thumbnail, get_video_info
 
 # Import video playback components
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -607,6 +607,37 @@ class ScreenshotsTab(QWidget):
             self.media_player.play()
             self.play_pause_button.setText("⏸️ Pause")
     
+    def _stop_video_playback(self):
+        """Stop video playback and release media player resources to prevent file locking."""
+        try:
+            # Stop playback
+            self.media_player.stop()
+            
+            # Clear the media source to release file lock
+            self.media_player.setSource(QUrl())
+            
+            # Update UI
+            self.play_pause_button.setText("▶️ Play")
+            
+            # Hide video components and show image placeholder
+            self.video_widget.hide()
+            self.play_pause_button.hide()
+            self.scroll_area.show()
+            
+            # Clear image display
+            self.image_label.clear()
+            self.image_label.setText("Media preview will appear here")
+            self.crosshair_overlay.hide()
+            
+            # Clear current media tracking
+            self.current_media_path = None
+            self.current_media_type = None
+            
+            print("[DEBUG] Video playback stopped and media player resources released")
+            
+        except Exception as e:
+            print(f"[DEBUG] Error stopping video playback: {e}")
+    
     def update_thumbnail_after_crop(self, image_path: str):
         """Update the thumbnail in the list after the image has been cropped."""
         try:
@@ -1050,6 +1081,10 @@ class ScreenshotsTab(QWidget):
         try:
             image_path = item.data(Qt.ItemDataRole.UserRole)
             
+            # Stop any video playback first to prevent file locking issues
+            # This ensures the file can be safely deleted even if it's currently playing
+            self._stop_video_playback()
+            
             if os.path.exists(image_path):
                 os.remove(image_path)
                 
@@ -1074,6 +1109,10 @@ class ScreenshotsTab(QWidget):
     def copy_media_to_gallery(self):
         """Copy all images from the stack to the Gallery."""
         try:
+            # Stop any video playback and release media player resources first
+            # This prevents file locking issues when copying video files
+            self._stop_video_playback()
+            
             # Check if we have a story context
             if not hasattr(self, 'story_id') or not self.story_id:
                 QMessageBox.warning(self, "Error", "No story selected. Please select a story first.")
@@ -1090,12 +1129,29 @@ class ScreenshotsTab(QWidget):
                 QMessageBox.information(self, "Info", "No images to copy to Gallery.")
                 return
             
-            # Show confirmation dialog with count
+            # Count images and videos for better user information
+            actual_images = [path for path in image_paths if not is_video_file(path)]
+            video_count = len(image_paths) - len(actual_images)
+            
+            # Create confirmation message
+            if video_count > 0 and len(actual_images) > 0:
+                message = f"Copy {len(actual_images)} image(s) and {video_count} video(s) from the stack to the Gallery?\n\n"
+                message += "Images will be saved as PNG files with thumbnails.\n"
+                message += "Videos will be saved with animated GIF thumbnails.\n"
+                message += "Media will be added to the current story's gallery with automatic thumbnails."
+            elif video_count > 0:
+                message = f"Copy {video_count} video(s) from the stack to the Gallery?\n\n"
+                message += "Videos will be saved with animated GIF thumbnails.\n"
+                message += "Media will be added to the current story's gallery."
+            else:
+                message = f"Copy {len(actual_images)} image(s) from the stack to the Gallery?\n\n"
+                message += "Images will be saved as PNG files with thumbnails.\n"
+                message += "Media will be added to the current story's gallery."
+            
             reply = QMessageBox.question(
                 self,
-                "Copy Media to Gallery",
-                f"Copy {len(image_paths)} image(s) from the stack to the Gallery?\n\n"
-                f"Images will be added to the current story's gallery with automatic thumbnails.",
+                "Copy Media to Gallery", 
+                message,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes
             )
@@ -1105,7 +1161,7 @@ class ScreenshotsTab(QWidget):
             
             # Show simple progress dialog
             progress = QProgressDialog(
-                f"Copying {len(image_paths)} images to Gallery...",
+                f"Copying {len(image_paths)} files to Gallery...",
                 "Cancel", 0, len(image_paths), self
             )
             progress.setWindowTitle("Copy to Gallery")
@@ -1113,7 +1169,7 @@ class ScreenshotsTab(QWidget):
             progress.setMinimumDuration(0)  # Show immediately
             progress.setValue(0)
             
-            # Process each image
+            # Process each file (both images and videos)
             successful_copies = 0
             failed_copies = []
             
@@ -1122,20 +1178,20 @@ class ScreenshotsTab(QWidget):
                 if progress.wasCanceled():
                     progress.close()
                     QMessageBox.information(self, "Cancelled", 
-                                          f"Copy operation cancelled. {successful_copies} images were copied successfully.")
+                                          f"Copy operation cancelled. {successful_copies} files were copied successfully.")
                     return
                 
                 # Update progress
-                progress.setLabelText(f"Copying image {i+1} of {len(image_paths)}...")
+                file_type = "video" if is_video_file(image_path) else "image"
+                progress.setLabelText(f"Copying {file_type} {i+1} of {len(image_paths)}...")
                 progress.setValue(i)
                 
-                # Copy single image to Gallery
+                # Copy single file to Gallery
                 try:
                     self._copy_single_image_to_gallery(image_path)
                     successful_copies += 1
                 except Exception as e:
                     failed_copies.append((image_path, str(e)))
-                    print(f"Failed to copy {image_path}: {e}")
             
             # Close progress dialog
             progress.setValue(len(image_paths))
@@ -1150,16 +1206,16 @@ class ScreenshotsTab(QWidget):
                 QMessageBox.warning(
                     self,
                     "Partial Success",
-                    f"Successfully copied {successful_copies} images to Gallery.\n"
-                    f"{len(failed_copies)} images failed to copy.\n\n"
-                    f"Failed images:\n" + "\n".join([os.path.basename(path) for path, _ in failed_copies[:5]])
+                    f"Successfully copied {successful_copies} files to Gallery.\n"
+                    f"{len(failed_copies)} files failed to copy.\n\n"
+                    f"Failed files:\n" + "\n".join([os.path.basename(path) for path, _ in failed_copies[:5]])
                 )
             else:
                 # Complete success
                 QMessageBox.information(
                     self,
                     "Success",
-                    f"Successfully copied {successful_copies} images to Gallery!"
+                    f"Successfully copied {successful_copies} files to Gallery!"
                 )
                 
         except Exception as e:
@@ -1167,97 +1223,150 @@ class ScreenshotsTab(QWidget):
             print(f"Error in copy_media_to_gallery: {e}")
     
     def _copy_single_image_to_gallery(self, image_path: str):
-        """Copy a single image to the Gallery using the same process as Gallery's save_image_to_story."""
-        # Load the image
-        if not os.path.exists(image_path):
-            raise FileNotFoundError(f"Image file not found: {image_path}")
+        """Copy a single image or video to the Gallery using the same process as Gallery's save_image_to_story."""
+        # Import video utilities to check file type
+        from app.utils.video_utils import is_video_file, generate_video_thumbnail
+        import shutil
         
-        # Load with PIL first, then convert to QImage for Gallery processing
-        with Image.open(image_path) as pil_image:
-            # Convert PIL to QImage
-            if pil_image.mode != 'RGB':
-                pil_image = pil_image.convert('RGB')
-            
-            h, w = pil_image.height, pil_image.width
-            bytes_per_line = 3 * w
-            qt_image = QImage(pil_image.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGB888)
-            
-            if qt_image.isNull():
-                raise ValueError(f"Could not convert image to QImage: {image_path}")
-            
-            # Get story data from database
-            cursor = self.db_conn.cursor()
-            cursor.execute("SELECT * FROM stories WHERE id = ?", (self.story_id,))
-            story_data = cursor.fetchone()
-            
-            if not story_data:
-                raise ValueError("Story data not found in database")
-            
-            story_data = dict(story_data)
-            
-            # Get folder paths using the utility function
-            from app.db_sqlite import get_story_folder_paths, ensure_story_folders_exist
-            
-            # Ensure all story folders exist
-            ensure_story_folders_exist(story_data)
-            
-            # Get paths
-            folder_paths = get_story_folder_paths(story_data)
-            images_folder = folder_paths['images_folder']
-            thumbnails_folder = folder_paths['thumbnails_folder']
-            
-            # Create folders if they don't exist
-            os.makedirs(images_folder, exist_ok=True)
-            os.makedirs(thumbnails_folder, exist_ok=True)
-            
-            # Generate unique filename with Gallery naming convention
-            timestamp = time.strftime("%Y%m%d%H%M%S")
-            random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        # Load the file
+        if not os.path.exists(image_path):
+            raise FileNotFoundError(f"File not found: {image_path}")
+        
+        # Check if this is a video file
+        is_video = is_video_file(image_path)
+        
+        # Get the story data
+        cursor = self.db_conn.cursor()
+        cursor.execute("SELECT * FROM stories WHERE id = ?", (self.story_id,))
+        story_data = dict(cursor.fetchone())
+        
+        if not story_data:
+            raise ValueError("Story data not found in database")
+        
+        # Get folder paths using the utility function
+        from app.db_sqlite import get_story_folder_paths, ensure_story_folders_exist
+        
+        # Ensure all story folders exist
+        ensure_story_folders_exist(story_data)
+        
+        # Get paths
+        folder_paths = get_story_folder_paths(story_data)
+        images_folder = folder_paths['images_folder']
+        thumbnails_folder = folder_paths['thumbnails_folder']
+        
+        # Create folders if they don't exist
+        os.makedirs(images_folder, exist_ok=True)
+        os.makedirs(thumbnails_folder, exist_ok=True)
+        
+        # Generate unique filename with appropriate prefix
+        timestamp = time.strftime("%Y%m%d%H%M%S")
+        random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        
+        if is_video:
+            # Keep original extension for video files
+            original_ext = os.path.splitext(image_path)[1]
+            file_name = f"vid_{timestamp}_{random_string}{original_ext}"
+            thumbnail_name = f"vid_{timestamp}_{random_string}.gif"  # Use GIF for video thumbnails
+        else:
+            # Use PNG for image files
             file_name = f"img_{timestamp}_{random_string}.png"
+            thumbnail_name = file_name  # Same name for image thumbnails
+        
+        # Define full file paths
+        gallery_file_path = os.path.join(images_folder, file_name)
+        thumbnail_path = os.path.join(thumbnails_folder, thumbnail_name)
+        
+        if is_video:
+            # Copy video file to gallery
+            shutil.copy2(image_path, gallery_file_path)
             
-            # Define full file paths
-            gallery_image_path = os.path.join(images_folder, file_name)
-            thumbnail_path = os.path.join(thumbnails_folder, file_name)
-            
-            # Generate thumbnail using Gallery's method
-            thumbnail_image = self._generate_thumbnail(qt_image)
-            
-            # Save the full image
-            if not qt_image.save(gallery_image_path, "PNG"):
-                raise IOError(f"Could not save image to {gallery_image_path}")
-            
-            # Save the thumbnail
-            if not thumbnail_image.save(thumbnail_path, "PNG"):
-                print(f"Warning: Could not save thumbnail to {thumbnail_path}")
-            
-            # Create timestamp
-            now = datetime.now().isoformat()
-            
-            # Insert into database
-            query = """
-                INSERT INTO images (story_id, title, path, created_at, updated_at, width, height, is_featured, filename)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            
-            cursor.execute(
-                query,
-                (
-                    self.story_id,
-                    "Screenshot Import",    # title
-                    images_folder,         # path (store folder path)
-                    now,                   # created_at
-                    now,                   # updated_at
-                    qt_image.width(),      # width
-                    qt_image.height(),     # height
-                    0,                     # is_featured (not NSFW)
-                    file_name              # filename
-                )
+            # Generate GIF thumbnail for video
+            success = generate_video_thumbnail(
+                image_path,
+                thumbnail_path,
+                max_dimension=320,
+                use_gif=True
             )
             
-            # Commit changes
-            self.db_conn.commit()
+            if not success:
+                # If GIF generation failed, try PNG fallback
+                thumbnail_name = f"vid_{timestamp}_{random_string}.png"
+                thumbnail_path = os.path.join(thumbnails_folder, thumbnail_name)
+                success = generate_video_thumbnail(
+                    image_path,
+                    thumbnail_path,
+                    max_dimension=320,
+                    use_gif=False
+                )
+                
+                if not success:
+                    raise IOError(f"Could not generate thumbnail for video: {image_path}")
             
-            print(f"Successfully copied {os.path.basename(image_path)} to Gallery as {file_name}")
+            # Get video dimensions (approximate)
+            try:
+                video_info = get_video_info(image_path)
+                width = video_info.get('width', 640) if video_info else 640
+                height = video_info.get('height', 480) if video_info else 480
+            except:
+                width, height = 640, 480  # Default fallback
+        else:
+            # Handle regular image files
+            # Load with PIL first, then convert to QImage for Gallery processing
+            with Image.open(image_path) as pil_image:
+                # Convert PIL to QImage
+                if pil_image.mode != 'RGB':
+                    pil_image = pil_image.convert('RGB')
+                
+                h, w = pil_image.height, pil_image.width
+                bytes_per_line = 3 * w
+                qt_image = QImage(pil_image.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGB888)
+                
+                if qt_image.isNull():
+                    raise ValueError(f"Could not convert image to QImage: {image_path}")
+                
+                # Generate thumbnail using Gallery's method
+                thumbnail_image = self._generate_thumbnail(qt_image)
+                
+                # Save the full image
+                if not qt_image.save(gallery_file_path, "PNG"):
+                    raise IOError(f"Could not save image to {gallery_file_path}")
+                
+                # Save the thumbnail
+                if not thumbnail_image.save(thumbnail_path, "PNG"):
+                    print(f"Warning: Could not save thumbnail to {thumbnail_path}")
+                
+                # Get image dimensions
+                width = qt_image.width()
+                height = qt_image.height()
+        
+        # Create timestamp
+        now = datetime.now().isoformat()
+        
+        # Insert into database
+        query = """
+            INSERT INTO images (story_id, title, path, created_at, updated_at, width, height, is_featured, filename)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        
+        cursor.execute(
+            query,
+            (
+                self.story_id,
+                "Imported Video" if is_video else "Imported Image",  # title
+                images_folder,         # path (store folder path)
+                now,                   # created_at
+                now,                   # updated_at
+                width,                 # width
+                height,                # height
+                0,                     # is_featured (not NSFW)
+                file_name              # filename
+            )
+        )
+        
+        # Commit changes
+        self.db_conn.commit()
+        
+        print(f"Successfully copied {'video' if is_video else 'image'} {os.path.basename(image_path)} to Gallery as {file_name}")
     
     def _generate_thumbnail(self, image: QImage, max_dimension: int = 320) -> QImage:
         """Generate a thumbnail from the image (copied from Gallery's method)."""
@@ -1292,7 +1401,7 @@ class ScreenshotsTab(QWidget):
         """Handle copy errors with retry/abort options."""
         msg = QMessageBox(self)
         msg.setWindowTitle("Copy Errors")
-        msg.setText(f"Failed to copy {len(failed_copies)} images to Gallery.")
+        msg.setText(f"Failed to copy {len(failed_copies)} files to Gallery.")
         msg.setDetailedText("\n".join([f"{os.path.basename(path)}: {error}" for path, error in failed_copies]))
         msg.setIcon(QMessageBox.Icon.Warning)
         
@@ -1304,18 +1413,18 @@ class ScreenshotsTab(QWidget):
         msg.exec()
         
         if msg.clickedButton() == retry_button:
-            # Retry only the failed images
+            # Retry only the failed files
             failed_paths = [path for path, _ in failed_copies]
             self._retry_failed_copies(failed_paths)
     
     def _retry_failed_copies(self, failed_paths):
-        """Retry copying failed images."""
+        """Retry copying failed files."""
         if not failed_paths:
             return
         
         # Show progress for retry
         progress = QProgressDialog(
-            f"Retrying {len(failed_paths)} failed images...",
+            f"Retrying {len(failed_paths)} failed files...",
             "Cancel", 0, len(failed_paths), self
         )
         progress.setWindowTitle("Retry Copy")
@@ -1330,7 +1439,8 @@ class ScreenshotsTab(QWidget):
             if progress.wasCanceled():
                 break
                 
-            progress.setLabelText(f"Retrying image {i+1} of {len(failed_paths)}...")
+            file_type = "video" if is_video_file(image_path) else "image"
+            progress.setLabelText(f"Retrying {file_type} {i+1} of {len(failed_paths)}...")
             progress.setValue(i)
             
             try:
@@ -1355,5 +1465,5 @@ class ScreenshotsTab(QWidget):
             QMessageBox.information(
                 self,
                 "Retry Success",
-                f"Successfully copied all {successful_retries} images on retry!"
+                f"Successfully copied all {successful_retries} files on retry!"
             ) 
