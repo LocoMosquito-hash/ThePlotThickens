@@ -11,6 +11,7 @@ associated visual media in a spoiler-free manner.
 
 import os
 import sys
+import json
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 
@@ -400,7 +401,7 @@ class DialogSearchWorker(QThread):
             
             # Audio patterns (also visual content)
             r'play\s+sound\s+"([^"]+)"',        # play sound "filename"
-            r'play\s+music\s+"([^"]+)"',        # play music "filename"
+            r'play\s+music\s+"([^"]+)"',        # play music "filename",
         ]
         
         import re
@@ -690,33 +691,59 @@ class MediaLoadingWorker(QThread):
         Resolve a Ren'Py asset name to its actual file path using the API's image definitions.
         
         Args:
-            asset_name: Name of the asset from Ren'Py script (e.g., "v10_morning_cafe1_1")
+            asset_name: Name of the asset from Ren'Py script (e.g., "v10_goodanim4")
             asset_type: Type of asset ('image' or 'video')
             
         Returns:
             Full path to the asset file if found, otherwise the original name
         """
-        print(f"[DEBUG] _resolve_asset_path called with: '{asset_name}', type: '{asset_type}'")
+        print(f"[DEBUG] MediaLoadingWorker._resolve_asset_path called with: '{asset_name}', type: '{asset_type}'")
         
         if not asset_name:
             return asset_name
         
+        # Initialize video mappings cache if not already done
+        if not hasattr(self, '_video_asset_mappings'):
+            print(f"[DEBUG] Initializing video asset mappings for first time")
+            self._video_asset_mappings = self._load_video_asset_mappings()
+            print(f"[DEBUG] Loaded {len(self._video_asset_mappings)} video asset mappings")
+        
+        # Check if this is a video asset using our comprehensive mapping
+        if asset_name in self._video_asset_mappings:
+            video_path = self._video_asset_mappings[asset_name]
+            print(f"[DEBUG] Found video mapping: '{asset_name}' -> '{video_path}'")
+            
+            # Build full path using source_path (which is already the game directory)
+            if hasattr(self, 'source_path'):
+                full_path = os.path.join(self.source_path, video_path)
+                print(f"[DEBUG] Trying video path: {full_path}")
+                
+                if os.path.exists(full_path):
+                    print(f"[DEBUG] FOUND VIDEO FILE via mapping: {full_path}")
+                    return full_path
+                else:
+                    print(f"[DEBUG] Video file not found at mapped path: {full_path}")
+            
         # Try to get the mapping from the RenpyProject if we have it
-        if hasattr(self, '_project_instance'):
+        if hasattr(self, '_project_instance') and self._project_instance is not None:
             try:
                 assets = self._project_instance.get_all_assets()
+                
                 # Look for image definitions that map this asset name to a file path
+                # Include multiple usage types: image_def, show, scene, etc.
+                valid_usage_types = {'image_def', 'show', 'scene', 'image_def_func'}
+                
                 for category_assets in assets.values():
                     for asset in category_assets:
                         if (asset['name'] == asset_name and 
-                            asset.get('usage_type') == 'image_def' and 
+                            asset.get('usage_type') in valid_usage_types and 
                             'file_path' in asset):
                             
                             file_path = asset['file_path']
                             resolved_path = os.path.join(self.source_path, file_path)
                             resolved_path = os.path.normpath(resolved_path)
                             
-                            print(f"[DEBUG] API found mapping: '{asset_name}' -> '{file_path}'")
+                            print(f"[DEBUG] API found mapping: '{asset_name}' -> '{file_path}' (usage: {asset.get('usage_type')})")
                             print(f"[DEBUG] Trying resolved path: {resolved_path}")
                             
                             if os.path.exists(resolved_path):
@@ -945,6 +972,53 @@ class MediaLoadingWorker(QThread):
     def cancel(self):
         """Cancel the media loading."""
         self._is_cancelled = True
+
+    def _load_video_asset_mappings(self) -> Dict[str, str]:
+        """
+        Load video asset mappings by parsing images.rpy for Movie() definitions.
+        
+        Parses RenPy image definitions like:
+        image v10_goodanim4 = Movie(channel="movie", image="...", start_image="...", play="images/v10/animation/good/4.webm")
+        
+        Returns:
+            Dict mapping asset names to video file paths from the play= parameter
+        """
+        video_mappings = {}
+        
+        try:
+            # Look for images.rpy in the game directory
+            if hasattr(self, 'source_path'):
+                # source_path is already the game directory, so images.rpy should be there
+                images_rpy_path = os.path.join(self.source_path, 'images.rpy')
+            else:
+                print(f"[DEBUG] No source_path available for video mapping")
+                return video_mappings
+            
+            print(f"[DEBUG] Loading video mappings from: {images_rpy_path}")
+            
+            if not os.path.exists(images_rpy_path):
+                print(f"[DEBUG] images.rpy not found at: {images_rpy_path}")
+                return video_mappings
+            
+            # Parse images.rpy for Movie() definitions
+            with open(images_rpy_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Regex to match: image asset_name = Movie(...play="video_path"...)
+            import re
+            pattern = r'image\s+(\w+)\s*=\s*Movie\([^)]*play\s*=\s*["\']([^"\']+)["\'][^)]*\)'
+            matches = re.findall(pattern, content)
+            
+            for asset_name, video_path in matches:
+                video_mappings[asset_name] = video_path
+                print(f"[DEBUG] Video mapping: '{asset_name}' -> '{video_path}'")
+            
+            print(f"[DEBUG] Loaded {len(video_mappings)} video asset mappings")
+            
+        except Exception as e:
+            print(f"[DEBUG] Error loading video mappings: {e}")
+        
+        return video_mappings
 
 
 class DialogSearchConfigDialog(QDialog):

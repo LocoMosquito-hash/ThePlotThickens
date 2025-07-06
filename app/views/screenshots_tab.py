@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QScrollArea, QCheckBox, QListWidget, QListWidgetItem, QMessageBox, QProgressDialog
 )
-from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer, QSize, QEvent, QPoint, QRect
+from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer, QSize, QEvent, QPoint, QRect, QUrl
 from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QPainter, QColor, QPen
 
 # Windows API imports (only on Windows)
@@ -57,6 +57,13 @@ except ImportError:
 
 # Import the shared classes from window_selector_tab
 from app.views.window_selector_tab import WindowInfo, CrosshairOverlay
+
+# Import video utilities for video thumbnail generation
+from app.utils.video_utils import is_video_file, generate_video_thumbnail
+
+# Import video playback components
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PyQt6.QtMultimediaWidgets import QVideoWidget
 
 
 class GlobalHotkeyMonitor(QThread):
@@ -332,12 +339,13 @@ class ScreenshotsTab(QWidget):
         self.status_label.setStyleSheet("padding: 10px; background-color: #f0f0f0; border-radius: 4px; margin: 10px 0;")
         right_layout.addWidget(self.status_label)
         
-        # Image display area
-        image_layout = QVBoxLayout()
-        image_label_title = QLabel("Screenshot Preview")
-        image_label_title.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-        image_layout.addWidget(image_label_title)
+        # Media display area (images and videos)
+        media_layout = QVBoxLayout()
+        media_label_title = QLabel("Media Preview")
+        media_label_title.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        media_layout.addWidget(media_label_title)
         
+        # Image display
         self.image_label = QLabel("Screenshot will appear here")
         self.image_label.setMinimumSize(400, 300)
         self.image_label.setStyleSheet("border: 2px dashed #ccc; background-color: #fafafa; color: #999;")
@@ -354,9 +362,55 @@ class ScreenshotsTab(QWidget):
         self.crosshair_overlay.hide()  # Start hidden
         
         self.scroll_area.setMinimumSize(400, 300)
-        image_layout.addWidget(self.scroll_area)
+        media_layout.addWidget(self.scroll_area)
         
-        right_layout.addLayout(image_layout)
+        # Video player setup
+        self.video_widget = QVideoWidget()
+        self.video_widget.setMinimumSize(400, 300)
+        self.video_widget.setStyleSheet("border: 2px solid #2196f3; background-color: #000;")
+        self.video_widget.hide()  # Start hidden
+        
+        # Media player 
+        self.media_player = QMediaPlayer()
+        self.audio_output = QAudioOutput()
+        self.media_player.setAudioOutput(self.audio_output)
+        self.media_player.setVideoOutput(self.video_widget)
+        
+        # Configure for looping
+        self.media_player.mediaStatusChanged.connect(self._on_media_status_changed)
+        self.media_player.positionChanged.connect(self._on_position_changed)
+        
+        media_layout.addWidget(self.video_widget)
+        
+        # Video controls
+        self.video_controls_layout = QHBoxLayout()
+        self.play_pause_button = QPushButton("⏸️ Pause")
+        self.play_pause_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2196f3;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1976d2;
+            }
+        """)
+        self.play_pause_button.clicked.connect(self._toggle_play_pause)
+        self.play_pause_button.hide()  # Start hidden
+        
+        self.video_controls_layout.addWidget(self.play_pause_button)
+        self.video_controls_layout.addStretch()
+        
+        media_layout.addLayout(self.video_controls_layout)
+        
+        # Current media tracking
+        self.current_media_path = None
+        self.current_media_type = None
+        
+        right_layout.addLayout(media_layout)
         
         # Create right panel widget  
         right_widget = QWidget()
@@ -368,60 +422,190 @@ class ScreenshotsTab(QWidget):
         main_layout.setStretch(1, 5)  # Main content (adjusted from 4)
     
     def load_existing_images(self):
-        """Load existing images from the image-stack folder into thumbnails."""
+        """Load existing images and videos from the image-stack folder into thumbnails."""
         if not os.path.exists(self.image_stack_folder):
             os.makedirs(self.image_stack_folder)
             
         # Support common image formats including those from RenPy games
         image_extensions = ['*.png', '*.jpg', '*.jpeg', '*.webp', '*.gif', '*.bmp', '*.tiff']
-        image_files = []
         
+        # Support video formats (matching media copier)
+        video_extensions = ['*.mp4', '*.avi', '*.mov', '*.mkv', '*.wmv', '*.flv', '*.webm', '*.m4v', '*.ogg', '*.ogv']
+        
+        media_files = []
+        
+        # Load image files
         for ext in image_extensions:
-            image_files.extend(glob.glob(os.path.join(self.image_stack_folder, ext)))
+            media_files.extend(glob.glob(os.path.join(self.image_stack_folder, ext)))
             
-        image_files.sort()  # Sort by filename (which includes timestamp) - date ascending
+        # Load video files
+        for ext in video_extensions:
+            media_files.extend(glob.glob(os.path.join(self.image_stack_folder, ext)))
+            
+        media_files.sort()  # Sort by filename (which includes timestamp) - date ascending
         
-        for image_path in image_files:
-            self.add_thumbnail_to_list(image_path)
+        for media_path in media_files:
+            self.add_thumbnail_to_list(media_path)
             
-        if image_files:
-            self.status_label.setText(f"📁 Loaded {len(image_files)} existing images from image-stack folder")
+        if media_files:
+            # Count images and videos separately for better status reporting
+            image_count = len([f for f in media_files if any(f.lower().endswith(ext[2:]) for ext in image_extensions)])
+            video_count = len([f for f in media_files if any(f.lower().endswith(ext[2:]) for ext in video_extensions)])
+            
+            if video_count > 0:
+                self.status_label.setText(f"📁 Loaded {image_count} images and {video_count} videos from image-stack folder")
+            else:
+                self.status_label.setText(f"📁 Loaded {image_count} images from image-stack folder")
             self.status_label.setStyleSheet("color: #2196f3;")
     
-    def add_thumbnail_to_list(self, image_path: str):
-        """Add a thumbnail to the vertical thumbnail list."""
+    def add_thumbnail_to_list(self, media_path: str):
+        """Add a thumbnail to the vertical thumbnail list (supports both images and videos)."""
         try:
-            # Check if image path already exists in the list to prevent duplicates
+            # Check if media path already exists in the list to prevent duplicates
             for i in range(self.thumbnail_list.count()):
                 existing_item = self.thumbnail_list.item(i)
-                if existing_item and existing_item.data(Qt.ItemDataRole.UserRole) == image_path:
-                    # Image already exists in the list, skip adding
+                if existing_item and existing_item.data(Qt.ItemDataRole.UserRole) == media_path:
+                    # Media already exists in the list, skip adding
                     return
             
-            # Generate thumbnail using PIL
-            with Image.open(image_path) as img:
-                # Create thumbnail (180x180 max size while maintaining aspect ratio)
-                img.thumbnail((180, 180), Image.Resampling.LANCZOS)
-                
-                # Convert PIL Image to QPixmap
-                img_qt = img.convert('RGBA')
-                h, w, ch = img_qt.size[1], img_qt.size[0], 4
-                bytes_per_line = ch * w
-                qt_image = QImage(img_qt.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGBA8888)
-                thumbnail_pixmap = QPixmap.fromImage(qt_image)
+            # Determine if this is a video file
+            is_video = is_video_file(media_path)
+            
+            if is_video:
+                # Generate video thumbnail
+                thumbnail_pixmap = self._generate_video_thumbnail(media_path)
+                media_type = "video"
+            else:
+                # Generate image thumbnail using PIL
+                with Image.open(media_path) as img:
+                    # Create thumbnail (180x180 max size while maintaining aspect ratio)
+                    img.thumbnail((180, 180), Image.Resampling.LANCZOS)
+                    
+                    # Convert PIL Image to QPixmap
+                    img_qt = img.convert('RGBA')
+                    h, w, ch = img_qt.size[1], img_qt.size[0], 4
+                    bytes_per_line = ch * w
+                    qt_image = QImage(img_qt.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGBA8888)
+                    thumbnail_pixmap = QPixmap.fromImage(qt_image)
+                media_type = "image"
             
             # Create list widget item
             item = QListWidgetItem()
             scaled_pixmap = thumbnail_pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             item.setIcon(QIcon(scaled_pixmap))  # Convert QPixmap to QIcon
-            item.setData(Qt.ItemDataRole.UserRole, image_path)  # Store full path
-            item.setToolTip(f"Click to view: {os.path.basename(image_path)}\nPress DELETE to remove")
+            item.setData(Qt.ItemDataRole.UserRole, media_path)  # Store full path
+            
+            # Add video icon overlay for video files
+            if is_video:
+                item.setToolTip(f"🎬 Click to play: {os.path.basename(media_path)}\nPress DELETE to remove")
+            else:
+                item.setToolTip(f"Click to view: {os.path.basename(media_path)}\nPress DELETE to remove")
+            
+            # Store media type for later use
+            item.setData(Qt.ItemDataRole.UserRole + 1, media_type)
             
             # Add to the bottom of the list (date ascending - newest last)
             self.thumbnail_list.addItem(item)
             
         except Exception as e:
-            print(f"Error creating thumbnail for {image_path}: {e}")
+            print(f"Error creating thumbnail for {media_path}: {e}")
+            
+    def _generate_video_thumbnail(self, video_path: str) -> QPixmap:
+        """Generate a static thumbnail for a video file.
+        
+        Args:
+            video_path: Path to the video file
+            
+        Returns:
+            QPixmap containing the video thumbnail
+        """
+        try:
+            import tempfile
+            import os
+            
+            # Generate a temporary thumbnail file
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+                temp_thumb_path = temp_file.name
+            
+            # Generate static thumbnail using video utilities (use_gif=False for PNG)
+            success = generate_video_thumbnail(
+                video_path, 
+                temp_thumb_path, 
+                max_dimension=180, 
+                use_gif=False  # Generate static PNG thumbnail
+            )
+            
+            if success and os.path.exists(temp_thumb_path):
+                # Load the generated thumbnail
+                thumbnail_pixmap = QPixmap(temp_thumb_path)
+                
+                # Clean up temporary file
+                try:
+                    os.unlink(temp_thumb_path)
+                except:
+                    pass  # Ignore cleanup errors
+                
+                if not thumbnail_pixmap.isNull():
+                    return thumbnail_pixmap
+            
+            # Fallback: create a placeholder with video icon
+            return self._create_video_placeholder_thumbnail()
+            
+        except Exception as e:
+            print(f"Error generating video thumbnail for {video_path}: {e}")
+            return self._create_video_placeholder_thumbnail()
+            
+    def _create_video_placeholder_thumbnail(self) -> QPixmap:
+        """Create a placeholder thumbnail for videos when thumbnail generation fails.
+        
+        Returns:
+            QPixmap containing a video placeholder icon
+        """
+        # Create a dark placeholder with video icon
+        placeholder = QPixmap(180, 180)
+        placeholder.fill(QColor(30, 30, 40))
+        
+        from PyQt6.QtGui import QPainter, QFont
+        painter = QPainter(placeholder)
+        painter.setPen(QColor(255, 255, 255))
+        painter.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        
+        # Draw play icon (triangle)
+        from PyQt6.QtGui import QPolygon
+        from PyQt6.QtCore import QPoint
+        play_triangle = QPolygon([
+            QPoint(70, 60),
+            QPoint(70, 120),
+            QPoint(110, 90)
+        ])
+        painter.setBrush(QColor(255, 255, 255))
+        painter.drawPolygon(play_triangle)
+        
+        # Draw "VIDEO" text
+        painter.drawText(60, 140, "VIDEO")
+        painter.end()
+        
+        return placeholder
+    
+    def _on_media_status_changed(self, status):
+        """Handle media status changes for video looping."""
+        if status == QMediaPlayer.MediaStatus.EndOfMedia:
+            # Loop the video by seeking to the beginning
+            self.media_player.setPosition(0)
+            self.media_player.play()
+    
+    def _on_position_changed(self, position):
+        """Handle position changes (currently unused but needed for connection)."""
+        pass
+    
+    def _toggle_play_pause(self):
+        """Toggle play/pause state of the video."""
+        if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.media_player.pause()
+            self.play_pause_button.setText("▶️ Play")
+        else:
+            self.media_player.play()
+            self.play_pause_button.setText("⏸️ Pause")
     
     def update_thumbnail_after_crop(self, image_path: str):
         """Update the thumbnail in the list after the image has been cropped."""
@@ -455,35 +639,78 @@ class ScreenshotsTab(QWidget):
             print(f"Error updating thumbnail for {image_path}: {e}")
     
     def on_thumbnail_clicked(self, item: QListWidgetItem):
-        """Handle thumbnail click to display image."""
-        image_path = item.data(Qt.ItemDataRole.UserRole)
-        if image_path and os.path.exists(image_path):
+        """Handle thumbnail click to display image or play video."""
+        media_path = item.data(Qt.ItemDataRole.UserRole)
+        media_type = item.data(Qt.ItemDataRole.UserRole + 1)
+        
+        if media_path and os.path.exists(media_path):
             try:
-                # Load and display the image
-                pixmap = QPixmap(image_path)
-                if not pixmap.isNull():
-                    self.current_pixmap = pixmap
-                    self.current_image_path = image_path
-                    
-                    # Scale to fit the image label size while maintaining aspect ratio (EXACT ORIGINAL APPROACH)
-                    scaled_pixmap = pixmap.scaled(
-                        self.image_label.size(),
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation
-                    )
-                    
-                    self.image_label.setPixmap(scaled_pixmap)
-                    
-                    # Show and update crosshair overlay position (EXACT ORIGINAL APPROACH)
-                    self.crosshair_overlay.update_position()
-                    self.crosshair_overlay.show()
-                    
-                    self.status_label.setText(f"📷 Viewing: {os.path.basename(image_path)}")
-                    self.status_label.setStyleSheet("color: #1976d2;")
+                # Store current media info
+                self.current_media_path = media_path
+                self.current_media_type = media_type
+                
+                if media_type == "video":
+                    # Handle video playback
+                    self._display_video(media_path)
+                else:
+                    # Handle image display
+                    self._display_image(media_path)
                     
             except Exception as e:
-                self.status_label.setText(f"❌ Error loading image: {str(e)}")
+                self.status_label.setText(f"❌ Error loading media: {str(e)}")
                 self.status_label.setStyleSheet("color: #f44336;")
+                
+    def _display_image(self, image_path: str):
+        """Display an image in the preview area."""
+        # Hide video components
+        self.video_widget.hide()
+        self.play_pause_button.hide()
+        
+        # Show image components
+        self.scroll_area.show()
+        
+        # Load and display the image
+        pixmap = QPixmap(image_path)
+        if not pixmap.isNull():
+            self.current_pixmap = pixmap
+            self.current_image_path = image_path
+            
+            # Scale to fit the image label size while maintaining aspect ratio
+            scaled_pixmap = pixmap.scaled(
+                self.image_label.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            
+            self.image_label.setPixmap(scaled_pixmap)
+            
+            # Show and update crosshair overlay position
+            self.crosshair_overlay.update_position()
+            self.crosshair_overlay.show()
+            
+            self.status_label.setText(f"📷 Viewing: {os.path.basename(image_path)}")
+            self.status_label.setStyleSheet("color: #1976d2;")
+            
+    def _display_video(self, video_path: str):
+        """Display and auto-play a video in the preview area."""
+        # Hide image components
+        self.scroll_area.hide()
+        self.crosshair_overlay.hide()
+        
+        # Show video components
+        self.video_widget.show()
+        self.play_pause_button.show()
+        
+        # Load and play the video
+        video_url = QUrl.fromLocalFile(os.path.abspath(video_path))
+        self.media_player.setSource(video_url)
+        
+        # Auto-start playback
+        self.media_player.play()
+        self.play_pause_button.setText("⏸️ Pause")
+        
+        self.status_label.setText(f"🎬 Playing: {os.path.basename(video_path)}")
+        self.status_label.setStyleSheet("color: #1976d2;")
     
     def on_thumbnail_selection_changed(self, current: QListWidgetItem, previous: QListWidgetItem):
         """Handle thumbnail selection change."""
@@ -491,21 +718,22 @@ class ScreenshotsTab(QWidget):
             self.on_thumbnail_clicked(current)
     
     def clear_all_images(self):
-        """Clear all images from the directory and list."""
+        """Clear all images and videos from the directory and list."""
         from PyQt6.QtWidgets import QMessageBox
         
         reply = QMessageBox.question(
             self,
-            "Clear All Images",
-            "Are you sure you want to delete all screenshots? This cannot be undone.",
+            "Clear All Media",
+            "Are you sure you want to delete all screenshots and videos? This cannot be undone.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
         
         if reply == QMessageBox.StandardButton.Yes:
             try:
-                # Remove all supported image files
-                supported_extensions = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff')
+                # Remove all supported image and video files
+                supported_extensions = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff',
+                                      '.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.ogg', '.ogv')
                 for filename in os.listdir(self.image_stack_folder):
                     if filename.lower().endswith(supported_extensions):
                         os.remove(os.path.join(self.image_stack_folder, filename))
@@ -517,11 +745,11 @@ class ScreenshotsTab(QWidget):
                 self.current_pixmap = None
                 self.current_image_path = None
                 self.crosshair_overlay.hide()
-                self.status_label.setText("🗑️ All images cleared")
+                self.status_label.setText("🗑️ All media cleared")
                 self.status_label.setStyleSheet("color: #ff5722;")
                 
             except Exception as e:
-                QMessageBox.warning(self, "Error", f"Failed to clear images: {e}")
+                QMessageBox.warning(self, "Error", f"Failed to clear media: {e}")
     
     def update_hotkey_status(self, message: str, color: str):
         """Update status label with hotkey monitoring messages."""
