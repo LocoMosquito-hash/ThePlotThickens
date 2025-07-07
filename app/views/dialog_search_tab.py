@@ -1647,6 +1647,9 @@ class DialogSearchTab(QWidget):
         Args:
             results: List of enhanced search result dictionaries
         """
+        # Disable sorting during data population to prevent display issues
+        self.results_table.setSortingEnabled(False)
+        
         self.results_table.setRowCount(len(results))
         
         # Connect selection signal if not already connected
@@ -1693,6 +1696,13 @@ class DialogSearchTab(QWidget):
             else:
                 media_count_item.setToolTip(f"{media_count} visual assets found in label '{label}'")
             self.results_table.setItem(row, 4, media_count_item)
+        
+        # Re-enable sorting after all data has been populated
+        self.results_table.setSortingEnabled(True)
+        
+        # Force table refresh to ensure all rows are displayed properly
+        self.results_table.resizeRowsToContents()
+        self.results_table.update()
     
     def _format_character_name(self, character_display: str, character_code: Optional[str] = None) -> str:
         """Format character name for display.
