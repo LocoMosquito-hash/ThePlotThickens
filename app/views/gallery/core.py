@@ -393,6 +393,13 @@ class GalleryWidget(QWidget):
         batch_context_btn.clicked.connect(self.on_batch_context_tagging)
         batch_buttons_layout.addWidget(batch_context_btn)
         
+        # Uncheck all button
+        uncheck_all_btn = QPushButton("Uncheck All")
+        uncheck_all_btn.setIcon(icon_manager.get_icon("square"))
+        uncheck_all_btn.clicked.connect(self.on_uncheck_all)
+        uncheck_all_btn.setToolTip("Uncheck all selected images")
+        batch_buttons_layout.addWidget(uncheck_all_btn)
+        
         batch_buttons_layout.addStretch()
         batch_layout.addLayout(batch_buttons_layout)
         
@@ -3003,6 +3010,35 @@ class GalleryWidget(QWidget):
         # After the dialog closes, refresh the gallery to reflect any changes (only if auto refresh is enabled)
         # Use smart refresh with batch tagging operation type
         self.refresh_if_auto_enabled("batch_tag")
+    
+    def on_uncheck_all(self) -> None:
+        """Uncheck all selected images."""
+        # Check if any images are selected
+        if not self.selected_images:
+            return
+        
+        # Get all thumbnail widgets from the thumbnails layout
+        thumbnails_to_uncheck = []
+        
+        # Iterate through all items in the thumbnails layout
+        for i in range(self.thumbnails_layout.count()):
+            item = self.thumbnails_layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                # Check if it's a ThumbnailWidget with an image_id in our selected set
+                if hasattr(widget, 'checkbox') and hasattr(widget, 'image_id'):
+                    if widget.image_id in self.selected_images:
+                        thumbnails_to_uncheck.append(widget)
+        
+        # Uncheck all found thumbnails
+        for thumbnail in thumbnails_to_uncheck:
+            thumbnail.checkbox.setChecked(False)
+        
+        # Clear the selected images set (this should happen automatically via checkbox signals, but ensure it's cleared)
+        self.selected_images.clear()
+        
+        # Update the UI
+        self.update_selection_ui()
     
     def refresh_gallery_with_progress(self) -> None:
         """Refresh the gallery with a visual progress indicator."""
