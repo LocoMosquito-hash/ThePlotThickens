@@ -689,9 +689,10 @@ class MediaLoadingWorker(QThread):
     def _resolve_asset_path(self, asset_name: str, asset_type: str) -> str:
         """
         Resolve a Ren'Py asset name to its actual file path using the API's image definitions.
+        Falls back to automatic Ren'Py image mapping if no explicit definition is found.
         
         Args:
-            asset_name: Name of the asset from Ren'Py script (e.g., "v10_goodanim4")
+            asset_name: Name of the asset from Ren'Py script (e.g., "v10_goodanim4", "ch1closingtime6")
             asset_type: Type of asset ('image' or 'video')
             
         Returns:
@@ -759,9 +760,74 @@ class MediaLoadingWorker(QThread):
         else:
             print(f"[DEBUG] No project instance available for API lookup")
         
-        # Return original name if not found in API
+        # FALLBACK: Try automatic Ren'Py image mapping
+        print(f"[DEBUG] Attempting automatic Ren'Py image mapping for: {asset_name}")
+        automatic_path = self._automatic_renpy_image_mapping(asset_name)
+        if automatic_path:
+            print(f"[DEBUG] FOUND FILE via automatic mapping: {automatic_path}")
+            return automatic_path
+        
+        # Return original name if not found in API or automatic mapping
         print(f"[DEBUG] Asset not resolved, returning original: {asset_name}")
         return asset_name
+
+    def _automatic_renpy_image_mapping(self, asset_name: str) -> Optional[str]:
+        """
+        Implement automatic Ren'Py image mapping based on filename conventions.
+        
+        According to Ren'Py documentation:
+        - Ren'Py searches for image files in the images directory
+        - The extension is removed, the file name is forced to lowercase
+        - That's used as the image name
+        - Images can be placed in subdirectories under the images directory
+        
+        Args:
+            asset_name: Asset name to resolve (e.g., 'ch1closingtime6')
+            
+        Returns:
+            Full path to the asset file if found, None otherwise
+        """
+        if not asset_name or not hasattr(self, 'source_path'):
+            return None
+            
+        # Ren'Py image file extensions (from documentation)
+        image_extensions = ['.png', '.jpg', '.jpeg', '.webp', '.avif', '.bmp', '.gif']
+        
+        # Directories to search (in order of preference)
+        search_dirs = [
+            os.path.join(self.source_path, 'images'),
+            self.source_path  # Also search in game root
+        ]
+        
+        # Convert asset name to lowercase (as per Ren'Py documentation)
+        asset_name_lower = asset_name.lower()
+        
+        print(f"[DEBUG] Automatic mapping search for: '{asset_name}' (normalized: '{asset_name_lower}')")
+        
+        for search_dir in search_dirs:
+            if not os.path.exists(search_dir):
+                print(f"[DEBUG]   Search directory does not exist: {search_dir}")
+                continue
+                
+            print(f"[DEBUG]   Searching in: {search_dir}")
+            
+            # Walk through directory and subdirectories  
+            for root, dirs, files in os.walk(search_dir):
+                for file in files:
+                    # Get filename without extension and convert to lowercase
+                    file_base = os.path.splitext(file)[0].lower()
+                    file_ext = os.path.splitext(file)[1].lower()
+                    
+                    # Check if this matches our asset name and has valid extension
+                    if file_base == asset_name_lower and file_ext in image_extensions:
+                        full_path = os.path.join(root, file)
+                        print(f"[DEBUG]     FOUND automatic mapping: {file} -> {full_path}")
+                        return full_path
+                        
+            print(f"[DEBUG]   No automatic mapping found in {search_dir}")
+        
+        print(f"[DEBUG] Asset '{asset_name}' not found via automatic mapping")
+        return None
     
     def _api_based_asset_discovery(self, project, label_name: str) -> List[Dict[str, Any]]:
         """Fall back to API-based asset discovery (original method).
