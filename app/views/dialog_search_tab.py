@@ -616,10 +616,10 @@ class MediaLoadingWorker(QThread):
         
         # Asset reference patterns with capture groups for filenames
         asset_patterns = [
-            # Image patterns - capture the asset name
-            (r'show\s+([a-zA-Z0-9_]+)', 'image'),
-            (r'scene\s+([a-zA-Z0-9_]+)', 'image'), 
-            (r'image\s+([a-zA-Z0-9_]+)', 'image'),
+            # Image patterns - capture the full image name including attributes
+            (r'show\s+([a-zA-Z0-9_]+(?:\s+[a-zA-Z0-9_]+)*?)(?:\s+at\s+|\s+with\s+|\s*$)', 'image'),
+            (r'scene\s+([a-zA-Z0-9_]+(?:\s+[a-zA-Z0-9_]+)*?)(?:\s+at\s+|\s+with\s+|\s*$)', 'image'), 
+            (r'image\s+([a-zA-Z0-9_]+(?:\s+[a-zA-Z0-9_]+)*)', 'image'),
             
             # Video patterns - capture the filename
             (r'play\s+movie\s+"([^"]+)"', 'video'),
@@ -688,12 +688,26 @@ class MediaLoadingWorker(QThread):
     
     def _resolve_asset_path(self, asset_name: str, asset_type: str) -> str:
         """
-        Resolve a Ren'Py asset name to its actual file path using the API's image definitions.
-        Falls back to automatic Ren'Py image mapping if no explicit definition is found.
+        Resolve a Ren'Py asset name to its actual file path using multiple resolution strategies.
+        Supports chained resolution for assets that reference other assets.
         
         Args:
-            asset_name: Name of the asset from Ren'Py script (e.g., "v10_goodanim4", "ch1closingtime6")
+            asset_name: Name of the asset from Ren'Py script (e.g., "ch1kjwalk", "ch1closingtime6")
             asset_type: Type of asset ('image' or 'video')
+            
+        Returns:
+            Full path to the asset file if found, otherwise the original name
+        """
+        return self._resolve_asset_path_recursive(asset_name, asset_type, set())
+    
+    def _resolve_asset_path_recursive(self, asset_name: str, asset_type: str, visited: set) -> str:
+        """
+        Recursive asset resolution with cycle detection.
+        
+        Args:
+            asset_name: Name of the asset to resolve
+            asset_type: Type of asset ('image' or 'video')
+            visited: Set of asset names we've already visited (for cycle detection)
             
         Returns:
             Full path to the asset file if found, otherwise the original name
@@ -702,6 +716,13 @@ class MediaLoadingWorker(QThread):
         
         if not asset_name:
             return asset_name
+            
+        # Cycle detection
+        if asset_name in visited:
+            print(f"[DEBUG] Cycle detected in asset resolution for: {asset_name}")
+            return asset_name
+        
+        visited.add(asset_name)
         
         # Initialize video mappings cache if not already done
         if not hasattr(self, '_video_asset_mappings'):
@@ -709,7 +730,13 @@ class MediaLoadingWorker(QThread):
             self._video_asset_mappings = self._load_video_asset_mappings()
             print(f"[DEBUG] Loaded {len(self._video_asset_mappings)} video asset mappings")
         
-        # Check if this is a video asset using our comprehensive mapping
+        # Initialize script-based image definitions cache if not already done
+        if not hasattr(self, '_script_image_definitions'):
+            print(f"[DEBUG] Initializing script-based image definitions for first time")
+            self._script_image_definitions = self._load_script_image_definitions()
+            print(f"[DEBUG] Loaded {len(self._script_image_definitions)} script image definitions")
+        
+        # 1. Check video asset mappings first
         if asset_name in self._video_asset_mappings:
             video_path = self._video_asset_mappings[asset_name]
             print(f"[DEBUG] Found video mapping: '{asset_name}' -> '{video_path}'")
@@ -724,8 +751,28 @@ class MediaLoadingWorker(QThread):
                     return full_path
                 else:
                     print(f"[DEBUG] Video file not found at mapped path: {full_path}")
+        
+        # 2. Check script-based image definitions
+        if asset_name in self._script_image_definitions:
+            target_asset = self._script_image_definitions[asset_name]
+            print(f"[DEBUG] Found script image definition: '{asset_name}' -> '{target_asset}'")
             
-        # Try to get the mapping from the RenpyProject if we have it
+            # If the target looks like a file path, try to resolve it directly
+            if target_asset.endswith(('.png', '.jpg', '.jpeg', '.webp', '.avif', '.bmp', '.gif')):
+                if hasattr(self, 'source_path'):
+                    full_path = os.path.join(self.source_path, target_asset)
+                    if os.path.exists(full_path):
+                        print(f"[DEBUG] FOUND FILE via script definition: {full_path}")
+                        return full_path
+            else:
+                # Target is another asset name - recursive resolution
+                print(f"[DEBUG] Recursively resolving target asset: '{target_asset}'")
+                resolved_path = self._resolve_asset_path_recursive(target_asset, asset_type, visited.copy())
+                if resolved_path != target_asset:  # Successfully resolved
+                    print(f"[DEBUG] FOUND FILE via chained resolution: {resolved_path}")
+                    return resolved_path
+        
+        # 3. Try to get the mapping from the RenpyProject API if we have it
         if hasattr(self, '_project_instance') and self._project_instance is not None:
             try:
                 assets = self._project_instance.get_all_assets()
@@ -760,14 +807,14 @@ class MediaLoadingWorker(QThread):
         else:
             print(f"[DEBUG] No project instance available for API lookup")
         
-        # FALLBACK: Try automatic Ren'Py image mapping
+        # 4. FALLBACK: Try automatic Ren'Py image mapping
         print(f"[DEBUG] Attempting automatic Ren'Py image mapping for: {asset_name}")
         automatic_path = self._automatic_renpy_image_mapping(asset_name)
         if automatic_path:
             print(f"[DEBUG] FOUND FILE via automatic mapping: {automatic_path}")
             return automatic_path
         
-        # Return original name if not found in API or automatic mapping
+        # Return original name if not found in any method
         print(f"[DEBUG] Asset not resolved, returning original: {asset_name}")
         return asset_name
 
@@ -1041,43 +1088,51 @@ class MediaLoadingWorker(QThread):
 
     def _load_video_asset_mappings(self) -> Dict[str, str]:
         """
-        Load video asset mappings by parsing images.rpy for Movie() definitions.
+        Load video asset mappings by parsing all .rpy files for Movie() definitions.
         
-        Parses RenPy image definitions like:
-        image v10_goodanim4 = Movie(channel="movie", image="...", start_image="...", play="images/v10/animation/good/4.webm")
+        Parses Ren'Py image definitions like:
+        image ch1kjwalkmov = Movie(play='chapters/chapter1/videos/ch1kjwalk.webm', play_callback=...)
         
         Returns:
             Dict mapping asset names to video file paths from the play= parameter
         """
         video_mappings = {}
         
+        if not hasattr(self, 'source_path'):
+            print(f"[DEBUG] No source_path available for video mapping")
+            return video_mappings
+        
         try:
-            # Look for images.rpy in the game directory
-            if hasattr(self, 'source_path'):
-                # source_path is already the game directory, so images.rpy should be there
-                images_rpy_path = os.path.join(self.source_path, 'images.rpy')
-            else:
-                print(f"[DEBUG] No source_path available for video mapping")
-                return video_mappings
+            import re
             
-            print(f"[DEBUG] Loading video mappings from: {images_rpy_path}")
+            # Find all .rpy files in the source directory (same as image definitions)
+            rpy_files = []
+            for root, dirs, files in os.walk(self.source_path):
+                for file in files:
+                    if file.endswith('.rpy'):
+                        rpy_files.append(os.path.join(root, file))
             
-            if not os.path.exists(images_rpy_path):
-                print(f"[DEBUG] images.rpy not found at: {images_rpy_path}")
-                return video_mappings
-            
-            # Parse images.rpy for Movie() definitions
-            with open(images_rpy_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            print(f"[DEBUG] Loading video mappings from: {self.source_path}")
+            print(f"[DEBUG] Searching {len(rpy_files)} .rpy files for Movie() definitions")
             
             # Regex to match: image asset_name = Movie(...play="video_path"...)
-            import re
-            pattern = r'image\s+(\w+)\s*=\s*Movie\([^)]*play\s*=\s*["\']([^"\']+)["\'][^)]*\)'
-            matches = re.findall(pattern, content)
+            movie_pattern = r'^\s*image\s+([a-zA-Z0-9_]+)\s*=\s*Movie\([^)]*play\s*=\s*["\']([^"\']+)["\'][^)]*\)'
             
-            for asset_name, video_path in matches:
-                video_mappings[asset_name] = video_path
-                print(f"[DEBUG] Video mapping: '{asset_name}' -> '{video_path}'")
+            for rpy_file in rpy_files:
+                try:
+                    with open(rpy_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                    
+                    # Find all Movie() definitions in this file
+                    matches = re.findall(movie_pattern, content, re.MULTILINE)
+                    
+                    for asset_name, video_path in matches:
+                        video_mappings[asset_name] = video_path
+                        print(f"[DEBUG] Video mapping: '{asset_name}' -> '{video_path}' (from {os.path.basename(rpy_file)})")
+                
+                except Exception as e:
+                    print(f"[DEBUG] Error parsing {rpy_file} for video mappings: {e}")
+                    continue
             
             print(f"[DEBUG] Loaded {len(video_mappings)} video asset mappings")
             
@@ -1085,6 +1140,123 @@ class MediaLoadingWorker(QThread):
             print(f"[DEBUG] Error loading video mappings: {e}")
         
         return video_mappings
+
+    def _load_script_image_definitions(self) -> Dict[str, str]:
+        """
+        Load image definitions from all script files (.rpy files).
+        
+        Parses both simple and complex image definitions like:
+        - image ch1kjwalk = "ch1kjwalk0"
+        - image ch1kjwalk movie:
+              "ch1kjwalkmov"
+              pause 2.4
+              "ch1kjwalk"
+        
+        Returns:
+            Dict mapping asset names to their target paths/names
+        """
+        image_definitions = {}
+        
+        if not hasattr(self, 'source_path'):
+            print(f"[DEBUG] No source_path available for script parsing")
+            return image_definitions
+        
+        try:
+            import re
+            
+            # Find all .rpy files in the source directory
+            rpy_files = []
+            for root, dirs, files in os.walk(self.source_path):
+                for file in files:
+                    if file.endswith('.rpy'):
+                        rpy_files.append(os.path.join(root, file))
+            
+            print(f"[DEBUG] Parsing {len(rpy_files)} .rpy files for image definitions")
+            
+            for rpy_file in rpy_files:
+                try:
+                    with open(rpy_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        lines = f.readlines()
+                    
+                    # Parse both simple and complex image definitions
+                    self._parse_simple_image_definitions(lines, rpy_file, image_definitions)
+                    self._parse_complex_image_definitions(lines, rpy_file, image_definitions)
+                
+                except Exception as e:
+                    print(f"[DEBUG] Error parsing {rpy_file}: {e}")
+                    continue
+            
+            print(f"[DEBUG] Loaded {len(image_definitions)} script image definitions total")
+            
+        except Exception as e:
+            print(f"[DEBUG] Error loading script image definitions: {e}")
+        
+        return image_definitions
+    
+    def _parse_simple_image_definitions(self, lines: List[str], rpy_file: str, image_definitions: Dict[str, str]):
+        """Parse simple image definitions like: image ch1kjwalk = "ch1kjwalk0" """
+        import re
+        
+        # Pattern to match simple image definitions
+        image_def_pattern = r'^\s*image\s+([a-zA-Z0-9_]+)\s*=\s*["\']([^"\']+)["\']'
+        
+        for line in lines:
+            matches = re.findall(image_def_pattern, line, re.MULTILINE)
+            for asset_name, target in matches:
+                image_definitions[asset_name] = target
+                print(f"[DEBUG] Script definition: '{asset_name}' -> '{target}' (from {os.path.basename(rpy_file)})")
+    
+    def _parse_complex_image_definitions(self, lines: List[str], rpy_file: str, image_definitions: Dict[str, str]):
+        """Parse complex multi-line image definitions like:
+        image ch1kjwalk movie:
+            "ch1kjwalkmov"
+            pause 2.4
+            "ch1kjwalk"
+        """
+        import re
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # Look for complex image definition start
+            complex_match = re.match(r'^\s*image\s+([a-zA-Z0-9_]+(?:\s+[a-zA-Z0-9_]+)*)\s*:', line)
+            if complex_match:
+                full_image_name = complex_match.group(1)
+                
+                # Look for the first quoted asset reference in the following indented lines
+                i += 1
+                first_asset = None
+                
+                while i < len(lines):
+                    next_line = lines[i].strip()
+                    
+                    # Stop if we hit another image definition or unindented line
+                    if (not next_line or 
+                        next_line.startswith('image ') or 
+                        next_line.startswith('define ') or
+                        next_line.startswith('label ') or
+                        next_line.startswith('screen ') or
+                        (not lines[i].startswith('    ') and not lines[i].startswith('\t'))):
+                        break
+                    
+                    # Look for quoted asset reference
+                    asset_match = re.search(r'["\']([^"\']+)["\']', next_line)
+                    if asset_match and not first_asset:
+                        first_asset = asset_match.group(1)
+                        # Only take the first asset reference, ignore "pause" etc.
+                        if not first_asset.replace('.', '').replace(' ', '').isdigit():
+                            break
+                    
+                    i += 1
+                
+                if first_asset:
+                    image_definitions[full_image_name] = first_asset
+                    print(f"[DEBUG] Complex definition: '{full_image_name}' -> '{first_asset}' (from {os.path.basename(rpy_file)})")
+                
+                continue
+            
+            i += 1
 
 
 class DialogSearchConfigDialog(QDialog):

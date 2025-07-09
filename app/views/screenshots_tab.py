@@ -692,7 +692,7 @@ class ScreenshotsTab(QWidget):
                 self.status_label.setStyleSheet("color: #f44336;")
                 
     def _display_image(self, image_path: str):
-        """Display an image in the preview area."""
+        """Display an image in the preview area with crosshair overlay."""
         # Hide video components
         self.video_widget.hide()
         self.play_pause_button.hide()
@@ -721,7 +721,7 @@ class ScreenshotsTab(QWidget):
             
             self.status_label.setText(f"📷 Viewing: {os.path.basename(image_path)}")
             self.status_label.setStyleSheet("color: #1976d2;")
-            
+    
     def _display_video(self, video_path: str):
         """Display and auto-play a video in the preview area."""
         # Hide image components
@@ -1150,7 +1150,7 @@ class ScreenshotsTab(QWidget):
             
             reply = QMessageBox.question(
                 self,
-                "Copy Media to Gallery", 
+                "Copy Media to Gallery",
                 message,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes
@@ -1323,21 +1323,21 @@ class ScreenshotsTab(QWidget):
                 
                 if qt_image.isNull():
                     raise ValueError(f"Could not convert image to QImage: {image_path}")
-                
-                # Generate thumbnail using Gallery's method
-                thumbnail_image = self._generate_thumbnail(qt_image)
-                
-                # Save the full image
-                if not qt_image.save(gallery_file_path, "PNG"):
-                    raise IOError(f"Could not save image to {gallery_file_path}")
-                
-                # Save the thumbnail
-                if not thumbnail_image.save(thumbnail_path, "PNG"):
-                    print(f"Warning: Could not save thumbnail to {thumbnail_path}")
-                
-                # Get image dimensions
-                width = qt_image.width()
-                height = qt_image.height()
+            
+            # Generate thumbnail using Gallery's method
+            thumbnail_image = self._generate_thumbnail(qt_image)
+            
+            # Save the full image
+            if not qt_image.save(gallery_file_path, "PNG"):
+                raise IOError(f"Could not save image to {gallery_file_path}")
+            
+            # Save the thumbnail
+            if not thumbnail_image.save(thumbnail_path, "PNG"):
+                print(f"Warning: Could not save thumbnail to {thumbnail_path}")
+            
+            # Get image dimensions
+            width = qt_image.width()
+            height = qt_image.height()
         
         # Create timestamp
         now = datetime.now().isoformat()
