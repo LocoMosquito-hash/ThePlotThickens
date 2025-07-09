@@ -380,8 +380,26 @@ def create_tables(conn: sqlite3.Connection) -> None:
 # Story functions
 def create_story(conn: sqlite3.Connection, title: str, description: str, type_name: str, folder_path: str,
                 universe: Optional[str] = None, is_part_of_series: bool = False, series_name: Optional[str] = None,
-                series_order: Optional[int] = None, author: Optional[str] = None, year: Optional[int] = None) -> Tuple[int, Dict[str, Any]]:
+                series_order: Optional[int] = None, author: Optional[str] = None, year: Optional[int] = None,
+                version: Optional[str] = None, first_release: Optional[str] = None, 
+                current_release: Optional[str] = None) -> Tuple[int, Dict[str, Any]]:
     """Create a new story in the database.
+    
+    Args:
+        conn: Database connection
+        title: Story title
+        description: Story description
+        type_name: Story type name
+        folder_path: Path to story folder
+        universe: Universe name
+        is_part_of_series: Whether the story is part of a series
+        series_name: Series name
+        series_order: Order within the series
+        author: Author name
+        year: Year of publication
+        version: Version string (alphanumeric)
+        first_release: First release date (YYYY-MM-DD format)
+        current_release: Current release date (YYYY-MM-DD format)
     
     Returns:
         Tuple containing the story ID and the story data
@@ -395,12 +413,15 @@ def create_story(conn: sqlite3.Connection, title: str, description: str, type_na
         ensure_story_folders_exist(story_data)
     
     cursor.execute('''
-    INSERT INTO stories (title, description, type_name, folder_path, universe, is_part_of_series, series_name, series_order, author, year)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (title, description, type_name, folder_path, universe, 1 if is_part_of_series else 0, series_name, series_order, author, year))
+    INSERT INTO stories (title, description, type_name, folder_path, universe, is_part_of_series, series_name, series_order, author, year, version, first_release, current_release)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (title, description, type_name, folder_path, universe, 1 if is_part_of_series else 0, series_name, series_order, author, year, version, first_release, current_release))
     
     conn.commit()
     story_id = cursor.lastrowid
+    
+    if story_id is None:
+        raise ValueError("Failed to create story: lastrowid is None")
     
     # Get the created story
     story_data = get_story(conn, story_id)
@@ -455,7 +476,9 @@ def get_all_stories(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
 def update_story(conn: sqlite3.Connection, story_id: int, title: str, description: str, 
                 type_name: str, universe: Optional[str] = None, is_part_of_series: bool = False, 
                 series_name: Optional[str] = None, series_order: Optional[int] = None, 
-                author: Optional[str] = None, year: Optional[int] = None) -> Dict[str, Any]:
+                author: Optional[str] = None, year: Optional[int] = None,
+                version: Optional[str] = None, first_release: Optional[str] = None, 
+                current_release: Optional[str] = None) -> Dict[str, Any]:
     """Update an existing story in the database.
     
     Args:
@@ -470,6 +493,9 @@ def update_story(conn: sqlite3.Connection, story_id: int, title: str, descriptio
         series_order: Order within the series
         author: Author name
         year: Year of publication
+        version: Version string (alphanumeric)
+        first_release: First release date (YYYY-MM-DD format)
+        current_release: Current release date (YYYY-MM-DD format)
         
     Returns:
         Updated story data
@@ -487,10 +513,13 @@ def update_story(conn: sqlite3.Connection, story_id: int, title: str, descriptio
         series_order = ?,
         author = ?,
         year = ?,
+        version = ?,
+        first_release = ?,
+        current_release = ?,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
     ''', (title, description, type_name, universe, 1 if is_part_of_series else 0, 
-         series_name, series_order, author, year, story_id))
+         series_name, series_order, author, year, version, first_release, current_release, story_id))
     
     conn.commit()
     

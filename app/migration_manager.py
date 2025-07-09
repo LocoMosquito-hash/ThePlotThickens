@@ -15,6 +15,7 @@ import logging
 from app.migrations.migrate_relationships import migrate_relationships
 from app.migrations.add_notepad_tables import migrate_add_notepad_tables, check_notepad_migration_needed
 from app.migrations.add_source_path_to_stories import migrate_up, migrate_down
+from app.migrations.add_version_and_release_dates import migrate_up as version_migrate_up, migrate_down as version_migrate_down
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -63,6 +64,17 @@ def check_and_run_migrations(db_path: str) -> bool:
                     logger.info("Source path migration completed successfully")
                 except Exception as e:
                     logger.error(f"Source path migration failed: {e}")
+                    success = False
+            elif migration == 'version_and_release_dates_migration_v1':
+                logger.info("Running version and release dates migration...")
+                try:
+                    cursor = conn.cursor()
+                    version_migrate_up(cursor)
+                    conn.commit()
+                    register_migration_complete(db_path, migration)
+                    logger.info("Version and release dates migration completed successfully")
+                except Exception as e:
+                    logger.error(f"Version and release dates migration failed: {e}")
                     success = False
             # Add other migrations as needed
         
@@ -130,6 +142,7 @@ def get_pending_migrations(conn: sqlite3.Connection) -> List[str]:
         'relationship_migration_v1',
         'notepad_migration_v1',
         'source_path_migration_v1',
+        'version_and_release_dates_migration_v1',
         # Add other migrations as they are developed
     ]
     
@@ -154,6 +167,13 @@ def get_pending_migrations(conn: sqlite3.Connection) -> List[str]:
     if not source_path_migration_needed and 'source_path_migration_v1' not in completed_migrations:
         completed_migrations.add('source_path_migration_v1')
     
+    # Check if we need to run the version and release dates migration
+    version_and_release_dates_migration_needed = check_version_and_release_dates_migration_needed(conn)
+    
+    # If version and release dates migration isn't needed, mark it as completed
+    if not version_and_release_dates_migration_needed and 'version_and_release_dates_migration_v1' not in completed_migrations:
+        completed_migrations.add('version_and_release_dates_migration_v1')
+    
     # Get list of pending migrations
     pending_migrations = [m for m in all_migrations if m not in completed_migrations]
     
@@ -168,6 +188,10 @@ def get_pending_migrations(conn: sqlite3.Connection) -> List[str]:
     # If source path migration is needed, ensure it's in the list
     if source_path_migration_needed and 'source_path_migration_v1' not in pending_migrations:
         pending_migrations.append('source_path_migration_v1')
+    
+    # If version and release dates migration is needed, ensure it's in the list
+    if version_and_release_dates_migration_needed and 'version_and_release_dates_migration_v1' not in pending_migrations:
+        pending_migrations.append('version_and_release_dates_migration_v1')
     
     return pending_migrations
 
@@ -260,6 +284,36 @@ def check_notepad_migration_needed(conn: sqlite3.Connection) -> bool:
     
     # Migration is needed if the table doesn't exist
     return cursor.fetchone() is None
+
+
+def check_version_and_release_dates_migration_needed(conn: sqlite3.Connection) -> bool:
+    """Check if the version and release dates migration is needed.
+    
+    Args:
+        conn: Database connection
+        
+    Returns:
+        True if migration is needed, False otherwise
+    """
+    cursor = conn.cursor()
+    
+    try:
+        # Check if the version, first_release, and current_release columns exist in the stories table
+        cursor.execute("PRAGMA table_info(stories)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        required_columns = ['version', 'first_release', 'current_release']
+        missing_columns = [col for col in required_columns if col not in columns]
+        
+        if missing_columns:
+            # Some required columns don't exist, migration is needed
+            return True
+        else:
+            # All columns exist, migration not needed
+            return False
+    except Exception:
+        # If there's an error, assume migration is needed
+        return True
 
 
 def register_migration_complete(db_path: str, migration_name: str) -> bool:

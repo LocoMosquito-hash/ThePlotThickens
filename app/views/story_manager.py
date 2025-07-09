@@ -21,9 +21,9 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QLabel, QLineEdit, QTextEdit, QComboBox, QFormLayout,
     QGroupBox, QFileDialog, QMessageBox, QSplitter, QApplication, QStyledItemDelegate, QStyle,
-    QMenu, QProgressDialog
+    QMenu, QProgressDialog, QDateEdit
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal, QSettings, QRect, QPoint
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QSettings, QRect, QPoint, QDate
 from PyQt6.QtGui import QFont, QPixmap, QImage, QClipboard, QPainter, QColor, QBrush, QPen, QAction
 
 from app.db_sqlite import (
@@ -261,6 +261,44 @@ class StoryManagerWidget(QWidget):
         self.year_edit = QLineEdit()
         details_layout.addRow("Year:", self.year_edit)
         
+        # Version field (alphanumeric)
+        self.version_edit = QLineEdit()
+        details_layout.addRow("Version:", self.version_edit)
+        
+        # Date fields for Visual Novel (initially hidden)
+        self.first_release_layout = QHBoxLayout()
+        self.first_release_edit = QLineEdit()
+        self.first_release_edit.setPlaceholderText("YYYY-MM-DD")
+        self.first_release_calendar = QDateEdit()
+        self.first_release_calendar.setCalendarPopup(True)
+        self.first_release_calendar.setDisplayFormat("yyyy-MM-dd")
+        self.first_release_calendar.dateChanged.connect(self.on_first_release_date_changed)
+        self.first_release_layout.addWidget(self.first_release_edit)
+        self.first_release_layout.addWidget(self.first_release_calendar)
+        
+        self.first_release_widget = QWidget()
+        self.first_release_widget.setLayout(self.first_release_layout)
+        self.first_release_widget.setVisible(False)  # Initially hidden
+        details_layout.addRow("First Release:", self.first_release_widget)
+        
+        self.current_release_layout = QHBoxLayout()
+        self.current_release_edit = QLineEdit()
+        self.current_release_edit.setPlaceholderText("YYYY-MM-DD")
+        self.current_release_calendar = QDateEdit()
+        self.current_release_calendar.setCalendarPopup(True)
+        self.current_release_calendar.setDisplayFormat("yyyy-MM-dd")
+        self.current_release_calendar.dateChanged.connect(self.on_current_release_date_changed)
+        self.current_release_layout.addWidget(self.current_release_edit)
+        self.current_release_layout.addWidget(self.current_release_calendar)
+        
+        self.current_release_widget = QWidget()
+        self.current_release_widget.setLayout(self.current_release_layout)
+        self.current_release_widget.setVisible(False)  # Initially hidden
+        details_layout.addRow("Current Release:", self.current_release_widget)
+        
+        # Connect story type change to show/hide date fields
+        self.type_combo.currentIndexChanged.connect(self.on_story_type_changed)
+        
         right_layout.addWidget(self.details_group)
         
         # Create save button
@@ -370,6 +408,35 @@ class StoryManagerWidget(QWidget):
             self.year_edit.setText(str(story_data["year"]))
         else:
             self.year_edit.clear()
+        
+        # Set version
+        self.version_edit.setText(story_data.get("version", "") or "")
+        
+        # Set release dates
+        first_release = story_data.get("first_release", "") or ""
+        self.first_release_edit.setText(first_release)
+        if first_release:
+            try:
+                date = QDate.fromString(first_release, "yyyy-MM-dd")
+                if date.isValid():
+                    self.first_release_calendar.setDate(date)
+            except:
+                pass  # Invalid date format, skip setting calendar
+        
+        current_release = story_data.get("current_release", "") or ""
+        self.current_release_edit.setText(current_release)
+        if current_release:
+            try:
+                date = QDate.fromString(current_release, "yyyy-MM-dd")
+                if date.isValid():
+                    self.current_release_calendar.setDate(date)
+            except:
+                pass  # Invalid date format, skip setting calendar
+        
+        # Show/hide date fields based on story type
+        is_visual_novel = story_data["type_name"] == "VISUAL_NOVEL"
+        self.first_release_widget.setVisible(is_visual_novel)
+        self.current_release_widget.setVisible(is_visual_novel)
         
         # Load artwork if it exists
         self.load_artwork(story_data["folder_path"])
@@ -1750,6 +1817,15 @@ class StoryManagerWidget(QWidget):
         self.author_edit.clear()
         self.year_edit.clear()
         
+        # Clear the new fields
+        self.version_edit.clear()
+        self.first_release_edit.clear()
+        self.current_release_edit.clear()
+        
+        # Hide date fields (they're only for Visual Novel)
+        self.first_release_widget.setVisible(False)
+        self.current_release_widget.setVisible(False)
+        
         # Clear the artwork
         self.clear_artwork()
         
@@ -1920,6 +1996,38 @@ class StoryManagerWidget(QWidget):
                 self.year_edit.setFocus()
                 return
         
+        # Get new fields
+        version = self.version_edit.text().strip() or None
+        first_release = self.first_release_edit.text().strip() or None
+        current_release = self.current_release_edit.text().strip() or None
+        
+        # Validate date formats if provided
+        if first_release:
+            try:
+                from datetime import datetime
+                datetime.strptime(first_release, "%Y-%m-%d")
+            except ValueError:
+                QMessageBox.warning(
+                    self,
+                    "Invalid First Release Date",
+                    "First release date must be in YYYY-MM-DD format."
+                )
+                self.first_release_edit.setFocus()
+                return
+        
+        if current_release:
+            try:
+                from datetime import datetime
+                datetime.strptime(current_release, "%Y-%m-%d")
+            except ValueError:
+                QMessageBox.warning(
+                    self,
+                    "Invalid Current Release Date",
+                    "Current release date must be in YYYY-MM-DD format."
+                )
+                self.current_release_edit.setFocus()
+                return
+        
         # Validate the form data
         if not title:
             QMessageBox.warning(self, "Invalid Title", "Please enter a valid title.")
@@ -1968,7 +2076,10 @@ class StoryManagerWidget(QWidget):
                         series_name=series_name,
                         series_order=series_order,
                         author=author,
-                        year=year
+                        year=year,
+                        version=version,
+                        first_release=first_release,
+                        current_release=current_release
                     )
                     
                     # Save artwork if available
@@ -2019,7 +2130,10 @@ class StoryManagerWidget(QWidget):
                 series_name=series_name,
                 series_order=series_order,
                 author=author,
-                year=year
+                year=year,
+                version=version,
+                first_release=first_release,
+                current_release=current_release
             )
             
             # Create the story folder with a random ID to avoid conflicts with saga titles
@@ -2095,6 +2209,31 @@ class StoryManagerWidget(QWidget):
         is_part_of_series = self.series_check.currentData() in (True, 1)
         self.series_name_edit.setEnabled(is_part_of_series)
         self.series_order_edit.setEnabled(is_part_of_series)
+    
+    def on_story_type_changed(self, index: int) -> None:
+        """Handle story type selection change - show/hide date fields for Visual Novel.
+        
+        Args:
+            index: Index of the selected item
+        """
+        selected_type = self.type_combo.currentData()
+        is_visual_novel = selected_type == "VISUAL_NOVEL"
+        
+        # Show/hide the date fields based on story type
+        self.first_release_widget.setVisible(is_visual_novel)
+        self.current_release_widget.setVisible(is_visual_novel)
+    
+    def on_first_release_date_changed(self) -> None:
+        """Handle first release date change from calendar widget."""
+        date = self.first_release_calendar.date()
+        date_str = date.toString("yyyy-MM-dd")
+        self.first_release_edit.setText(date_str)
+    
+    def on_current_release_date_changed(self) -> None:
+        """Handle current release date change from calendar widget."""
+        date = self.current_release_calendar.date()
+        date_str = date.toString("yyyy-MM-dd")
+        self.current_release_edit.setText(date_str)
 
     def add_story_to_list(self, story_data: Dict[str, Any]) -> None:
         """Add a story to the list widget.
