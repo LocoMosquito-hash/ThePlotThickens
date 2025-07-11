@@ -217,13 +217,15 @@ class ScreenshotsTab(QWidget):
             
         if horizontal_header:
             horizontal_header.setVisible(True)  # Show headers now that we have meaningful columns
-            # Configure column sizing: Thumbnail(auto), Filename(stretch), Duplicates(auto), Dialog Context(fixed width)
-            horizontal_header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            # Configure column sizing: Thumbnail(fixed wider), Filename(stretch), Duplicates(auto), Dialog Context(fixed width)
+            horizontal_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
             horizontal_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
             horizontal_header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
             horizontal_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
             
-            # Set fixed width for dialog context column (about 3x duplicates column width)
+            # Set fixed width for thumbnail column (wider for better viewing)
+            self.thumbnail_table.setColumnWidth(0, 200)  # Fixed width for thumbnails (was auto-sized)
+            # Set fixed width for dialog context column
             self.thumbnail_table.setColumnWidth(3, 200)  # Fixed width for dialog context
         self.thumbnail_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.thumbnail_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
