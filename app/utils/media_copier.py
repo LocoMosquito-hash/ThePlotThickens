@@ -278,14 +278,24 @@ class MediaCopyWorker(QThread):
             base_path = os.path.splitext(media_file_path)[0]
             metadata_path = f"{base_path}.meta"
             
+            # Extract dialog context if available
+            dialog_context = self._extract_dialog_context(asset)
+            
+            # Debug output to see what asset data we're getting
+            print(f"[DEBUG] Creating metadata for asset: {asset.get('name', 'unknown')}")
+            print(f"[DEBUG] Asset keys: {list(asset.keys())}")
+            line_num = asset.get('line_number', asset.get('line', 0))
+            print(f"[DEBUG] Line number found: {line_num}")
+            
             # Extract relevant metadata from asset
             metadata = {
                 'original_asset_name': asset.get('name', ''),
                 'asset_type': asset.get('type', 'unknown'),
                 'asset_category': asset.get('category', 'unknown'),
                 'source_file': asset.get('file', ''),
-                'source_line': asset.get('line_number', 0),
+                'source_line': line_num,
                 'usage_type': asset.get('usage_type', 'unknown'),
+                'dialog_context': dialog_context,
                 'created_at': datetime.now().isoformat()
             }
             
@@ -297,6 +307,223 @@ class MediaCopyWorker(QThread):
             # Don't fail the copy operation if metadata creation fails
             print(f"Warning: Failed to create metadata file for {media_file_path}: {e}")
             pass
+
+    def _extract_dialog_context(self, asset: Dict[str, Any]) -> str:
+        """Extract dialog context that appears after this asset in the source script.
+        
+        Args:
+            asset: Asset dictionary containing source file and line information
+            
+        Returns:
+            Dialog context string, or empty string if none found
+        """
+        try:
+            source_file = asset.get('file', '')
+            # Try both 'line_number' and 'line' fields for compatibility
+            source_line = asset.get('line_number', asset.get('line', 0))
+            asset_name = asset.get('name', '')
+            
+            print(f"[DEBUG] Dialog extraction for {asset_name}: file={source_file}, line={source_line}")
+            
+            if not source_file or source_line <= 0:
+                print(f"[DEBUG] Early return: no file or invalid line number")
+                return ""
+            
+            # Build full path - the source_file might be relative to the game directory
+            # Try to infer the game directory from the media asset paths
+            full_source_path = source_file
+            if not os.path.isabs(source_file):
+                # Try to find the game directory by looking at other assets
+                game_dir = None
+                for media_asset in self.media_assets:
+                    media_path = media_asset.get('path', '')
+                    if media_path and os.path.exists(media_path):
+                        # Work backwards from media path to find game directory
+                        # Example: T:/AG/LastCall-0.4-pc/game/chapters/chapter3/images/...
+                        # We want: T:/AG/LastCall-0.4-pc/game
+                        path_parts = media_path.replace('\\', '/').split('/')
+                        for i, part in enumerate(path_parts):
+                            if part == 'game':
+                                game_dir = '/'.join(path_parts[:i+1])
+                                break
+                        if game_dir:
+                            break
+                
+                if game_dir:
+                    # Convert game_dir back to proper path separators for the OS
+                    game_dir = game_dir.replace('/', os.sep)
+                    full_source_path = os.path.join(game_dir, source_file)
+                    print(f"[DEBUG] Built full path using game directory: {full_source_path}")
+                else:
+                    # Fallback: try common locations relative to current directory
+                    current_dir = os.getcwd()
+                    potential_paths = [
+                        os.path.join(current_dir, source_file),
+                        os.path.join(current_dir, 'game', source_file)
+                    ]
+                    for path in potential_paths:
+                        if os.path.exists(path):
+                            full_source_path = path
+                            print(f"[DEBUG] Found file at fallback path: {full_source_path}")
+                            break
+            
+            print(f"[DEBUG] Trying to read file: {full_source_path}")
+            if not os.path.exists(full_source_path):
+                print(f"[DEBUG] File not found: {full_source_path}")
+                return ""
+                
+            # Read the source file
+            with open(full_source_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+                
+            # Find dialog lines after the asset line
+            dialog_lines = []
+            start_line = source_line - 1  # Convert to 0-based index
+            
+            # Look for dialog lines after the asset line
+            print(f"[DEBUG] Scanning lines from {start_line + 1} to {len(lines)} for dialog")
+            for i in range(start_line + 1, len(lines)):
+                line = lines[i].strip()
+                print(f"[DEBUG] Line {i+1}: '{line}'")
+                
+                # Skip empty lines and comments
+                if not line or line.startswith('#'):
+                    print(f"[DEBUG] Skipping empty/comment line")
+                    continue
+                    
+                # Stop if we hit another asset line (scene, show, etc.)
+                if self._is_asset_line(line):
+                    print(f"[DEBUG] Hit another asset line, stopping: {line}")
+                    break
+                    
+                # Stop if we hit control flow (jump, call, return, etc.)
+                if self._is_control_flow_line(line):
+                    print(f"[DEBUG] Hit control flow line, stopping: {line}")
+                    break
+                    
+                # Check if this is a dialog line
+                if self._is_dialog_line(line):
+                    print(f"[DEBUG] Found dialog line: {line}")
+                    dialog_lines.append(line)
+                else:
+                    print(f"[DEBUG] Not a dialog line: {line}")
+                    
+                # Stop after finding a reasonable number of dialog lines
+                if len(dialog_lines) >= 5:  # Limit to avoid overly long context
+                    print(f"[DEBUG] Hit max dialog lines limit")
+                    break
+                    
+            # Join dialog lines with newlines
+            if dialog_lines:
+                result = '\n'.join(dialog_lines)
+                print(f"[DEBUG] Returning dialog context: '{result}'")
+                return result
+            else:
+                print(f"[DEBUG] No dialog lines found, returning empty string")
+                
+        except Exception as e:
+            print(f"Warning: Failed to extract dialog context for asset {asset.get('name', '')}: {e}")
+            
+        return ""
+        
+    def _is_asset_line(self, line: str) -> bool:
+        """Check if a line contains an asset reference (scene, show, etc.).
+        
+        Args:
+            line: Line to check
+            
+        Returns:
+            True if line contains an asset reference
+        """
+        line_lower = line.lower().strip()
+        
+        # Major asset keywords that should stop dialog extraction
+        major_asset_keywords = ['scene ', 'show ', 'image ']
+        if any(line_lower.startswith(keyword) for keyword in major_asset_keywords):
+            return True
+            
+        # Audio/music commands - but only if they're not simple background operations
+        if line_lower.startswith('play ') or line_lower.startswith('stop '):
+            # Don't stop for simple sound effects, only for major audio changes
+            if 'sound' in line_lower:
+                return False  # Sound effects shouldn't stop dialog extraction
+            return True
+            
+        # Don't treat window show/hide as asset lines - they're just UI directives
+        if line_lower.startswith('window '):
+            return False
+            
+        return False
+        
+    def _is_control_flow_line(self, line: str) -> bool:
+        """Check if a line contains control flow (jump, call, return, etc.).
+        
+        Args:
+            line: Line to check
+            
+        Returns:
+            True if line contains control flow
+        """
+        line_lower = line.lower().strip()
+        
+        # Major control flow that should stop dialog extraction
+        major_control_keywords = ['jump ', 'call ', 'return', 'label ']
+        if any(line_lower.startswith(keyword) for keyword in major_control_keywords):
+            return True
+            
+        # Python control flow (but not simple assignments/pauses)
+        python_control_keywords = ['if ', 'else:', 'elif ', 'while ', 'for ']
+        if any(line_lower.startswith(keyword) for keyword in python_control_keywords):
+            return True
+            
+        # Don't treat Ren'Py $ statements as control flow unless they're complex
+        # Simple pauses, assignments, and function calls shouldn't stop dialog extraction
+        if line_lower.startswith('$'):
+            # Allow simple statements like: $ renpy.pause(), $ variable = value
+            simple_python_patterns = [
+                'renpy.pause',
+                'renpy.transition',
+                'renpy.with_statement',
+                'renpy.sound',
+                'renpy.music'
+            ]
+            if any(pattern in line_lower for pattern in simple_python_patterns):
+                return False
+            # Also allow simple variable assignments (single = not ==)
+            if '=' in line_lower and '==' not in line_lower and '<=' not in line_lower and '>=' not in line_lower:
+                return False
+        
+        return False
+        
+    def _is_dialog_line(self, line: str) -> bool:
+        """Check if a line is a dialog line.
+        
+        Args:
+            line: Line to check
+            
+        Returns:
+            True if line appears to be dialog
+        """
+        # Dialog lines typically start with a character name followed by a quote
+        # or just a quote for narrator dialog
+        if '"' in line:
+            # Character dialog: character_name "dialog text"
+            # Narrator dialog: "dialog text"
+            return True
+            
+        # Check for common Ren'Py dialog patterns
+        if line.startswith('"') and line.endswith('"'):
+            return True
+            
+        # Check for character name followed by dialog
+        parts = line.split('"', 1)
+        if len(parts) >= 2:
+            character_part = parts[0].strip()
+            # Character names are typically single words or short phrases
+            if character_part and len(character_part.split()) <= 2:
+                return True
+                
+        return False
 
 
 class MediaCopierDialog:

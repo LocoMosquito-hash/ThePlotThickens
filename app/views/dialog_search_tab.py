@@ -587,10 +587,13 @@ class MediaLoadingWorker(QThread):
         try:
             # Try script-based asset discovery first
             script_assets = self._script_based_asset_discovery(project, label_name)
+            print(f"[DEBUG] Script-based discovery found {len(script_assets)} assets for label '{label_name}'")
             if script_assets:
                 media_assets = script_assets
+                print(f"[DEBUG] Using script-based assets with line numbers")
             else:
                 # Fall back to API-based discovery
+                print(f"[DEBUG] Falling back to API-based discovery (no line numbers)")
                 media_assets = self._api_based_asset_discovery(project, label_name)
             
         except Exception as e:

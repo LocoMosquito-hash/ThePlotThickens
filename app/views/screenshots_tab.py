@@ -204,8 +204,8 @@ class ScreenshotsTab(QWidget):
         self.thumbnail_table.setMinimumWidth(300)  # Set a reasonable minimum width
         
         # Configure table structure
-        self.thumbnail_table.setColumnCount(3)  # Thumbnail, Original Filename, and Duplicate Count columns
-        self.thumbnail_table.setHorizontalHeaderLabels(["Thumbnail", "Original Filename", "Duplicates"])
+        self.thumbnail_table.setColumnCount(4)  # Thumbnail, Original Filename, Duplicate Count, and Dialog Context columns
+        self.thumbnail_table.setHorizontalHeaderLabels(["Thumbnail", "Original Filename", "Duplicates", "Dialog Context"])
         
         # Configure headers
         vertical_header = self.thumbnail_table.verticalHeader()
@@ -217,10 +217,14 @@ class ScreenshotsTab(QWidget):
             
         if horizontal_header:
             horizontal_header.setVisible(True)  # Show headers now that we have meaningful columns
-            # Thumbnail column adjusts to content, filename column takes remaining space, duplicate count adjusts to content
+            # Configure column sizing: Thumbnail(auto), Filename(stretch), Duplicates(auto), Dialog Context(fixed width)
             horizontal_header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
             horizontal_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
             horizontal_header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+            horizontal_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+            
+            # Set fixed width for dialog context column (about 3x duplicates column width)
+            self.thumbnail_table.setColumnWidth(3, 200)  # Fixed width for dialog context
         self.thumbnail_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.thumbnail_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         
@@ -569,6 +573,20 @@ class ScreenshotsTab(QWidget):
             duplicate_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.thumbnail_table.setItem(row_position, 2, duplicate_item)
             
+            # Add dialog context to the fourth column (from metadata if available)
+            dialog_context = self._get_dialog_context(media_path)
+            dialog_item = QTableWidgetItem(dialog_context)
+            dialog_item.setFlags(dialog_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+            dialog_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+            
+            # Set tooltip with full dialog context if it's truncated
+            if len(dialog_context) > 50:  # If text is long, show full text in tooltip
+                dialog_item.setToolTip(dialog_context)
+            else:
+                dialog_item.setToolTip("Dialog context that appears after this asset in the script")
+            
+            self.thumbnail_table.setItem(row_position, 3, dialog_item)
+            
             # Adjust row height to fit thumbnail
             self.thumbnail_table.setRowHeight(row_position, 160)
             
@@ -606,6 +624,35 @@ class ScreenshotsTab(QWidget):
         
         # Fallback to filename if no metadata or error
         return os.path.basename(media_path)
+    
+    def _get_dialog_context(self, media_path: str) -> str:
+        """Get the dialog context from metadata file.
+        
+        Args:
+            media_path: Path to the media file
+            
+        Returns:
+            Dialog context if found in metadata, otherwise empty string
+        """
+        try:
+            import json
+            
+            # Check for metadata file
+            base_path = os.path.splitext(media_path)[0]
+            metadata_path = f"{base_path}.meta"
+            
+            if os.path.exists(metadata_path):
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+                    dialog_context = metadata.get('dialog_context', '')
+                    if dialog_context:
+                        return dialog_context
+                        
+        except Exception as e:
+            print(f"Warning: Could not read dialog context metadata for {media_path}: {e}")
+        
+        # Return empty string if no dialog context found
+        return ""
     
     def _update_duplicate_counts(self):
         """Update duplicate counts for all rows in the table.
