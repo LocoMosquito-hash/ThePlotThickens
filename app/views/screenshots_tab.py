@@ -200,14 +200,14 @@ class ScreenshotsTab(QWidget):
         
         # Thumbnail list widget - now using QTableWidget
         self.thumbnail_table = QTableWidget()
-        self.thumbnail_table.setMaximumWidth(210)
-        self.thumbnail_table.setMinimumWidth(210)
+        # Remove width constraints to allow horizontal expansion
+        self.thumbnail_table.setMinimumWidth(300)  # Set a reasonable minimum width
         
         # Configure table structure
-        self.thumbnail_table.setColumnCount(1)  # Start with just thumbnail column
-        self.thumbnail_table.setHorizontalHeaderLabels(["Thumbnail"])
+        self.thumbnail_table.setColumnCount(2)  # Thumbnail and Original Filename columns
+        self.thumbnail_table.setHorizontalHeaderLabels(["Thumbnail", "Original Filename"])
         
-        # Hide row numbers and configure headers
+        # Configure headers
         vertical_header = self.thumbnail_table.verticalHeader()
         horizontal_header = self.thumbnail_table.horizontalHeader()
         
@@ -216,34 +216,47 @@ class ScreenshotsTab(QWidget):
             vertical_header.setDefaultSectionSize(160)  # Thumbnail height + padding
             
         if horizontal_header:
-            horizontal_header.setVisible(False)
+            horizontal_header.setVisible(True)  # Show headers now that we have meaningful columns
+            # Thumbnail column adjusts to content, filename column takes remaining space
             horizontal_header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            horizontal_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.thumbnail_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.thumbnail_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         
-        # Configure appearance to match original styling
+        # Configure appearance with dark theme compatibility
         self.thumbnail_table.setStyleSheet("""
             QTableWidget {
-                background-color: #f5f5f5;
-                border: 1px solid #ddd;
+                background-color: #2b2b2b;
+                border: 1px solid #555555;
                 border-radius: 5px;
                 padding: 5px;
                 gridline-color: transparent;
+                color: #ffffff;
             }
             QTableWidget::item {
-                background-color: white;
-                border: 1px solid #ccc;
+                background-color: #3c3c3c;
+                border: 1px solid #555555;
                 border-radius: 3px;
                 margin: 2px;
-                padding: 2px;
+                padding: 5px;
+                color: #ffffff;
             }
             QTableWidget::item:selected {
-                background-color: #2196f3;
-                border: 2px solid #1976d2;
+                background-color: #0d7377;
+                border: 2px solid #14a085;
+                color: #ffffff;
             }
             QTableWidget::item:hover {
-                background-color: #e3f2fd;
-                border: 1px solid #2196f3;
+                background-color: #4a4a4a;
+                border: 1px solid #14a085;
+                color: #ffffff;
+            }
+            QHeaderView::section {
+                background-color: #404040;
+                color: #ffffff;
+                border: 1px solid #555555;
+                padding: 8px;
+                font-weight: bold;
             }
         """)
         
@@ -434,8 +447,8 @@ class ScreenshotsTab(QWidget):
         main_layout.addWidget(right_widget)
         
         # Set proportions: thumbnail panel takes more space now, main content takes rest
-        main_layout.setStretch(0, 2)  # Thumbnail panel (increased from 1)
-        main_layout.setStretch(1, 5)  # Main content (adjusted from 4)
+        main_layout.setStretch(0, 3)  # Thumbnail panel - expanded for more horizontal space
+        main_layout.setStretch(1, 4)  # Main content - balanced with thumbnail expansion
     
     def load_existing_images(self):
         """Load all existing images and videos from the image-stack folder."""
@@ -523,7 +536,7 @@ class ScreenshotsTab(QWidget):
             # Set the thumbnail as cell widget
             self.thumbnail_table.setCellWidget(row_position, 0, thumbnail_label)
             
-            # Create table item to store data
+            # Create table item to store data for thumbnail column
             item = QTableWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, media_path)  # Store full path
             item.setData(Qt.ItemDataRole.UserRole + 1, media_type)  # Store media type
@@ -534,8 +547,20 @@ class ScreenshotsTab(QWidget):
             else:
                 item.setToolTip(f"Click to view: {os.path.basename(media_path)}\nPress DELETE to remove")
             
-            # Set the item in the table
+            # Set the item in the thumbnail column
             self.thumbnail_table.setItem(row_position, 0, item)
+            
+            # Add filename to the second column
+            filename = os.path.basename(media_path)
+            filename_item = QTableWidgetItem(filename)
+            filename_item.setFlags(filename_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+            filename_item.setToolTip(f"Original filename: {filename}")
+            
+            # Store additional data in filename item for future use
+            filename_item.setData(Qt.ItemDataRole.UserRole, media_path)  # Store full path for reference
+            filename_item.setData(Qt.ItemDataRole.UserRole + 2, filename)  # Store original filename (for now, same as current)
+            
+            self.thumbnail_table.setItem(row_position, 1, filename_item)
             
             # Adjust row height to fit thumbnail
             self.thumbnail_table.setRowHeight(row_position, 160)
@@ -695,6 +720,13 @@ class ScreenshotsTab(QWidget):
                         if isinstance(thumbnail_label, QLabel):
                             scaled_pixmap = thumbnail_pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                             thumbnail_label.setPixmap(scaled_pixmap)
+                        
+                        # Update filename in second column if needed (filename shouldn't change after crop)
+                        filename_item = self.thumbnail_table.item(row, 1)
+                        if filename_item:
+                            filename = os.path.basename(image_path)
+                            filename_item.setText(filename)
+                            filename_item.setToolTip(f"Original filename: {filename}")
                     
                     print(f"[DEBUG] Thumbnail updated for cropped image: {image_path}")
                     break
