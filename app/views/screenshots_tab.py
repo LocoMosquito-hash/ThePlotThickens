@@ -204,8 +204,8 @@ class ScreenshotsTab(QWidget):
         self.thumbnail_table.setMinimumWidth(300)  # Set a reasonable minimum width
         
         # Configure table structure
-        self.thumbnail_table.setColumnCount(2)  # Thumbnail and Original Filename columns
-        self.thumbnail_table.setHorizontalHeaderLabels(["Thumbnail", "Original Filename"])
+        self.thumbnail_table.setColumnCount(3)  # Thumbnail, Original Filename, and Duplicate Count columns
+        self.thumbnail_table.setHorizontalHeaderLabels(["Thumbnail", "Original Filename", "Duplicates"])
         
         # Configure headers
         vertical_header = self.thumbnail_table.verticalHeader()
@@ -217,9 +217,10 @@ class ScreenshotsTab(QWidget):
             
         if horizontal_header:
             horizontal_header.setVisible(True)  # Show headers now that we have meaningful columns
-            # Thumbnail column adjusts to content, filename column takes remaining space
+            # Thumbnail column adjusts to content, filename column takes remaining space, duplicate count adjusts to content
             horizontal_header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
             horizontal_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+            horizontal_header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.thumbnail_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.thumbnail_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         
@@ -562,8 +563,17 @@ class ScreenshotsTab(QWidget):
             
             self.thumbnail_table.setItem(row_position, 1, filename_item)
             
+            # Add duplicate count to the third column (initially empty)
+            duplicate_item = QTableWidgetItem("")
+            duplicate_item.setFlags(duplicate_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
+            duplicate_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.thumbnail_table.setItem(row_position, 2, duplicate_item)
+            
             # Adjust row height to fit thumbnail
             self.thumbnail_table.setRowHeight(row_position, 160)
+            
+            # Update duplicate counts for all rows
+            self._update_duplicate_counts()
             
         except Exception as e:
             print(f"Error creating thumbnail for {media_path}: {e}")
@@ -596,6 +606,43 @@ class ScreenshotsTab(QWidget):
         
         # Fallback to filename if no metadata or error
         return os.path.basename(media_path)
+    
+    def _update_duplicate_counts(self):
+        """Update duplicate counts for all rows in the table.
+        
+        For each row, count how many rows above it have the same original asset name.
+        If count > 0, show the count in the third column; otherwise leave blank.
+        """
+        try:
+            row_count = self.thumbnail_table.rowCount()
+            
+            for current_row in range(row_count):
+                # Get the original asset name for the current row
+                filename_item = self.thumbnail_table.item(current_row, 1)
+                if not filename_item:
+                    continue
+                
+                current_asset_name = filename_item.text()
+                
+                # Count occurrences of this asset name in rows above the current row
+                duplicate_count = 0
+                for check_row in range(current_row):
+                    check_filename_item = self.thumbnail_table.item(check_row, 1)
+                    if check_filename_item and check_filename_item.text() == current_asset_name:
+                        duplicate_count += 1
+                
+                # Update the duplicate count column
+                duplicate_item = self.thumbnail_table.item(current_row, 2)
+                if duplicate_item:
+                    if duplicate_count > 0:
+                        duplicate_item.setText(str(duplicate_count))
+                        duplicate_item.setToolTip(f"This asset appears {duplicate_count + 1} times total")
+                    else:
+                        duplicate_item.setText("")
+                        duplicate_item.setToolTip("First occurrence of this asset")
+                        
+        except Exception as e:
+            print(f"Error updating duplicate counts: {e}")
             
     def _generate_video_thumbnail(self, video_path: str) -> QPixmap:
         """Generate a static thumbnail for a video file.
@@ -1189,6 +1236,9 @@ class ScreenshotsTab(QWidget):
                 os.remove(image_path)
                 
             self.thumbnail_table.removeRow(row)
+            
+            # Update duplicate counts after removal
+            self._update_duplicate_counts()
             
             filename = os.path.basename(image_path)
             self.status_label.setText(f"🗑️ Deleted: {filename}")
