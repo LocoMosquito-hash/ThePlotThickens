@@ -550,15 +550,15 @@ class ScreenshotsTab(QWidget):
             # Set the item in the thumbnail column
             self.thumbnail_table.setItem(row_position, 0, item)
             
-            # Add filename to the second column
-            filename = os.path.basename(media_path)
-            filename_item = QTableWidgetItem(filename)
+            # Add original asset name to the second column (from metadata if available)
+            original_asset_name = self._get_original_asset_name(media_path)
+            filename_item = QTableWidgetItem(original_asset_name)
             filename_item.setFlags(filename_item.flags() & ~Qt.ItemFlag.ItemIsEditable)  # Make read-only
-            filename_item.setToolTip(f"Original filename: {filename}")
+            filename_item.setToolTip(f"Original Ren'Py asset name: {original_asset_name}")
             
             # Store additional data in filename item for future use
             filename_item.setData(Qt.ItemDataRole.UserRole, media_path)  # Store full path for reference
-            filename_item.setData(Qt.ItemDataRole.UserRole + 2, filename)  # Store original filename (for now, same as current)
+            filename_item.setData(Qt.ItemDataRole.UserRole + 2, original_asset_name)  # Store original asset name
             
             self.thumbnail_table.setItem(row_position, 1, filename_item)
             
@@ -567,6 +567,35 @@ class ScreenshotsTab(QWidget):
             
         except Exception as e:
             print(f"Error creating thumbnail for {media_path}: {e}")
+            
+    def _get_original_asset_name(self, media_path: str) -> str:
+        """Get the original Ren'Py asset name from metadata file.
+        
+        Args:
+            media_path: Path to the media file
+            
+        Returns:
+            Original asset name if found in metadata, otherwise filename
+        """
+        try:
+            import json
+            
+            # Check for metadata file
+            base_path = os.path.splitext(media_path)[0]
+            metadata_path = f"{base_path}.meta"
+            
+            if os.path.exists(metadata_path):
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+                    original_name = metadata.get('original_asset_name', '')
+                    if original_name:
+                        return original_name
+                        
+        except Exception as e:
+            print(f"Warning: Could not read metadata for {media_path}: {e}")
+        
+        # Fallback to filename if no metadata or error
+        return os.path.basename(media_path)
             
     def _generate_video_thumbnail(self, video_path: str) -> QPixmap:
         """Generate a static thumbnail for a video file.

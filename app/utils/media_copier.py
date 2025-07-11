@@ -112,6 +112,9 @@ class MediaCopyWorker(QThread):
                     # Set file timestamps
                     self._set_file_timestamp(dest_path, timestamp)
                     
+                    # Create metadata file with original asset name
+                    self._create_metadata_file(dest_path, asset)
+                    
                     self.file_copied.emit(dest_path)
                     copied_count += 1
                     
@@ -211,7 +214,6 @@ class MediaCopyWorker(QThread):
             Generated filename
         """
         asset_path = asset.get('path', '')
-        original_name = Path(asset_path).name
         file_ext = Path(asset_path).suffix.lower()
         
         # Convert timestamp to formatted string
@@ -260,6 +262,40 @@ class MediaCopyWorker(QThread):
             os.utime(file_path, (timestamp, timestamp))
         except Exception:
             # Ignore errors - timestamp setting is not critical
+            pass
+            
+    def _create_metadata_file(self, media_file_path: str, asset: Dict[str, Any]):
+        """Create a metadata file alongside the copied media file.
+        
+        Args:
+            media_file_path: Path to the copied media file
+            asset: Original asset dictionary with metadata
+        """
+        try:
+            import json
+            
+            # Create metadata filename (same name but with .meta extension)
+            base_path = os.path.splitext(media_file_path)[0]
+            metadata_path = f"{base_path}.meta"
+            
+            # Extract relevant metadata from asset
+            metadata = {
+                'original_asset_name': asset.get('name', ''),
+                'asset_type': asset.get('type', 'unknown'),
+                'asset_category': asset.get('category', 'unknown'),
+                'source_file': asset.get('file', ''),
+                'source_line': asset.get('line_number', 0),
+                'usage_type': asset.get('usage_type', 'unknown'),
+                'created_at': datetime.now().isoformat()
+            }
+            
+            # Write metadata file
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+                
+        except Exception as e:
+            # Don't fail the copy operation if metadata creation fails
+            print(f"Warning: Failed to create metadata file for {media_file_path}: {e}")
             pass
 
 
