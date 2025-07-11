@@ -21,7 +21,8 @@ from typing import List, Tuple, Optional, Dict, Any
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QScrollArea, QCheckBox, QListWidget, QListWidgetItem, QMessageBox, QProgressDialog
+    QScrollArea, QCheckBox, QListWidget, QListWidgetItem, QMessageBox, QProgressDialog,
+    QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer, QSize, QEvent, QPoint, QRect, QUrl
 from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QPainter, QColor, QPen
@@ -197,46 +198,61 @@ class ScreenshotsTab(QWidget):
         thumbnail_label.setStyleSheet("color: #333; padding: 5px;")
         thumbnail_panel.addWidget(thumbnail_label)
         
-        # Thumbnail list widget
-        self.thumbnail_list = QListWidget()
-        self.thumbnail_list.setMaximumWidth(210)
-        self.thumbnail_list.setMinimumWidth(210)
-        self.thumbnail_list.setIconSize(QSize(150, 150))
-        self.thumbnail_list.setResizeMode(QListWidget.ResizeMode.Adjust)
-        self.thumbnail_list.setSpacing(5)
-        self.thumbnail_list.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.thumbnail_list.setStyleSheet("""
-            QListWidget {
+        # Thumbnail list widget - now using QTableWidget
+        self.thumbnail_table = QTableWidget()
+        self.thumbnail_table.setMaximumWidth(210)
+        self.thumbnail_table.setMinimumWidth(210)
+        
+        # Configure table structure
+        self.thumbnail_table.setColumnCount(1)  # Start with just thumbnail column
+        self.thumbnail_table.setHorizontalHeaderLabels(["Thumbnail"])
+        
+        # Hide row numbers and configure headers
+        vertical_header = self.thumbnail_table.verticalHeader()
+        horizontal_header = self.thumbnail_table.horizontalHeader()
+        
+        if vertical_header:
+            vertical_header.setVisible(False)
+            vertical_header.setDefaultSectionSize(160)  # Thumbnail height + padding
+            
+        if horizontal_header:
+            horizontal_header.setVisible(False)
+            horizontal_header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.thumbnail_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.thumbnail_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        
+        # Configure appearance to match original styling
+        self.thumbnail_table.setStyleSheet("""
+            QTableWidget {
                 background-color: #f5f5f5;
                 border: 1px solid #ddd;
                 border-radius: 5px;
                 padding: 5px;
+                gridline-color: transparent;
             }
-            QListWidget::item {
+            QTableWidget::item {
                 background-color: white;
                 border: 1px solid #ccc;
                 border-radius: 3px;
                 margin: 2px;
                 padding: 2px;
             }
-            QListWidget::item:selected {
+            QTableWidget::item:selected {
                 background-color: #2196f3;
                 border: 2px solid #1976d2;
             }
-            QListWidget::item:hover {
+            QTableWidget::item:hover {
                 background-color: #e3f2fd;
                 border: 1px solid #2196f3;
             }
-            QListWidget::item:focus {
-                background-color: #bbdefb;
-                border: 2px solid #1976d2;
-                outline: none;
-            }
         """)
-        self.thumbnail_list.itemClicked.connect(self.on_thumbnail_clicked)
-        self.thumbnail_list.currentItemChanged.connect(self.on_thumbnail_selection_changed)
-        self.thumbnail_list.installEventFilter(self)
-        thumbnail_panel.addWidget(self.thumbnail_list)
+        
+        # Connect signals
+        self.thumbnail_table.cellClicked.connect(self.on_thumbnail_clicked)
+        self.thumbnail_table.currentCellChanged.connect(self.on_thumbnail_selection_changed)
+        self.thumbnail_table.installEventFilter(self)
+        
+        thumbnail_panel.addWidget(self.thumbnail_table)
         
         # Clear all images button
         clear_button = QPushButton("🗑️ Clear All Images")
@@ -422,50 +438,54 @@ class ScreenshotsTab(QWidget):
         main_layout.setStretch(1, 5)  # Main content (adjusted from 4)
     
     def load_existing_images(self):
-        """Load existing images and videos from the image-stack folder into thumbnails."""
+        """Load all existing images and videos from the image-stack folder."""
         if not os.path.exists(self.image_stack_folder):
             os.makedirs(self.image_stack_folder)
-            
-        # Support common image formats including those from RenPy games
-        image_extensions = ['*.png', '*.jpg', '*.jpeg', '*.webp', '*.gif', '*.bmp', '*.tiff']
+            return
         
-        # Support video formats (matching media copier)
-        video_extensions = ['*.mp4', '*.avi', '*.mov', '*.mkv', '*.wmv', '*.flv', '*.webm', '*.m4v', '*.ogg', '*.ogv']
+        # Clear table before loading
+        self.thumbnail_table.setRowCount(0)
+        
+        # Load all supported media files
+        supported_extensions = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff',
+                               '.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.ogg', '.ogv')
         
         media_files = []
+        for filename in os.listdir(self.image_stack_folder):
+            if filename.lower().endswith(supported_extensions):
+                full_path = os.path.join(self.image_stack_folder, filename)
+                media_files.append(full_path)
         
-        # Load image files
-        for ext in image_extensions:
-            media_files.extend(glob.glob(os.path.join(self.image_stack_folder, ext)))
-            
-        # Load video files
-        for ext in video_extensions:
-            media_files.extend(glob.glob(os.path.join(self.image_stack_folder, ext)))
-            
-        media_files.sort()  # Sort by filename (which includes timestamp) - date ascending
+        # Sort files by creation time (oldest first) for consistent ordering
+        media_files.sort(key=lambda x: os.path.getctime(x))
         
+        # Add thumbnails for each media file
         for media_path in media_files:
-            self.add_thumbnail_to_list(media_path)
-            
+            self.add_thumbnail_to_table(media_path)
+        
+        # Update status based on what was loaded
         if media_files:
             # Count images and videos separately for better status reporting
-            image_count = len([f for f in media_files if any(f.lower().endswith(ext[2:]) for ext in image_extensions)])
-            video_count = len([f for f in media_files if any(f.lower().endswith(ext[2:]) for ext in video_extensions)])
+            image_extensions = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff')
+            video_extensions = ('.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.ogg', '.ogv')
+            
+            image_count = len([f for f in media_files if any(f.lower().endswith(ext) for ext in image_extensions)])
+            video_count = len([f for f in media_files if any(f.lower().endswith(ext) for ext in video_extensions)])
             
             if video_count > 0:
                 self.status_label.setText(f"📁 Loaded {image_count} images and {video_count} videos from image-stack folder")
             else:
                 self.status_label.setText(f"📁 Loaded {image_count} images from image-stack folder")
             self.status_label.setStyleSheet("color: #2196f3;")
-    
-    def add_thumbnail_to_list(self, media_path: str):
-        """Add a thumbnail to the vertical thumbnail list (supports both images and videos)."""
+
+    def add_thumbnail_to_table(self, media_path: str):
+        """Add a thumbnail to the table (supports both images and videos)."""
         try:
-            # Check if media path already exists in the list to prevent duplicates
-            for i in range(self.thumbnail_list.count()):
-                existing_item = self.thumbnail_list.item(i)
+            # Check if media path already exists in the table to prevent duplicates
+            for row in range(self.thumbnail_table.rowCount()):
+                existing_item = self.thumbnail_table.item(row, 0)
                 if existing_item and existing_item.data(Qt.ItemDataRole.UserRole) == media_path:
-                    # Media already exists in the list, skip adding
+                    # Media already exists in the table, skip adding
                     return
             
             # Determine if this is a video file
@@ -489,23 +509,36 @@ class ScreenshotsTab(QWidget):
                     thumbnail_pixmap = QPixmap.fromImage(qt_image)
                 media_type = "image"
             
-            # Create list widget item
-            item = QListWidgetItem()
-            scaled_pixmap = thumbnail_pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            item.setIcon(QIcon(scaled_pixmap))  # Convert QPixmap to QIcon
-            item.setData(Qt.ItemDataRole.UserRole, media_path)  # Store full path
+            # Add new row to table
+            row_position = self.thumbnail_table.rowCount()
+            self.thumbnail_table.insertRow(row_position)
             
-            # Add video icon overlay for video files
+            # Create a QLabel to hold the thumbnail
+            thumbnail_label = QLabel()
+            scaled_pixmap = thumbnail_pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            thumbnail_label.setPixmap(scaled_pixmap)
+            thumbnail_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            thumbnail_label.setStyleSheet("border: 1px solid #ccc; border-radius: 3px; margin: 2px; padding: 2px;")
+            
+            # Set the thumbnail as cell widget
+            self.thumbnail_table.setCellWidget(row_position, 0, thumbnail_label)
+            
+            # Create table item to store data
+            item = QTableWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, media_path)  # Store full path
+            item.setData(Qt.ItemDataRole.UserRole + 1, media_type)  # Store media type
+            
+            # Add tooltip
             if is_video:
                 item.setToolTip(f"🎬 Click to play: {os.path.basename(media_path)}\nPress DELETE to remove")
             else:
                 item.setToolTip(f"Click to view: {os.path.basename(media_path)}\nPress DELETE to remove")
             
-            # Store media type for later use
-            item.setData(Qt.ItemDataRole.UserRole + 1, media_type)
+            # Set the item in the table
+            self.thumbnail_table.setItem(row_position, 0, item)
             
-            # Add to the bottom of the list (date ascending - newest last)
-            self.thumbnail_list.addItem(item)
+            # Adjust row height to fit thumbnail
+            self.thumbnail_table.setRowHeight(row_position, 160)
             
         except Exception as e:
             print(f"Error creating thumbnail for {media_path}: {e}")
@@ -639,11 +672,11 @@ class ScreenshotsTab(QWidget):
             print(f"[DEBUG] Error stopping video playback: {e}")
     
     def update_thumbnail_after_crop(self, image_path: str):
-        """Update the thumbnail in the list after the image has been cropped."""
+        """Update the thumbnail in the table after the image has been cropped."""
         try:
             # Find the thumbnail item with this image path
-            for i in range(self.thumbnail_list.count()):
-                item = self.thumbnail_list.item(i)
+            for row in range(self.thumbnail_table.rowCount()):
+                item = self.thumbnail_table.item(row, 0)
                 if item is not None and item.data(Qt.ItemDataRole.UserRole) == image_path:
                     # Regenerate the thumbnail with the cropped image
                     with Image.open(image_path) as img:
@@ -657,20 +690,24 @@ class ScreenshotsTab(QWidget):
                         qt_image = QImage(img_qt.tobytes(), w, h, bytes_per_line, QImage.Format.Format_RGBA8888)
                         thumbnail_pixmap = QPixmap.fromImage(qt_image)
                         
-                        # Update the icon
-                        scaled_pixmap = thumbnail_pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                        item.setIcon(QIcon(scaled_pixmap))
-                        
-                        # Update tooltip
-                        item.setToolTip(f"Click to view: {os.path.basename(image_path)}\nPress DELETE to remove")
-                        
-                        break
-                        
+                        # Update the thumbnail display
+                        thumbnail_label = self.thumbnail_table.cellWidget(row, 0)
+                        if isinstance(thumbnail_label, QLabel):
+                            scaled_pixmap = thumbnail_pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                            thumbnail_label.setPixmap(scaled_pixmap)
+                    
+                    print(f"[DEBUG] Thumbnail updated for cropped image: {image_path}")
+                    break
+                    
         except Exception as e:
             print(f"Error updating thumbnail for {image_path}: {e}")
     
-    def on_thumbnail_clicked(self, item: QListWidgetItem):
+    def on_thumbnail_clicked(self, row: int, column: int):
         """Handle thumbnail click to display image or play video."""
+        item = self.thumbnail_table.item(row, 0)
+        if not item:
+            return
+            
         media_path = item.data(Qt.ItemDataRole.UserRole)
         media_type = item.data(Qt.ItemDataRole.UserRole + 1)
         
@@ -743,13 +780,13 @@ class ScreenshotsTab(QWidget):
         self.status_label.setText(f"🎬 Playing: {os.path.basename(video_path)}")
         self.status_label.setStyleSheet("color: #1976d2;")
     
-    def on_thumbnail_selection_changed(self, current: QListWidgetItem, previous: QListWidgetItem):
+    def on_thumbnail_selection_changed(self, current_row: int, current_column: int, previous_row: int, previous_column: int):
         """Handle thumbnail selection change."""
-        if current:
-            self.on_thumbnail_clicked(current)
+        if current_row >= 0:
+            self.on_thumbnail_clicked(current_row, current_column)
     
     def clear_all_images(self):
-        """Clear all images and videos from the directory and list."""
+        """Clear all images and videos from the directory and table."""
         from PyQt6.QtWidgets import QMessageBox
         
         reply = QMessageBox.question(
@@ -769,8 +806,8 @@ class ScreenshotsTab(QWidget):
                     if filename.lower().endswith(supported_extensions):
                         os.remove(os.path.join(self.image_stack_folder, filename))
                 
-                # Clear the list and display
-                self.thumbnail_list.clear()
+                # Clear the table and display
+                self.thumbnail_table.setRowCount(0)
                 self.image_label.clear()
                 self.image_label.setText("Screenshot will appear here")
                 self.current_pixmap = None
@@ -856,7 +893,7 @@ class ScreenshotsTab(QWidget):
             os.makedirs(self.image_stack_folder)
         
         # Clear existing thumbnails before reloading to prevent duplicates
-        self.thumbnail_list.clear()
+        self.thumbnail_table.setRowCount(0)
         
         self.load_existing_images()
     
@@ -970,7 +1007,7 @@ class ScreenshotsTab(QWidget):
                 try:
                     pil_image.save(filepath, "PNG")
                     self.current_image_path = filepath
-                    self.add_thumbnail_to_list(filepath)
+                    self.add_thumbnail_to_table(filepath)
                 except Exception as save_error:
                     print(f"Failed to save screenshot: {str(save_error)}")
                 
@@ -1067,16 +1104,18 @@ class ScreenshotsTab(QWidget):
             return False
     
     def eventFilter(self, obj, event):
-        """Handle keyboard events for the thumbnail list."""
-        if obj == self.thumbnail_list and event.type() == QEvent.Type.KeyPress:
+        """Handle keyboard events for the thumbnail table."""
+        if obj == self.thumbnail_table and event.type() == QEvent.Type.KeyPress:
             if event.key() == Qt.Key.Key_Delete:
-                current_item = self.thumbnail_list.currentItem()
-                if current_item:
-                    self.delete_selected_thumbnail(current_item)
+                current_row = self.thumbnail_table.currentRow()
+                if current_row >= 0:
+                    current_item = self.thumbnail_table.item(current_row, 0)
+                    if current_item:
+                        self.delete_selected_thumbnail(current_item, current_row)
                 return True
         return super().eventFilter(obj, event)
     
-    def delete_selected_thumbnail(self, item: QListWidgetItem):
+    def delete_selected_thumbnail(self, item: QTableWidgetItem, row: int):
         """Delete the selected thumbnail and its associated file."""
         try:
             image_path = item.data(Qt.ItemDataRole.UserRole)
@@ -1088,14 +1127,13 @@ class ScreenshotsTab(QWidget):
             if os.path.exists(image_path):
                 os.remove(image_path)
                 
-            row = self.thumbnail_list.row(item)
-            self.thumbnail_list.takeItem(row)
+            self.thumbnail_table.removeRow(row)
             
             filename = os.path.basename(image_path)
             self.status_label.setText(f"🗑️ Deleted: {filename}")
             self.status_label.setStyleSheet("color: #ff5722; padding: 10px; background-color: #f0f0f0; border-radius: 4px; margin: 10px 0;")
             
-            if self.thumbnail_list.count() == 0:
+            if self.thumbnail_table.rowCount() == 0:
                 self.image_label.clear()
                 self.image_label.setText("Screenshot will appear here")
                 self.current_pixmap = None
@@ -1118,10 +1156,10 @@ class ScreenshotsTab(QWidget):
                 QMessageBox.warning(self, "Error", "No story selected. Please select a story first.")
                 return
             
-            # Get all image paths from thumbnail list
+            # Get all image paths from thumbnail table
             image_paths = []
-            for i in range(self.thumbnail_list.count()):
-                item = self.thumbnail_list.item(i)
+            for i in range(self.thumbnail_table.rowCount()):
+                item = self.thumbnail_table.item(i, 0)
                 if item and item.data(Qt.ItemDataRole.UserRole):
                     image_paths.append(item.data(Qt.ItemDataRole.UserRole))
             
