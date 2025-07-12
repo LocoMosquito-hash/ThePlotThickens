@@ -12,7 +12,7 @@ associated visual media in a spoiler-free manner.
 import os
 import sys
 import json
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
@@ -531,6 +531,7 @@ class MediaLoadingWorker(QThread):
     media_found = pyqtSignal(list)  # List of media asset dictionaries
     loading_completed = pyqtSignal()  # Loading finished successfully
     loading_failed = pyqtSignal(str)  # Error message
+    conditional_encountered = pyqtSignal(str, str, int)  # condition_text, condition_type, line_number
     
     def __init__(self, source_path: str, label_name: str, parent=None):
         """Initialize the media loading worker.
@@ -544,6 +545,11 @@ class MediaLoadingWorker(QThread):
         self.source_path = source_path
         self.label_name = label_name
         self._is_cancelled = False
+        
+        # Conditional processing state
+        self._conditional_choice = None  # 'yes', 'no', or 'dismiss_all'
+        self._dismiss_all_conditionals = False
+        self._waiting_for_choice = False
     
     def run(self):
         """Run the media loading process."""
@@ -645,14 +651,18 @@ class MediaLoadingWorker(QThread):
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                     lines = f.readlines()
                 
-                for line_num, line in enumerate(lines, 1):
+                line_idx = 0
+                while line_idx < len(lines):
                     if self._is_cancelled:
                         break
                         
+                    line = lines[line_idx]
+                    line_num = line_idx + 1
                     line_content = line.strip()
                     
                     # Skip comments and empty lines
                     if not line_content or line_content.startswith('#'):
+                        line_idx += 1
                         continue
                     
                     # Track current label
@@ -661,9 +671,41 @@ class MediaLoadingWorker(QThread):
                         if label_match:
                             current_label = label_match.group(1)
                             in_target_label = (current_label == label_name)
+                        line_idx += 1
+                        continue
                     
                     # If we're in the target label, look for asset references
                     elif in_target_label:
+                        # Check for conditionals first (if not dismissing all)
+                        if not self._dismiss_all_conditionals:
+                            conditional_result = self._check_for_conditional(line_content, line_num)
+                            if conditional_result:
+                                condition_type, condition_text = conditional_result
+                                
+                                # Emit signal and wait for user choice
+                                self._waiting_for_choice = True
+                                self.conditional_encountered.emit(condition_text, condition_type, line_num)
+                                
+                                # Wait for user response
+                                while self._waiting_for_choice and not self._is_cancelled:
+                                    self.msleep(50)  # Sleep for 50ms
+                                
+                                if self._is_cancelled:
+                                    break
+                                    
+                                # Handle user choice
+                                if self._conditional_choice == 'no':
+                                    # Skip this conditional block - find next line at same or lower indentation
+                                    current_indentation = len(line) - len(line.lstrip())
+                                    skip_to_line = self._find_next_line_at_indentation(lines, line_idx, current_indentation)
+                                    line_idx = skip_to_line
+                                    continue
+                                elif self._conditional_choice == 'dismiss_all':
+                                    # Continue processing normally
+                                    pass
+                                # 'yes' choice continues processing normally
+                        
+                        # Look for asset references
                         for pattern, asset_type in asset_patterns:
                             matches = re.findall(pattern, line_content, re.IGNORECASE)
                             for match in matches:
@@ -682,6 +724,8 @@ class MediaLoadingWorker(QThread):
                                 asset_info['path'] = full_path
                                 
                                 media_assets.append(asset_info)
+                    
+                    line_idx += 1
             
             except Exception as e:
                 # Skip files that can't be read
@@ -1088,6 +1132,104 @@ class MediaLoadingWorker(QThread):
     def cancel(self):
         """Cancel the media loading."""
         self._is_cancelled = True
+    
+    def set_conditional_choice(self, choice: str):
+        """Set the user's choice for conditional processing.
+        
+        Args:
+            choice: 'yes', 'no', or 'dismiss_all'
+        """
+        self._conditional_choice = choice
+        if choice == 'dismiss_all':
+            self._dismiss_all_conditionals = True
+        self._waiting_for_choice = False
+    
+    def _check_for_conditional(self, line_content: str, line_num: int) -> Optional[Tuple[str, str]]:
+        """Check if a line contains a conditional statement.
+        
+        Args:
+            line_content: The line to check
+            line_num: Line number
+            
+        Returns:
+            Tuple of (condition_type, condition_text) if conditional found, None otherwise
+        """
+        import re
+        
+        # Check for if statements
+        if_match = re.match(r'^\s*if\s+(.+):', line_content)
+        if if_match:
+            condition_text = if_match.group(1).strip()
+            return ('if', f"if {condition_text}:")
+        
+        # Check for menu choices (quoted strings ending with colon)
+        menu_match = re.match(r'^\s*"([^"]+)"\s*:', line_content)
+        if menu_match:
+            choice_text = menu_match.group(1)
+            return ('menu', f'"{choice_text}":')
+        
+        return None
+    
+    def _find_next_line_at_indentation(self, lines: List[str], start_line_idx: int, base_indentation: int) -> int:
+        """Find the next line at the same or lower indentation level to skip to.
+        
+        Args:
+            lines: List of all lines
+            start_line_idx: Index of the conditional line
+            base_indentation: Indentation level of the conditional
+            
+        Returns:
+            Index of the next line to process (same or lower indentation)
+        """
+        i = start_line_idx + 1  # Start from next line after conditional
+        
+        while i < len(lines):
+            line = lines[i]
+            line_content = line.strip()
+            
+            # Skip empty lines and comments
+            if not line_content or line_content.startswith('#'):
+                i += 1
+                continue
+            
+            line_indentation = len(line) - len(line.lstrip())
+            
+            # If we hit a line with same or less indentation, we're done with this block
+            if line_indentation <= base_indentation:
+                return i
+            
+            i += 1
+        
+        # If we reach the end of the file, return the last line index
+        return len(lines)
+    
+    def _skip_conditional_block(self, lines: List[str], start_line_idx: int, base_indentation: int) -> List[str]:
+        """Skip a conditional block by removing lines with higher indentation.
+        
+        Args:
+            lines: List of all lines
+            start_line_idx: Index of the conditional line
+            base_indentation: Indentation level of the conditional
+            
+        Returns:
+            Modified list of lines with conditional block removed
+        """
+        modified_lines = lines[:start_line_idx]  # Keep lines before conditional
+        
+        i = start_line_idx
+        while i < len(lines):
+            line = lines[i]
+            line_indentation = len(line) - len(line.lstrip())
+            
+            # If we hit a line with same or less indentation, we're done with this block
+            if line.strip() and line_indentation <= base_indentation:
+                # Add remaining lines
+                modified_lines.extend(lines[i:])
+                break
+            
+            i += 1
+        
+        return modified_lines
 
     def _load_video_asset_mappings(self) -> Dict[str, str]:
         """
@@ -1406,6 +1548,153 @@ class MinimalThumbnailWidget(QLabel):
                 self.setText("Invalid Image")
         else:
             self.setText("Image Not Found")
+
+
+class ConditionalChoiceDialog(QDialog):
+    """Dialog for handling conditional choices during asset processing."""
+    
+    def __init__(self, condition_text: str, condition_type: str, line_number: int, parent=None):
+        """Initialize the conditional choice dialog.
+        
+        Args:
+            condition_text: The text of the conditional (e.g., "pursue_morgan", "Are you still feeling lonely?")
+            condition_type: Type of conditional ('if' or 'menu')
+            line_number: Line number where the conditional appears
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.condition_text = condition_text
+        self.condition_type = condition_type
+        self.line_number = line_number
+        self.user_choice = None
+        
+        self.init_ui()
+        
+    def init_ui(self):
+        """Initialize the UI components."""
+        self.setWindowTitle("RenPy Conditional Found")
+        self.setModal(True)
+        self.setMinimumSize(500, 300)
+        
+        layout = QVBoxLayout()
+        
+        # Title
+        title_label = QLabel(f"RenPy {self.condition_type.title()} Statement Found")
+        title_label.setStyleSheet("font-weight: bold; font-size: 14px; margin-bottom: 10px;")
+        layout.addWidget(title_label)
+        
+        # Condition info
+        info_frame = QFrame()
+        info_frame.setFrameStyle(QFrame.Shape.Box)
+        info_frame.setStyleSheet("QFrame { background-color: #f0f0f0; border: 1px solid #ccc; padding: 10px; }")
+        info_layout = QVBoxLayout(info_frame)
+        
+        # Line number
+        line_label = QLabel(f"Line {self.line_number}")
+        line_label.setStyleSheet("font-weight: bold; color: #666;")
+        info_layout.addWidget(line_label)
+        
+        # Condition text
+        condition_label = QLabel(self.condition_text)
+        condition_label.setWordWrap(True)
+        condition_label.setStyleSheet("font-family: monospace; font-size: 12px; margin: 5px 0;")
+        info_layout.addWidget(condition_label)
+        
+        layout.addWidget(info_frame)
+        
+        # Explanation
+        explanation_text = ""
+        if self.condition_type == "if":
+            explanation_text = ("This is an IF statement. Assets and dialog inside this block will only appear "
+                              "if the condition is met in the game. Do you want to include these assets?")
+        elif self.condition_type == "menu":
+            explanation_text = ("This is a MENU choice. Assets and dialog inside this block will only appear "
+                              "if the player selects this option. Do you want to include these assets?")
+        
+        explanation_label = QLabel(explanation_text)
+        explanation_label.setWordWrap(True)
+        explanation_label.setStyleSheet("margin: 15px 0; color: #444;")
+        layout.addWidget(explanation_label)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        # Yes button
+        yes_button = QPushButton("Yes - Include Assets")
+        yes_button.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; padding: 8px 16px; font-weight: bold; }")
+        yes_button.clicked.connect(self.on_yes_clicked)
+        button_layout.addWidget(yes_button)
+        
+        # No button  
+        no_button = QPushButton("No - Skip Assets")
+        no_button.setStyleSheet("QPushButton { background-color: #f44336; color: white; padding: 8px 16px; font-weight: bold; }")
+        no_button.clicked.connect(self.on_no_clicked)
+        button_layout.addWidget(no_button)
+        
+        # Dismiss All button
+        dismiss_button = QPushButton("Dismiss All - Include Everything")
+        dismiss_button.setStyleSheet("QPushButton { background-color: #FF9800; color: white; padding: 8px 16px; font-weight: bold; }")
+        dismiss_button.clicked.connect(self.on_dismiss_all_clicked)
+        button_layout.addWidget(dismiss_button)
+        
+        layout.addLayout(button_layout)
+        
+        # Help text
+        help_text = QLabel("• Yes: Process assets and dialog inside this conditional\n"
+                          "• No: Skip this conditional block entirely\n"
+                          "• Dismiss All: Include all assets without asking again")
+        help_text.setStyleSheet("font-size: 10px; color: #666; margin-top: 10px; border-top: 1px solid #ccc; padding-top: 10px;")
+        layout.addWidget(help_text)
+        
+        self.setLayout(layout)
+        
+        # Apply dark theme
+        try:
+            import qdarktheme
+            self.setStyleSheet(qdarktheme.load_stylesheet("dark"))
+        except ImportError:
+            # Fallback styling if qdarktheme is not available
+            self.setStyleSheet("""
+                QDialog {
+                    background-color: #2b2b2b;
+                    color: #ffffff;
+                }
+                QLabel {
+                    color: #ffffff;
+                }
+                QPushButton {
+                    background-color: #404040;
+                    color: #ffffff;
+                    border: 1px solid #606060;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #505050;
+                }
+                QPushButton:pressed {
+                    background-color: #353535;
+                }
+                QFrame {
+                    background-color: #353535;
+                    border: 1px solid #555555;
+                }
+            """)
+        
+    def on_yes_clicked(self):
+        """Handle Yes button click."""
+        self.user_choice = 'yes'
+        self.accept()
+        
+    def on_no_clicked(self):
+        """Handle No button click."""
+        self.user_choice = 'no'
+        self.accept()
+        
+    def on_dismiss_all_clicked(self):
+        """Handle Dismiss All button click."""
+        self.user_choice = 'dismiss_all'
+        self.accept()
 
 
 class DialogSearchTab(QWidget):
@@ -2152,6 +2441,7 @@ class DialogSearchTab(QWidget):
         self.media_worker.media_found.connect(self._on_media_found)
         self.media_worker.loading_completed.connect(self._on_media_loading_completed)
         self.media_worker.loading_failed.connect(self._on_media_loading_failed)
+        self.media_worker.conditional_encountered.connect(self._on_conditional_encountered)
         self.media_worker.start()
     
     def _on_media_found(self, media_assets: List[Dict[str, Any]]):
@@ -2227,6 +2517,27 @@ class DialogSearchTab(QWidget):
             error_message: Error description
         """
         self._show_gallery_error(f"Failed to load media: {error_message}")
+    
+    def _on_conditional_encountered(self, condition_text: str, condition_type: str, line_number: int):
+        """Handle conditional encountered during media loading.
+        
+        Args:
+            condition_text: Text of the conditional
+            condition_type: Type of conditional ('if' or 'menu')
+            line_number: Line number where conditional appears
+        """
+        # Show the conditional choice dialog
+        dialog = ConditionalChoiceDialog(condition_text, condition_type, line_number, self)
+        result = dialog.exec()
+        
+        if result == QDialog.DialogCode.Accepted and dialog.user_choice:
+            # Send the user's choice back to the worker
+            if self.media_worker:
+                self.media_worker.set_conditional_choice(dialog.user_choice)
+        else:
+            # User cancelled or closed dialog - treat as 'no'
+            if self.media_worker:
+                self.media_worker.set_conditional_choice('no')
     
     def _show_gallery_message(self, message: str):
         """Show a message in the gallery area.
