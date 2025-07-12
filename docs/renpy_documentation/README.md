@@ -18,6 +18,22 @@ This directory contains essential Ren'Py documentation fetched for offline use i
 | **[language_basics.md](./language_basics.md)**         | Core syntax and structure     | Script parsing and analysis foundations  |
 | **[labels_control_flow.md](./labels_control_flow.md)** | Story structure and branching | Critical for narrative flow tracking     |
 
+### 🔀 Control Flow & Decision Points
+
+| Document                                           | Purpose                      | Relevance to TPT                          |
+| -------------------------------------------------- | ---------------------------- | ----------------------------------------- |
+| **[menus.md](./menus.md)**                         | In-game menus and choices    | Decision point analysis and branching     |
+| **[conditional.md](./conditional.md)**             | if/elif/else, while loops    | Understanding script logic and conditions |
+| **[python_statements.md](./python_statements.md)** | Python integration in Ren'Py | Variable management and state tracking    |
+| **[dialogue.md](./dialogue.md)**                   | Text and character systems   | Dialogue parsing and character extraction |
+
+### 🎨 Asset Management
+
+| Document                                           | Purpose                        | Relevance to TPT                         |
+| -------------------------------------------------- | ------------------------------ | ---------------------------------------- |
+| **[displaying_images.md](./displaying_images.md)** | Image organization and display | Visual asset management and organization |
+| **[audio.md](./audio.md)**                         | Sound and music management     | Audio asset tracking and organization    |
+
 ### 🔧 Setup Information
 
 - **Fetch MCP Server:** Successfully configured and working
@@ -169,14 +185,26 @@ After restarting Cursor, you can request:
 3. **Improve character extraction patterns** based on Ren'Py conventions
 4. **Update story visualization** to match Ren'Py mental models
 
+### Additional Documentation Available
+
+With the expanded documentation, we now have comprehensive coverage of:
+
+✅ **In-Game Menus** - Complete choice mechanics and decision trees  
+✅ **Displaying Images** - Full asset management and layer systems  
+✅ **Dialogue and Narration** - Character objects and text processing  
+✅ **Python Statements** - Variable management and script integration  
+✅ **Conditional Statements** - Branching logic and flow control  
+✅ **Audio System** - Sound, music, and voice asset organization
+
 ### Future Documentation Needs
 
-Consider fetching these additional sections:
+Consider fetching these additional sections when needed:
 
-- **In-Game Menus** - for choice mechanics
-- **Displaying Images** - for asset management
-- **Dialogue and Narration** - for text processing
-- **Python Statements** - for advanced script analysis
+- **Transforms** - for animation and positioning
+- **Configuration Variables** - for project settings analysis
+- **Movie/Video** - for video asset management
+- **Store Variables** - for save data and persistence
+- **Screens and Screen Language** - for UI analysis
 
 ## 🎯 Conclusion
 
