@@ -299,26 +299,63 @@ class CrosshairOverlay(QWidget):
             original_pixmap = screenshots_tab.current_pixmap
             original_image_path = screenshots_tab.current_image_path
             
-            # Scale crop rectangle to match original image coordinates
-            display_size = screenshots_tab.image_label.size()
+            # Get container and original image sizes
+            container_size = screenshots_tab.image_label.size()
             original_size = original_pixmap.size()
             
             # Check that we have valid crop rectangle and sizes
-            if self.crop_rect is None or display_size.isEmpty() or original_size.isEmpty():
+            if self.crop_rect is None or container_size.isEmpty() or original_size.isEmpty():
                 QMessageBox.warning(self.parent_widget, "Error", "Invalid crop area or image size.")
                 self.clear_rectangle()
                 return
             
-            # Calculate scale factors
-            scale_x = original_size.width() / display_size.width()
-            scale_y = original_size.height() / display_size.height()
+            # Calculate the actual displayed image size within the container
+            # The image is scaled to fit while maintaining aspect ratio
+            container_aspect = container_size.width() / container_size.height()
+            original_aspect = original_size.width() / original_size.height()
+            
+            if original_aspect > container_aspect:
+                # Image is wider than container aspect - fit by width
+                displayed_width = container_size.width()
+                displayed_height = int(displayed_width / original_aspect)
+                offset_x = 0
+                offset_y = (container_size.height() - displayed_height) // 2
+            else:
+                # Image is taller than container aspect - fit by height
+                displayed_height = container_size.height()
+                displayed_width = int(displayed_height * original_aspect)
+                offset_x = (container_size.width() - displayed_width) // 2
+                offset_y = 0
+            
+            # Convert crop rectangle from container coordinates to displayed image coordinates
+            # First, adjust for the offset (white space around the image)
+            adjusted_crop_rect = QRect(
+                self.crop_rect.x() - offset_x,
+                self.crop_rect.y() - offset_y,
+                self.crop_rect.width(),
+                self.crop_rect.height()
+            )
+            
+            # Ensure the crop rectangle is within the displayed image bounds
+            displayed_image_rect = QRect(0, 0, displayed_width, displayed_height)
+            adjusted_crop_rect = adjusted_crop_rect.intersected(displayed_image_rect)
+            
+            # If the crop rectangle is completely outside the image, show a warning
+            if adjusted_crop_rect.isEmpty():
+                QMessageBox.warning(self.parent_widget, "Error", "Crop area is outside the image bounds.")
+                self.clear_rectangle()
+                return
+            
+            # Calculate scale factors from displayed image to original image
+            scale_x = original_size.width() / displayed_width
+            scale_y = original_size.height() / displayed_height
             
             # Convert crop rectangle to original image coordinates
             final_crop_rect = QRect(
-                int(self.crop_rect.x() * scale_x),
-                int(self.crop_rect.y() * scale_y),
-                int(self.crop_rect.width() * scale_x),
-                int(self.crop_rect.height() * scale_y)
+                int(adjusted_crop_rect.x() * scale_x),
+                int(adjusted_crop_rect.y() * scale_y),
+                int(adjusted_crop_rect.width() * scale_x),
+                int(adjusted_crop_rect.height() * scale_y)
             )
             
             # Ensure crop rectangle is within image bounds

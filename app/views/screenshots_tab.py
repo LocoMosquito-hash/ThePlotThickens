@@ -22,7 +22,7 @@ from typing import List, Tuple, Optional, Dict, Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QScrollArea, QCheckBox, QListWidget, QListWidgetItem, QMessageBox, QProgressDialog,
-    QTableWidget, QTableWidgetItem, QHeaderView
+    QTableWidget, QTableWidgetItem, QHeaderView, QSplitter
 )
 from PyQt6.QtCore import Qt, QSettings, QThread, pyqtSignal, QTimer, QSize, QEvent, QPoint, QRect, QUrl
 from PyQt6.QtGui import QFont, QPixmap, QImage, QIcon, QPainter, QColor, QPen
@@ -217,16 +217,17 @@ class ScreenshotsTab(QWidget):
             
         if horizontal_header:
             horizontal_header.setVisible(True)  # Show headers now that we have meaningful columns
-            # Configure column sizing: Thumbnail(fixed wider), Filename(stretch), Duplicates(auto), Dialog Context(fixed width)
-            horizontal_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-            horizontal_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-            horizontal_header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-            horizontal_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+            # Configure column sizing: Make all columns resizable
+            horizontal_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)  # Thumbnail - resizable
+            horizontal_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)  # Filename - resizable
+            horizontal_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)  # Duplicates - resizable
+            horizontal_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)  # Dialog Context - resizable
             
-            # Set fixed width for thumbnail column (wider for better viewing)
-            self.thumbnail_table.setColumnWidth(0, 200)  # Fixed width for thumbnails (was auto-sized)
-            # Set fixed width for dialog context column
-            self.thumbnail_table.setColumnWidth(3, 200)  # Fixed width for dialog context
+            # Set default column widths
+            self.thumbnail_table.setColumnWidth(0, 200)  # Thumbnail column
+            self.thumbnail_table.setColumnWidth(1, 150)  # Filename column
+            self.thumbnail_table.setColumnWidth(2, 80)   # Duplicates column
+            self.thumbnail_table.setColumnWidth(3, 200)  # Dialog Context column
         self.thumbnail_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.thumbnail_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         
@@ -319,7 +320,6 @@ class ScreenshotsTab(QWidget):
         # Create thumbnail panel widget
         thumbnail_widget = QWidget()
         thumbnail_widget.setLayout(thumbnail_panel)
-        main_layout.addWidget(thumbnail_widget)
         
         # Right panel: Main screenshot interface
         right_layout = QVBoxLayout()
@@ -451,11 +451,16 @@ class ScreenshotsTab(QWidget):
         # Create right panel widget  
         right_widget = QWidget()
         right_widget.setLayout(right_layout)
-        main_layout.addWidget(right_widget)
         
-        # Set proportions: thumbnail panel takes more space now, main content takes rest
-        main_layout.setStretch(0, 3)  # Thumbnail panel - expanded for more horizontal space
-        main_layout.setStretch(1, 4)  # Main content - balanced with thumbnail expansion
+        # Create a splitter to combine thumbnail panel and right panel
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.addWidget(thumbnail_widget)
+        self.splitter.addWidget(right_widget)
+        
+        # Set initial splitter proportions (thumbnail panel gets 1/3, media preview gets 2/3)
+        self.splitter.setSizes([400, 800])  # Initial sizes for thumbnail and media preview
+        
+        main_layout.addWidget(self.splitter)
     
     def load_existing_images(self):
         """Load all existing images and videos from the image-stack folder."""
