@@ -1586,18 +1586,33 @@ class ConditionalChoiceDialog(QDialog):
         # Condition info
         info_frame = QFrame()
         info_frame.setFrameStyle(QFrame.Shape.Box)
-        info_frame.setStyleSheet("QFrame { background-color: #f0f0f0; border: 1px solid #ccc; padding: 10px; }")
+        info_frame.setStyleSheet("""
+            QFrame { 
+                background-color: #404040; 
+                border: 1px solid #606060; 
+                padding: 10px; 
+                border-radius: 4px;
+                color: #ffffff;
+            }
+        """)
         info_layout = QVBoxLayout(info_frame)
         
         # Line number
         line_label = QLabel(f"Line {self.line_number}")
-        line_label.setStyleSheet("font-weight: bold; color: #666;")
+        line_label.setStyleSheet("font-weight: bold; color: #cccccc; background-color: transparent;")
         info_layout.addWidget(line_label)
         
         # Condition text
         condition_label = QLabel(self.condition_text)
         condition_label.setWordWrap(True)
-        condition_label.setStyleSheet("font-family: monospace; font-size: 12px; margin: 5px 0;")
+        condition_label.setStyleSheet("""
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace; 
+            font-size: 12px; 
+            margin: 5px 0; 
+            color: #ffffff; 
+            background-color: transparent;
+            padding: 5px;
+        """)
         info_layout.addWidget(condition_label)
         
         layout.addWidget(info_frame)
@@ -1613,7 +1628,7 @@ class ConditionalChoiceDialog(QDialog):
         
         explanation_label = QLabel(explanation_text)
         explanation_label.setWordWrap(True)
-        explanation_label.setStyleSheet("margin: 15px 0; color: #444;")
+        explanation_label.setStyleSheet("margin: 15px 0; color: #cccccc; background-color: transparent;")
         layout.addWidget(explanation_label)
         
         # Buttons
@@ -1643,43 +1658,54 @@ class ConditionalChoiceDialog(QDialog):
         help_text = QLabel("• Yes: Process assets and dialog inside this conditional\n"
                           "• No: Skip this conditional block entirely\n"
                           "• Dismiss All: Include all assets without asking again")
-        help_text.setStyleSheet("font-size: 10px; color: #666; margin-top: 10px; border-top: 1px solid #ccc; padding-top: 10px;")
+        help_text.setStyleSheet("""
+            font-size: 10px; 
+            color: #aaaaaa; 
+            margin-top: 10px; 
+            border-top: 1px solid #555555; 
+            padding-top: 10px;
+            background-color: transparent;
+        """)
         layout.addWidget(help_text)
         
         self.setLayout(layout)
         
-        # Apply dark theme
-        try:
-            import qdarktheme
-            self.setStyleSheet(qdarktheme.load_stylesheet("dark"))
-        except ImportError:
-            # Fallback styling if qdarktheme is not available
-            self.setStyleSheet("""
-                QDialog {
-                    background-color: #2b2b2b;
-                    color: #ffffff;
-                }
-                QLabel {
-                    color: #ffffff;
-                }
-                QPushButton {
-                    background-color: #404040;
-                    color: #ffffff;
-                    border: 1px solid #606060;
-                    padding: 8px 16px;
-                    border-radius: 4px;
-                }
-                QPushButton:hover {
-                    background-color: #505050;
-                }
-                QPushButton:pressed {
-                    background-color: #353535;
-                }
-                QFrame {
-                    background-color: #353535;
-                    border: 1px solid #555555;
-                }
-            """)
+        # Apply comprehensive dark theme
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #2b2b2b;
+                color: #ffffff;
+            }
+            QLabel {
+                color: #ffffff;
+                background-color: transparent;
+            }
+            QPushButton {
+                background-color: #404040;
+                color: #ffffff;
+                border: 1px solid #606060;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #505050;
+                border: 1px solid #707070;
+            }
+            QPushButton:pressed {
+                background-color: #353535;
+            }
+            QFrame {
+                background-color: #353535;
+                border: 1px solid #555555;
+                color: #ffffff;
+                padding: 10px;
+                border-radius: 4px;
+            }
+            QVBoxLayout {
+                spacing: 10px;
+            }
+        """)
         
     def on_yes_clicked(self):
         """Handle Yes button click."""
