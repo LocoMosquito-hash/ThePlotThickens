@@ -34,6 +34,18 @@ This directory contains essential Ren'Py documentation fetched for offline use i
 | **[displaying_images.md](./displaying_images.md)** | Image organization and display | Visual asset management and organization |
 | **[audio.md](./audio.md)**                         | Sound and music management     | Audio asset tracking and organization    |
 
+### 🎬 Animation & Visual Dynamics
+
+| Document                             | Purpose                                    | Relevance to TPT                     |
+| ------------------------------------ | ------------------------------------------ | ------------------------------------ |
+| **[transforms.md](./transforms.md)** | Positioning, animation, and visual effects | Scene dynamics and movement analysis |
+
+### ⚙️ System Configuration
+
+| Document                     | Purpose                                      | Relevance to TPT                            |
+| ---------------------------- | -------------------------------------------- | ------------------------------------------- |
+| **[config.md](./config.md)** | Configuration variables and project settings | Project analysis and behavior understanding |
+
 ### 🔧 Setup Information
 
 - **Fetch MCP Server:** Successfully configured and working
@@ -194,17 +206,19 @@ With the expanded documentation, we now have comprehensive coverage of:
 ✅ **Dialogue and Narration** - Character objects and text processing  
 ✅ **Python Statements** - Variable management and script integration  
 ✅ **Conditional Statements** - Branching logic and flow control  
-✅ **Audio System** - Sound, music, and voice asset organization
+✅ **Audio System** - Sound, music, and voice asset organization  
+✅ **Configuration Variables** - Project settings and behavior control  
+✅ **Transforms** - Animation, positioning, and visual dynamics system
 
 ### Future Documentation Needs
 
 Consider fetching these additional sections when needed:
 
-- **Transforms** - for animation and positioning
-- **Configuration Variables** - for project settings analysis
+- **Screens and Screen Language** - for UI elements and interface analysis
 - **Movie/Video** - for video asset management
 - **Store Variables** - for save data and persistence
-- **Screens and Screen Language** - for UI analysis
+- **Text Formatting** - for advanced text tags and styling
+- **Translation** - for multi-language support analysis
 
 ## 🎯 Conclusion
 
