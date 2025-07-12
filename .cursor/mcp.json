@@ -43,6 +43,13 @@
         "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens"
       }
+    },
+    "fetch": {
+      "command": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\venv\\Scripts\\python.exe",
+      "args": ["-m", "mcp_server_fetch"],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
     }
   }
 }
