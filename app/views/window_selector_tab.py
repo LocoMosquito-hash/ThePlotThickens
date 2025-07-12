@@ -154,7 +154,7 @@ class WindowInfo:
             return {
                 "visible": win32gui.IsWindowVisible(self.hwnd),
                 "minimized": win32gui.IsIconic(self.hwnd),
-                "maximized": win32gui.IsZoomed(self.hwnd)
+                "maximized": getattr(win32gui, 'IsZoomed', lambda x: False)(self.hwnd)
             }
         except:
             return {"visible": False, "minimized": False, "maximized": False}
@@ -277,8 +277,8 @@ class CrosshairOverlay(QWidget):
             self.clear_rectangle()
     
     def perform_crop(self):
-        """Crop the current image and overwrite the original file."""
-        # Get the screenshots tab instance (navigate up the parent hierarchy)
+        """Crop the current image with precise coordinate transformation."""
+        # Get the screenshots tab instance
         screenshots_tab = self.parent_widget
         while screenshots_tab and not hasattr(screenshots_tab, 'current_pixmap'):
             screenshots_tab = screenshots_tab.parent()
@@ -287,91 +287,137 @@ class CrosshairOverlay(QWidget):
             QMessageBox.warning(self.parent_widget, "Error", "No image available for cropping.")
             self.clear_rectangle()
             return
-        
+
         # Check if we have the original image path
         if not hasattr(screenshots_tab, 'current_image_path') or not screenshots_tab.current_image_path:
             QMessageBox.warning(self.parent_widget, "Error", "Cannot determine original image file for overwriting.")
             self.clear_rectangle()
             return
-        
+
         try:
-            # Get the original pixmap and file path
+            # Get the original pixmap and validate
             original_pixmap = screenshots_tab.current_pixmap
             original_image_path = screenshots_tab.current_image_path
             
-            # Get container and original image sizes
-            container_size = screenshots_tab.image_label.size()
-            original_size = original_pixmap.size()
-            
-            # Check that we have valid crop rectangle and sizes
-            if self.crop_rect is None or container_size.isEmpty() or original_size.isEmpty():
-                QMessageBox.warning(self.parent_widget, "Error", "Invalid crop area or image size.")
+            if self.crop_rect is None:
+                QMessageBox.warning(self.parent_widget, "Error", "No crop area selected.")
                 self.clear_rectangle()
                 return
             
-            # Calculate the actual displayed image size within the container
-            # The image is scaled to fit while maintaining aspect ratio
-            container_aspect = container_size.width() / container_size.height()
-            original_aspect = original_size.width() / original_size.height()
+            # Get precise dimensions using double precision
+            container_width = float(screenshots_tab.image_label.width())
+            container_height = float(screenshots_tab.image_label.height())
+            original_width = float(original_pixmap.width())
+            original_height = float(original_pixmap.height())
             
+            # Validate dimensions
+            if container_width <= 0 or container_height <= 0 or original_width <= 0 or original_height <= 0:
+                QMessageBox.warning(self.parent_widget, "Error", "Invalid image or container dimensions.")
+                self.clear_rectangle()
+                return
+            
+            # Calculate aspect ratios with high precision
+            container_aspect = container_width / container_height
+            original_aspect = original_width / original_height
+            
+            # Calculate displayed image dimensions and position within container
+            # This is the key calculation - we need to determine exactly how Qt scales and positions the image
             if original_aspect > container_aspect:
-                # Image is wider than container aspect - fit by width
-                displayed_width = container_size.width()
-                displayed_height = int(displayed_width / original_aspect)
-                offset_x = 0
-                offset_y = (container_size.height() - displayed_height) // 2
+                # Image is wider than container - fit by width (black bars on top/bottom)
+                displayed_width = container_width
+                displayed_height = container_width / original_aspect
+                offset_x = 0.0
+                offset_y = (container_height - displayed_height) / 2.0
             else:
-                # Image is taller than container aspect - fit by height
-                displayed_height = container_size.height()
-                displayed_width = int(displayed_height * original_aspect)
-                offset_x = (container_size.width() - displayed_width) // 2
-                offset_y = 0
+                # Image is taller than container - fit by height (black bars on left/right)
+                displayed_height = container_height
+                displayed_width = container_height * original_aspect
+                offset_x = (container_width - displayed_width) / 2.0
+                offset_y = 0.0
             
-            # Convert crop rectangle from container coordinates to displayed image coordinates
-            # First, adjust for the offset (white space around the image)
-            adjusted_crop_rect = QRect(
-                self.crop_rect.x() - offset_x,
-                self.crop_rect.y() - offset_y,
-                self.crop_rect.width(),
-                self.crop_rect.height()
-            )
+            # Get crop rectangle coordinates with high precision
+            crop_x = float(self.crop_rect.x())
+            crop_y = float(self.crop_rect.y())
+            crop_width = float(self.crop_rect.width())
+            crop_height = float(self.crop_rect.height())
             
-            # Ensure the crop rectangle is within the displayed image bounds
-            displayed_image_rect = QRect(0, 0, displayed_width, displayed_height)
-            adjusted_crop_rect = adjusted_crop_rect.intersected(displayed_image_rect)
+            # Transform crop coordinates from container space to displayed image space
+            # This removes the white space offset
+            image_crop_x = crop_x - offset_x
+            image_crop_y = crop_y - offset_y
             
-            # If the crop rectangle is completely outside the image, show a warning
-            if adjusted_crop_rect.isEmpty():
-                QMessageBox.warning(self.parent_widget, "Error", "Crop area is outside the image bounds.")
+            # Handle crop areas that start in the white space (outside the actual image)
+            if image_crop_x < 0:
+                # Crop starts in left white space - adjust width and start position
+                crop_width += image_crop_x  # Reduce width by the amount in white space
+                image_crop_x = 0.0
+            if image_crop_y < 0:
+                # Crop starts in top white space - adjust height and start position  
+                crop_height += image_crop_y  # Reduce height by the amount in white space
+                image_crop_y = 0.0
+            
+            # Clamp crop area to displayed image bounds
+            if image_crop_x + crop_width > displayed_width:
+                crop_width = displayed_width - image_crop_x
+            if image_crop_y + crop_height > displayed_height:
+                crop_height = displayed_height - image_crop_y
+            
+            # Check if we have a valid crop area after adjustments
+            if crop_width <= 0 or crop_height <= 0:
+                QMessageBox.warning(self.parent_widget, "Error", 
+                                  "Crop area is entirely outside the image bounds.")
                 self.clear_rectangle()
                 return
             
             # Calculate scale factors from displayed image to original image
-            scale_x = original_size.width() / displayed_width
-            scale_y = original_size.height() / displayed_height
+            scale_x = original_width / displayed_width
+            scale_y = original_height / displayed_height
             
-            # Convert crop rectangle to original image coordinates
-            final_crop_rect = QRect(
-                int(adjusted_crop_rect.x() * scale_x),
-                int(adjusted_crop_rect.y() * scale_y),
-                int(adjusted_crop_rect.width() * scale_x),
-                int(adjusted_crop_rect.height() * scale_y)
-            )
+            # Transform to original image coordinates with high precision
+            orig_crop_x = image_crop_x * scale_x
+            orig_crop_y = image_crop_y * scale_y
+            orig_crop_width = crop_width * scale_x
+            orig_crop_height = crop_height * scale_y
             
-            # Ensure crop rectangle is within image bounds
-            final_crop_rect = final_crop_rect.intersected(
-                QRect(0, 0, original_size.width(), original_size.height())
-            )
+            # Convert to integers for QRect with proper rounding
+            final_x = max(0, int(round(orig_crop_x)))
+            final_y = max(0, int(round(orig_crop_y)))
+            final_width = min(int(round(orig_crop_width)), int(original_width) - final_x)
+            final_height = min(int(round(orig_crop_height)), int(original_height) - final_y)
             
-            # Crop the image
+            # Final validation
+            if final_width <= 0 or final_height <= 0:
+                QMessageBox.warning(self.parent_widget, "Error", 
+                                  "Calculated crop area is invalid.")
+                self.clear_rectangle()
+                return
+            
+            # Debug information
+            print(f"Container: {container_width}x{container_height}")
+            print(f"Original: {original_width}x{original_height}")
+            print(f"Displayed: {displayed_width}x{displayed_height}")
+            print(f"Offset: {offset_x}, {offset_y}")
+            print(f"Crop rect: {crop_x}, {crop_y}, {crop_width}x{crop_height}")
+            print(f"Image crop: {image_crop_x}, {image_crop_y}, {crop_width}x{crop_height}")
+            print(f"Final crop: {final_x}, {final_y}, {final_width}x{final_height}")
+            
+            # Create the final crop rectangle
+            final_crop_rect = QRect(final_x, final_y, final_width, final_height)
+            
+            # Perform the crop
             cropped_pixmap = original_pixmap.copy(final_crop_rect)
             
-            # Overwrite the original file
+            if cropped_pixmap.isNull():
+                QMessageBox.warning(self.parent_widget, "Error", "Failed to crop image.")
+                self.clear_rectangle()
+                return
+            
+            # Save the cropped image
             if cropped_pixmap.save(original_image_path, "PNG"):
-                # Update the current pixmap to the cropped version
+                # Update the current pixmap and display
                 screenshots_tab.current_pixmap = cropped_pixmap
                 
-                # Update the display to show the cropped image
+                # Update the display
                 scaled_pixmap = cropped_pixmap.scaled(
                     screenshots_tab.image_label.size(), 
                     Qt.AspectRatioMode.KeepAspectRatio, 
@@ -379,22 +425,25 @@ class CrosshairOverlay(QWidget):
                 )
                 screenshots_tab.image_label.setPixmap(scaled_pixmap)
                 
-                # Update the thumbnail in the list if the method exists
+                # Update thumbnail if possible
                 if hasattr(screenshots_tab, 'update_thumbnail_after_crop'):
                     screenshots_tab.update_thumbnail_after_crop(original_image_path)
                 
-                # Update status
+                # Success message
                 filename = os.path.basename(original_image_path)
-                screenshots_tab.status_label.setText(f"✅ Image cropped and saved: {filename}")
+                crop_info = f"{final_width}x{final_height} from {int(original_width)}x{int(original_height)}"
+                screenshots_tab.status_label.setText(f"✅ Image cropped and saved: {filename} ({crop_info})")
                 screenshots_tab.status_label.setStyleSheet("color: #4caf50; padding: 10px; background-color: #f0f0f0; border-radius: 4px; margin: 10px 0;")
                 
-                # Clear the rectangle
                 self.clear_rectangle()
             else:
                 QMessageBox.warning(self.parent_widget, "Error", "Failed to save cropped image.")
                 
         except Exception as e:
             QMessageBox.critical(self.parent_widget, "Cropping Error", f"Failed to crop image: {str(e)}")
+            print(f"Cropping error: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             self.clear_rectangle()
     
@@ -461,11 +510,12 @@ class WindowPickerWidget(QWidget):
         
         # Configure table
         header = self.windows_table.horizontalHeader()
-        header.setStretchLastSection(True)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        if header:
+            header.setStretchLastSection(True)
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         
         self.windows_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.windows_table.itemSelectionChanged.connect(self.on_selection_changed)
