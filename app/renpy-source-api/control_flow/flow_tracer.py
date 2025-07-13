@@ -7,6 +7,7 @@ statements, and flow control commands.
 """
 
 import re
+import random
 from typing import List, Optional, Tuple, Dict, Any
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,12 +56,14 @@ class FlowTracer:
     jumps, calls, menus, or returns.
     """
     
-    def __init__(self, project_path: str):
+    def __init__(self, project_path: str, choice_strategy: str = "first", random_seed: Optional[int] = None):
         """
         Initialize FlowTracer with a Ren'Py project.
         
         Args:
             project_path: Path to the Ren'Py project root directory
+            choice_strategy: Strategy for menu choice selection ("first" or "random")
+            random_seed: Seed for random choice selection (for reproducible results)
             
         Raises:
             RenpyProjectError: If project is invalid
@@ -69,6 +72,15 @@ class FlowTracer:
         self.project_path = project_path
         self.parser = RenpyParser()
         self.start_finder = StartLabelFinder(project_path)
+        
+        # Choice selection strategy
+        if choice_strategy not in ["first", "random"]:
+            raise ValueError("choice_strategy must be 'first' or 'random'")
+        self.choice_strategy = choice_strategy
+        
+        # Set up random seed for reproducible results
+        if random_seed is not None:
+            random.seed(random_seed)
         
         # Get start location
         self.start_location = self.start_finder.get_start_location()
@@ -200,27 +212,30 @@ class FlowTracer:
         
         return None
 
-    def _parse_menu_choices(self, current_file_lines: List[RenpyLine], menu_line_idx: int) -> Optional[Tuple[str, str]]:
+    def _parse_menu_choices(self, current_file_lines: List[RenpyLine], menu_line_idx: int) -> List[Tuple[str, str]]:
         """
-        Parse menu choices and return the first available choice with its target.
+        Parse menu choices and return all available choices with their targets.
         
         Args:
             current_file_lines: Lines from the current file
             menu_line_idx: Index of the menu statement line
             
         Returns:
-            Tuple of (choice_text, target_action) for first choice, or None if no choices found
+            List of tuples (choice_text, target_action) for all choices found
         """
         choice_pattern = re.compile(r'^\s*"([^"]+)"\s*:', re.IGNORECASE)
         jump_pattern = re.compile(r'^\s*jump\s+(\w+)', re.IGNORECASE)
         
-        # Look for choices after the menu line
-        for i in range(menu_line_idx + 1, len(current_file_lines)):
+        choices = []
+        i = menu_line_idx + 1
+        
+        # Process lines after the menu
+        while i < len(current_file_lines):
             line = current_file_lines[i]
             content = line.content.strip()
             
-            # Stop if we hit another statement that ends the menu
-            if content and not content.startswith((' ', '\t', '"')) and ':' not in content:
+            # Stop if we hit a statement that ends the menu (like 'label')
+            if content.startswith('label '):
                 break
                 
             # Check if this is a choice
@@ -228,29 +243,32 @@ class FlowTracer:
             if choice_match:
                 choice_text = choice_match.group(1)
                 
-                # Look for the action on the next line(s)
-                for j in range(i + 1, min(i + 5, len(current_file_lines))):  # Look ahead max 5 lines
-                    action_line = current_file_lines[j]
+                # Look for the action on the next line
+                if i + 1 < len(current_file_lines):
+                    action_line = current_file_lines[i + 1]
                     action_content = action_line.content.strip()
                     
-                    if not action_content:
-                        continue
-                        
                     # Check for jump statement
                     jump_match = jump_pattern.match(action_content)
                     if jump_match:
                         target = jump_match.group(1)
-                        return (choice_text, f"jump {target}")
+                        choices.append((choice_text, f"jump {target}"))
+                        i += 2  # Skip the action line
+                        continue
                     
                     # Check for other actions (return, call, etc.)
                     if action_content.startswith(('return', 'call', 'scene', 'show')):
-                        return (choice_text, action_content)
-                    
-                    # If we hit another choice or unrelated content, break
-                    if choice_pattern.match(action_content) or (action_content and not action_content.startswith((' ', '\t'))):
-                        break
+                        choices.append((choice_text, action_content))
+                        i += 2  # Skip the action line
+                        continue
+                
+                # If no valid action found, skip this choice
+                i += 1
+            else:
+                # Not a choice line, move to next
+                i += 1
         
-        return None
+        return choices
     
     def _get_file_lines(self, file_path: str) -> List[RenpyLine]:
         """
@@ -418,12 +436,12 @@ class FlowTracer:
                     step_count += 1
                     continue  # Continue tracing from the jump target
                 
-                # Special handling for menu statements - follow first choice
+                # Special handling for menu statements - follow selected choice
                 if stmt_type == 'menu':
-                    # Parse the menu choices and get the first one
-                    first_choice = self._parse_menu_choices(current_file_lines, current_line_idx)
+                    # Parse all menu choices
+                    all_choices = self._parse_menu_choices(current_file_lines, current_line_idx)
                     
-                    if first_choice is None:
+                    if not all_choices:
                         # No choices found in menu - stop tracing
                         return FlowTraceResult(
                             start_location=self.start_location,
@@ -434,10 +452,25 @@ class FlowTracer:
                             flow_control_encountered='menu'
                         )
                     
-                    choice_text, action = first_choice
+                    # Select choice based on strategy
+                    if self.choice_strategy == "first":
+                        selected_choice = all_choices[0]
+                    elif self.choice_strategy == "random":
+                        selected_choice = random.choice(all_choices)
+                    else:
+                        # Fallback to first choice
+                        selected_choice = all_choices[0]
+                    
+                    choice_text, action = selected_choice
                     
                     # Add the choice selection as metadata to the current step
-                    step.parsed_data = {'choice_selected': choice_text, 'action': action}
+                    step.parsed_data = {
+                        'choice_selected': choice_text, 
+                        'action': action,
+                        'strategy': self.choice_strategy,
+                        'all_choices': [choice for choice, _ in all_choices],
+                        'total_choices': len(all_choices)
+                    }
                     
                     # Parse the action to see what to do
                     if action.startswith('jump '):
