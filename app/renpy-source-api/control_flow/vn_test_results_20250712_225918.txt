@@ -1,0 +1,373 @@
+StartLabelFinder Test Results
+Generated: 2025-07-12 22:59:18
+
+VN: LastCall
+Path: T:\AG\LastCall-0.4-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:134
+RPY files: 117
+Parse time: 0.3628957271575928
+Error: None
+--------------------------------------------------
+VN: MySisterMyRoommate
+Path: T:\AG\MySisterMyRoommateV1.69-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:97
+RPY files: 13
+Parse time: 0.3725402355194092
+Error: None
+--------------------------------------------------
+VN: AlisonFalloftheApple
+Path: T:\AG\AlisonFalloftheApple-1.0-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: prologue.rpy:2
+RPY files: 20
+Parse time: 1.579190731048584
+Error: None
+--------------------------------------------------
+VN: TheAlphaGender
+Path: T:\AG\TheAlphaGender-0.3b-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:82
+RPY files: 37
+Parse time: 1.3557496070861816
+Error: None
+--------------------------------------------------
+VN: ThisTime
+Path: T:\AG\ThisTime\game\scripts
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:117
+RPY files: 38
+Parse time: 1.0442757606506348
+Error: None
+--------------------------------------------------
+VN: DeviantAnomalies
+Path: T:\AG\DeviantAnomalies-0.9.5-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:599
+RPY files: 61
+Parse time: 3.76224422454834
+Error: None
+--------------------------------------------------
+VN: Savior
+Path: T:\AG\Savior-0.16c-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:311
+RPY files: 47
+Parse time: 5.970249891281128
+Error: None
+--------------------------------------------------
+VN: DetectiveNecro
+Path: T:\AG\DetectiveNecro-0.55-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:1
+RPY files: 21
+Parse time: 0.9141793251037598
+Error: None
+--------------------------------------------------
+VN: TuneInToTheShow
+Path: T:\AG\Tune in to the Show Episode 6-v0.6-market-STEAM\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:41
+RPY files: 3
+Parse time: 0.6034104824066162
+Error: None
+--------------------------------------------------
+VN: Tropicali
+Path: T:\AG\Tropicali_Demo-0.6d-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:42
+RPY files: 31
+Parse time: 2.1650655269622803
+Error: None
+--------------------------------------------------
+VN: BrightonCityEmpire
+Path: T:\AG\BrightonCityEmpire-0.04-pc\game\scripts
+Exists: True
+Valid project: True
+Has start label: False
+Start location: None:None
+RPY files: 12
+Parse time: 0.34362339973449707
+Error: None
+--------------------------------------------------
+VN: StarPeriphery
+Path: T:\AG\StarPeriphery-Release4.5-win\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:184
+RPY files: 31
+Parse time: 0.7063467502593994
+Error: None
+--------------------------------------------------
+VN: ProjectMnemosyne
+Path: T:\AG\ProjectMnemosyne-0.14.2-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:3
+RPY files: 12
+Parse time: 1.372194766998291
+Error: None
+--------------------------------------------------
+VN: Mybrotherswife
+Path: T:\AG\Mybrotherswife-0.9.2-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:101
+RPY files: 7
+Parse time: 1.0867087841033936
+Error: None
+--------------------------------------------------
+VN: DOF
+Path: T:\AG\DOF-Ep2_V_2_Final-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:50
+RPY files: 36
+Parse time: 1.1181259155273438
+Error: None
+--------------------------------------------------
+VN: MistOfHerBody
+Path: T:\AG\Mist_of_her_body-1.0-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:94
+RPY files: 1
+Parse time: 0.31041908264160156
+Error: None
+--------------------------------------------------
+VN: NSEvolution
+Path: T:\AG\NSEvolutionv0.3.9.2Hotfix3\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:1718
+RPY files: 18
+Parse time: 2.2879388332366943
+Error: None
+--------------------------------------------------
+VN: WestviewAcademy
+Path: T:\AG\WestviewAcademy-0.4.1-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: chapters\chapter1\script\scene1.rpy:2
+RPY files: 318
+Parse time: 0.4642179012298584
+Error: None
+--------------------------------------------------
+VN: HotSandOfAntarctica
+Path: T:\AG\HotSandOfAntarctica-0.08-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:146
+RPY files: 153
+Parse time: 1.1941168308258057
+Error: None
+--------------------------------------------------
+VN: Motherless
+Path: T:\AG\Motherless\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:50
+RPY files: 261
+Parse time: 16.605422019958496
+Error: None
+--------------------------------------------------
+VN: GuiltyPleasure
+Path: T:\AG\GuiltyPleasure-0.27-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:23
+RPY files: 17
+Parse time: 0.9032151699066162
+Error: None
+--------------------------------------------------
+VN: NotGoingBack
+Path: T:\AG\NotGoingBack-1.0-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:1
+RPY files: 4
+Parse time: 0.5693717002868652
+Error: None
+--------------------------------------------------
+VN: RedLucy
+Path: T:\AG\RedLucy-0.8-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:17
+RPY files: 8
+Parse time: 1.1957478523254395
+Error: None
+--------------------------------------------------
+VN: AFathersSins
+Path: T:\AG\A_Fathers_Sins-Chapter_20-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:88
+RPY files: 27
+Parse time: 1.7465691566467285
+Error: None
+--------------------------------------------------
+VN: TheEntrepreneur
+Path: T:\AG\TheEntrepreneur-Episode4_EarlyRelease-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:254
+RPY files: 3
+Parse time: 1.3349497318267822
+Error: None
+--------------------------------------------------
+VN: LetterToMyDream
+Path: T:\AG\LettertomyDream-0.1.2-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:101
+RPY files: 30
+Parse time: 1.2265870571136475
+Error: None
+--------------------------------------------------
+VN: RedBrim
+Path: T:\AG\RedBrim-0.1_alpha-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:75
+RPY files: 14
+Parse time: 0.5326464176177979
+Error: None
+--------------------------------------------------
+VN: Duality
+Path: T:\AG\Duality-v0.1.8-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:142
+RPY files: 20
+Parse time: 2.569002389907837
+Error: None
+--------------------------------------------------
+VN: BadMemories
+Path: T:\AG\Bad Memories\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:520
+RPY files: 76
+Parse time: 1.2679128646850586
+Error: None
+--------------------------------------------------
+VN: StarHarem
+Path: T:\AG\StarHaremEpisode1-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:82
+RPY files: 4
+Parse time: 0.5896396636962891
+Error: None
+--------------------------------------------------
+VN: SOP
+Path: T:\AG\SOP-1.0-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: ep1\01.rpy:1
+RPY files: 7
+Parse time: 0.755753755569458
+Error: None
+--------------------------------------------------
+VN: TheDeLucaFamily
+Path: T:\AG\The_DeLuca_Family-0.09.6-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:51
+RPY files: 151
+Parse time: 2.900040864944458
+Error: None
+--------------------------------------------------
+VN: ColdComforts
+Path: T:\AG\ColdComforts-v0.1b-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:34
+RPY files: 5
+Parse time: 0.2592930793762207
+Error: None
+--------------------------------------------------
+VN: ReRudy
+Path: T:\AG\ReRudy-0.5.0-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:89
+RPY files: 10
+Parse time: 0.6044631004333496
+Error: None
+--------------------------------------------------
+VN: Unleashed
+Path: T:\AG\unleashed-0.6b2-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:43
+RPY files: 2
+Parse time: 0.2741086483001709
+Error: None
+--------------------------------------------------
+VN: FriendsInNeed
+Path: T:\AG\FriendsinNeed-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:215
+RPY files: 2
+Parse time: 1.242591142654419
+Error: None
+--------------------------------------------------
+VN: MindSociety
+Path: T:\AG\MindSociety-0.5-pc\game
+Exists: True
+Valid project: True
+Has start label: True
+Start location: script.rpy:86
+RPY files: 10
+Parse time: 1.2845737934112549
+Error: None
+--------------------------------------------------
