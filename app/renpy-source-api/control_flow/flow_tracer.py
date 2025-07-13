@@ -98,7 +98,7 @@ class FlowTracer:
         }
         
         # Flow control statements that stop tracing
-        self.flow_control_statements = {'call', 'return', 'menu'}  # Removed 'jump' to enable jump following
+        self.flow_control_statements = {'call', 'return'}  # Removed 'jump' and 'menu' to enable following
         
         # Label location cache for jump following
         self._label_cache: Dict[str, Tuple[str, int]] = {}
@@ -197,6 +197,58 @@ class FlowTracer:
         # Regular label lookup
         if label_name in self._label_cache:
             return self._label_cache[label_name]
+        
+        return None
+
+    def _parse_menu_choices(self, current_file_lines: List[RenpyLine], menu_line_idx: int) -> Optional[Tuple[str, str]]:
+        """
+        Parse menu choices and return the first available choice with its target.
+        
+        Args:
+            current_file_lines: Lines from the current file
+            menu_line_idx: Index of the menu statement line
+            
+        Returns:
+            Tuple of (choice_text, target_action) for first choice, or None if no choices found
+        """
+        choice_pattern = re.compile(r'^\s*"([^"]+)"\s*:', re.IGNORECASE)
+        jump_pattern = re.compile(r'^\s*jump\s+(\w+)', re.IGNORECASE)
+        
+        # Look for choices after the menu line
+        for i in range(menu_line_idx + 1, len(current_file_lines)):
+            line = current_file_lines[i]
+            content = line.content.strip()
+            
+            # Stop if we hit another statement that ends the menu
+            if content and not content.startswith((' ', '\t', '"')) and ':' not in content:
+                break
+                
+            # Check if this is a choice
+            choice_match = choice_pattern.match(content)
+            if choice_match:
+                choice_text = choice_match.group(1)
+                
+                # Look for the action on the next line(s)
+                for j in range(i + 1, min(i + 5, len(current_file_lines))):  # Look ahead max 5 lines
+                    action_line = current_file_lines[j]
+                    action_content = action_line.content.strip()
+                    
+                    if not action_content:
+                        continue
+                        
+                    # Check for jump statement
+                    jump_match = jump_pattern.match(action_content)
+                    if jump_match:
+                        target = jump_match.group(1)
+                        return (choice_text, f"jump {target}")
+                    
+                    # Check for other actions (return, call, etc.)
+                    if action_content.startswith(('return', 'call', 'scene', 'show')):
+                        return (choice_text, action_content)
+                    
+                    # If we hit another choice or unrelated content, break
+                    if choice_pattern.match(action_content) or (action_content and not action_content.startswith((' ', '\t'))):
+                        break
         
         return None
     
@@ -366,7 +418,76 @@ class FlowTracer:
                     step_count += 1
                     continue  # Continue tracing from the jump target
                 
-                # Check if this is a flow control statement (excluding jumps, which we handle above)
+                # Special handling for menu statements - follow first choice
+                if stmt_type == 'menu':
+                    # Parse the menu choices and get the first one
+                    first_choice = self._parse_menu_choices(current_file_lines, current_line_idx)
+                    
+                    if first_choice is None:
+                        # No choices found in menu - stop tracing
+                        return FlowTraceResult(
+                            start_location=self.start_location,
+                            steps=steps,
+                            stop_reason="menu_no_choices",
+                            stop_location=(current_file, current_line_idx + 1),
+                            total_lines_traced=len(steps),
+                            flow_control_encountered='menu'
+                        )
+                    
+                    choice_text, action = first_choice
+                    
+                    # Add the choice selection as metadata to the current step
+                    step.parsed_data = {'choice_selected': choice_text, 'action': action}
+                    
+                    # Parse the action to see what to do
+                    if action.startswith('jump '):
+                        # Extract jump target and handle like a jump
+                        jump_target = action.split(' ', 1)[1]
+                        
+                        # Find the target label location
+                        target_location = self._find_label_location(jump_target, current_file)
+                        
+                        if target_location is None:
+                            # Target label not found - stop tracing
+                            return FlowTraceResult(
+                                start_location=self.start_location,
+                                steps=steps,
+                                stop_reason="menu_jump_target_not_found",
+                                stop_location=(current_file, current_line_idx + 1),
+                                total_lines_traced=len(steps),
+                                flow_control_encountered='menu'
+                            )
+                        
+                        # Jump to the target label
+                        target_file, target_line = target_location
+                        
+                        # If jumping to a different file, load it
+                        if target_file != current_file:
+                            current_file = target_file
+                            current_file_lines = self._get_file_lines(current_file)
+                        
+                        # Jump to the target label line (convert to 0-based index)
+                        current_line_idx = target_line - 1
+                        step_count += 1
+                        continue  # Continue tracing from the menu choice target
+                    
+                    # Handle other actions (return, call, etc.)
+                    elif action in ('return', 'call'):
+                        return FlowTraceResult(
+                            start_location=self.start_location,
+                            steps=steps,
+                            stop_reason=f"menu_choice_{action}",
+                            stop_location=(current_file, current_line_idx + 1),
+                            total_lines_traced=len(steps),
+                            flow_control_encountered='menu'
+                        )
+                    
+                    # For other actions (scene, show, etc.), continue to next line
+                    current_line_idx += 1
+                    step_count += 1
+                    continue
+                
+                # Check if this is a flow control statement (excluding jumps and menus, which we handle above)
                 if stmt_type in self.flow_control_statements:
                     return FlowTraceResult(
                         start_location=self.start_location,
