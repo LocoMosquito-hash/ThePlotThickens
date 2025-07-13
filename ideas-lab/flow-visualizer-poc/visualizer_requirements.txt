@@ -1,0 +1,12 @@
+# Renpy Flow Visualizer POC Requirements
+# Core GUI framework
+PyQt6>=6.4.0
+
+# Graph algorithms and layout
+networkx>=2.8.0
+
+# Optional: For hierarchical layouts (requires graphviz system installation)
+# pygraphviz>=1.9.0
+
+# Optional: For performance improvements
+# numpy>=1.21.0 
