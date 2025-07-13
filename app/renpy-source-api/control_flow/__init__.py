@@ -7,22 +7,29 @@ decision point analysis.
 
 Main Components:
 - StartLabelFinder: Locates the story entry point (start label)
-- FlowTracer: Follows narrative paths through jumps and calls (planned)
+- FlowTracer: Follows narrative paths through sequential execution
 - BranchMapper: Maps all possible story branches (planned)
 - MenuAnalyzer: Analyzes decision points and choices (planned)
 
 Usage:
-    from app.renpy_source_api.control_flow import StartLabelFinder
+    from app.renpy_source_api.control_flow import StartLabelFinder, FlowTracer
     
     finder = StartLabelFinder(project_path)
     start_location = finder.find_start_label()
+    
+    tracer = FlowTracer(project_path)
+    flow_result = tracer.trace_from_start()
 """
 
 try:
     from .start_label_finder import StartLabelFinder
+    from .flow_tracer import FlowTracer, FlowStep, FlowTraceResult
     
     __all__ = [
         "StartLabelFinder",
+        "FlowTracer",
+        "FlowStep", 
+        "FlowTraceResult",
     ]
 except ImportError as e:
     # Graceful fallback if imports fail
