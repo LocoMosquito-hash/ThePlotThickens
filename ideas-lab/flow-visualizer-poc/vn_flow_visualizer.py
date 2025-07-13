@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QPointF, QRectF, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import (
     QPen, QBrush, QColor, QPainter, QPainterPath, QFont,
-    QPolygonF, QLinearGradient, QRadialGradient
+    QPolygonF, QLinearGradient, QRadialGradient, QMouseEvent
 )
 import networkx as nx
 
@@ -703,20 +703,38 @@ class VNFlowVisualizer(QGraphicsView):
     def mousePressEvent(self, event):
         """Handle mouse press events for navigation."""
         if event.button() == Qt.MouseButton.MiddleButton:
+            # Enable hand drag for middle mouse button
             self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
             self._middle_button_pressed = True
+            # Create a modified event with left button to trick the drag system
+            modified_event = QMouseEvent(
+                event.type(),
+                event.position(),
+                Qt.MouseButton.LeftButton,  # Change to left button
+                Qt.MouseButton.LeftButton,
+                event.modifiers()
+            )
+            super().mousePressEvent(modified_event)
         else:
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
-            
-        super().mousePressEvent(event)
+            super().mousePressEvent(event)
         
     def mouseReleaseEvent(self, event):
         """Handle mouse release events."""
         if event.button() == Qt.MouseButton.MiddleButton:
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
             self._middle_button_pressed = False
-            
-        super().mouseReleaseEvent(event)
+            # Create a modified event with left button
+            modified_event = QMouseEvent(
+                event.type(),
+                event.position(),
+                Qt.MouseButton.LeftButton,  # Change to left button
+                Qt.MouseButton.LeftButton,
+                event.modifiers()
+            )
+            super().mouseReleaseEvent(modified_event)
+        else:
+            super().mouseReleaseEvent(event)
         
     def reset_view(self):
         """Reset view to show all content."""
