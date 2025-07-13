@@ -49,7 +49,7 @@ VN_TEST_PATHS = {
     # Additional test cases
     "TuneInToTheShow": r"T:\AG\Tune in to the Show Episode 6-v0.6-market-STEAM\game",
     "Tropicali": r"T:\AG\Tropicali_Demo-0.6d-pc\game",
-    "BrightonCityEmpire": r"T:\AG\BrightonCityEmpire-0.04-pc\game\scripts",
+    "BrightonCityEmpire": r"T:\AG\BrightonCityEmpire-0.04-pc\game",
     "StarPeriphery": r"T:\AG\StarPeriphery-Release4.5-win\game",
     "ProjectMnemosyne": r"T:\AG\ProjectMnemosyne-0.14.2-pc\game",
     "Mybrotherswife": r"T:\AG\Mybrotherswife-0.9.2-pc\game",
