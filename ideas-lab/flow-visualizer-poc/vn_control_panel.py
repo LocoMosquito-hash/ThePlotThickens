@@ -65,9 +65,9 @@ class VNControlPanel(QWidget):
         
         self.layout_combo = QComboBox()
         self.layout_combo.addItems([
-            "spring", "circular", "hierarchical", "random"
+            "narrative", "topological", "spring", "circular", "hierarchical", "random"
         ])
-        self.layout_combo.setCurrentText("spring")
+        self.layout_combo.setCurrentText("narrative")
         alg_layout.addWidget(self.layout_combo)
         
         layout.addLayout(alg_layout)
@@ -84,6 +84,13 @@ class VNControlPanel(QWidget):
         button_layout.addWidget(self.reset_button)
         
         layout.addLayout(button_layout)
+        
+        # Add layout help text
+        help_text = QLabel("• Narrative: Story-aware flow\n• Topological: DAG layers\n• Spring: Force-directed")
+        help_text.setFont(QFont("", 7))
+        help_text.setWordWrap(True)
+        help_text.setStyleSheet("color: gray;")
+        layout.addWidget(help_text)
         
         return group
         
@@ -182,7 +189,7 @@ class VNControlPanel(QWidget):
         
     def reset_view(self):
         """Signal to reset the visualization view."""
-        # This would be connected to the visualizer's reset method
+        # This should be connected to the visualizer's reset method in the main window
         pass
         
     def update_project_info(self, project_data: Dict[str, Any]):

@@ -330,21 +330,22 @@ class VNFlowVisualizer(QGraphicsView):
     def __init__(self, parent=None):
         super().__init__(parent)
         
-        # Create scene
+        # Initialize graphics components
         self.scene = QGraphicsScene()
         self.setScene(self.scene)
         
-        # Visualization state
-        self.flow_graph: Optional[Dict[str, Any]] = None
+        # Storage for graph elements
         self.nodes: Dict[str, VNLabelNode] = {}
         self.connections: List[VNFlowConnection] = []
+        self.graph: Optional[nx.DiGraph] = None
+        self.current_flow_graph: Optional[Dict[str, Any]] = None
+        
+        # Middle mouse button state
+        self._middle_button_pressed = False
         
         # Set up view properties
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
-        
-        # Enable zooming and panning
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         
@@ -478,7 +479,7 @@ class VNFlowVisualizer(QGraphicsView):
                 self.connections.append(connection)
                 
         # Apply initial layout and ensure proper scaling
-        self.apply_layout('spring')
+        self.apply_layout('narrative')
         
         # Force fit view to content with proper margins
         self.fitInView(self.scene.itemsBoundingRect().adjusted(-50, -50, 50, 50), 
@@ -492,14 +493,17 @@ class VNFlowVisualizer(QGraphicsView):
             margined_rect = bounding_rect.adjusted(-100, -100, 100, 100)
             self.fitInView(margined_rect, Qt.AspectRatioMode.KeepAspectRatio)
             
-    def apply_layout(self, layout_type: str = 'spring'):
-        """Apply layout algorithm to position nodes."""
+    def apply_layout(self, layout_type: str = 'narrative'):
+        """Apply layout algorithm to position nodes with narrative awareness."""
         if not self.graph or not self.nodes:
             return
             
-        # Generate positions using NetworkX
-        if layout_type == 'spring':
-            # Use larger area and more iterations for better spread
+        # Handle different layout types
+        if layout_type == 'narrative':
+            pos = self._narrative_hierarchical_layout()
+        elif layout_type == 'topological':
+            pos = self._topological_layout()
+        elif layout_type == 'spring':
             pos = nx.spring_layout(self.graph, k=3, iterations=100)
         elif layout_type == 'circular':
             pos = nx.circular_layout(self.graph)
@@ -507,12 +511,11 @@ class VNFlowVisualizer(QGraphicsView):
             try:
                 pos = nx.nx_agraph.graphviz_layout(self.graph, prog='dot')
             except:
-                # Fall back to spring layout if graphviz not available
-                pos = nx.spring_layout(self.graph, k=3, iterations=100)
+                pos = self._narrative_hierarchical_layout()  # Fallback to narrative
         elif layout_type == 'random':
             pos = nx.random_layout(self.graph)
         else:
-            pos = nx.spring_layout(self.graph, k=3, iterations=100)
+            pos = self._narrative_hierarchical_layout()  # Default to narrative
         
         # Scale positions for better visibility
         scale = 400
@@ -530,6 +533,191 @@ class VNFlowVisualizer(QGraphicsView):
         # Automatically fit view after layout
         self.fit_view_to_content()
         
+    def _narrative_hierarchical_layout(self) -> Dict[str, Tuple[float, float]]:
+        """
+        Create a narrative-aware hierarchical layout that respects story progression.
+        
+        Handles:
+        - Story progression from start to endings
+        - Disconnected components separately  
+        - Branching paths with vertical separation
+        - Decision points kept central
+        """
+        pos = {}
+        
+        # Find disconnected components
+        if self.graph.is_directed():
+            components = list(nx.weakly_connected_components(self.graph))
+        else:
+            components = list(nx.connected_components(self.graph))
+        
+        component_width = 8  # Space between components
+        current_x_offset = 0
+        
+        for component_nodes in components:
+            # Create subgraph for this component
+            subgraph = self.graph.subgraph(component_nodes).copy()
+            
+            # Get component layout
+            component_pos = self._layout_narrative_component(subgraph)
+            
+            # Offset this component horizontally
+            for node, (x, y) in component_pos.items():
+                pos[node] = (x + current_x_offset, y)
+            
+            # Calculate component width for next offset
+            if component_pos:
+                min_x = min(x for x, y in component_pos.values())
+                max_x = max(x for x, y in component_pos.values())
+                current_x_offset += (max_x - min_x) + component_width
+        
+        return pos
+        
+    def _layout_narrative_component(self, subgraph: nx.DiGraph) -> Dict[str, Tuple[float, float]]:
+        """Layout a single connected component with narrative awareness."""
+        
+        # Find potential start nodes
+        start_candidates = self._find_start_nodes(subgraph)
+        
+        if not start_candidates:
+            # If no clear start, use nodes with no incoming edges
+            start_candidates = [n for n in subgraph.nodes() if subgraph.in_degree(n) == 0]
+            
+        if not start_candidates:
+            # If still no start, pick node with highest out-degree
+            start_candidates = [max(subgraph.nodes(), key=lambda n: subgraph.out_degree(n))]
+        
+        # Create narrative layers using BFS from start nodes
+        layers = self._create_narrative_layers(subgraph, start_candidates)
+        
+        # Position nodes in layers
+        return self._position_narrative_layers(layers, subgraph)
+        
+    def _find_start_nodes(self, subgraph: nx.DiGraph) -> List[str]:
+        """Find likely story start nodes."""
+        start_candidates = []
+        
+        # Check for common start label names
+        start_names = ['start', 'main', 'begin', 'intro', 'prologue', 'opening']
+        for node in subgraph.nodes():
+            node_lower = str(node).lower()
+            if any(start_name in node_lower for start_name in start_names):
+                start_candidates.append(node)
+                
+        return start_candidates
+        
+    def _create_narrative_layers(self, subgraph: nx.DiGraph, start_nodes: List[str]) -> List[List[str]]:
+        """Create narrative depth layers using BFS from start nodes."""
+        visited = set()
+        layers = []
+        current_layer = list(start_nodes)
+        
+        while current_layer:
+            # Remove already visited nodes
+            current_layer = [n for n in current_layer if n not in visited]
+            
+            if not current_layer:
+                break
+                
+            layers.append(current_layer[:])
+            visited.update(current_layer)
+            
+            # Find next layer
+            next_layer = []
+            for node in current_layer:
+                for successor in subgraph.successors(node):
+                    if successor not in visited:
+                        next_layer.append(successor)
+            
+            current_layer = list(set(next_layer))  # Remove duplicates
+        
+        # Add any remaining unvisited nodes as final layer
+        remaining = [n for n in subgraph.nodes() if n not in visited]
+        if remaining:
+            layers.append(remaining)
+            
+        return layers
+        
+    def _position_narrative_layers(self, layers: List[List[str]], subgraph: nx.DiGraph) -> Dict[str, Tuple[float, float]]:
+        """Position nodes within narrative layers for optimal flow visualization."""
+        pos = {}
+        layer_height = 3  # Vertical space between layers
+        
+        for layer_index, layer_nodes in enumerate(layers):
+            y = -layer_index * layer_height  # Progress downward through story
+            
+            # Sort nodes in layer by importance/connectivity
+            layer_nodes_sorted = self._sort_layer_nodes(layer_nodes, subgraph)
+            
+            # Position nodes horizontally within layer
+            if len(layer_nodes_sorted) == 1:
+                pos[layer_nodes_sorted[0]] = (0, y)
+            else:
+                # Spread nodes across horizontal space
+                layer_width = max(6, len(layer_nodes_sorted) * 1.5)
+                for i, node in enumerate(layer_nodes_sorted):
+                    x = (i - (len(layer_nodes_sorted) - 1) / 2) * (layer_width / len(layer_nodes_sorted))
+                    pos[node] = (x, y)
+        
+        return pos
+        
+    def _sort_layer_nodes(self, layer_nodes: List[str], subgraph: nx.DiGraph) -> List[str]:
+        """Sort nodes within a layer by narrative importance."""
+        def node_importance(node):
+            # Prioritize by: out_degree (decision points), in_degree (convergence), node_type
+            node_data = subgraph.nodes.get(node, {})
+            out_deg = subgraph.out_degree(node)
+            in_deg = subgraph.in_degree(node)
+            
+            # Menu/decision points get central position
+            if node_data.get('has_menu', False) or node_data.get('node_type') == 'menu':
+                return (2, -out_deg, -in_deg)  # High priority, then by connectivity
+            
+            # End nodes get edge positions  
+            if out_deg == 0:
+                return (0, -in_deg, 0)  # Lower priority
+                
+            # Regular nodes sorted by connectivity
+            return (1, -out_deg, -in_deg)
+        
+        return sorted(layer_nodes, key=node_importance, reverse=True)
+        
+    def _topological_layout(self) -> Dict[str, Tuple[float, float]]:
+        """Create layout using NetworkX topological generations."""
+        try:
+            # Use topological generations for DAG layout
+            layers = list(nx.topological_generations(self.graph))
+            
+            # Add layer attribute to nodes
+            for layer_index, layer_nodes in enumerate(layers):
+                for node in layer_nodes:
+                    self.graph.nodes[node]['layer'] = layer_index
+            
+            # Use multipartite layout
+            return nx.multipartite_layout(self.graph, subset_key='layer')
+            
+        except nx.NetworkXError:
+            # Graph has cycles, fall back to narrative layout
+            return self._narrative_hierarchical_layout()
+            
+    def mousePressEvent(self, event):
+        """Handle mouse press events for navigation."""
+        if event.button() == Qt.MouseButton.MiddleButton:
+            self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+            self._middle_button_pressed = True
+        else:
+            self.setDragMode(QGraphicsView.DragMode.NoDrag)
+            
+        super().mousePressEvent(event)
+        
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release events."""
+        if event.button() == Qt.MouseButton.MiddleButton:
+            self.setDragMode(QGraphicsView.DragMode.NoDrag)
+            self._middle_button_pressed = False
+            
+        super().mouseReleaseEvent(event)
+        
     def reset_view(self):
         """Reset view to show all content."""
         self.fit_view_to_content()
@@ -542,7 +730,7 @@ class VNFlowVisualizer(QGraphicsView):
             zoom_factor = 1 / zoom_factor
             
         self.scale(zoom_factor, zoom_factor)
-        
+         
     def on_selection_changed(self):
         """Handle scene selection changes."""
         selected_items = self.scene.selectedItems()

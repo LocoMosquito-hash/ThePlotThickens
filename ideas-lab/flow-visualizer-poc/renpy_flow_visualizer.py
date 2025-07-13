@@ -131,6 +131,9 @@ class RenpyFlowMapper(QMainWindow):
         self.visualizer.node_selected.connect(self.control_panel.update_node_details)
         self.control_panel.layout_changed.connect(self.visualizer.apply_layout)
         
+        # Connect the reset button to the visualizer's reset_view method
+        self.control_panel.reset_button.clicked.connect(self.visualizer.reset_view)
+        
         self.setWindowTitle("Renpy Flow Visualizer - POC")
         self.resize(1400, 900)
         
