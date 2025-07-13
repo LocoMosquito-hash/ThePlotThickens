@@ -351,12 +351,104 @@ class VNFlowVisualizer(QGraphicsView):
         # Connect scene selection changes
         self.scene.selectionChanged.connect(self.on_selection_changed)
         
-    def load_flow_graph(self, flow_graph: Dict[str, Any]):
-        """Load and display a flow graph."""
-        self.flow_graph = flow_graph
+    def load_flow_graph(self, analysis_data: Dict[str, Any]):
+        """
+        Load and visualize a flow graph from renpy-source-api analysis data.
+        
+        Args:
+            analysis_data: Complete analysis data from ProjectAnalysisThread
+        """
         self.clear_visualization()
+        
+        # Extract flow graph data
+        flow_graph = analysis_data.get('flow_graph', {})
+        if not flow_graph:
+            return
+            
+        # Store current graph data
+        self.current_flow_graph = analysis_data
+        
+        # Convert renpy-source-api flow graph to NetworkX format
+        self.graph = self._convert_flow_graph_to_networkx(flow_graph)
+        
+        # Create visualization
         self.create_visualization()
-        self.apply_layout('spring')
+        
+    def _convert_flow_graph_to_networkx(self, flow_graph: Dict[str, Any]) -> nx.DiGraph:
+        """
+        Convert renpy-source-api flow graph format to NetworkX DiGraph.
+        
+        Args:
+            flow_graph: Flow graph data from renpy-source-api
+            
+        Returns:
+            NetworkX directed graph
+        """
+        G = nx.DiGraph()
+        
+        # Add nodes with their properties
+        for label_name, label_data in flow_graph.items():
+            # Determine node type for color coding
+            node_type = self._determine_node_type(label_name, label_data)
+            
+            # Add node with attributes
+            G.add_node(label_name, 
+                name=label_data.get('name', label_name),
+                file_path=label_data.get('file_path', ''),
+                line_number=label_data.get('line_number', 0),
+                has_menu=label_data.get('has_menu', False),
+                has_dialogue=label_data.get('has_dialogue', False),
+                is_reachable=label_data.get('is_reachable', True),
+                is_dead_end=label_data.get('is_dead_end', False),
+                flow_complexity=label_data.get('flow_complexity', 0),
+                node_type=node_type,
+                incoming_flows=label_data.get('incoming_flows', []),
+                outgoing_flows=label_data.get('outgoing_flows', [])
+            )
+        
+        # Add edges from outgoing flows
+        for label_name, label_data in flow_graph.items():
+            outgoing_flows = label_data.get('outgoing_flows', [])
+            
+            for flow in outgoing_flows:
+                target_label = flow.get('target_label')
+                if target_label and target_label in flow_graph:
+                    # Add edge with flow properties
+                    G.add_edge(label_name, target_label,
+                        flow_type=flow.get('flow_type', 'unknown'),
+                        context=flow.get('context', ''),
+                        condition=flow.get('condition', ''),
+                        source_file=flow.get('file_path', ''),
+                        source_line=flow.get('line_number', 0)
+                    )
+        
+        return G
+        
+    def _determine_node_type(self, label_name: str, label_data: Dict[str, Any]) -> str:
+        """
+        Determine the node type for color coding.
+        
+        Args:
+            label_name: Name of the label
+            label_data: Label data from flow graph
+            
+        Returns:
+            Node type string ('start', 'menu', 'ending', 'regular')
+        """
+        # Check for start label
+        if label_name.lower() in ['start', 'main', 'begin', 'intro']:
+            return 'start'
+            
+        # Check for menu/choice points
+        if label_data.get('has_menu', False):
+            return 'menu'
+            
+        # Check for ending labels (no outgoing flows)
+        if label_data.get('is_dead_end', False) or not label_data.get('outgoing_flows', []):
+            return 'ending'
+            
+        # Default to regular label
+        return 'regular'
         
     def clear_visualization(self):
         """Clear current visualization."""
@@ -366,79 +458,78 @@ class VNFlowVisualizer(QGraphicsView):
         
     def create_visualization(self):
         """Create visual elements from flow graph data."""
-        if not self.flow_graph:
+        if not self.graph:
             return
-            
-        nodes_data = self.flow_graph.get('nodes', {})
-        
+             
         # Create nodes
-        for node_id, node_data in nodes_data.items():
-            node_item = VNLabelNode(node_id, node_data)
+        for node_id in self.graph.nodes:
+            node_item = VNLabelNode(node_id, self.graph.nodes[node_id])
             self.scene.addItem(node_item)
             self.nodes[node_id] = node_item
+             
+        # Create connections based on graph edges
+        for source_id, target_id in self.graph.edges:
+            if source_id in self.nodes and target_id in self.nodes:
+                source_node = self.nodes[source_id]
+                target_node = self.nodes[target_id]
+                edge_data = self.graph.edges[source_id, target_id]
+                connection = VNFlowConnection(source_node, target_node, edge_data)
+                self.scene.addItem(connection)
+                self.connections.append(connection)
+                
+        # Apply initial layout and ensure proper scaling
+        self.apply_layout('spring')
+        
+        # Force fit view to content with proper margins
+        self.fitInView(self.scene.itemsBoundingRect().adjusted(-50, -50, 50, 50), 
+                      Qt.AspectRatioMode.KeepAspectRatio)
+        
+    def fit_view_to_content(self):
+        """Fit the view to show all content with proper margins."""
+        if self.scene.items():
+            bounding_rect = self.scene.itemsBoundingRect()
+            # Add margins around the content
+            margined_rect = bounding_rect.adjusted(-100, -100, 100, 100)
+            self.fitInView(margined_rect, Qt.AspectRatioMode.KeepAspectRatio)
             
-        # Create connections
-        for node_id, node_data in nodes_data.items():
-            source_node = self.nodes[node_id]
-            outgoing_flows = node_data.get('outgoing_flows', [])
-            
-            for target_id in outgoing_flows:
-                if target_id in self.nodes:
-                    target_node = self.nodes[target_id]
-                    connection = VNFlowConnection(source_node, target_node)
-                    self.scene.addItem(connection)
-                    self.connections.append(connection)
-                    
     def apply_layout(self, layout_type: str = 'spring'):
         """Apply layout algorithm to position nodes."""
-        if not self.nodes:
+        if not self.graph or not self.nodes:
             return
             
-        # Create NetworkX graph for layout calculation
-        G = nx.DiGraph()
-        
-        # Add nodes
-        for node_id in self.nodes:
-            G.add_node(node_id)
-            
-        # Add edges
-        for connection in self.connections:
-            source_id = connection.source_node.node_id
-            target_id = connection.target_node.node_id
-            G.add_edge(source_id, target_id)
-            
-        # Calculate layout
+        # Generate positions using NetworkX
         if layout_type == 'spring':
-            pos = nx.spring_layout(G, k=3, iterations=50)
+            # Use larger area and more iterations for better spread
+            pos = nx.spring_layout(self.graph, k=3, iterations=100)
         elif layout_type == 'circular':
-            pos = nx.circular_layout(G)
+            pos = nx.circular_layout(self.graph)
         elif layout_type == 'hierarchical':
-            # Try to create hierarchical layout
             try:
-                pos = nx.nx_agraph.graphviz_layout(G, prog='dot')
+                pos = nx.nx_agraph.graphviz_layout(self.graph, prog='dot')
             except:
-                pos = nx.spring_layout(G)  # Fallback
+                # Fall back to spring layout if graphviz not available
+                pos = nx.spring_layout(self.graph, k=3, iterations=100)
+        elif layout_type == 'random':
+            pos = nx.random_layout(self.graph)
         else:
-            pos = nx.spring_layout(G)
-            
-        # Apply positions (scale up for better visibility)
+            pos = nx.spring_layout(self.graph, k=3, iterations=100)
+        
+        # Scale positions for better visibility
         scale = 400
-        for node_id, (x, y) in pos.items():
+        scaled_pos = {node: (x * scale, y * scale) for node, (x, y) in pos.items()}
+        
+        # Apply positions to nodes
+        for node_id, (x, y) in scaled_pos.items():
             if node_id in self.nodes:
-                self.nodes[node_id].setPos(x * scale, y * scale)
-                
+                self.nodes[node_id].setPos(x, y)
+        
         # Update connections
         for connection in self.connections:
             connection.update_path()
             
-        # Fit view to content
+        # Automatically fit view after layout
         self.fit_view_to_content()
         
-    def fit_view_to_content(self):
-        """Fit the view to show all content."""
-        if self.scene.items():
-            self.fitInView(self.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
-            
     def reset_view(self):
         """Reset view to show all content."""
         self.fit_view_to_content()

@@ -27,292 +27,246 @@ class VNControlPanel(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        
         self.current_project_info: Optional[Dict[str, Any]] = None
-        self.current_node_info: Optional[Dict[str, Any]] = None
+        self.current_node_data: Optional[Dict[str, Any]] = None
         
         self.setup_ui()
         
     def setup_ui(self):
-        """Set up the control panel user interface."""
+        """Set up the control panel interface."""
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setSpacing(5)  # Reduced spacing
+        layout.setContentsMargins(3, 3, 3, 3)  # Reduced margins
         
-        # Create scroll area for content
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        
-        content_widget = QWidget()
-        content_layout = QVBoxLayout(content_widget)
-        content_layout.setSpacing(15)
-        
-        # Layout Controls Section
+        # Layout Controls section
         layout_group = self.create_layout_controls()
-        content_layout.addWidget(layout_group)
+        layout.addWidget(layout_group)
         
-        # Project Information Section
-        self.project_info_group = self.create_project_info_section()
-        content_layout.addWidget(self.project_info_group)
+        # Project Information section
+        self.project_group = self.create_project_info_section()
+        layout.addWidget(self.project_group)
         
-        # Node Details Section
-        self.node_details_group = self.create_node_details_section()
-        content_layout.addWidget(self.node_details_group)
+        # Selected Node Details section
+        self.node_group = self.create_node_details_section()
+        layout.addWidget(self.node_group)
         
-        # Add stretch to push content to top
-        content_layout.addStretch()
-        
-        scroll_area.setWidget(content_widget)
-        layout.addWidget(scroll_area)
-        
-        # Set panel properties
-        self.setMaximumWidth(350)
-        self.setMinimumWidth(250)
+        # Add stretch to push everything up
+        layout.addStretch()
         
     def create_layout_controls(self) -> QGroupBox:
-        """Create layout control section."""
+        """Create the layout algorithm controls."""
         group = QGroupBox("Layout Controls")
         layout = QVBoxLayout(group)
+        layout.setSpacing(3)  # Reduced spacing
         
-        # Layout algorithm selection
-        layout_layout = QHBoxLayout()
-        layout_layout.addWidget(QLabel("Algorithm:"))
+        # Algorithm selection
+        alg_layout = QHBoxLayout()
+        alg_layout.addWidget(QLabel("Algorithm:"))
         
         self.layout_combo = QComboBox()
         self.layout_combo.addItems([
-            "spring", "circular", "hierarchical"
+            "spring", "circular", "hierarchical", "random"
         ])
-        self.layout_combo.currentTextChanged.connect(self.on_layout_changed)
-        layout_layout.addWidget(self.layout_combo)
+        self.layout_combo.setCurrentText("spring")
+        alg_layout.addWidget(self.layout_combo)
         
-        layout.addLayout(layout_layout)
+        layout.addLayout(alg_layout)
         
-        # Layout control buttons
+        # Apply and Reset buttons
         button_layout = QHBoxLayout()
         
-        self.apply_layout_btn = QPushButton("Apply Layout")
-        self.apply_layout_btn.clicked.connect(self.apply_current_layout)
-        button_layout.addWidget(self.apply_layout_btn)
+        self.apply_button = QPushButton("Apply Layout")
+        self.apply_button.clicked.connect(self.apply_layout)
+        button_layout.addWidget(self.apply_button)
         
-        self.reset_view_btn = QPushButton("Reset View")
-        self.reset_view_btn.clicked.connect(self.reset_view)
-        button_layout.addWidget(self.reset_view_btn)
+        self.reset_button = QPushButton("Reset View")
+        self.reset_button.clicked.connect(self.reset_view)
+        button_layout.addWidget(self.reset_button)
         
         layout.addLayout(button_layout)
         
         return group
         
     def create_project_info_section(self) -> QGroupBox:
-        """Create project information section."""
+        """Create the project information display."""
         group = QGroupBox("Project Information")
-        layout = QVBoxLayout(group)
+        layout = QGridLayout(group)
+        layout.setSpacing(2)  # Reduced spacing
         
-        # Project stats grid
-        self.stats_layout = QGridLayout()
-        layout.addLayout(self.stats_layout)
+        # Use smaller font for labels to save space
+        small_font = QFont()
+        small_font.setPointSize(8)
         
-        # Initially show "No project loaded"
-        self.no_project_label = QLabel("No project loaded")
-        self.no_project_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.no_project_label.setStyleSheet("color: gray; font-style: italic;")
-        layout.addWidget(self.no_project_label)
+        # Project stats labels
+        self.project_name_label = QLabel("No project loaded")
+        self.project_name_label.setFont(QFont("", 9, QFont.Weight.Bold))
+        layout.addWidget(QLabel("Name:"), 0, 0)
+        layout.addWidget(self.project_name_label, 0, 1)
+        
+        # Explicitly define label attributes
+        label_font = QFont()
+        label_font.setPointSize(8)
+        
+        # Labels
+        labels_label = QLabel("Labels:")
+        labels_label.setFont(label_font)
+        self.total_labels_label = QLabel("-")
+        self.total_labels_label.setFont(label_font)
+        layout.addWidget(labels_label, 1, 0)
+        layout.addWidget(self.total_labels_label, 1, 1)
+        
+        # Files
+        files_label = QLabel("Files:")
+        files_label.setFont(label_font)
+        self.rpy_files_label = QLabel("-")
+        self.rpy_files_label.setFont(label_font)
+        layout.addWidget(files_label, 2, 0)
+        layout.addWidget(self.rpy_files_label, 2, 1)
+        
+        # Lines
+        lines_label = QLabel("Lines:")
+        lines_label.setFont(label_font)
+        self.dialogue_lines_label = QLabel("-")
+        self.dialogue_lines_label.setFont(label_font)
+        layout.addWidget(lines_label, 3, 0)
+        layout.addWidget(self.dialogue_lines_label, 3, 1)
+        
+        # Path on separate row, with smaller text
+        path_label = QLabel("Path:")
+        path_label.setFont(label_font)
+        self.project_path_label = QLabel("-")
+        self.project_path_label.setWordWrap(True)
+        self.project_path_label.setMaximumHeight(40)  # Reduced height
+        self.project_path_label.setFont(label_font)
+        layout.addWidget(path_label, 4, 0)
+        layout.addWidget(self.project_path_label, 4, 1)
         
         return group
         
     def create_node_details_section(self) -> QGroupBox:
-        """Create node details section."""
+        """Create the selected node details display."""
         group = QGroupBox("Selected Node Details")
         layout = QVBoxLayout(group)
+        layout.setSpacing(3)  # Reduced spacing
         
-        # Node details text area
-        self.node_details_text = QTextEdit()
-        self.node_details_text.setReadOnly(True)
-        self.node_details_text.setMaximumHeight(200)
-        self.node_details_text.setPlainText("No node selected")
-        layout.addWidget(self.node_details_text)
+        # Node info display area - smaller
+        self.node_info = QTextEdit()
+        self.node_info.setMaximumHeight(120)  # Reduced height
+        self.node_info.setReadOnly(True)
+        self.node_info.setPlainText("No node selected")
+        # Smaller font for details
+        small_font = QFont()
+        small_font.setPointSize(8)
+        self.node_info.setFont(small_font)
+        layout.addWidget(self.node_info)
         
-        # Node actions
-        actions_layout = QHBoxLayout()
+        # Action buttons - smaller
+        button_layout = QHBoxLayout()
         
-        self.highlight_paths_btn = QPushButton("Highlight Paths")
-        self.highlight_paths_btn.setEnabled(False)
-        self.highlight_paths_btn.clicked.connect(self.highlight_node_paths)
-        actions_layout.addWidget(self.highlight_paths_btn)
+        self.highlight_button = QPushButton("Paths")
+        self.highlight_button.setEnabled(False)
+        button_layout.addWidget(self.highlight_button)
         
-        self.show_details_btn = QPushButton("Show Details")
-        self.show_details_btn.setEnabled(False)
-        self.show_details_btn.clicked.connect(self.show_detailed_node_info)
-        actions_layout.addWidget(self.show_details_btn)
+        self.show_details_button = QPushButton("Details")
+        self.show_details_button.setEnabled(False)
+        button_layout.addWidget(self.show_details_button)
         
-        layout.addLayout(actions_layout)
+        layout.addLayout(button_layout)
         
         return group
         
-    def update_project_info(self, flow_graph: Dict[str, Any]):
-        """Update project information display."""
-        self.current_project_info = flow_graph
-        
-        # Hide "no project" label
-        self.no_project_label.hide()
-        
-        # Clear existing stats
-        self.clear_layout(self.stats_layout)
-        
-        # Extract statistics
-        stats = flow_graph.get('stats', {})
-        nodes = flow_graph.get('nodes', {})
-        
-        # Calculate additional stats
-        total_labels = len(nodes)
-        menu_labels = sum(1 for node in nodes.values() if node.get('has_menu', False))
-        ending_labels = sum(1 for node in nodes.values() if not node.get('outgoing_flows', []))
-        dialogue_labels = sum(1 for node in nodes.values() if node.get('has_dialogue', False))
-        
-        # Display stats in grid
-        stat_items = [
-            ("Total Labels:", str(total_labels)),
-            ("Menu Choices:", str(menu_labels)),
-            ("Ending Labels:", str(ending_labels)),
-            ("With Dialogue:", str(dialogue_labels)),
-            ("Has Start Label:", "Yes" if stats.get('has_start', False) else "No"),
-        ]
-        
-        for i, (label_text, value_text) in enumerate(stat_items):
-            label = QLabel(label_text)
-            label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-            value = QLabel(value_text)
-            value.setAlignment(Qt.AlignmentFlag.AlignRight)
-            
-            # Style the value
-            font = QFont()
-            font.setBold(True)
-            value.setFont(font)
-            
-            self.stats_layout.addWidget(label, i, 0)
-            self.stats_layout.addWidget(value, i, 1)
-            
-        # Project path (if available)
-        project_path = stats.get('project_path', '')
-        if project_path:
-            path_label = QLabel("Path:")
-            path_value = QLabel(project_path)
-            path_value.setWordWrap(True)
-            path_value.setStyleSheet("font-size: 9px; color: gray;")
-            
-            row = len(stat_items)
-            self.stats_layout.addWidget(path_label, row, 0)
-            self.stats_layout.addWidget(path_value, row, 1)
-            
-    def show_node_details(self, node_id: str, node_data: Dict[str, Any]):
-        """Display details for selected node."""
-        self.current_node_info = {'id': node_id, 'data': node_data}
-        
-        # Format node details
-        details = []
-        details.append(f"Label: {node_data.get('name', node_id)}")
-        details.append(f"ID: {node_id}")
-        details.append("")
-        
-        # File location
-        file_path = node_data.get('file_path', 'Unknown')
-        line_number = node_data.get('line_number', 0)
-        details.append(f"File: {file_path}")
-        details.append(f"Line: {line_number}")
-        details.append("")
-        
-        # Properties
-        properties = []
-        if node_data.get('has_menu', False):
-            properties.append("Has Menu Choices")
-        if node_data.get('has_dialogue', False):
-            properties.append("Has Dialogue")
-        if not node_data.get('outgoing_flows', []):
-            properties.append("Ending Label")
-        if node_id == 'start':
-            properties.append("Start Label")
-            
-        if properties:
-            details.append("Properties:")
-            for prop in properties:
-                details.append(f"  • {prop}")
-            details.append("")
-            
-        # Outgoing flows
-        outgoing = node_data.get('outgoing_flows', [])
-        if outgoing:
-            details.append(f"Connects to ({len(outgoing)}):")
-            for target in outgoing:
-                details.append(f"  → {target}")
-        else:
-            details.append("No outgoing connections")
-            
-        # Update display
-        self.node_details_text.setPlainText("\n".join(details))
-        
-        # Enable action buttons
-        self.highlight_paths_btn.setEnabled(True)
-        self.show_details_btn.setEnabled(True)
-        
-    def clear_layout(self, layout):
-        """Clear all widgets from a layout."""
-        while layout.count():
-            child = layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-                
-    def on_layout_changed(self, layout_type: str):
-        """Handle layout algorithm change."""
-        # Emit signal will be handled by main window
-        pass
-        
-    def apply_current_layout(self):
-        """Apply the currently selected layout."""
+    def apply_layout(self):
+        """Apply the selected layout algorithm."""
         layout_type = self.layout_combo.currentText()
         self.layout_changed.emit(layout_type)
         
     def reset_view(self):
-        """Reset the visualization view."""
-        # This will be connected to the visualizer's reset_view method
+        """Signal to reset the visualization view."""
+        # This would be connected to the visualizer's reset method
         pass
         
-    def highlight_node_paths(self):
-        """Highlight paths from/to selected node."""
-        if self.current_node_info:
-            # TODO: Implement path highlighting
-            print(f"Highlighting paths for: {self.current_node_info['id']}")
+    def update_project_info(self, project_data: Dict[str, Any]):
+        """Update the project information display."""
+        self.current_project_info = project_data
+        
+        # Update project name
+        name = project_data.get('name', 'Unknown Project')
+        self.project_name_label.setText(name)
+        
+        # Update path
+        path = project_data.get('path', '')
+        self.project_path_label.setText(path)
+        
+        # Update stats with real data
+        total_labels = project_data.get('labels', 0)
+        self.total_labels_label.setText(str(total_labels))
+        
+        rpy_files = project_data.get('rpy_files', 0)
+        self.rpy_files_label.setText(str(rpy_files))
+        
+        dialogue_lines = project_data.get('dialogue_lines', 0)
+        self.dialogue_lines_label.setText(str(dialogue_lines))
+        
+    def clear_project_info(self):
+        """Clear the project information display."""
+        self.current_project_info = None
+        
+        self.project_name_label.setText("No project loaded")
+        self.project_path_label.setText("-")
+        self.total_labels_label.setText("-")
+        self.rpy_files_label.setText("-")
+        self.dialogue_lines_label.setText("-")
+        
+    def update_node_details(self, node_id: str, node_data: Dict[str, Any]):
+        """Update the selected node details display."""
+        self.current_node_data = node_data
+        
+        # Format node information
+        info_text = f"Label: {node_id}\n\n"
+        
+        # Add basic node properties
+        if 'file_path' in node_data:
+            info_text += f"File: {node_data['file_path']}\n"
+        if 'line_number' in node_data:
+            info_text += f"Line: {node_data['line_number']}\n"
+        
+        info_text += "\nProperties:\n"
+        if node_data.get('has_menu', False):
+            info_text += "• Has menu choices\n"
+        if node_data.get('has_dialogue', False):
+            info_text += "• Contains dialogue\n"
+        if node_data.get('is_reachable', True):
+            info_text += "• Reachable from start\n"
+        if node_data.get('is_dead_end', False):
+            info_text += "• Dead end (no outgoing flows)\n"
+        
+        # Add flow information
+        incoming_flows = node_data.get('incoming_flows', [])
+        outgoing_flows = node_data.get('outgoing_flows', [])
+        
+        info_text += f"\nConnections:\n"
+        info_text += f"• Incoming: {len(incoming_flows)}\n"
+        info_text += f"• Outgoing: {len(outgoing_flows)}\n"
+        
+        if outgoing_flows:
+            info_text += "\nOutgoing Connections:\n"
+            for flow in outgoing_flows[:5]:  # Show first 5
+                target = flow.get('target_label', 'Unknown')
+                flow_type = flow.get('flow_type', 'unknown')
+                info_text += f"• {target} ({flow_type})\n"
             
-    def show_detailed_node_info(self):
-        """Show detailed information dialog for selected node."""
-        if self.current_node_info:
-            from PyQt6.QtWidgets import QMessageBox
-            
-            node_id = self.current_node_info['id']
-            node_data = self.current_node_info['data']
-            
-            # Create detailed info message
-            info_parts = []
-            info_parts.append(f"Label: {node_data.get('name', node_id)}")
-            info_parts.append(f"Unique ID: {node_id}")
-            info_parts.append("")
-            info_parts.append(f"File: {node_data.get('file_path', 'Unknown')}")
-            info_parts.append(f"Line Number: {node_data.get('line_number', 0)}")
-            info_parts.append("")
-            
-            # Add all available data
-            if 'has_menu' in node_data:
-                info_parts.append(f"Has Menu: {node_data['has_menu']}")
-            if 'has_dialogue' in node_data:
-                info_parts.append(f"Has Dialogue: {node_data['has_dialogue']}")
-                
-            outgoing = node_data.get('outgoing_flows', [])
-            info_parts.append(f"Outgoing Connections: {len(outgoing)}")
-            if outgoing:
-                info_parts.append("Targets:")
-                for target in outgoing:
-                    info_parts.append(f"  • {target}")
-                    
-            message = "\n".join(info_parts)
-            
-            QMessageBox.information(
-                self, f"Node Details: {node_id}", message
-            ) 
+            if len(outgoing_flows) > 5:
+                info_text += f"... and {len(outgoing_flows) - 5} more\n"
+        
+        self.node_info.setPlainText(info_text)
+        
+        # Enable action buttons
+        self.highlight_button.setEnabled(True)
+        self.show_details_button.setEnabled(True)
+        
+    def clear_node_details(self):
+        """Clear the node details display."""
+        self.current_node_data = None
+        self.node_info.setPlainText("No node selected")
+        self.highlight_button.setEnabled(False)
+        self.show_details_button.setEnabled(False) 
