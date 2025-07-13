@@ -98,7 +98,107 @@ class FlowTracer:
         }
         
         # Flow control statements that stop tracing
-        self.flow_control_statements = {'jump', 'call', 'return', 'menu'}
+        self.flow_control_statements = {'call', 'return', 'menu'}  # Removed 'jump' to enable jump following
+        
+        # Label location cache for jump following
+        self._label_cache: Dict[str, Tuple[str, int]] = {}
+        self._label_cache_built = False
+    
+    def _build_label_cache(self) -> None:
+        """
+        Build a cache of all label locations in the project.
+        This enables efficient label lookup for jump following.
+        """
+        if self._label_cache_built:
+            return
+            
+        try:
+            # Find all .rpy files in the project
+            from pathlib import Path
+            project_root = Path(self.project_path)
+            game_dir = project_root / 'game'
+            
+            if not game_dir.exists():
+                # Try project root if game/ doesn't exist
+                search_dirs = [project_root]
+            else:
+                search_dirs = [game_dir]
+            
+            for search_dir in search_dirs:
+                for rpy_file in search_dir.glob('*.rpy'):
+                    try:
+                        # Use the existing parser instance to get consistent line parsing
+                        lines = self.parser.parse_file(str(rpy_file))
+                        
+                        # Build label cache with first executable line after each label
+                        for i, line in enumerate(lines):
+                            if line.line_type == 'label' and line.label_name:
+                                # Find the next executable line after this label
+                                next_executable_idx = i + 1
+                                while (next_executable_idx < len(lines) and 
+                                       lines[next_executable_idx].line_type in ['comment', 'empty']):
+                                    next_executable_idx += 1
+                                
+                                # Store the relative path and the next executable line index
+                                relative_path = rpy_file.relative_to(Path(self.project_path))
+                                self._label_cache[line.label_name] = (str(relative_path), next_executable_idx)
+                                
+                    except Exception as e:
+                        # Skip files that can't be parsed
+                        continue
+            
+            self._label_cache_built = True
+            
+        except Exception as e:
+            # Fallback to empty cache if building fails
+            self._label_cache = {}
+            self._label_cache_built = True
+    
+    def _find_label_location(self, label_name: str, current_file: Optional[str] = None) -> Optional[Tuple[str, int]]:
+        """
+        Find the location of a label in the project.
+        
+        Args:
+            label_name: Name of the label to find
+            current_file: Current file path for local label resolution
+            
+        Returns:
+            Tuple of (file_path, line_number) if found, None otherwise
+        """
+        self._build_label_cache()
+        
+        # Handle local labels (starting with .)
+        if label_name.startswith('.') and current_file is not None:
+            # Local label - need to find the current global label context
+            # For now, we'll try a simple resolution
+            local_name = label_name[1:]  # Remove the dot
+            
+            # Try to find current global label in the current file
+            try:
+                current_lines = self._get_file_lines(current_file)
+                current_global_label = None
+                
+                for line in current_lines:
+                    if line.line_type == 'label' and line.label_name and not line.label_name.startswith('.'):
+                        current_global_label = line.label_name
+                    elif line.line_type == 'label' and line.label_name == local_name:
+                        # Found the local label in current context
+                        return (current_file, line.line_number)
+                
+                # Try global.local format
+                if current_global_label:
+                    full_label = f"{current_global_label}.{local_name}"
+                    if full_label in self._label_cache:
+                        return self._label_cache[full_label]
+                        
+            except Exception:
+                pass
+        
+        # Regular label lookup
+        if label_name in self._label_cache:
+            return self._label_cache[label_name]
+        
+        return None
     
     def _get_file_lines(self, file_path: str) -> List[RenpyLine]:
         """
@@ -167,6 +267,9 @@ class FlowTracer:
         start_file, start_line = self.start_location
         steps: List[FlowStep] = []
         
+        # Track visited labels to prevent infinite jump loops
+        visited_labels: set = set()
+        
         try:
             # Get the file containing the start label
             current_file_lines = self._get_file_lines(start_file)
@@ -193,8 +296,20 @@ class FlowTracer:
                 current_renpy_line = current_file_lines[current_line_idx]
                 content = current_renpy_line.content.strip()
                 
-                # Classify the statement
+                # Classify the statement - use both our classifier and the parser's classification
                 stmt_type, parsed_data = self._classify_statement(content)
+                
+                # Handle cases where RenpyParser classified jumps as "choice_jump"
+                if current_renpy_line.line_type == 'choice_jump' and stmt_type == 'unknown':
+                    stmt_type = 'jump'
+                    # Re-parse the jump target
+                    jump_match = self.statement_patterns['jump'].match(content)
+                    if jump_match:
+                        parsed_data = {'target': jump_match.group(1)}
+                
+                # Also handle return statements that might be classified as "choice_return"
+                if current_renpy_line.line_type == 'choice_return' and stmt_type == 'unknown':
+                    stmt_type = 'return'
                 
                 # Create flow step
                 step = FlowStep(
@@ -206,7 +321,52 @@ class FlowTracer:
                 )
                 steps.append(step)
                 
-                # Check if this is a flow control statement
+                # Special handling for jump statements - follow the jump
+                if stmt_type == 'jump' and parsed_data and 'target' in parsed_data:
+                    target_label = parsed_data['target']
+                    
+                    # Check for infinite jump loops
+                    jump_key = f"{current_file}:{current_line_idx + 1}->{target_label}"
+                    if jump_key in visited_labels:
+                        return FlowTraceResult(
+                            start_location=self.start_location,
+                            steps=steps,
+                            stop_reason="infinite_jump_loop",
+                            stop_location=(current_file, current_line_idx + 1),
+                            total_lines_traced=len(steps),
+                            flow_control_encountered='jump'
+                        )
+                    
+                    visited_labels.add(jump_key)
+                    
+                    # Find the target label location
+                    target_location = self._find_label_location(target_label, current_file)
+                    
+                    if target_location is None:
+                        # Target label not found - stop tracing
+                        return FlowTraceResult(
+                            start_location=self.start_location,
+                            steps=steps,
+                            stop_reason="jump_target_not_found",
+                            stop_location=(current_file, current_line_idx + 1),
+                            total_lines_traced=len(steps),
+                            flow_control_encountered='jump'
+                        )
+                    
+                    # Jump to the target label
+                    target_file, target_line = target_location
+                    
+                    # If jumping to a different file, load it
+                    if target_file != current_file:
+                        current_file = target_file
+                        current_file_lines = self._get_file_lines(current_file)
+                    
+                    # Jump to the target label line (convert to 0-based index)
+                    current_line_idx = target_line - 1
+                    step_count += 1
+                    continue  # Continue tracing from the jump target
+                
+                # Check if this is a flow control statement (excluding jumps, which we handle above)
                 if stmt_type in self.flow_control_statements:
                     return FlowTraceResult(
                         start_location=self.start_location,

@@ -355,6 +355,197 @@ label start:
         unknown_steps = [s for s in result.steps if s.statement_type == "unknown"]
         self.assertEqual(len(unknown_steps), 2)
 
+    def test_simple_jump_following(self):
+        """Test basic jump following functionality."""
+        project = self.create_test_project({
+            "script.rpy": '''
+label start:
+    "Beginning of story"
+    jump middle_scene
+    "This should not be reached"
+
+label middle_scene:
+    "Middle of the story"
+    "More dialogue"
+    jump ending
+
+label ending:
+    "The end"
+    return
+'''
+        })
+        
+        tracer = FlowTracer(project)
+        result = tracer.trace_from_start()
+        
+        # Should follow both jumps and reach return
+        self.assertEqual(result.stop_reason, "flow_control_return")
+        self.assertEqual(result.flow_control_encountered, "return")
+        
+        # Check the sequence of steps
+        expected_content = [
+            "label start:",
+            '"Beginning of story"',
+            "jump middle_scene",
+            "label middle_scene:",
+            '"Middle of the story"',
+            '"More dialogue"',
+            "jump ending",
+            "label ending:",
+            '"The end"',
+            "return"
+        ]
+        
+        actual_content = [step.content for step in result.steps]
+        self.assertEqual(actual_content, expected_content)
+        
+        # Verify we visited multiple labels
+        labels_visited = [step.content for step in result.steps if step.statement_type == 'label']
+        self.assertEqual(len(labels_visited), 3)  # start, middle_scene, ending
+    
+    def test_jump_infinite_loop_prevention(self):
+        """Test prevention of infinite jump loops."""
+        project = self.create_test_project({
+            "script.rpy": '''
+label start:
+    "Beginning"
+    jump loop_a
+
+label loop_a:
+    "In loop A"
+    jump loop_b
+
+label loop_b:
+    "In loop B"
+    jump loop_a
+'''
+        })
+        
+        tracer = FlowTracer(project)
+        result = tracer.trace_from_start()
+        
+        # Should detect infinite loop and stop
+        self.assertEqual(result.stop_reason, "infinite_jump_loop")
+        self.assertEqual(result.flow_control_encountered, "jump")
+        
+        # Should have detected the loop before completing it multiple times
+        self.assertGreater(len(result.steps), 5)  # At least some steps before loop detection
+        self.assertLess(len(result.steps), 20)   # But not too many
+    
+    def test_jump_target_not_found(self):
+        """Test handling of jump to non-existent label."""
+        project = self.create_test_project({
+            "script.rpy": '''
+label start:
+    "Beginning"
+    jump nonexistent_label
+    "This should not be reached"
+'''
+        })
+        
+        tracer = FlowTracer(project)
+        result = tracer.trace_from_start()
+        
+        # Should stop when jump target is not found
+        self.assertEqual(result.stop_reason, "jump_target_not_found")
+        self.assertEqual(result.flow_control_encountered, "jump")
+        
+        # Should have traced up to the problematic jump
+        self.assertEqual(len(result.steps), 3)  # label, dialogue, jump
+    
+    def test_cross_file_jumping(self):
+        """Test jumping between different files."""
+        project = self.create_test_project({
+            "script.rpy": '''
+label start:
+    "In main script"
+    jump chapter1
+''',
+            "chapter1.rpy": '''
+label chapter1:
+    "In chapter 1"
+    "More content"
+    jump epilogue
+''',
+            "epilogue.rpy": '''
+label epilogue:
+    "In epilogue"
+    return
+'''
+        })
+        
+        tracer = FlowTracer(project)
+        result = tracer.trace_from_start()
+        
+        # Should successfully follow jumps across files
+        self.assertEqual(result.stop_reason, "flow_control_return")
+        self.assertEqual(result.flow_control_encountered, "return")
+        
+        # Check that we visited all three files
+        files_visited = set(step.file_path for step in result.steps)
+        expected_files = {"game\\script.rpy", "game\\chapter1.rpy", "game\\epilogue.rpy"}
+        
+        # Convert to relative paths for comparison (handling different path separators)
+        files_visited_relative = {f.replace("\\", "/").split("/")[-1] for f in files_visited}
+        expected_files_relative = {"script.rpy", "chapter1.rpy", "epilogue.rpy"}
+        
+        self.assertEqual(files_visited_relative, expected_files_relative)
+    
+    def test_jump_vs_other_flow_control(self):
+        """Test that jumps are followed but other flow control statements still stop tracing."""
+        project = self.create_test_project({
+            "script.rpy": '''
+label start:
+    "Beginning"
+    jump middle
+
+label middle:
+    "Middle section"
+    call subroutine
+    "This should not be reached"
+
+label subroutine:
+    "In subroutine"
+    return
+'''
+        })
+        
+        tracer = FlowTracer(project)
+        result = tracer.trace_from_start()
+        
+        # Should follow the jump but stop at the call
+        self.assertEqual(result.stop_reason, "flow_control_call")
+        self.assertEqual(result.flow_control_encountered, "call")
+        
+        # Should have reached the middle label via jump
+        labels_in_steps = [step.content for step in result.steps if step.statement_type == 'label']
+        self.assertIn("label middle:", labels_in_steps)
+    
+    def test_local_label_jumping(self):
+        """Test jumping to local labels."""
+        project = self.create_test_project({
+            "script.rpy": '''
+label start:
+    "Beginning"
+    jump .local_scene
+
+label .local_scene:
+    "In local scene"
+    return
+'''
+        })
+        
+        tracer = FlowTracer(project)
+        result = tracer.trace_from_start()
+        
+        # Should successfully resolve and follow local label jump
+        self.assertEqual(result.stop_reason, "flow_control_return")
+        
+        # Should have found both labels
+        labels_in_steps = [step.content for step in result.steps if step.statement_type == 'label']
+        self.assertEqual(len(labels_in_steps), 2)
+        self.assertIn("label .local_scene:", labels_in_steps)
+
 
 class TestFlowTracerIntegration(unittest.TestCase):
     """Integration tests for FlowTracer with complex scenarios."""
