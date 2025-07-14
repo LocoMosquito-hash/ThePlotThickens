@@ -602,6 +602,8 @@ class VNFlowVisualizer(QGraphicsView):
             pos = self._dot_like_layout()
         elif layout_type == 'random':
             pos = nx.random_layout(self.graph)
+        elif layout_type == 'flow_aware':
+            pos = self._flow_aware_layout()
         else:
             pos = self._narrative_hierarchical_layout()  # Default to narrative
         
@@ -710,93 +712,519 @@ class VNFlowVisualizer(QGraphicsView):
     
     def _classify_nodes_semantically(self, project_path: Optional[str]) -> Dict[str, str]:
         """
-        Classify all nodes semantically using MenuAnalyzer, jump analysis, and flow structure.
+        Classify nodes based on semantic analysis using MenuAnalyzer, StartLabelFinder,
+        and jump analysis for intelligent node coloring.
         
-        Args:
-            project_path: Path to the Renpy project's game directory
-            
         Returns:
-            Dictionary mapping node_id -> classification
+            Dict mapping node_id -> classification ('start', 'decision_point', 'jump_target', 'linear', 'orphaned')
         """
         classifications = {}
         
-        if not CONTROL_FLOW_AVAILABLE or not project_path or not self.graph:
-            # Fallback to basic classification
+        if not project_path:
+            # Fallback: classify based on graph structure only
             for node in self.graph.nodes():
-                classifications[node] = "linear"
+                in_degree = self.graph.in_degree(node)
+                out_degree = self.graph.out_degree(node)
+                
+                if in_degree == 0:
+                    classifications[node] = 'orphaned'
+                elif out_degree > 1:
+                    classifications[node] = 'decision_point'
+                else:
+                    classifications[node] = 'linear'
             return classifications
         
+        print("Starting semantic node classification...")
+        
         try:
-            print("Starting semantic node classification...")
+            # Import analysis modules
+            from app.renpy_source_api.control_flow import StartLabelFinder
+            from app.renpy_source_api.control_flow.analyze_vn_menus import analyze_menus_in_vn
+            from app.renpy_source_api.control_flow.analyze_vn_jumps import analyze_jumps_in_vn
             
-            # 1. Start node classification
-            if self.semantic_start_node:
-                classifications[self.semantic_start_node] = "start"
-                print(f"Classified '{self.semantic_start_node}' as start node")
+            # Step 1: Find semantic start node
+            start_finder = StartLabelFinder(project_path)
+            try:
+                start_line = start_finder.find_start_label()
+                start_node = start_line.label_name
+                classifications[start_node] = 'start'
+                print(f"Classified '{start_node}' as start node")
+            except Exception as e:
+                print(f"Warning: Could not find start label: {e}")
+                start_node = None
             
-            # 2. Menu analysis for decision points
-            menu_analyzer = MenuAnalyzer()
-            menu_analysis = menu_analyzer.analyze_vn_menus(project_path)
+            # Step 2: Find decision points using MenuAnalyzer
+            try:
+                menu_analysis = analyze_menus_in_vn(project_path)
+                decision_nodes = set()
+                
+                for menu_info in menu_analysis.get('menus', []):
+                    # Get the label that contains this menu
+                    if 'label' in menu_info:
+                        decision_nodes.add(menu_info['label'])
+                    # Also check if the menu creates jump targets
+                    for choice in menu_info.get('choices', []):
+                        if choice.get('has_jumps', False) and choice.get('destination'):
+                            decision_nodes.add(choice['destination'])
+                
+                for node in decision_nodes:
+                    if node in self.graph.nodes():
+                        classifications[node] = 'decision_point'
+                
+                print(f"Classified {len(decision_nodes)} decision point nodes from MenuAnalyzer")
+            except Exception as e:
+                print(f"Warning: MenuAnalyzer failed: {e}")
             
-            decision_nodes = set()
-            for menu_struct in menu_analysis.get('menu_structures', []):
-                if menu_struct.label_name:
-                    decision_nodes.add(menu_struct.label_name)
-                    classifications[menu_struct.label_name] = "decision"
+            # Step 3: Find jump targets using JumpAnalyzer
+            try:
+                jump_analysis = analyze_jumps_in_vn(project_path)
+                jump_targets = set(jump_analysis.get('jump_targets', []))
+                
+                for target in jump_targets:
+                    if target in self.graph.nodes() and target not in classifications:
+                        classifications[target] = 'jump_target'
+                
+                print(f"Classified {len(jump_targets)} jump target nodes")
+            except Exception as e:
+                print(f"Warning: JumpAnalyzer failed: {e}")
             
-            print(f"Classified {len(decision_nodes)} decision point nodes from MenuAnalyzer")
+            # Step 4: Classify remaining nodes based on reachability
+            classified_nodes = set(classifications.keys())
             
-            # 3. Jump target analysis  
-            jump_analysis = analyze_jumps_in_vn(project_path)
-            jump_targets = set(jump_analysis.get('jump_targets', []))
-            
-            for target in jump_targets:
-                if target in self.graph.nodes() and target not in classifications:
-                    classifications[target] = "jump_target"
-            
-            print(f"Classified {len(jump_targets)} jump target nodes")
-            
-            # 4. Orphaned/unreachable nodes
             for node in self.graph.nodes():
-                if node not in classifications:
+                if node not in classified_nodes:
                     # Check if node is reachable from start
-                    if self.semantic_start_node and self.semantic_start_node in self.graph.nodes():
+                    if start_node and node in self.graph.nodes() and start_node in self.graph.nodes():
                         try:
-                            # Try to find path from start to this node
-                            if nx.has_path(self.graph, self.semantic_start_node, node):
-                                # Node is reachable - classify as linear progression
-                                classifications[node] = "linear"
+                            if nx.has_path(self.graph, start_node, node):
+                                classifications[node] = 'linear'
                             else:
-                                # Node is unreachable from start
-                                classifications[node] = "orphaned"
+                                classifications[node] = 'orphaned'
                         except:
-                            # If path checking fails, default to linear
-                            classifications[node] = "linear"
+                            classifications[node] = 'orphaned'
                     else:
-                        # No semantic start available, check connectivity
-                        if self.graph.in_degree(node) == 0:
-                            classifications[node] = "orphaned"
+                        # No start node or unreachable - check structural patterns
+                        in_degree = self.graph.in_degree(node)
+                        if in_degree == 0:
+                            classifications[node] = 'orphaned'
                         else:
-                            classifications[node] = "linear"
+                            classifications[node] = 'linear'
             
-            print(f"Semantic classification complete: {len(classifications)} nodes classified")
+            print("Semantic classification complete: {} nodes classified".format(len(classifications)))
             
-            # Print classification summary
-            classification_counts = {}
+            # Debug: Print classification summary
+            class_counts = {}
             for classification in classifications.values():
-                classification_counts[classification] = classification_counts.get(classification, 0) + 1
-            
-            print(f"Classification summary: {classification_counts}")
-            
-            return classifications
+                class_counts[classification] = class_counts.get(classification, 0) + 1
+            print(f"Classification summary: {class_counts}")
             
         except Exception as e:
             print(f"Error in semantic classification: {e}")
-            # Fallback to basic classification
+            # Fallback to structural classification
             for node in self.graph.nodes():
-                classifications[node] = "linear"
-            return classifications
+                in_degree = self.graph.in_degree(node)
+                out_degree = self.graph.out_degree(node)
+                
+                if in_degree == 0:
+                    classifications[node] = 'orphaned'
+                elif out_degree > 1:
+                    classifications[node] = 'decision_point'
+                else:
+                    classifications[node] = 'linear'
+        
+        return classifications
+
+    def _analyze_narrative_flow_patterns(self, project_path: Optional[str]) -> Dict[str, Any]:
+        """
+        Phase 3: Analyze actual narrative flow patterns using FlowTracer and JumpAnalyzer.
+        
+        This provides comprehensive flow intelligence for layout optimization:
+        - Jump density mapping
+        - Decision tree clustering
+        - Common narrative paths
+        - Flow bottlenecks and convergence points
+        
+        Returns:
+            Dictionary with detailed flow analysis
+        """
+        flow_analysis = {
+            'jump_density_map': {},      # node -> jump frequency
+            'decision_trees': {},        # clusters of related decisions  
+            'common_paths': [],          # frequently traversed routes
+            'bottlenecks': [],           # high convergence points
+            'orphaned_regions': [],     # disconnected subgraphs
+            'chapter_progression': {},   # detected chapter/version boundaries
+            'flow_complexity': {}       # complexity metrics per region
+        }
+        
+        if not project_path:
+            return flow_analysis
+            
+        try:
+            print("🔍 Phase 3: Analyzing narrative flow patterns...")
+            
+            # Import flow analysis modules
+            from app.renpy_source_api.control_flow.analyze_vn_jumps import analyze_jumps_in_vn
+            from app.renpy_source_api.control_flow.analyze_vn_menus import analyze_menus_in_vn
+            from app.renpy_source_api.control_flow import FlowTracer
+            
+            # 1. Jump Density Analysis
+            print("  📊 Analyzing jump density patterns...")
+            jump_analysis = analyze_jumps_in_vn(project_path)
+            
+            # Map jump frequency for each node
+            for file_name, line_num, target in jump_analysis.get('jump_locations', []):
+                if target in self.graph.nodes():
+                    current_count = flow_analysis['jump_density_map'].get(target, 0)
+                    flow_analysis['jump_density_map'][target] = current_count + 1
+            
+            # 2. Decision Tree Clustering
+            print("  🌳 Identifying decision tree clusters...")
+            menu_analysis = analyze_menus_in_vn(project_path)
+            
+            decision_clusters = {}
+            for menu_info in menu_analysis.get('menus', []):
+                menu_label = menu_info.get('label', 'unknown')
+                if menu_label in self.graph.nodes():
+                    # Find all nodes reachable from this decision point
+                    cluster_nodes = []
+                    try:
+                        # Get nodes within 3 hops of this decision point
+                        for target_node in self.graph.nodes():
+                            try:
+                                if nx.has_path(self.graph, menu_label, target_node):
+                                    path_length = nx.shortest_path_length(self.graph, menu_label, target_node)
+                                    if path_length <= 3:  # Local decision cluster
+                                        cluster_nodes.append(target_node)
+                            except:
+                                continue
+                        
+                        if cluster_nodes:
+                            decision_clusters[menu_label] = {
+                                'center': menu_label,
+                                'nodes': cluster_nodes,
+                                'complexity': len(menu_info.get('choices', [])),
+                                'depth': max(3, len(cluster_nodes) // 3)
+                            }
+                    except:
+                        continue
+            
+            flow_analysis['decision_trees'] = decision_clusters
+            
+            # 3. Common Path Analysis using FlowTracer
+            print("  🛤️  Tracing common narrative paths...")
+            try:
+                tracer = FlowTracer(project_path, choice_strategy="first")
+                flow_result = tracer.trace_flow(max_steps=50)
+                
+                if flow_result and flow_result.steps:
+                    # Extract the path taken by the tracer
+                    traced_path = []
+                    for step in flow_result.steps:
+                        if step.statement_type == 'label':
+                            traced_path.append(step.parsed_data.get('label_name', 'unknown'))
+                    
+                    # Store as a common path (in real implementation, you'd run multiple traces)
+                    if len(traced_path) > 1:
+                        flow_analysis['common_paths'].append({
+                            'path': traced_path,
+                            'length': len(traced_path),
+                            'strategy': 'first_choice'
+                        })
+                        
+                        print(f"    ✅ Traced path with {len(traced_path)} labels")
+                
+            except Exception as e:
+                print(f"    ⚠️  FlowTracer warning: {e}")
+            
+            # 4. Bottleneck Detection (high in-degree nodes)
+            print("  🔍 Detecting flow bottlenecks...")
+            for node in self.graph.nodes():
+                in_degree = self.graph.in_degree(node)
+                if in_degree >= 3:  # Convergence point
+                    flow_analysis['bottlenecks'].append({
+                        'node': node,
+                        'convergence': in_degree,
+                        'type': 'convergence_point'
+                    })
+            
+            # 5. Chapter/Version Progression Detection
+            print("  📖 Detecting chapter progression...")
+            chapter_patterns = ['ch', 'chapter', 'v', 'version', 'ep', 'episode', 'part']
+            chapter_nodes = {}
+            
+            for node in self.graph.nodes():
+                node_lower = str(node).lower()
+                for pattern in chapter_patterns:
+                    if pattern in node_lower:
+                        # Extract number if possible
+                        import re
+                        match = re.search(r'(\d+)', node_lower)
+                        if match:
+                            chapter_num = int(match.group(1))
+                            if chapter_num not in chapter_nodes:
+                                chapter_nodes[chapter_num] = []
+                            chapter_nodes[chapter_num].append(node)
+                        break
+            
+            flow_analysis['chapter_progression'] = chapter_nodes
+            
+            # 6. Orphaned Region Detection
+            print("  🏝️  Identifying orphaned regions...")
+            if self.graph.is_directed():
+                weak_components = list(nx.weakly_connected_components(self.graph))
+            else:
+                weak_components = list(nx.connected_components(self.graph))
+            
+            # Components with < 5 nodes are likely orphaned regions
+            for component in weak_components:
+                if len(component) < 5:
+                    flow_analysis['orphaned_regions'].append(list(component))
+            
+            print(f"  ✅ Flow analysis complete:")
+            print(f"    • Jump targets: {len(flow_analysis['jump_density_map'])}")
+            print(f"    • Decision trees: {len(flow_analysis['decision_trees'])}")
+            print(f"    • Common paths: {len(flow_analysis['common_paths'])}")
+            print(f"    • Bottlenecks: {len(flow_analysis['bottlenecks'])}")
+            print(f"    • Chapter groups: {len(flow_analysis['chapter_progression'])}")
+            print(f"    • Orphaned regions: {len(flow_analysis['orphaned_regions'])}")
+            
+        except Exception as e:
+            print(f"⚠️  Flow analysis error: {e}")
+        
+        return flow_analysis
+
+    def _flow_aware_layout(self) -> Dict[str, Tuple[float, float]]:
+        """
+        Phase 3: Create flow-aware layout based on actual narrative patterns.
+        
+        This algorithm:
+        1. Uses FlowTracer results to understand actual story progression
+        2. Groups related decision trees using MenuAnalyzer
+        3. Positions nodes based on narrative flow density
+        4. Minimizes orphaned label disruption
+        5. Optimizes for common player choice paths
+        """
+        print("🎯 Creating Phase 3 flow-aware layout...")
+        
+        # Get flow analysis data
+        flow_analysis = self._analyze_narrative_flow_patterns(self.project_path)
+        pos = {}
+        
+        # Find disconnected components
+        if self.graph.is_directed():
+            components = list(nx.weakly_connected_components(self.graph))
+        else:
+            components = list(nx.connected_components(self.graph))
+        
+        component_width = 20  # More space for complex flow patterns
+        current_x_offset = 0
+        
+        for component_nodes in components:
+            # Create subgraph for this component
+            subgraph = self.graph.subgraph(component_nodes).copy()
+            
+            if len(component_nodes) == 1:
+                # Single node component (likely orphaned)
+                node = list(component_nodes)[0]
+                pos[node] = (current_x_offset, 0)
+                current_x_offset += 3
+                continue
+            
+            # Analyze this component for flow patterns
+            component_pos = self._layout_flow_aware_component(subgraph, flow_analysis)
+            
+            # Offset and add to main position dict
+            for node, (x, y) in component_pos.items():
+                pos[node] = (x + current_x_offset, y)
+            
+            # Calculate component width for next offset
+            if component_pos:
+                component_x_coords = [x for x, y in component_pos.values()]
+                component_width_actual = max(component_x_coords) - min(component_x_coords) + 5
+                current_x_offset += max(component_width, component_width_actual)
+        
+        print(f"✅ Flow-aware layout complete: {len(pos)} nodes positioned")
+        return pos
+
+    def _layout_flow_aware_component(self, subgraph: nx.DiGraph, flow_analysis: Dict[str, Any]) -> Dict[str, Tuple[float, float]]:
+        """
+        Layout a single component using flow-aware positioning algorithms.
+        
+        This is the core of Phase 3 flow-aware layout, implementing:
+        - Decision tree clustering and grouping
+        - Jump density-based positioning
+        - Common path optimization
+        - Chapter progression respect
+        """
+        pos = {}
+        nodes = list(subgraph.nodes())
+        
+        if len(nodes) <= 1:
+            if nodes:
+                pos[nodes[0]] = (0, 0)
+            return pos
+        
+        # 1. Identify flow patterns in this component
+        component_decision_trees = {}
+        component_jump_targets = set()
+        component_bottlenecks = []
+        
+        # Extract relevant flow data for this component
+        for tree_center, tree_data in flow_analysis.get('decision_trees', {}).items():
+            if tree_center in nodes:
+                component_decision_trees[tree_center] = tree_data
+        
+        for node in nodes:
+            if node in flow_analysis.get('jump_density_map', {}):
+                component_jump_targets.add(node)
+        
+        for bottleneck in flow_analysis.get('bottlenecks', []):
+            if bottleneck['node'] in nodes:
+                component_bottlenecks.append(bottleneck)
+        
+        # 2. Find semantic start for this component
+        semantic_start = self._find_semantic_start_node(self.project_path)
+        start_nodes = self._find_start_nodes(subgraph, semantic_start)
+        
+        if not start_nodes:
+            # Fallback: use highest jump target or highest in-degree
+            if component_jump_targets:
+                start_nodes = [max(component_jump_targets, 
+                                 key=lambda n: flow_analysis['jump_density_map'].get(n, 0))]
+            else:
+                start_nodes = [max(nodes, key=lambda n: subgraph.in_degree(n))]
+        
+        # 3. Create flow-aware layers
+        flow_layers = self._create_flow_aware_layers(subgraph, start_nodes, flow_analysis)
+        
+        # 4. Position nodes based on flow intelligence
+        layer_height = 3.0  # Vertical spacing
+        
+        for layer_index, layer_nodes in enumerate(flow_layers):
+            y = -layer_index * layer_height
+            
+            # Sort nodes in layer by flow importance
+            sorted_nodes = self._sort_nodes_by_flow_importance(layer_nodes, subgraph, flow_analysis)
+            
+            # Position horizontally with flow-aware spacing
+            if len(sorted_nodes) == 1:
+                pos[sorted_nodes[0]] = (0, y)
+            else:
+                # Group decision trees together
+                decision_groups = []
+                regular_nodes = []
+                
+                for node in sorted_nodes:
+                    if node in component_decision_trees:
+                        # This is a decision tree center - group with its cluster
+                        tree_data = component_decision_trees[node]
+                        cluster_nodes_in_layer = [n for n in tree_data['nodes'] if n in layer_nodes]
+                        if cluster_nodes_in_layer:
+                            decision_groups.append(cluster_nodes_in_layer)
+                        else:
+                            regular_nodes.append(node)
+                    else:
+                        regular_nodes.append(node)
+                
+                # Position decision groups compactly, regular nodes with more space
+                x_offset = 0
+                
+                # Position decision groups first (more compact)
+                for group in decision_groups:
+                    group_width = len(group) * 1.2  # Tight spacing for decision clusters
+                    for i, node in enumerate(group):
+                        x = x_offset + (i - (len(group) - 1) / 2) * 1.2
+                        pos[node] = (x, y)
+                    x_offset += group_width + 2  # Space between groups
+                
+                # Position regular nodes with normal spacing
+                if regular_nodes:
+                    regular_width = len(regular_nodes) * 2.0  # Normal spacing
+                    for i, node in enumerate(regular_nodes):
+                        x = x_offset + (i - (len(regular_nodes) - 1) / 2) * 2.0
+                        pos[node] = (x, y)
+        
+        return pos
     
+    def _create_flow_aware_layers(self, subgraph: nx.DiGraph, start_nodes: List[str], 
+                                  flow_analysis: Dict[str, Any]) -> List[List[str]]:
+        """Create layers that respect actual narrative flow patterns."""
+        visited = set()
+        layers = []
+        current_layer = list(start_nodes)
+        
+        # Track common paths to prioritize main narrative flow
+        common_paths = flow_analysis.get('common_paths', [])
+        priority_nodes = set()
+        
+        for path_info in common_paths:
+            priority_nodes.update(path_info.get('path', []))
+        
+        while current_layer:
+            # Remove already visited nodes
+            current_layer = [n for n in current_layer if n not in visited]
+            
+            if not current_layer:
+                break
+                
+            layers.append(current_layer[:])
+            visited.update(current_layer)
+            
+            # Find next layer with flow awareness
+            next_layer = []
+            
+            for node in current_layer:
+                successors = list(subgraph.successors(node))
+                
+                # Prioritize nodes that are part of common paths
+                priority_successors = [s for s in successors if s in priority_nodes and s not in visited]
+                regular_successors = [s for s in successors if s not in priority_nodes and s not in visited]
+                
+                # Add priority nodes first
+                next_layer.extend(priority_successors)
+                next_layer.extend(regular_successors)
+            
+            current_layer = list(set(next_layer))  # Remove duplicates
+        
+        # Add any remaining unvisited nodes as final layer
+        remaining = [n for n in subgraph.nodes() if n not in visited]
+        if remaining:
+            layers.append(remaining)
+            
+        return layers
+    
+    def _sort_nodes_by_flow_importance(self, layer_nodes: List[str], subgraph: nx.DiGraph, 
+                                       flow_analysis: Dict[str, Any]) -> List[str]:
+        """Sort nodes within a layer by narrative flow importance."""
+        def flow_importance(node):
+            # Multi-criteria importance scoring
+            jump_frequency = flow_analysis.get('jump_density_map', {}).get(node, 0)
+            is_decision_center = node in flow_analysis.get('decision_trees', {})
+            is_bottleneck = any(b['node'] == node for b in flow_analysis.get('bottlenecks', []))
+            in_common_path = any(node in path['path'] for path in flow_analysis.get('common_paths', []))
+            
+            out_deg = subgraph.out_degree(node)
+            in_deg = subgraph.in_degree(node)
+            
+            # Priority scoring
+            priority = 0
+            
+            if is_decision_center:
+                priority += 1000  # Highest priority for decision points
+            if is_bottleneck:
+                priority += 500   # High priority for convergence points
+            if in_common_path:
+                priority += 200   # Medium priority for main path nodes
+            
+            priority += jump_frequency * 10  # Jump popularity
+            priority += out_deg * 5          # Branching factor
+            priority += in_deg * 2           # Convergence factor
+            
+            return priority
+        
+        return sorted(layer_nodes, key=flow_importance, reverse=True)
+
     def _find_start_nodes(self, subgraph: nx.DiGraph, semantic_start: Optional[str] = None) -> List[str]:
         """
         Find story start nodes using semantic analysis when possible.
