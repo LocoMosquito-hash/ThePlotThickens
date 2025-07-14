@@ -1,0 +1,2193 @@
+=== GRAPH ANALYSIS FOR NARRATIVE LAYOUT ===
+
+Total nodes: 240
+Total edges: 330
+Is directed: True
+
+=== NODE ANALYSIS ===
+Node: ch1mcchecksphone
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1mcfionaflashback']
+  Successors: ['ch1maxsaysinvitefiona']
+
+Node: ch1maxsaysinvitefiona
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1mcchecksphone']
+  Successors: ['ch1mcmorganelecstore', 'maxtalksgirl']
+
+Node: maxtalksgirl
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch1maxsaysinvitefiona']
+  Successors: ['ch1mcmorganelecstore']
+
+Node: ch1mcmorganelecstore
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1maxsaysinvitefiona', 'maxtalksgirl']
+  Successors: ['ch1mcanniewifi']
+
+Node: ch1mcanniewifi
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1mcmorganelecstore']
+  Successors: ['mcsaidannieiscute', 'ch1morganatbarjoeandkelly']
+
+Node: mcsaidannieiscute
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch1mcanniewifi']
+  Successors: ['ch1morganatbarjoeandkelly']
+
+Node: ch1morganatbarjoeandkelly
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1mcanniewifi', 'mcsaidannieiscute']
+  Successors: ['ch1mcfriendtext']
+
+Node: ch1mcfriendtext
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1morganatbarjoeandkelly']
+  Successors: ['ch1angryconvowithmax']
+
+Node: ch1angryconvowithmax
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1mcfriendtext']
+  Successors: ['ch1cstore']
+
+Node: ch1cstore
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1angryconvowithmax']
+  Successors: ['ch1drinkingonroof']
+
+Node: ch1drinkingonroof
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1cstore']
+  Successors: ['defendedfiona', 'madatfiona']
+
+Node: defendedfiona
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch1drinkingonroof']
+  Successors: ['ch1afterrooftopchoices']
+
+Node: madatfiona
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch1drinkingonroof']
+  Successors: ['ch1afterrooftopchoices']
+
+Node: ch1afterrooftopchoices
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['defendedfiona', 'madatfiona']
+  Successors: ['ch1budtalksaboutgirl']
+
+Node: ch1budtalksaboutgirl
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1afterrooftopchoices']
+  Successors: ['ch1morgangetsaburger']
+
+Node: ch1closingtime
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['start']
+  Successors: ['afterfirstname', 'imleo']
+
+Node: imleo
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch1closingtime']
+  Successors: ['afterfirstname']
+
+Node: afterfirstname
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch1closingtime', 'imleo']
+  Successors: ['ch1maxhouse']
+
+Node: ch1morgangetsaburger
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1budtalksaboutgirl']
+  Successors: ['ch1lastcallbudandkelly']
+
+Node: ch1lastcallbudandkelly
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1morgangetsaburger']
+  Successors: ['ch1mckellycar']
+
+Node: ch1mckellycar
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1lastcallbudandkelly']
+  Successors: ['turnkellydown', 'acceptedkjproposal']
+
+Node: turnkellydown
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch1mckellycar']
+  Successors: ['ch2s1mcwenthome']
+
+Node: acceptedkjproposal
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch1mckellycar']
+  Successors: ['ch1kellymclewd']
+
+Node: ch1kellymclewd
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['acceptedkjproposal']
+  Successors: ['ch2s2kjmorningafter']
+
+Node: ch1maxhouse
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['afterfirstname']
+  Successors: ['ch1macaroni']
+
+Node: ch1macaroni
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1maxhouse']
+  Successors: ['ch1maxreclinersleep']
+
+Node: ch1maxreclinersleep
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1macaroni']
+  Successors: ['ch1mcrecall']
+
+Node: ch1mcrecall
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1maxreclinersleep']
+  Successors: ['ch1barinventory']
+
+Node: ch1barinventory
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1mcrecall']
+  Successors: ['budcleanskitchen']
+
+Node: budcleanskitchen
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch1barinventory']
+  Successors: ['ch1mccheckinglaptop']
+
+Node: ch1mccheckinglaptop
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['budcleanskitchen']
+  Successors: ['ch1mcfionaflashback']
+
+Node: ch1mcfionaflashback
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['ch1mccheckinglaptop']
+  Successors: ['ch1mcchecksphone']
+
+Node: ch2s10talkabouttrivianight
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['c2s9mcmaxcar']
+  Successors: ['ch2s11morganasksyouout']
+
+Node: ch2s11morganasksyouout
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s10talkabouttrivianight']
+  Successors: ['ch2s12maxmclivingroom']
+
+Node: ch2s12maxmclivingroom
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s11morganasksyouout']
+  Successors: ['ch2s12talkwithmax', 'endofsceen12']
+
+Node: ch2s12talkwithmax
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s12maxmclivingroom']
+  Successors: ['endofsceen12']
+
+Node: endofsceen12
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch2s12maxmclivingroom', 'ch2s12talkwithmax']
+  Successors: ['ch2s13pickupmorganforcoffee']
+
+Node: ch2s13pickupmorganforcoffee
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['endofsceen12']
+  Successors: ['ch2s14morgandatecoffeeshop']
+
+Node: ch2s14morgandatecoffeeshop
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s13pickupmorganforcoffee']
+  Successors: ['ch2s15infrontofmorganshouse']
+
+Node: ch2s15infrontofmorganshouse
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s14morgandatecoffeeshop']
+  Successors: ['ch2s16closingthebarjoekj']
+
+Node: ch2s16closingthebarjoekj
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s15infrontofmorganshouse']
+  Successors: ['ch2s17takingkellyjohome']
+
+Node: ch2s17takingkellyjohome
+  In-degree: 1, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s16closingthebarjoekj']
+  Successors: ['ch2s17menuforsexproposition', 'ch2s17hadsexwithkjch1']
+
+Node: ch2s17menuforsexproposition
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17takingkellyjohome']
+  Successors: ['ch2s17declinekjsexforsecondtime', 'ch2s17acceptkjsex']
+
+Node: ch2s17declinekjsexforsecondtime
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17menuforsexproposition']
+  Successors: ['ch2s17wenthomeinsteadofsexwithkj']
+
+Node: ch2s17acceptkjsex
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17menuforsexproposition']
+  Successors: ['ch2s17aftersexwithKJ']
+
+Node: ch2s17hadsexwithkjch1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch1', 'ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17takingkellyjohome']
+  Successors: ['ch2s17declinekjsexafterhavingsexinch1', 'ch2s17acceptsexafterhavingsexinch1']
+
+Node: ch2s17declinekjsexafterhavingsexinch1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1', 'ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17hadsexwithkjch1']
+  Successors: ['ch2s17wenthomeinsteadofsexwithkj']
+
+Node: ch2s17acceptsexafterhavingsexinch1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1', 'ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17hadsexwithkjch1']
+  Successors: ['ch2s17aftersexwithKJ']
+
+Node: ch2s17aftersexwithKJ
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17acceptkjsex', 'ch2s17acceptsexafterhavingsexinch1']
+  Successors: ['ch2s17nomovein', 'ch2s17yesmovein']
+
+Node: ch2s17nomovein
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17aftersexwithKJ']
+  Successors: ['ch2s17kjexplainshowshefeels']
+
+Node: ch2s17yesmovein
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17aftersexwithKJ']
+  Successors: ['ch2s17kjexplainshowshefeels']
+
+Node: ch2s17kjexplainshowshefeels
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17nomovein', 'ch2s17yesmovein']
+  Successors: ['ch2s17kjandmccometoanunderstanding']
+
+Node: ch2s17kjandmccometoanunderstanding
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17kjexplainshowshefeels']
+  Successors: ['ch2s17camehomeaftersexwithkj']
+
+Node: ch2s17wenthomeinsteadofsexwithkj
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17declinekjsexforsecondtime', 'ch2s17declinekjsexafterhavingsexinch1']
+  Successors: ['ch2s18mcmorgananniebar']
+
+Node: ch2s17camehomeaftersexwithkj
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17kjandmccometoanunderstanding']
+  Successors: ['ch2s18mcmorgananniebar']
+
+Node: ch2s18mcmorgananniebar
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s17wenthomeinsteadofsexwithkj', 'ch2s17camehomeaftersexwithkj']
+  Successors: ['ch2s19textingmorgan']
+
+Node: ch2s19textingmorgan
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s18mcmorgananniebar']
+  Successors: ['ch2s20trivianight']
+
+Node: ch2s1mcwenthome
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['turnkellydown']
+  Successors: ['ch2s5breakfastwithmax']
+
+Node: ch2s20trivianight
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s19textingmorgan']
+  Successors: ['ch2s21mcmaxathome']
+
+Node: ch2s21mcmaxathome
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s20trivianight']
+  Successors: ['ch3s1mcworriedaboutmaxathome']
+
+Node: ch2s2kjmorningafter
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch1kellymclewd']
+  Successors: ['ch2s3kjkitchen']
+
+Node: ch2s3kjkitchen
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s2kjmorningafter']
+  Successors: ['ch2s4walkofshame']
+
+Node: ch2s4walkofshame
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s3kjkitchen']
+  Successors: ['ch2s5breakfastwithmax']
+
+Node: ch2s5breakfastwithmax
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s1mcwenthome', 'ch2s4walkofshame']
+  Successors: ['ch2s5gownsarcasm', 'ch2s5nogownsarcasm']
+
+Node: ch2s5gownsarcasm
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s5breakfastwithmax']
+  Successors: ['ch2s6mcannietalkatbar']
+
+Node: ch2s5nogownsarcasm
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s5breakfastwithmax']
+  Successors: ['ch2s6mcannietalkatbar']
+
+Node: ch2s6mcannietalkatbar
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s5gownsarcasm', 'ch2s5nogownsarcasm']
+  Successors: ['ch2s6anniefavor', 'ch2s6noanniefavor']
+
+Node: ch2s6anniefavor
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s6mcannietalkatbar']
+  Successors: ['ch2s6afterchoices']
+
+Node: ch2s6noanniefavor
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s6mcannietalkatbar']
+  Successors: ['ch2s6afterchoices']
+
+Node: ch2s6afterchoices
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s6anniefavor', 'ch2s6noanniefavor']
+  Successors: ['ch2s7mcbudjoetalkatbar']
+
+Node: ch2s7mcbudjoetalkatbar
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s6afterchoices']
+  Successors: ['ch2s8doctorvisit']
+
+Node: ch2s8doctorvisit
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['ch2s7mcbudjoetalkatbar']
+  Successors: ['c2s9mcmaxcar']
+
+Node: c2s9mcmaxcar
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch2s8doctorvisit']
+  Successors: ['ch2s10talkabouttrivianight']
+
+Node: ch3s10ladiesnight
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s9maxwakesupmc']
+  Successors: ['ch3s10afterchoicestotellmorganaboutpatty']
+
+Node: ch3s10afterchoicestotellmorganaboutpatty
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s10ladiesnight']
+  Successors: ['ch3s11mcandmaxnextmorning']
+
+Node: ch3s11mcandmaxnextmorning
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s10afterchoicestotellmorganaboutpatty']
+  Successors: ['ch3s11aftermaxscherylchoice']
+
+Node: ch3s11aftermaxscherylchoice
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s11mcandmaxnextmorning']
+  Successors: ['ch3s12mcjoebobbypicksupdad']
+
+Node: ch3s12mcjoebobbypicksupdad
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s11aftermaxscherylchoice']
+  Successors: ['ch3s12afteranniechoice']
+
+Node: ch3s12afteranniechoice
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s12mcjoebobbypicksupdad']
+  Successors: ['ch3s13mcandmaxtext']
+
+Node: ch3s13mcandmaxtext
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s12afteranniechoice']
+  Successors: ['ch3s14mcandbobbyatconveniencestore']
+
+Node: ch3s14mcandbobbyatconveniencestore
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s13mcandmaxtext']
+  Successors: ['ch3s15mcwithannieormorgan']
+
+Node: ch3s15mcwithannieormorgan
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s14mcandbobbyatconveniencestore']
+  Successors: ['ch3s15endofscene15', 'ch3s15fingerannie']
+
+Node: ch3s15fingerannie
+  In-degree: 1, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15mcwithannieormorgan']
+  Successors: ['ch3s15endofscene15', 'ch3s15morgansex']
+
+Node: ch3s15morgansex
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15fingerannie']
+  Successors: ['ch3s15choice23', 'ch3s15endofscene15']
+
+Node: ch3s15choice23
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15morgansex']
+  Successors: ['ch3s15morganblowjob', 'ch3s15morgandisrobed']
+
+Node: ch3s15afterblowjob
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15morganblowjob']
+  Successors: ['ch3s15morganblowjob', 'ch3s15morgandisrobed']
+
+Node: ch3s15morganblowjob
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15choice23', 'ch3s15afterblowjob']
+  Successors: ['ch3s15afterblowjob']
+
+Node: ch3s15morgandisrobed
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15choice23', 'ch3s15afterblowjob']
+  Successors: ['ch3s15morgansexmenu']
+
+Node: ch3s15morgansexmenu
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15morgandisrobed']
+  Successors: ['ch3s15cunnilingus', 'ch3s15scissoring']
+
+Node: ch3s15cunnilingus
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15morgansexmenu', 'ch3s15morgansexoptions2']
+  Successors: ['ch3s15morgansexoptions2']
+
+Node: ch3s15morgansexoptions2
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15cunnilingus']
+  Successors: ['ch3s15cunnilingus', 'ch3s15scissoring']
+
+Node: ch3s15scissoring
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15morgansexmenu', 'ch3s15morgansexoptions2']
+  Successors: ['ch3s15anal', 'ch3s15vaginalsex']
+
+Node: ch3s15anal
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15scissoring', 'ch3s15anal']
+  Successors: ['ch3s15anal', 'ch3s15aftersex']
+
+Node: ch3s15vaginalsex
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15scissoring', 'ch3s15vaginalsex']
+  Successors: ['ch3s15vaginalsex', 'ch3s15aftersex']
+
+Node: ch3s15aftersex
+  In-degree: 2, Out-degree: 0
+  Type: ending
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15anal', 'ch3s15vaginalsex']
+  Successors: []
+
+Node: ch3s15endofscene15
+  In-degree: 3, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s15mcwithannieormorgan', 'ch3s15fingerannie', 'ch3s15morgansex']
+  Successors: ['ch4s1McAndMaxHouseKitchen']
+
+Node: ch3s1mcworriedaboutmaxathome
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch2s21mcmaxathome']
+  Successors: ['ch3s2mcmorganclub']
+
+Node: ch3s2mcmorganclub
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s1mcworriedaboutmaxathome']
+  Successors: ['ch3s2aftershots']
+
+Node: ch3s2aftershots
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s2mcmorganclub']
+  Successors: ['ch3s2isthisplacemystyle']
+
+Node: ch3s2isthisplacemystyle
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s2aftershots']
+  Successors: ['ch3s2circumstances']
+
+Node: ch3s2circumstances
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s2isthisplacemystyle']
+  Successors: ['ch3s2artandalcohol']
+
+Node: ch3s2artandalcohol
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s2circumstances']
+  Successors: ['ch3s2annieandtheevent']
+
+Node: ch3s2annieandtheevent
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s2artandalcohol']
+  Successors: ['ch3s2anniecankeepasecret']
+
+Node: ch3s2anniecankeepasecret
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s2annieandtheevent']
+  Successors: ['ch3s3mcmorganafterclub']
+
+Node: ch3s3mcmorganafterclub
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s2anniecankeepasecret']
+  Successors: ['ch3s4mcreturnshomeafterdate', 'ch3s3doyouwanttohavesexwithmorgan']
+
+Node: ch3s3doyouwanttohavesexwithmorgan
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s3mcmorganafterclub']
+  Successors: ['ch3s3sexwithmorgan', 'ch3s3nottonight']
+
+Node: ch3s3sexwithmorgan
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s3doyouwanttohavesexwithmorgan']
+  Successors: ['ch3s3morganblowjob', 'ch3s3mcmorganwheelbarrowpart1']
+
+Node: ch3s3morganblowjob
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s3sexwithmorgan', 'ch3s3morganblowjob']
+  Successors: ['ch3s3morganblowjob', 'ch3s3mcmorganwheelbarrowpart1']
+
+Node: ch3s3mcmorganwheelbarrowpart1
+  In-degree: 2, Out-degree: 0
+  Type: ending
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s3sexwithmorgan', 'ch3s3morganblowjob']
+  Successors: []
+
+Node: ch3s3mcmorganwheelbarrowpart2
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s3mcmorganwheelbarrowpart2']
+  Successors: ['ch3s3mcmorganwheelbarrowpart2', 'ch3s3choosedoggyorcowgirl']
+
+Node: ch3s3choosedoggyorcowgirl
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s3mcmorganwheelbarrowpart2']
+  Successors: ['ch3s3mcmorgandoggy', 'ch3s3mcmorgancowgirl']
+
+Node: ch3s3mcmorgandoggy
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s3choosedoggyorcowgirl', 'ch3s3mcmorgandoggy', 'ch3s3mcmorgancowgirl']
+  Successors: ['ch3s3mcmorgandoggy', 'ch3s3mcmorgancowgirl', 'ch3s3mcmorganmissionary']
+
+Node: ch3s3mcmorgancowgirl
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s3choosedoggyorcowgirl', 'ch3s3mcmorgandoggy', 'ch3s3mcmorgancowgirl']
+  Successors: ['ch3s3mcmorgancowgirl', 'ch3s3mcmorgandoggy', 'ch3s3mcmorganmissionary']
+
+Node: ch3s3mcmorganmissionary
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s3mcmorgandoggy', 'ch3s3mcmorgancowgirl']
+  Successors: ['ch3s4mcreturnshomeafterdate']
+
+Node: ch3s3nottonight
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s3doyouwanttohavesexwithmorgan']
+  Successors: ['ch3s4mcreturnshomeafterdate']
+
+Node: ch3s4mcreturnshomeafterdate
+  In-degree: 3, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s3mcmorganafterclub', 'ch3s3mcmorganmissionary', 'ch3s3nottonight']
+  Successors: ['ch3s5mcbaranniejoebudmaxintrouble']
+
+Node: ch3s5mcbaranniejoebudmaxintrouble
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: ['intro']
+  Predecessors: ['ch3s4mcreturnshomeafterdate']
+  Successors: ['ch3s5anniesaysshetoldbud']
+
+Node: ch3s5anniesaysshetoldbud
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s5mcbaranniejoebudmaxintrouble']
+  Successors: ['ch3s5aftermaxchoices']
+
+Node: ch3s5aftermaxchoices
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s5anniesaysshetoldbud']
+  Successors: ['ch3s5talkingwithannieaftermaxconvo']
+
+Node: ch3s5talkingwithannieaftermaxconvo
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s5aftermaxchoices']
+  Successors: ['ch3s6mchomewithmaxandtextingmorgan']
+
+Node: ch3s6mchomewithmaxandtextingmorgan
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s5talkingwithannieaftermaxconvo']
+  Successors: ['ch3s7mcatbarwithjoemorganellie']
+
+Node: ch3s7mcatbarwithjoemorganellie
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s6mchomewithmaxandtextingmorgan']
+  Successors: ['ch3s8mcatbartalkstopattyandkj']
+
+Node: ch3s8mcatbartalkstopattyandkj
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s7mcatbarwithjoemorganellie']
+  Successors: ['ch3s8afterchoiceswithkj']
+
+Node: ch3s8afterchoiceswithkj
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s8mcatbartalkstopattyandkj']
+  Successors: ['ch3s9maxwakesupmc']
+
+Node: ch3s9maxwakesupmc
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['ch3s8afterchoiceswithkj']
+  Successors: ['ch3s10ladiesnight']
+
+Node: ch4s10McBudTalkAboutMorganAndMaxCalls
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['endscene9']
+  Successors: ['mcdoubting', 'budistotallyright']
+
+Node: mcdoubting
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s10McBudTalkAboutMorganAndMaxCalls']
+  Successors: ['askaboutmax']
+
+Node: budistotallyright
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s10McBudTalkAboutMorganAndMaxCalls']
+  Successors: ['askaboutmax']
+
+Node: askaboutmax
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['mcdoubting', 'budistotallyright']
+  Successors: ['ch4s11MCPicksUpMaxAfterAccident']
+
+Node: ch4s11MCPicksUpMaxAfterAccident
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['askaboutmax']
+  Successors: ['ch4s12MaxAndBudArgueMaxHome']
+
+Node: ch4s12MaxAndBudArgueMaxHome
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['ch4s11MCPicksUpMaxAfterAccident']
+  Successors: ['offermaxthings', 'tellmaxtorest']
+
+Node: offermaxthings
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s12MaxAndBudArgueMaxHome']
+  Successors: ['ch4scene12end']
+
+Node: tellmaxtorest
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s12MaxAndBudArgueMaxHome']
+  Successors: ['ch4scene12end']
+
+Node: ch4scene12end
+  In-degree: 2, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['offermaxthings', 'tellmaxtorest']
+  Successors: ['ch4s13McMorganText', 'ch4s14McMaxMorningBedroomTalk']
+
+Node: ch4s13McMorganText
+  In-degree: 1, Out-degree: 4
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['ch4scene12end']
+  Successors: ['textymolove', 'mcisheretohelp', 'thisisdumbgrl', 'gobednow']
+
+Node: textymolove
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s13McMorganText']
+  Successors: ['mcisheretohelp', 'gobednow']
+
+Node: mcisheretohelp
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s13McMorganText', 'textymolove']
+  Successors: ['gobednow']
+
+Node: thisisdumbgrl
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s13McMorganText']
+  Successors: ['gobednow']
+
+Node: gobednow
+  In-degree: 4, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s13McMorganText', 'textymolove', 'mcisheretohelp', 'thisisdumbgrl']
+  Successors: ['ch4s14McMaxMorningBedroomTalk']
+
+Node: ch4s14McMaxMorningBedroomTalk
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['ch4scene12end', 'gobednow']
+  Successors: ['ch4s15McAnnieTalkAboutMorganAgain']
+
+Node: ch4s15McAnnieTalkAboutMorganAgain
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['ch4s14McMaxMorningBedroomTalk']
+  Successors: ['ch4s16McTalksToKjAboutMorgan']
+
+Node: ch4s16McTalksToKjAboutMorgan
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['ch4s15McAnnieTalkAboutMorganAgain']
+  Successors: ['ilikeherbut', 'reallylikemo']
+
+Node: ilikeherbut
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s16McTalksToKjAboutMorgan']
+  Successors: ['ch4s16AfterChoices']
+
+Node: reallylikemo
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s16McTalksToKjAboutMorgan']
+  Successors: ['ch4s16AfterChoices']
+
+Node: ch4s16AfterChoices
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['ilikeherbut', 'reallylikemo']
+  Successors: ['ch4s16end']
+
+Node: ch4s16end
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['ch4s16AfterChoices']
+  Successors: ['ch4s17SurpriseMotherFucker']
+
+Node: ch4s17SurpriseMotherFucker
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['ch4s16end']
+  Successors: ['endofversion']
+
+Node: ch4s1McAndMaxHouseKitchen
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['ch3s15endofscene15']
+  Successors: ['ch4s2McAndMaxCoverForAnnie']
+
+Node: ch4s2McAndMaxCoverForAnnie
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['ch4s1McAndMaxHouseKitchen']
+  Successors: ['bobbyfishing', 'budmaxcouple']
+
+Node: bobbyfishing
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s2McAndMaxCoverForAnnie']
+  Successors: ['sceneTwoAfterChoices']
+
+Node: budmaxcouple
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s2McAndMaxCoverForAnnie']
+  Successors: ['sceneTwoAfterChoices']
+
+Node: sceneTwoAfterChoices
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['bobbyfishing', 'budmaxcouple']
+  Successors: ['ch4s3KjTellsBudTequilaStory']
+
+Node: ch4s3KjTellsBudTequilaStory
+  In-degree: 1, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['sceneTwoAfterChoices']
+  Successors: ['morelingerie', 'poorannie', 'ch4s4ThreesomeOrAnnieSolo']
+
+Node: morelingerie
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s3KjTellsBudTequilaStory']
+  Successors: ['ch4s4ThreesomeOrAnnieSolo']
+
+Node: poorannie
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s3KjTellsBudTequilaStory']
+  Successors: ['ch4s4ThreesomeOrAnnieSolo']
+
+Node: ch4s4ThreesomeOrAnnieSolo
+  In-degree: 3, Out-degree: 3
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['ch4s3KjTellsBudTequilaStory', 'morelingerie', 'poorannie']
+  Successors: ['endSceneFour', 'start_threesome_chance', 'no_3some']
+
+Node: start_threesome_chance
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: ['start']
+  Predecessors: ['ch4s4ThreesomeOrAnnieSolo']
+  Successors: ['threesome_ep4', 'no_3some']
+
+Node: threesome_ep4
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['start_threesome_chance']
+  Successors: ['girlstastemc', 'anniecunnilingus']
+
+Node: girlstastemc
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['threesome_ep4', 'girlstastemc', 'moreanniecunnilingus']
+  Successors: ['girlstastemc', 'anniecunnilingus', 'moonbed']
+
+Node: anniecunnilingus
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['threesome_ep4', 'girlstastemc']
+  Successors: ['moreanniecunnilingus']
+
+Node: moreanniecunnilingus
+  In-degree: 2, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['anniecunnilingus', 'moreanniecunnilingus']
+  Successors: ['moreanniecunnilingus', 'girlstastemc', 'moonbed']
+
+Node: moonbed
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['girlstastemc', 'moreanniecunnilingus']
+  Successors: ['mo_cunnilingus', 'mo_doggy']
+
+Node: mo_cunnilingus
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['moonbed']
+  Successors: ['mo_more_cunnilingus']
+
+Node: mo_more_cunnilingus
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['mo_cunnilingus', 'mo_more_cunnilingus', 'mo_more_doggy']
+  Successors: ['mo_more_cunnilingus', 'mo_more_doggy', 'girlongirl']
+
+Node: mo_doggy
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['moonbed']
+  Successors: ['mo_more_doggy']
+
+Node: mo_more_doggy
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['mo_more_cunnilingus', 'mo_doggy', 'mo_more_doggy']
+  Successors: ['mo_more_doggy', 'mo_more_cunnilingus', 'girlongirl']
+
+Node: girlongirl
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['mo_more_cunnilingus', 'mo_more_doggy']
+  Successors: ['enterannie', 'entermorgan']
+
+Node: enterannie
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['girlongirl', 'enterannie', 'entermorgan']
+  Successors: ['enterannie', 'entermorgan', 'finish3some']
+
+Node: entermorgan
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['girlongirl', 'enterannie', 'entermorgan']
+  Successors: ['entermorgan', 'enterannie', 'finish3some']
+
+Node: finish3some
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['enterannie', 'entermorgan']
+  Successors: ['endSceneFour']
+
+Node: no_3some
+  In-degree: 2, Out-degree: 3
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s4ThreesomeOrAnnieSolo', 'start_threesome_chance']
+  Successors: ['endSceneFour', 'soloAnnieChoice', 'noSexOption']
+
+Node: soloAnnieChoice
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['no_3some']
+  Successors: ['anniesexscene', 'gohome']
+
+Node: anniesexscene
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['soloAnnieChoice']
+  Successors: ['ep4AnnieSex']
+
+Node: ep4AnnieSex
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['anniesexscene']
+  Successors: ['usefingersonannie', 'usetongueonannie']
+
+Node: usefingersonannie
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ep4AnnieSex', 'usefingersonannie', 'usetongueonannie']
+  Successors: ['usefingersonannie', 'usetongueonannie', 'situpsex']
+
+Node: usetongueonannie
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ep4AnnieSex', 'usefingersonannie', 'usetongueonannie']
+  Successors: ['usetongueonannie', 'usefingersonannie', 'situpsex']
+
+Node: situpsex
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['usefingersonannie', 'usetongueonannie']
+  Successors: ['anniecowgirl', 'annieanvil']
+
+Node: anniecowgirl
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['situpsex', 'anniecowgirl', 'annieanvil']
+  Successors: ['anniecowgirl', 'annieanvil', 'finishannie']
+
+Node: annieanvil
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['situpsex', 'anniecowgirl', 'annieanvil']
+  Successors: ['annieanvil', 'anniecowgirl', 'finishannie']
+
+Node: finishannie
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['anniecowgirl', 'annieanvil']
+  Successors: ['cowgirlfinish', 'reversecowgirlfinish']
+
+Node: cowgirlfinish
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['finishannie']
+  Successors: ['finishanniesex']
+
+Node: reversecowgirlfinish
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['finishannie']
+  Successors: ['finishanniesex']
+
+Node: finishanniesex
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['cowgirlfinish', 'reversecowgirlfinish']
+  Successors: ['endSceneFour']
+
+Node: gohome
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['soloAnnieChoice']
+  Successors: ['endSceneFour']
+
+Node: noSexOption
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['no_3some']
+  Successors: ['endSceneFour']
+
+Node: endSceneFour
+  In-degree: 6, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s4ThreesomeOrAnnieSolo', 'finish3some', 'no_3some', 'finishanniesex', 'gohome', 'noSexOption']
+  Successors: ['ch4s5BudTalksToMcAboutMax']
+
+Node: ch4s5BudTalksToMcAboutMax
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['endSceneFour']
+  Successors: ['buddrink', 'leavebud']
+
+Node: buddrink
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s5BudTalksToMcAboutMax']
+  Successors: ['sceneFiveEnd']
+
+Node: leavebud
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s5BudTalksToMcAboutMax']
+  Successors: ['sceneFiveEnd']
+
+Node: sceneFiveEnd
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['buddrink', 'leavebud']
+  Successors: ['ch4s6McAnnieTalkAndMcTalksToMorgan']
+
+Node: ch4s6McAnnieTalkAndMcTalksToMorgan
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['sceneFiveEnd']
+  Successors: ['idreamofannie', 'dreamedit']
+
+Node: idreamofannie
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s6McAnnieTalkAndMcTalksToMorgan']
+  Successors: ['afterdream']
+
+Node: dreamedit
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s6McAnnieTalkAndMcTalksToMorgan']
+  Successors: ['afterdream']
+
+Node: afterdream
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['idreamofannie', 'dreamedit']
+  Successors: ['noregretannie', 'norushannie']
+
+Node: noregretannie
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['afterdream']
+  Successors: ['endSceneSix']
+
+Node: norushannie
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['afterdream']
+  Successors: ['endSceneSix']
+
+Node: endSceneSix
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['noregretannie', 'norushannie']
+  Successors: ['sceneSixSecondEnd']
+
+Node: sceneSixSecondEnd
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['endSceneSix']
+  Successors: ['askmorgan', 'leavemorganalone']
+
+Node: askmorgan
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['sceneSixSecondEnd']
+  Successors: ['endChoice14']
+
+Node: leavemorganalone
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['sceneSixSecondEnd']
+  Successors: ['endChoice14']
+
+Node: endChoice14
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['askmorgan', 'leavemorganalone']
+  Successors: ['sceneSixEndBranches']
+
+Node: sceneSixEndBranches
+  In-degree: 1, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['endChoice14']
+  Successors: ['ch4s7McMorganSex', 'ch4s8McMorningWalkWithBobby']
+
+Node: ch4s7McMorganSex
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['sceneSixEndBranches']
+  Successors: ['mosexmontage', 'canwejustcuddlemo']
+
+Node: canwejustcuddlemo
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s7McMorganSex']
+  Successors: ['cuddleswithmo']
+
+Node: mosexmontage
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s7McMorganSex']
+  Successors: ['moremoblow']
+
+Node: moremoblow
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['mosexmontage', 'moremoblow']
+  Successors: ['moremoblow', 'sexwithmoonfloor']
+
+Node: sexwithmoonfloor
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['moremoblow']
+  Successors: ['moresexwithmoonfloor']
+
+Node: moresexwithmoonfloor
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['sexwithmoonfloor', 'moresexwithmoonfloor']
+  Successors: ['moresexwithmoonfloor', 'mostanding']
+
+Node: mostanding
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['moresexwithmoonfloor']
+  Successors: ['hotwallsex', 'hotbedsex']
+
+Node: hotwallsex
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['mostanding', 'hotwallsex', 'hotbedsex']
+  Successors: ['hotwallsex', 'hotbedsex', 'finishmorganoff']
+
+Node: hotbedsex
+  In-degree: 3, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['mostanding', 'hotwallsex', 'hotbedsex']
+  Successors: ['hotbedsex', 'hotwallsex', 'finishmorganoff']
+
+Node: finishmorganoff
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotwallsex', 'hotbedsex']
+  Successors: ['cumonstomach', 'cumonbreasts']
+
+Node: cumonstomach
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['finishmorganoff']
+  Successors: ['cuddleswithmo']
+
+Node: cumonbreasts
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['finishmorganoff']
+  Successors: ['cuddleswithmo']
+
+Node: cuddleswithmo
+  In-degree: 3, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['canwejustcuddlemo', 'cumonstomach', 'cumonbreasts']
+  Successors: ['ignoreworries', 'askaboutworries']
+
+Node: ignoreworries
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['cuddleswithmo']
+  Successors: ['afterworries']
+
+Node: askaboutworries
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['cuddleswithmo']
+  Successors: ['afterworries']
+
+Node: afterworries
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ignoreworries', 'askaboutworries']
+  Successors: ['apologizetomo', 'calmdownmo']
+
+Node: apologizetomo
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['afterworries']
+  Successors: ['waitformo']
+
+Node: calmdownmo
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['afterworries']
+  Successors: ['apologizetomo2', 'waitformo']
+
+Node: apologizetomo2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['calmdownmo']
+  Successors: ['waitformo']
+
+Node: waitformo
+  In-degree: 3, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['apologizetomo', 'calmdownmo', 'apologizetomo2']
+  Successors: ['lovethemorgan', 'leavethemorgan']
+
+Node: lovethemorgan
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['waitformo']
+  Successors: ['endBranchS7']
+
+Node: leavethemorgan
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['waitformo']
+  Successors: ['endBranchS7']
+
+Node: endBranchS7
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lovethemorgan', 'leavethemorgan']
+  Successors: ['ch4s8McMorningWalkWithBobby']
+
+Node: ch4s8McMorningWalkWithBobby
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['sceneSixEndBranches', 'endBranchS7']
+  Successors: ['textmorgan', 'donttextmorgan']
+
+Node: textmorgan
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s8McMorningWalkWithBobby']
+  Successors: ['bobbyarrival']
+
+Node: donttextmorgan
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s8McMorningWalkWithBobby']
+  Successors: ['bobbyarrival']
+
+Node: bobbyarrival
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['textmorgan', 'donttextmorgan']
+  Successors: ['seeyoubobby', 'bobbygrewuphere']
+
+Node: bobbygrewuphere
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['bobbyarrival']
+  Successors: ['seeyoubobby']
+
+Node: seeyoubobby
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['bobbyarrival', 'bobbygrewuphere']
+  Successors: ['ch4s9McFindsOutMorganLeft']
+
+Node: ch4s9McFindsOutMorganLeft
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch4']
+  Start indicators: []
+  Predecessors: ['seeyoubobby']
+  Successors: ['defendmoshonor', 'mcagreeswithannie']
+
+Node: defendmoshonor
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s9McFindsOutMorganLeft']
+  Successors: ['endscene9']
+
+Node: mcagreeswithannie
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s9McFindsOutMorganLeft']
+  Successors: ['endscene9']
+
+Node: endscene9
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['defendmoshonor', 'mcagreeswithannie']
+  Successors: ['ch4s10McBudTalkAboutMorganAndMaxCalls']
+
+Node: get_save_name
+  In-degree: 0, Out-degree: 0
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: []
+  Successors: []
+
+Node: splashscreen
+  In-degree: 0, Out-degree: 0
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: []
+  Successors: []
+
+Node: start
+  In-degree: 0, Out-degree: 1
+  Type: start
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: ['start']
+  Predecessors: []
+  Successors: ['ch1closingtime']
+
+Node: endofversion
+  In-degree: 1, Out-degree: 0
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ch4s17SurpriseMotherFucker']
+  Successors: []
+
+Node: unlock_gallery
+  In-degree: 0, Out-degree: 0
+  Type: ending
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: []
+  Successors: []
+
+=== COMPONENT ANALYSIS ===
+Component 1: 237 nodes
+  Nodes: ['reallylikemo', 'bobbygrewuphere', 'ch3s8afterchoiceswithkj', 'ch3s2isthisplacemystyle', 'ch1mccheckinglaptop', 'ch2s17menuforsexproposition', 'ch2s17nomovein', 'ch2s5gownsarcasm', 'ch3s3choosedoggyorcowgirl', 'turnkellydown', 'endChoice14', 'ch3s15morganblowjob', 'ch2s17wenthomeinsteadofsexwithkj', 'ch1cstore', 'ch1morganatbarjoeandkelly', 'ch3s4mcreturnshomeafterdate', 'ch2s7mcbudjoetalkatbar', 'ch3s13mcandmaxtext', 'ch2s12talkwithmax', 'finishanniesex', 'textymolove', 'hotwallsex', 'tellmaxtorest', 'ch3s9maxwakesupmc', 'ch3s5aftermaxchoices', 'ilikeherbut', 'mo_more_cunnilingus', 'soloAnnieChoice', 'ch4s7McMorganSex', 'moresexwithmoonfloor', 'moreanniecunnilingus', 'ch2s1mcwenthome', 'ch3s10ladiesnight', 'ch2s17kjandmccometoanunderstanding', 'askmorgan', 'ch2s15infrontofmorganshouse', 'ch3s2aftershots', 'ch3s12afteranniechoice', 'mo_more_doggy', 'sceneSixSecondEnd', 'ch1lastcallbudandkelly', 'ch3s15morgansexoptions2', 'ch3s15anal', 'finishannie', 'endscene9', 'ch3s3mcmorgancowgirl', 'ch3s5talkingwithannieaftermaxconvo', 'ch4s1McAndMaxHouseKitchen', 'ch3s15morgandisrobed', 'ch1maxsaysinvitefiona', 'ch1macaroni', 'madatfiona', 'ch2s19textingmorgan', 'ch1closingtime', 'ep4AnnieSex', 'endofsceen12', 'ch2s16closingthebarjoekj', 'ch1mcfionaflashback', 'mo_cunnilingus', 'ch2s17acceptkjsex', 'ch2s17declinekjsexafterhavingsexinch1', 'ch2s17yesmovein', 'ch3s8mcatbartalkstopattyandkj', 'askaboutworries', 'ch2s8doctorvisit', 'ch3s3mcmorganmissionary', 'girlongirl', 'apologizetomo', 'ch1drinkingonroof', 'endofversion', 'ch2s17declinekjsexforsecondtime', 'ch2s6anniefavor', 'ch4s16AfterChoices', 'ch3s3doyouwanttohavesexwithmorgan', 'c2s9mcmaxcar', 'ch3s3sexwithmorgan', 'offermaxthings', 'norushannie', 'annieanvil', 'donttextmorgan', 'start_threesome_chance', 'mcisheretohelp', 'ch3s15fingerannie', 'ch1barinventory', 'afterdream', 'ch1mckellycar', 'ch3s15endofscene15', 'noSexOption', 'ch3s15vaginalsex', 'ch1maxhouse', 'anniesexscene', 'hotbedsex', 'moremoblow', 'defendedfiona', 'ch4s5BudTalksToMcAboutMax', 'ch2s5nogownsarcasm', 'ch2s17kjexplainshowshefeels', 'sexwithmoonfloor', 'cumonstomach', 'ch3s2circumstances', 'sceneFiveEnd', 'ch3s5mcbaranniejoebudmaxintrouble', 'ch1budtalksaboutgirl', 'ch3s15choice23', 'enterannie', 'leavethemorgan', 'mcsaidannieiscute', 'cumonbreasts', 'budistotallyright', 'ch3s3mcmorganwheelbarrowpart2', 'ch1morgangetsaburger', 'ch3s2mcmorganclub', 'mo_doggy', 'mosexmontage', 'ch3s3nottonight', 'ch2s21mcmaxathome', 'ch4s9McFindsOutMorganLeft', 'reversecowgirlfinish', 'ch4s16end', 'leavebud', 'sceneSixEndBranches', 'ch4s4ThreesomeOrAnnieSolo', 'ch2s17aftersexwithKJ', 'ch2s17takingkellyjohome', 'ch4s17SurpriseMotherFucker', 'ch4s10McBudTalkAboutMorganAndMaxCalls', 'cowgirlfinish', 'ch4s15McAnnieTalkAboutMorganAgain', 'ch1mcfriendtext', 'girlstastemc', 'ch2s18mcmorgananniebar', 'ch1mcmorganelecstore', 'threesome_ep4', 'ch3s10afterchoicestotellmorganaboutpatty', 'ch2s6noanniefavor', 'situpsex', 'ch4s13McMorganText', 'ignoreworries', 'ch1maxreclinersleep', 'ch2s5breakfastwithmax', 'ch2s11morganasksyouout', 'apologizetomo2', 'ch2s3kjkitchen', 'ch2s17camehomeaftersexwithkj', 'ch3s14mcandbobbyatconveniencestore', 'textmorgan', 'ch3s15morgansexmenu', 'defendmoshonor', 'ch2s17hadsexwithkjch1', 'gohome', 'poorannie', 'ch3s15morgansex', 'gobednow', 'ch3s3mcmorganafterclub', 'ch4s3KjTellsBudTequilaStory', 'ch3s2anniecankeepasecret', 'ch3s2annieandtheevent', 'ch2s4walkofshame', 'ch3s1mcworriedaboutmaxathome', 'ch3s6mchomewithmaxandtextingmorgan', 'ch3s15scissoring', 'anniecowgirl', 'ch1kellymclewd', 'ch3s3mcmorgandoggy', 'idreamofannie', 'seeyoubobby', 'imleo', 'ch4scene12end', 'usetongueonannie', 'ch3s11mcandmaxnextmorning', 'ch3s2artandalcohol', 'ch4s11MCPicksUpMaxAfterAccident', 'calmdownmo', 'ch1mcchecksphone', 'start', 'waitformo', 'no_3some', 'maxtalksgirl', 'ch4s6McAnnieTalkAndMcTalksToMorgan', 'dreamedit', 'endBranchS7', 'ch3s5anniesaysshetoldbud', 'morelingerie', 'budmaxcouple', 'finish3some', 'acceptedkjproposal', 'ch3s3morganblowjob', 'ch3s3mcmorganwheelbarrowpart1', 'mcdoubting', 'askaboutmax', 'ch1angryconvowithmax', 'ch1mcanniewifi', 'leavemorganalone', 'sceneTwoAfterChoices', 'canwejustcuddlemo', 'cuddleswithmo', 'mostanding', 'ch4s12MaxAndBudArgueMaxHome', 'ch3s15cunnilingus', 'ch3s15mcwithannieormorgan', 'ch4s8McMorningWalkWithBobby', 'afterworries', 'ch2s14morgandatecoffeeshop', 'ch4s14McMaxMorningBedroomTalk', 'entermorgan', 'endSceneSix', 'lovethemorgan', 'ch2s10talkabouttrivianight', 'ch2s6afterchoices', 'ch3s12mcjoebobbypicksupdad', 'buddrink', 'ch2s12maxmclivingroom', 'moonbed', 'ch4s16McTalksToKjAboutMorgan', 'endSceneFour', 'bobbyarrival', 'ch2s17acceptsexafterhavingsexinch1', 'ch2s20trivianight', 'ch3s15afterblowjob', 'usefingersonannie', 'ch1mcrecall', 'finishmorganoff', 'ch1afterrooftopchoices', 'thisisdumbgrl', 'bobbyfishing', 'ch2s6mcannietalkatbar', 'ch3s15aftersex', 'anniecunnilingus', 'ch4s2McAndMaxCoverForAnnie', 'noregretannie', 'afterfirstname', 'ch2s13pickupmorganforcoffee', 'mcagreeswithannie', 'ch3s11aftermaxscherylchoice', 'budcleanskitchen', 'ch3s7mcatbarwithjoemorganellie', 'ch2s2kjmorningafter']
+
+Component 2: 1 nodes
+  Nodes: ['get_save_name']
+
+Component 3: 1 nodes
+  Nodes: ['splashscreen']
+
+Component 4: 1 nodes
+  Nodes: ['unlock_gallery']
+
+=== START NODE DETECTION ===
+Component 1 start candidates: ['ch3s5mcbaranniejoebudmaxintrouble', 'start_threesome_chance', 'start']
+  Nodes with no incoming edges: ['start']
+
+Component 2 start candidates: []
+  Nodes with no incoming edges: ['get_save_name']
+
+Component 3 start candidates: []
+  Nodes with no incoming edges: ['splashscreen']
+
+Component 4 start candidates: []
+  Nodes with no incoming edges: ['unlock_gallery']
+

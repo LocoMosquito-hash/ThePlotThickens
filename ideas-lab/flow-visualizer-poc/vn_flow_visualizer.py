@@ -497,10 +497,15 @@ class VNFlowVisualizer(QGraphicsView):
         """Apply layout algorithm to position nodes with narrative awareness."""
         if not self.graph or not self.nodes:
             return
+        
+        # Debug output
+        self._debug_graph_analysis(layout_type)
             
         # Handle different layout types
         if layout_type == 'narrative':
             pos = self._narrative_hierarchical_layout()
+        elif layout_type == 'narrative_flow':
+            pos = self._narrative_flow_layout()
         elif layout_type == 'topological':
             pos = self._topological_layout()
         elif layout_type == 'spring':
@@ -512,6 +517,8 @@ class VNFlowVisualizer(QGraphicsView):
                 pos = nx.nx_agraph.graphviz_layout(self.graph, prog='dot')
             except:
                 pos = self._narrative_hierarchical_layout()  # Fallback to narrative
+        elif layout_type == 'dot_like':
+            pos = self._dot_like_layout()
         elif layout_type == 'random':
             pos = nx.random_layout(self.graph)
         else:
@@ -699,6 +706,458 @@ class VNFlowVisualizer(QGraphicsView):
         except nx.NetworkXError:
             # Graph has cycles, fall back to narrative layout
             return self._narrative_hierarchical_layout()
+    
+    def _narrative_flow_layout(self) -> Dict[str, Tuple[float, float]]:
+        """
+        Create a narrative flow layout that prioritizes story progression over neat organization.
+        
+        This algorithm:
+        1. Ensures start nodes are always at the top
+        2. Detects chapter progression and respects it
+        3. Follows main narrative threads closely
+        4. Minimizes line crossings for better visual flow
+        """
+        pos = {}
+        
+        # Find disconnected components
+        if self.graph.is_directed():
+            components = list(nx.weakly_connected_components(self.graph))
+        else:
+            components = list(nx.connected_components(self.graph))
+        
+        component_width = 15  # More space between components for clarity
+        current_x_offset = 0
+        
+        for component_nodes in components:
+            # Create subgraph for this component
+            subgraph = self.graph.subgraph(component_nodes).copy()
+            
+            # Get component layout using narrative flow
+            component_pos = self._layout_narrative_flow_component(subgraph)
+            
+            # Offset this component horizontally
+            for node, (x, y) in component_pos.items():
+                pos[node] = (x + current_x_offset, y)
+            
+            # Calculate component width for next offset
+            if component_pos:
+                min_x = min(x for x, y in component_pos.values())
+                max_x = max(x for x, y in component_pos.values())
+                current_x_offset += (max_x - min_x) + component_width
+        
+        return pos
+    
+    def _layout_narrative_flow_component(self, subgraph: nx.DiGraph) -> Dict[str, Tuple[float, float]]:
+        """Layout a component prioritizing narrative flow over neat organization."""
+        
+        # Step 1: Find and position start nodes at the top
+        start_nodes = self._find_start_nodes(subgraph)
+        if not start_nodes:
+            start_nodes = [n for n in subgraph.nodes() if subgraph.in_degree(n) == 0]
+        if not start_nodes:
+            start_nodes = [max(subgraph.nodes(), key=lambda n: subgraph.out_degree(n))]
+        
+        # Step 2: Detect chapter progression  
+        chapter_groups = self._detect_chapter_groups(subgraph)
+        
+        # Step 3: Create narrative threads following main paths
+        narrative_threads = self._create_narrative_threads(subgraph, start_nodes)
+        
+        # Step 4: Position nodes prioritizing flow over organization
+        return self._position_narrative_flow_nodes(subgraph, start_nodes, chapter_groups, narrative_threads)
+    
+    def _detect_chapter_groups(self, subgraph: nx.DiGraph) -> Dict[str, List[str]]:
+        """Detect chapter groupings from node names."""
+        chapter_groups = {}
+        
+        for node in subgraph.nodes():
+            node_str = str(node).lower()
+            
+            # Look for chapter indicators
+            if 'ch1' in node_str or 'chapter1' in node_str:
+                chapter_groups.setdefault('ch1', []).append(node)
+            elif 'ch2' in node_str or 'chapter2' in node_str:
+                chapter_groups.setdefault('ch2', []).append(node)
+            elif 'ch3' in node_str or 'chapter3' in node_str:
+                chapter_groups.setdefault('ch3', []).append(node)
+            elif 'ch4' in node_str or 'chapter4' in node_str:
+                chapter_groups.setdefault('ch4', []).append(node)
+            elif 'ch5' in node_str or 'chapter5' in node_str:
+                chapter_groups.setdefault('ch5', []).append(node)
+            else:
+                # No clear chapter, put in general group
+                chapter_groups.setdefault('general', []).append(node)
+        
+        return chapter_groups
+    
+    def _create_narrative_threads(self, subgraph: nx.DiGraph, start_nodes: List[str]) -> List[List[str]]:
+        """Create narrative threads by following main paths from start nodes."""
+        threads = []
+        visited = set()
+        
+        for start_node in start_nodes:
+            if start_node in visited:
+                continue
+            
+            # Follow the main path from this start node
+            thread = []
+            current = start_node
+            
+            while current and current not in visited:
+                thread.append(current)
+                visited.add(current)
+                
+                # Find the most likely next node (prefer single successor, then highest degree)
+                successors = list(subgraph.successors(current))
+                if not successors:
+                    break
+                elif len(successors) == 1:
+                    current = successors[0]
+                else:
+                    # Choose successor with highest importance/connectivity
+                    current = max(successors, key=lambda n: (
+                        subgraph.out_degree(n),
+                        subgraph.in_degree(n),
+                        1 if subgraph.nodes.get(n, {}).get('has_menu', False) else 0
+                    ))
+            
+            if thread:
+                threads.append(thread)
+        
+        return threads
+    
+    def _position_narrative_flow_nodes(self, subgraph: nx.DiGraph, start_nodes: List[str], 
+                                     chapter_groups: Dict[str, List[str]], 
+                                     narrative_threads: List[List[str]]) -> Dict[str, Tuple[float, float]]:
+        """Position nodes to optimize narrative flow visualization."""
+        pos = {}
+        
+        # Step 1: Position start nodes at the very top
+        start_y = 0
+        for i, start_node in enumerate(start_nodes):
+            x = (i - len(start_nodes)/2) * 4
+            pos[start_node] = (x, start_y)
+        
+        # Step 2: Position main narrative threads vertically
+        thread_y_offset = -4  # Start below start nodes
+        positioned_nodes = set(start_nodes)
+        
+        for thread_idx, thread in enumerate(narrative_threads):
+            current_y = thread_y_offset
+            
+            for node_idx, node in enumerate(thread):
+                if node in positioned_nodes:
+                    continue
+                
+                # Position main thread nodes vertically with some horizontal spread
+                x = thread_idx * 2 + (node_idx % 3 - 1) * 0.5  # Slight horizontal variation
+                y = current_y - node_idx * 2
+                pos[node] = (x, y)
+                positioned_nodes.add(node)
+        
+        # Step 3: Position chapter groups, respecting their logical order
+        chapter_order = ['ch1', 'ch2', 'ch3', 'ch4', 'ch5', 'general']
+        chapter_y_start = min(pos.values(), key=lambda p: p[1])[1] - 6  # Below main threads
+        
+        for chapter_idx, chapter in enumerate(chapter_order):
+            if chapter not in chapter_groups:
+                continue
+                
+            chapter_nodes = [n for n in chapter_groups[chapter] if n not in positioned_nodes]
+            if not chapter_nodes:
+                continue
+            
+            # Position chapter nodes in a more spread-out pattern
+            chapter_y = chapter_y_start - chapter_idx * 8
+            nodes_per_row = max(3, min(6, len(chapter_nodes) // 2))
+            
+            for i, node in enumerate(chapter_nodes):
+                row = i // nodes_per_row
+                col = i % nodes_per_row
+                x = (col - nodes_per_row/2) * 3
+                y = chapter_y - row * 3
+                pos[node] = (x, y)
+                positioned_nodes.add(node)
+        
+        # Step 4: Position any remaining nodes
+        remaining_nodes = [n for n in subgraph.nodes() if n not in positioned_nodes]
+        if remaining_nodes:
+            remaining_y = min(pos.values(), key=lambda p: p[1])[1] - 8
+            for i, node in enumerate(remaining_nodes):
+                x = (i % 5 - 2) * 4
+                y = remaining_y - (i // 5) * 3
+                pos[node] = (x, y)
+        
+        return pos
+    
+    def _debug_graph_analysis(self, layout_type: str):
+        """Debug function to analyze graph structure and layout decisions."""
+        if not self.graph:
+            return
+            
+        import os
+        debug_file = f"debug_layout_{layout_type}.txt"
+        
+        with open(debug_file, 'w') as f:
+            f.write(f"=== GRAPH ANALYSIS FOR {layout_type.upper()} LAYOUT ===\n\n")
+            
+            # Basic graph stats
+            f.write(f"Total nodes: {len(self.graph.nodes)}\n")
+            f.write(f"Total edges: {len(self.graph.edges)}\n")
+            f.write(f"Is directed: {self.graph.is_directed()}\n\n")
+            
+            # Node analysis
+            f.write("=== NODE ANALYSIS ===\n")
+            for node in self.graph.nodes:
+                node_data = self.graph.nodes.get(node, {})
+                in_degree = self.graph.in_degree(node)
+                out_degree = self.graph.out_degree(node)
+                
+                f.write(f"Node: {node}\n")
+                f.write(f"  In-degree: {in_degree}, Out-degree: {out_degree}\n")
+                f.write(f"  Type: {node_data.get('node_type', 'unknown')}\n")
+                f.write(f"  Has menu: {node_data.get('has_menu', False)}\n")
+                
+                # Check for chapter indicators
+                node_lower = str(node).lower()
+                chapter_indicators = []
+                for ch in ['ch1', 'ch2', 'ch3', 'ch4', 'ch5']:
+                    if ch in node_lower:
+                        chapter_indicators.append(ch)
+                f.write(f"  Chapter indicators: {chapter_indicators}\n")
+                
+                # Check for start indicators
+                start_indicators = []
+                for start in ['start', 'main', 'begin', 'intro', 'prologue', 'opening']:
+                    if start in node_lower:
+                        start_indicators.append(start)
+                f.write(f"  Start indicators: {start_indicators}\n")
+                
+                f.write(f"  Predecessors: {list(self.graph.predecessors(node))}\n")
+                f.write(f"  Successors: {list(self.graph.successors(node))}\n\n")
+            
+            # Component analysis
+            f.write("=== COMPONENT ANALYSIS ===\n")
+            if self.graph.is_directed():
+                components = list(nx.weakly_connected_components(self.graph))
+            else:
+                components = list(nx.connected_components(self.graph))
+            
+            for i, component in enumerate(components):
+                f.write(f"Component {i+1}: {len(component)} nodes\n")
+                f.write(f"  Nodes: {list(component)}\n\n")
+            
+            # Start node detection
+            f.write("=== START NODE DETECTION ===\n")
+            for i, component in enumerate(components):
+                subgraph = self.graph.subgraph(component)
+                start_candidates = self._find_start_nodes(subgraph)
+                f.write(f"Component {i+1} start candidates: {start_candidates}\n")
+                
+                # Also check nodes with no incoming edges
+                no_incoming = [n for n in component if self.graph.in_degree(n) == 0]
+                f.write(f"  Nodes with no incoming edges: {no_incoming}\n\n")
+        
+        print(f"Debug analysis saved to {debug_file}")
+    
+    def _dot_like_layout(self) -> Dict[str, Tuple[float, float]]:
+        """
+        DOT-like layout algorithm following the Sugiyama framework.
+        
+        This implements the four phases of the Sugiyama framework:
+        1. Layer Assignment - assign nodes to hierarchical layers
+        2. Crossing Reduction - minimize edge crossings
+        3. Coordinate Assignment - assign final positions
+        """
+        pos = {}
+        
+        # Find disconnected components
+        if self.graph.is_directed():
+            components = list(nx.weakly_connected_components(self.graph))
+        else:
+            components = list(nx.connected_components(self.graph))
+        
+        component_width = 20  # Space between components
+        current_x_offset = 0
+        
+        for component_nodes in components:
+            # Create subgraph for this component
+            subgraph = self.graph.subgraph(component_nodes).copy()
+            
+            # Apply DOT algorithm to this component
+            component_pos = self._dot_like_component(subgraph)
+            
+            # Offset this component horizontally
+            for node, (x, y) in component_pos.items():
+                pos[node] = (x + current_x_offset, y)
+            
+            # Calculate component width for next offset
+            if component_pos:
+                min_x = min(x for x, y in component_pos.values())
+                max_x = max(x for x, y in component_pos.values())
+                current_x_offset += (max_x - min_x) + component_width
+        
+        return pos
+    
+    def _dot_like_component(self, subgraph: nx.DiGraph) -> Dict[str, Tuple[float, float]]:
+        """Apply DOT algorithm to a single component following Sugiyama framework."""
+        
+        # Phase 1: Layer Assignment
+        layers = self._assign_layers_dot(subgraph)
+        
+        # Phase 2: Crossing Reduction
+        optimized_layers = self._reduce_crossings_dot(subgraph, layers)
+        
+        # Phase 3: Coordinate Assignment
+        return self._assign_coordinates_dot(subgraph, optimized_layers)
+    
+    def _assign_layers_dot(self, subgraph: nx.DiGraph) -> List[List[str]]:
+        """
+        Phase 1: Layer Assignment using longest path algorithm.
+        
+        This assigns each node to a layer based on its longest path from start nodes.
+        """
+        # Find start nodes (nodes with no incoming edges)
+        start_nodes = [n for n in subgraph.nodes() if subgraph.in_degree(n) == 0]
+        
+        if not start_nodes:
+            # If no start nodes, look for nodes with minimum incoming degree
+            min_in_degree = min(subgraph.in_degree(n) for n in subgraph.nodes())
+            start_nodes = [n for n in subgraph.nodes() if subgraph.in_degree(n) == min_in_degree]
+        
+        # Calculate layer for each node using longest path
+        node_layers = {}
+        
+        # Initialize all nodes to layer 0
+        for node in subgraph.nodes():
+            node_layers[node] = 0
+        
+        # Set start nodes to layer 0
+        for node in start_nodes:
+            node_layers[node] = 0
+        
+        print(f"DOT-like algorithm: Found start nodes: {start_nodes}")
+        
+        # Use topological sort to process nodes in correct order
+        try:
+            topo_order = list(nx.topological_sort(subgraph))
+        except (nx.NetworkXError, nx.NetworkXUnfeasible):
+            # Graph has cycles, fall back to narrative layout
+            print(f"DOT-like layout detected cycles, falling back to narrative layout")
+            return self._create_narrative_layers(subgraph, start_nodes)
+        
+        # For each node, set its layer to max(predecessor_layers) + 1
+        for node in topo_order:
+            if node in start_nodes:
+                continue
+            
+            predecessors = list(subgraph.predecessors(node))
+            if predecessors:
+                max_pred_layer = max(node_layers[pred] for pred in predecessors)
+                node_layers[node] = max_pred_layer + 1
+        
+        # Group nodes by layer
+        max_layer = max(node_layers.values()) if node_layers else 0
+        layers = [[] for _ in range(max_layer + 1)]
+        
+        for node, layer in node_layers.items():
+            layers[layer].append(node)
+        
+        print(f"DOT-like algorithm: Created {len(layers)} layers")
+        for i, layer_nodes in enumerate(layers):
+            print(f"  Layer {i}: {layer_nodes[:3]}{'...' if len(layer_nodes) > 3 else ''} ({len(layer_nodes)} nodes)")
+        
+        return layers
+    
+    def _reduce_crossings_dot(self, subgraph: nx.DiGraph, layers: List[List[str]]) -> List[List[str]]:
+        """
+        Phase 2: Crossing Reduction using barycenter method.
+        
+        This performs layer-by-layer sweeps to minimize edge crossings.
+        """
+        if len(layers) <= 1:
+            return layers
+        
+        # Make a copy to avoid modifying the original
+        working_layers = [layer[:] for layer in layers]
+        
+        # Perform multiple sweeps
+        for _ in range(5):  # Maximum 5 iterations
+            # Forward sweep (top to bottom)
+            for i in range(1, len(working_layers)):
+                working_layers[i] = self._order_layer_by_barycenter(
+                    subgraph, working_layers[i-1], working_layers[i], direction='down'
+                )
+            
+            # Backward sweep (bottom to top)
+            for i in range(len(working_layers) - 2, -1, -1):
+                working_layers[i] = self._order_layer_by_barycenter(
+                    subgraph, working_layers[i+1], working_layers[i], direction='up'
+                )
+        
+        return working_layers
+    
+    def _order_layer_by_barycenter(self, subgraph: nx.DiGraph, fixed_layer: List[str], 
+                                   moving_layer: List[str], direction: str) -> List[str]:
+        """Order nodes in a layer by their barycenter positions."""
+        
+        # Create position mapping for fixed layer
+        fixed_positions = {node: i for i, node in enumerate(fixed_layer)}
+        
+        # Calculate barycenter for each node in moving layer
+        node_barycenters = []
+        
+        for node in moving_layer:
+            if direction == 'down':
+                # Look at predecessors in the layer above
+                neighbors = [n for n in subgraph.predecessors(node) if n in fixed_positions]
+            else:
+                # Look at successors in the layer below
+                neighbors = [n for n in subgraph.successors(node) if n in fixed_positions]
+            
+            if neighbors:
+                # Calculate barycenter (average position)
+                barycenter = sum(fixed_positions[n] for n in neighbors) / len(neighbors)
+            else:
+                # Node has no relevant neighbors, use current position
+                barycenter = moving_layer.index(node)
+            
+            node_barycenters.append((node, barycenter))
+        
+        # Sort by barycenter and return ordered nodes
+        node_barycenters.sort(key=lambda x: x[1])
+        return [node for node, _ in node_barycenters]
+    
+    def _assign_coordinates_dot(self, subgraph: nx.DiGraph, layers: List[List[str]]) -> Dict[str, Tuple[float, float]]:
+        """
+        Phase 3: Coordinate Assignment.
+        
+        This assigns final x,y coordinates to each node.
+        Start nodes appear at the top, flowing downward.
+        """
+        pos = {}
+        
+        # Assign Y coordinates based on layer
+        layer_spacing = 4
+        
+        for layer_idx, layer_nodes in enumerate(layers):
+            # Start nodes (layer 0) should be at the top (smallest Y value)
+            y = layer_idx * layer_spacing
+            
+            print(f"DOT coordinates: Layer {layer_idx} -> Y={y}, nodes: {layer_nodes[:3]}{'...' if len(layer_nodes) > 3 else ''}")
+            
+            # Assign X coordinates within the layer
+            if len(layer_nodes) == 1:
+                x = 0
+                pos[layer_nodes[0]] = (x, y)
+            else:
+                # Spread nodes horizontally
+                total_width = max(8, (len(layer_nodes) - 1) * 3)
+                for i, node in enumerate(layer_nodes):
+                    x = (i * total_width) / max(1, len(layer_nodes) - 1) - total_width / 2
+                    pos[node] = (x, y)
+        
+        return pos
             
     def mousePressEvent(self, event):
         """Handle mouse press events for navigation."""
