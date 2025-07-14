@@ -6,6 +6,8 @@ This widget handles the display, interaction, and manipulation of VN branching s
 """
 
 import math
+import sys
+from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 from PyQt6.QtWidgets import (
     QGraphicsView, QGraphicsScene, QGraphicsItem, QGraphicsObject,
@@ -20,6 +22,22 @@ from PyQt6.QtGui import (
 )
 import networkx as nx
 
+# Import renpy-source-api control flow modules
+try:
+    # Add path for renpy-source-api imports
+    current_dir = Path(__file__).parent
+    app_dir = current_dir.parent.parent / "app"
+    renpy_api_dir = app_dir / "renpy-source-api"
+    sys.path.insert(0, str(renpy_api_dir))
+    
+    from control_flow.start_label_finder import StartLabelFinder
+    from control_flow.analyze_vn_menus import MenuAnalyzer
+    from control_flow.analyze_vn_jumps import analyze_jumps_in_vn
+    CONTROL_FLOW_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Could not import control_flow modules: {e}")
+    CONTROL_FLOW_AVAILABLE = False
+
 
 class VNLabelNode(QGraphicsObject):
     """
@@ -29,12 +47,13 @@ class VNLabelNode(QGraphicsObject):
     (start label, menu choices, endings, etc.)
     """
     
-    def __init__(self, node_id: str, node_data: Dict[str, Any], parent=None):
+    def __init__(self, node_id: str, node_data: Dict[str, Any], semantic_classification: str = "linear", parent=None):
         super().__init__(parent)
         
         self.node_id = node_id
         self.node_data = node_data
         self.node_name = node_data.get('name', node_id)
+        self.semantic_classification = semantic_classification
         
         # Visual properties
         self.base_width = 120  # Base width for rectangular nodes
@@ -59,16 +78,23 @@ class VNLabelNode(QGraphicsObject):
         self.setAcceptHoverEvents(True)
         
     def _determine_colors(self) -> Dict[str, QColor]:
-        """Determine node colors based on node properties."""
-        base_color = QColor(100, 150, 250)  # Default blue
+        """Determine node colors based on semantic classification."""
         
-        # Special colors for different node types
-        if self.node_name == 'start':
-            base_color = QColor(100, 250, 100)  # Green for start
-        elif not self.node_data.get('outgoing_flows', []):
+        # Phase 2: Intelligent Node Classification Color Scheme
+        color_map = {
+            'start': QColor(100, 250, 100),      # Green - True start node
+            'decision': QColor(250, 200, 100),    # Yellow - Decision points from MenuAnalyzer
+            'linear': QColor(100, 150, 250),      # Blue - Linear story progression
+            'orphaned': QColor(150, 150, 150),    # Gray - Orphaned/unreachable nodes
+            'jump_target': QColor(200, 100, 250), # Purple - Jump targets
+        }
+        
+        # Get base color from semantic classification
+        base_color = color_map.get(self.semantic_classification, QColor(100, 150, 250))
+        
+        # Special handling for endings (no outgoing flows)
+        if not self.node_data.get('outgoing_flows', []) and self.semantic_classification != 'orphaned':
             base_color = QColor(250, 100, 100)  # Red for endings
-        elif self.node_data.get('has_menu', False):
-            base_color = QColor(250, 200, 100)  # Yellow for choice points
             
         return {
             'normal': base_color,
@@ -380,6 +406,11 @@ class VNFlowVisualizer(QGraphicsView):
         self.graph: Optional[nx.DiGraph] = None
         self.current_flow_graph: Optional[Dict[str, Any]] = None
         
+        # Semantic analysis data
+        self.project_path: Optional[str] = None
+        self.semantic_start_node: Optional[str] = None
+        self.semantic_classifications: Dict[str, str] = {}  # node_id -> classification
+        
         # Middle mouse button state
         self._middle_button_pressed = False
         
@@ -409,8 +440,17 @@ class VNFlowVisualizer(QGraphicsView):
         # Store current graph data
         self.current_flow_graph = analysis_data
         
+        # Extract project path for semantic analysis
+        self.project_path = analysis_data.get('project_path')
+        
+        # Find the semantic start node using StartLabelFinder
+        self.semantic_start_node = self._find_semantic_start_node(self.project_path)
+        
         # Convert renpy-source-api flow graph to NetworkX format
         self.graph = self._convert_flow_graph_to_networkx(flow_graph)
+        
+        # Perform semantic node classification
+        self.semantic_classifications = self._classify_nodes_semantically(self.project_path)
         
         # Create visualization
         self.create_visualization()
@@ -502,9 +542,10 @@ class VNFlowVisualizer(QGraphicsView):
         if not self.graph:
             return
              
-        # Create nodes
+        # Create nodes with semantic classification
         for node_id in self.graph.nodes:
-            node_item = VNLabelNode(node_id, self.graph.nodes[node_id])
+            semantic_classification = self.semantic_classifications.get(node_id, "linear")
+            node_item = VNLabelNode(node_id, self.graph.nodes[node_id], semantic_classification)
             self.scene.addItem(node_item)
             self.nodes[node_id] = node_item
              
@@ -623,8 +664,8 @@ class VNFlowVisualizer(QGraphicsView):
     def _layout_narrative_component(self, subgraph: nx.DiGraph) -> Dict[str, Tuple[float, float]]:
         """Layout a single connected component with narrative awareness."""
         
-        # Find potential start nodes
-        start_candidates = self._find_start_nodes(subgraph)
+        # Find potential start nodes using semantic detection
+        start_candidates = self._find_start_nodes(subgraph, self.semantic_start_node)
         
         if not start_candidates:
             # If no clear start, use nodes with no incoming edges
@@ -640,18 +681,154 @@ class VNFlowVisualizer(QGraphicsView):
         # Position nodes in layers
         return self._position_narrative_layers(layers, subgraph)
         
-    def _find_start_nodes(self, subgraph: nx.DiGraph) -> List[str]:
-        """Find likely story start nodes."""
-        start_candidates = []
+    def _find_semantic_start_node(self, project_path: Optional[str]) -> Optional[str]:
+        """
+        Find the true semantic start node using StartLabelFinder.
         
-        # Check for common start label names
+        Args:
+            project_path: Path to the Renpy project's game directory
+            
+        Returns:
+            The actual start label name, or None if not found
+        """
+        if not CONTROL_FLOW_AVAILABLE or not project_path:
+            return None
+            
+        try:
+            finder = StartLabelFinder(project_path)
+            start_label_obj = finder.find_start_label()
+            if start_label_obj and hasattr(start_label_obj, 'label_name'):
+                start_label = start_label_obj.label_name
+                print(f"Semantic start node detection: Found '{start_label}' in {project_path}")
+                return start_label
+            else:
+                print(f"Semantic start node detection: No valid start label found in {project_path}")
+                return None
+        except Exception as e:
+            print(f"Error finding semantic start node: {e}")
+            return None
+    
+    def _classify_nodes_semantically(self, project_path: Optional[str]) -> Dict[str, str]:
+        """
+        Classify all nodes semantically using MenuAnalyzer, jump analysis, and flow structure.
+        
+        Args:
+            project_path: Path to the Renpy project's game directory
+            
+        Returns:
+            Dictionary mapping node_id -> classification
+        """
+        classifications = {}
+        
+        if not CONTROL_FLOW_AVAILABLE or not project_path or not self.graph:
+            # Fallback to basic classification
+            for node in self.graph.nodes():
+                classifications[node] = "linear"
+            return classifications
+        
+        try:
+            print("Starting semantic node classification...")
+            
+            # 1. Start node classification
+            if self.semantic_start_node:
+                classifications[self.semantic_start_node] = "start"
+                print(f"Classified '{self.semantic_start_node}' as start node")
+            
+            # 2. Menu analysis for decision points
+            menu_analyzer = MenuAnalyzer()
+            menu_analysis = menu_analyzer.analyze_vn_menus(project_path)
+            
+            decision_nodes = set()
+            for menu_struct in menu_analysis.get('menu_structures', []):
+                if menu_struct.label_name:
+                    decision_nodes.add(menu_struct.label_name)
+                    classifications[menu_struct.label_name] = "decision"
+            
+            print(f"Classified {len(decision_nodes)} decision point nodes from MenuAnalyzer")
+            
+            # 3. Jump target analysis  
+            jump_analysis = analyze_jumps_in_vn(project_path)
+            jump_targets = set(jump_analysis.get('jump_targets', []))
+            
+            for target in jump_targets:
+                if target in self.graph.nodes() and target not in classifications:
+                    classifications[target] = "jump_target"
+            
+            print(f"Classified {len(jump_targets)} jump target nodes")
+            
+            # 4. Orphaned/unreachable nodes
+            for node in self.graph.nodes():
+                if node not in classifications:
+                    # Check if node is reachable from start
+                    if self.semantic_start_node and self.semantic_start_node in self.graph.nodes():
+                        try:
+                            # Try to find path from start to this node
+                            if nx.has_path(self.graph, self.semantic_start_node, node):
+                                # Node is reachable - classify as linear progression
+                                classifications[node] = "linear"
+                            else:
+                                # Node is unreachable from start
+                                classifications[node] = "orphaned"
+                        except:
+                            # If path checking fails, default to linear
+                            classifications[node] = "linear"
+                    else:
+                        # No semantic start available, check connectivity
+                        if self.graph.in_degree(node) == 0:
+                            classifications[node] = "orphaned"
+                        else:
+                            classifications[node] = "linear"
+            
+            print(f"Semantic classification complete: {len(classifications)} nodes classified")
+            
+            # Print classification summary
+            classification_counts = {}
+            for classification in classifications.values():
+                classification_counts[classification] = classification_counts.get(classification, 0) + 1
+            
+            print(f"Classification summary: {classification_counts}")
+            
+            return classifications
+            
+        except Exception as e:
+            print(f"Error in semantic classification: {e}")
+            # Fallback to basic classification
+            for node in self.graph.nodes():
+                classifications[node] = "linear"
+            return classifications
+    
+    def _find_start_nodes(self, subgraph: nx.DiGraph, semantic_start: Optional[str] = None) -> List[str]:
+        """
+        Find story start nodes using semantic analysis when possible.
+        
+        Args:
+            subgraph: The graph component to analyze
+            semantic_start: The true start node from StartLabelFinder
+            
+        Returns:
+            List of start node candidates
+        """
+        # Priority 1: Use semantic start node if available and in this subgraph
+        if semantic_start and semantic_start in subgraph.nodes():
+            print(f"Using semantic start node: {semantic_start}")
+            return [semantic_start]
+        
+        # Priority 2: Look for common start label names
+        start_candidates = []
         start_names = ['start', 'main', 'begin', 'intro', 'prologue', 'opening']
         for node in subgraph.nodes():
             node_lower = str(node).lower()
             if any(start_name in node_lower for start_name in start_names):
                 start_candidates.append(node)
-                
-        return start_candidates
+        
+        if start_candidates:
+            print(f"Using heuristic start nodes: {start_candidates}")
+            return start_candidates
+            
+        # Priority 3: Fallback to nodes with no incoming edges (current problematic behavior)
+        fallback_candidates = [n for n in subgraph.nodes() if subgraph.in_degree(n) == 0]
+        print(f"Fallback to orphaned start nodes: {fallback_candidates}")
+        return fallback_candidates
         
     def _create_narrative_layers(self, subgraph: nx.DiGraph, start_nodes: List[str]) -> List[List[str]]:
         """Create narrative depth layers using BFS from start nodes."""
@@ -790,8 +967,8 @@ class VNFlowVisualizer(QGraphicsView):
     def _layout_narrative_flow_component(self, subgraph: nx.DiGraph) -> Dict[str, Tuple[float, float]]:
         """Layout a component prioritizing narrative flow over neat organization."""
         
-        # Step 1: Find and position start nodes at the top
-        start_nodes = self._find_start_nodes(subgraph)
+        # Step 1: Find and position start nodes at the top using semantic detection
+        start_nodes = self._find_start_nodes(subgraph, self.semantic_start_node)
         if not start_nodes:
             start_nodes = [n for n in subgraph.nodes() if subgraph.in_degree(n) == 0]
         if not start_nodes:
@@ -991,7 +1168,7 @@ class VNFlowVisualizer(QGraphicsView):
             f.write("=== START NODE DETECTION ===\n")
             for i, component in enumerate(components):
                 subgraph = self.graph.subgraph(component)
-                start_candidates = self._find_start_nodes(subgraph)
+                start_candidates = self._find_start_nodes(subgraph, self.semantic_start_node)
                 f.write(f"Component {i+1} start candidates: {start_candidates}\n")
                 
                 # Also check nodes with no incoming edges
@@ -1057,11 +1234,11 @@ class VNFlowVisualizer(QGraphicsView):
         
         This assigns each node to a layer based on its longest path from start nodes.
         """
-        # Find start nodes (nodes with no incoming edges)
-        start_nodes = [n for n in subgraph.nodes() if subgraph.in_degree(n) == 0]
+        # Use semantic start node detection instead of naive orphaned label approach
+        start_nodes = self._find_start_nodes(subgraph, self.semantic_start_node)
         
         if not start_nodes:
-            # If no start nodes, look for nodes with minimum incoming degree
+            # If no start nodes found, look for nodes with minimum incoming degree
             min_in_degree = min(subgraph.in_degree(n) for n in subgraph.nodes())
             start_nodes = [n for n in subgraph.nodes() if subgraph.in_degree(n) == min_in_degree]
         
