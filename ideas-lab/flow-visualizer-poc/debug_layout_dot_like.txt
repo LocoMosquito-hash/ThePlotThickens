@@ -1,0 +1,450 @@
+=== GRAPH ANALYSIS FOR DOT_LIKE LAYOUT ===
+
+Total nodes: 47
+Total edges: 47
+Is directed: True
+
+=== NODE ANALYSIS ===
+Node: start
+  In-degree: 0, Out-degree: 1
+  Type: start
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: ['start']
+  Predecessors: []
+  Successors: ['chapter1scene1']
+
+Node: chapter1scene1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['start']
+  Successors: ['chapter1scene2']
+
+Node: chapter1scene2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter1scene1']
+  Successors: ['chapter1scene3']
+
+Node: chapter1scene3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter1scene2']
+  Successors: ['chapter1scene4']
+
+Node: chapter1scene4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter1scene3']
+  Successors: ['chapter1scene5']
+
+Node: chapter1scene5
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter1scene4']
+  Successors: ['bookTaken', 'bookNotTaken']
+
+Node: bookTaken
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter1scene5']
+  Successors: ['chapter1scene6']
+
+Node: bookNotTaken
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter1scene5']
+  Successors: ['chapter1scene6']
+
+Node: chapter1scene6
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['bookTaken', 'bookNotTaken']
+  Successors: ['chapter1scene7']
+
+Node: chapter1scene7
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter1scene6']
+  Successors: ['chapter1scene8']
+
+Node: chapter1scene8
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter1scene7']
+  Successors: ['chapter1scene8didntquitjob', 'chapter1scene8quitjob']
+
+Node: chapter1scene8didntquitjob
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter1scene8']
+  Successors: ['chapter1scene9']
+
+Node: chapter1scene8quitjob
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter1scene8']
+  Successors: ['chapter1scene9']
+
+Node: chapter1scene9
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter1scene8didntquitjob', 'chapter1scene8quitjob']
+  Successors: ['chapter2scene1']
+
+Node: chapter2scene1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter1scene9']
+  Successors: ['chapter2scene1a']
+
+Node: chapter2scene1a
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene1']
+  Successors: ['chapter2scene1b']
+
+Node: chapter2scene1b
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene1a']
+  Successors: ['chapter2scene2']
+
+Node: chapter2scene2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene1b']
+  Successors: ['chapter2scene3']
+
+Node: chapter2scene3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene2']
+  Successors: ['chapter2scene4']
+
+Node: chapter2scene4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene3']
+  Successors: ['chapter2scene5']
+
+Node: chapter2scene5
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene4']
+  Successors: ['chapter2scene6']
+
+Node: chapter2scene6
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene5']
+  Successors: ['chapter2scene7']
+
+Node: chapter2scene7
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene6']
+  Successors: ['meetCynthia', 'dontmeetCynthia']
+
+Node: meetCynthia
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene7']
+  Successors: ['chapter2scene7a']
+
+Node: dontmeetCynthia
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene7']
+  Successors: ['chapter2scene7a']
+
+Node: chapter2scene7a
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['meetCynthia', 'dontmeetCynthia']
+  Successors: ['chapter2scene8']
+
+Node: chapter2scene8
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene7a']
+  Successors: ['chapter2scene8a']
+
+Node: chapter2scene8a
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene8']
+  Successors: ['chapter2scene9']
+
+Node: chapter2scene9
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene8a']
+  Successors: ['chapter3scene1']
+
+Node: chapter3scene1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter2scene9']
+  Successors: ['chapter3scene2']
+
+Node: chapter3scene2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter3scene1']
+  Successors: ['chapter3scene2a']
+
+Node: chapter3scene2a
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter3scene2']
+  Successors: ['chapter3scene3']
+
+Node: chapter3scene3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter3scene2a']
+  Successors: ['chapter3scene3a']
+
+Node: chapter3scene3a
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter3scene3']
+  Successors: ['chapter3scene4']
+
+Node: chapter3scene4
+  In-degree: 1, Out-degree: 0
+  Type: ending
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter3scene3a']
+  Successors: []
+
+Node: tryReject
+  In-degree: 4, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['rejFail1', 'rejFail2', 'rejFail3', 'rejFail4']
+  Successors: ['commitOlivia']
+
+Node: rejFail1
+  In-degree: 0, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: []
+  Successors: ['tryReject']
+
+Node: rejFail2
+  In-degree: 0, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: []
+  Successors: ['tryReject']
+
+Node: rejFail3
+  In-degree: 0, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: []
+  Successors: ['tryReject']
+
+Node: rejFail4
+  In-degree: 0, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: []
+  Successors: ['tryReject']
+
+Node: commitOlivia
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['tryReject']
+  Successors: ['chapter3scene5']
+
+Node: rejectOlivia
+  In-degree: 0, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: []
+  Successors: ['chapter3scene5']
+
+Node: chapter3scene5
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['commitOlivia', 'rejectOlivia']
+  Successors: ['chapter3scene6']
+
+Node: chapter3scene6
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter3scene5']
+  Successors: ['chapter3scene7']
+
+Node: chapter3scene7
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter3scene6']
+  Successors: ['endthegame']
+
+Node: endthegame
+  In-degree: 1, Out-degree: 0
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['chapter3scene7']
+  Successors: []
+
+Node: splashscreen
+  In-degree: 0, Out-degree: 0
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: []
+  Successors: []
+
+=== COMPONENT ANALYSIS ===
+Component 1: 35 nodes
+  Nodes: ['chapter2scene7', 'chapter3scene1', 'chapter1scene8', 'bookTaken', 'chapter2scene1', 'chapter1scene9', 'chapter2scene9', 'chapter2scene4', 'chapter1scene7', 'chapter3scene3', 'chapter3scene2', 'chapter1scene8didntquitjob', 'chapter2scene1a', 'chapter3scene3a', 'chapter1scene6', 'meetCynthia', 'chapter3scene2a', 'start', 'chapter1scene1', 'chapter1scene2', 'chapter1scene8quitjob', 'chapter2scene7a', 'chapter3scene4', 'chapter2scene3', 'chapter2scene8', 'chapter1scene3', 'chapter2scene1b', 'chapter2scene8a', 'dontmeetCynthia', 'chapter2scene6', 'chapter1scene4', 'chapter1scene5', 'bookNotTaken', 'chapter2scene5', 'chapter2scene2']
+
+Component 2: 11 nodes
+  Nodes: ['commitOlivia', 'rejectOlivia', 'rejFail2', 'chapter3scene6', 'rejFail4', 'rejFail3', 'rejFail1', 'chapter3scene7', 'tryReject', 'chapter3scene5', 'endthegame']
+
+Component 3: 1 nodes
+  Nodes: ['splashscreen']
+
+=== START NODE DETECTION ===
+Component 1 start candidates: ['start']
+  Nodes with no incoming edges: ['start']
+
+Component 2 start candidates: []
+  Nodes with no incoming edges: ['rejectOlivia', 'rejFail2', 'rejFail4', 'rejFail3', 'rejFail1']
+
+Component 3 start candidates: []
+  Nodes with no incoming edges: ['splashscreen']
+

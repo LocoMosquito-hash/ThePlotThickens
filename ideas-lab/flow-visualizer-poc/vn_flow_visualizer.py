@@ -37,9 +37,13 @@ class VNLabelNode(QGraphicsObject):
         self.node_name = node_data.get('name', node_id)
         
         # Visual properties
-        self.radius = 40
-        self.selected_radius = 50
+        self.base_width = 120  # Base width for rectangular nodes
+        self.height = 40       # Height of rectangular nodes
+        self.selected_scale = 1.2  # Scale factor when selected
         self.colors = self._determine_colors()
+        
+        # Calculate dynamic width based on text length
+        self.width = max(self.base_width, len(self.node_name) * 8 + 20)
         
         # State
         self._selected = False
@@ -75,47 +79,52 @@ class VNLabelNode(QGraphicsObject):
         
     def boundingRect(self) -> QRectF:
         """Return the bounding rectangle of this item."""
-        radius = self.selected_radius if self._selected else self.radius
-        return QRectF(-radius, -radius, radius * 2, radius * 2)
+        scale = self.selected_scale if self._selected else 1.0
+        width = self.width * scale
+        height = self.height * scale
+        return QRectF(-width/2, -height/2, width, height)
         
     def paint(self, painter: QPainter, option, widget=None):
         """Paint the node."""
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        # Determine current radius and color
-        radius = self.selected_radius if self._selected else self.radius
+        # Determine current size and color
+        scale = self.selected_scale if self._selected else 1.0
+        width = self.width * scale
+        height = self.height * scale
         color = self.colors['selected'] if self._selected else \
                 self.colors['hover'] if self._highlighted else \
                 self.colors['normal']
         
         # Create gradient
-        gradient = QRadialGradient(0, 0, radius)
+        gradient = QLinearGradient(0, -height/2, 0, height/2)
         gradient.setColorAt(0, color.lighter(130))
         gradient.setColorAt(1, color.darker(110))
         
-        # Draw circle
+        # Draw rounded rectangle
         painter.setBrush(QBrush(gradient))
         painter.setPen(QPen(color.darker(140), 2))
-        painter.drawEllipse(-radius, -radius, radius * 2, radius * 2)
+        rect = QRectF(-width/2, -height/2, width, height)
+        painter.drawRoundedRect(rect, 8, 8)  # 8px corner radius
         
         # Draw text
         painter.setPen(QPen(self.colors['text']))
         font = QFont()
         font.setBold(True)
-        font.setPointSize(8 if len(self.node_name) > 10 else 10)
+        font.setPointSize(9)  # Fixed size for better readability
         painter.setFont(font)
         
-        # Calculate text rectangle
-        text_rect = QRectF(-radius + 5, -radius + 5, (radius - 5) * 2, (radius - 5) * 2)
+        # Calculate text rectangle with padding
+        text_rect = QRectF(-width/2 + 8, -height/2 + 5, width - 16, height - 10)
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, self.node_name)
         
         # Draw special indicators
         if self.node_data.get('has_menu', False):
-            # Draw menu indicator (small triangle)
+            # Draw menu indicator (small triangle in top-right corner)
             triangle = QPolygonF([
-                QPointF(radius - 15, -radius + 5),
-                QPointF(radius - 5, -radius + 5),
-                QPointF(radius - 10, -radius + 15)
+                QPointF(width/2 - 15, -height/2 + 5),
+                QPointF(width/2 - 5, -height/2 + 5),
+                QPointF(width/2 - 10, -height/2 + 15)
             ])
             painter.setBrush(QBrush(QColor(255, 255, 0)))
             painter.drawPolygon(triangle)
@@ -228,16 +237,56 @@ class VNFlowConnection(QGraphicsPathItem):
         
         self.update_path()
         
+    def _get_rectangle_intersection(self, center_pos: QPointF, ux: float, uy: float, node: 'VNLabelNode', is_source: bool) -> QPointF:
+        """Calculate intersection point of line with rectangular node edge."""
+        # Get node dimensions
+        half_width = node.width / 2
+        half_height = node.height / 2
+        
+        # Calculate intersection with rectangle edges
+        # We need to find which edge the line intersects first
+        
+        # Time to reach each edge (if moving in direction ux, uy)
+        if ux != 0:
+            t_right = half_width / abs(ux) if ux > 0 else float('inf')
+            t_left = half_width / abs(ux) if ux < 0 else float('inf')
+        else:
+            t_right = t_left = float('inf')
+            
+        if uy != 0:
+            t_bottom = half_height / abs(uy) if uy > 0 else float('inf')
+            t_top = half_height / abs(uy) if uy < 0 else float('inf')
+        else:
+            t_bottom = t_top = float('inf')
+        
+        # Find the minimum time (closest edge)
+        t_min = min(t_right, t_left, t_bottom, t_top)
+        
+        # Calculate intersection point
+        if t_min == float('inf'):
+            # No intersection (shouldn't happen), return center
+            return center_pos
+        
+        # Calculate the actual intersection point
+        intersection_x = center_pos.x() + ux * t_min
+        intersection_y = center_pos.y() + uy * t_min
+        
+        # Clamp to rectangle bounds to avoid floating point errors
+        intersection_x = max(center_pos.x() - half_width, min(center_pos.x() + half_width, intersection_x))
+        intersection_y = max(center_pos.y() - half_height, min(center_pos.y() + half_height, intersection_y))
+        
+        return QPointF(intersection_x, intersection_y)
+
     def update_path(self):
         """Update the connection path between nodes."""
         if not self.source_node or not self.target_node:
             return
             
-        # Get node positions
+        # Get node positions (centers)
         source_pos = self.source_node.scenePos()
         target_pos = self.target_node.scenePos()
         
-        # Calculate connection points (edge of circles)
+        # Calculate connection points (edge of rectangles)
         dx = target_pos.x() - source_pos.x()
         dy = target_pos.y() - source_pos.y()
         distance = math.sqrt(dx*dx + dy*dy)
@@ -249,18 +298,9 @@ class VNFlowConnection(QGraphicsPathItem):
         ux = dx / distance
         uy = dy / distance
         
-        # Connection points
-        source_radius = self.source_node.radius
-        target_radius = self.target_node.radius
-        
-        start_point = QPointF(
-            source_pos.x() + ux * source_radius,
-            source_pos.y() + uy * source_radius
-        )
-        end_point = QPointF(
-            target_pos.x() - ux * target_radius,
-            target_pos.y() - uy * target_radius
-        )
+        # Calculate intersection points with rectangular node edges
+        start_point = self._get_rectangle_intersection(source_pos, ux, uy, self.source_node, True)
+        end_point = self._get_rectangle_intersection(target_pos, -ux, -uy, self.target_node, False)
         
         # Create bezier curve
         path = QPainterPath()
@@ -648,7 +688,7 @@ class VNFlowVisualizer(QGraphicsView):
     def _position_narrative_layers(self, layers: List[List[str]], subgraph: nx.DiGraph) -> Dict[str, Tuple[float, float]]:
         """Position nodes within narrative layers for optimal flow visualization."""
         pos = {}
-        layer_height = 3  # Vertical space between layers
+        layer_height = 2.5  # Reduced spacing for tighter layout
         
         for layer_index, layer_nodes in enumerate(layers):
             y = -layer_index * layer_height  # Progress downward through story
@@ -1138,7 +1178,7 @@ class VNFlowVisualizer(QGraphicsView):
         pos = {}
         
         # Assign Y coordinates based on layer
-        layer_spacing = 4
+        layer_spacing = 2.5  # Reduced spacing for tighter layout
         
         for layer_idx, layer_nodes in enumerate(layers):
             # Start nodes (layer 0) should be at the top (smallest Y value)
