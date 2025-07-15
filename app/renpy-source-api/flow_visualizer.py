@@ -51,7 +51,8 @@ class FlowGraphVisualizer:
         """Build a NetworkX directed graph from flow analysis data with separate menu nodes."""
         G = nx.DiGraph()
         
-        labels = self.flow_data.get('labels', {})
+        # Handle both old format (flow_data['labels']) and new format (flow_data as labels)
+        labels = self.flow_data.get('labels', self.flow_data) if self.flow_data else {}
         
         # Get menu nodes from the project
         menu_nodes_by_label = self.project.parser.get_menu_nodes_by_label(self.project.project_path)
@@ -63,9 +64,9 @@ class FlowGraphVisualizer:
                 'file': label_data.get('file', ''),
                 'line': label_data.get('line', 0),
                 'reachable': label_data.get('reachable', True),
-                'incoming_count': len(label_data.get('incoming_connections', [])),
-                'outgoing_count': len(label_data.get('outgoing_connections', [])),
-                'complexity': len(label_data.get('outgoing_connections', [])),
+                'incoming_count': len(label_data.get('incoming_connections', label_data.get('incoming_flows', []))),
+                'outgoing_count': len(label_data.get('outgoing_connections', label_data.get('outgoing_flows', []))),
+                'complexity': len(label_data.get('outgoing_connections', label_data.get('outgoing_flows', []))),
                 'depth': label_data.get('depth', 0),
                 'has_menu': label_name in menu_nodes_by_label
             })
@@ -129,18 +130,29 @@ class FlowGraphVisualizer:
         
         # Add non-menu edges (avoiding menu choice edges that are now handled by menu nodes)
         for label_name, label_data in labels.items():
-            for connection in label_data.get('outgoing_connections', []):
+            # Convert outgoing_flows to connections format if needed
+            connections = label_data.get('outgoing_connections', [])
+            if not connections and 'outgoing_flows' in label_data:
+                connections = [
+                    {
+                        'target': flow.get('target_label'),
+                        'type': flow.get('flow_type'),
+                        'condition': flow.get('condition'),
+                        'file': flow.get('file_path'),
+                        'line': flow.get('line_number')
+                    }
+                    for flow in label_data['outgoing_flows']
+                ]
+            
+            for connection in connections:
                 target = connection.get('target')
                 if target and target in labels:
-                    # Check if this is a menu choice edge that should be handled by menu nodes
+                    # Check if this edge should be handled by menu nodes
                     choice_key = (label_name, target)
-                    is_menu_choice = (
-                        choice_key in menu_choice_edges and 
-                        connection.get('type') == 'menu_choice'
-                    )
+                    is_handled_by_menu = choice_key in menu_choice_edges
                     
-                    # Only add direct edge if it's not a menu choice or if there's no menu handling it
-                    if not is_menu_choice:
+                    # Only add direct edge if it's not handled by a menu node
+                    if not is_handled_by_menu:
                         G.add_edge(label_name, target, **{
                             'flow_type': connection.get('type', 'unknown'),
                             'edge_style': 'label_to_label',
