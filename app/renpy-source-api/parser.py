@@ -274,11 +274,11 @@ class RenpyParser:
             'dialogue': re.compile(r'^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s+"([^"]+)"', re.IGNORECASE),
             'narrator': re.compile(r'^\s*"([^"]+)"'),
             'menu': re.compile(r'^\s*menu:', re.IGNORECASE),
-            'menu_choice': re.compile(r'^\s*"([^"]+)":'),
+            'menu_choice': re.compile(r'^\s*"([^"]+)"\s*:'),
             
             # Enhanced menu and choice patterns
             'menu_with_name': re.compile(r'^\s*menu\s+([a-zA-Z_][a-zA-Z0-9_]*):', re.IGNORECASE),
-            'choice_with_condition': re.compile(r'^\s*"([^"]+)"\s+if\s+(.+):', re.IGNORECASE),
+            'choice_with_condition': re.compile(r'^\s*"([^"]+)"\s+if\s+(.+)\s*:', re.IGNORECASE),
             'choice_jump': re.compile(r'^\s*jump\s+([a-zA-Z_][a-zA-Z0-9_]*)', re.IGNORECASE),
             'choice_call': re.compile(r'^\s*call\s+([a-zA-Z_][a-zA-Z0-9_]*)', re.IGNORECASE),
             'choice_return': re.compile(r'^\s*return', re.IGNORECASE),
@@ -1129,6 +1129,10 @@ class RenpyParser:
                 for i, menu_structure in enumerate(label_menus):
                     menu_node = self._create_menu_node_from_structure(menu_structure, i)
                     node.menu_nodes.append(menu_node)
+                
+                # Update computed fields after adding menu data
+                node.has_menu = len(node.menu_structures) > 0 or len(node.menu_nodes) > 0
+                node.menu_count = max(len(node.menu_structures), len(node.menu_nodes))
         
         dialogue_lines = []
         for file_path, line_num, line in all_lines:

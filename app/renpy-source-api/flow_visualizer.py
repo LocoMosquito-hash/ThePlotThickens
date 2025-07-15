@@ -44,7 +44,7 @@ class FlowGraphVisualizer:
         if not self.project.is_analyzed:
             self.project.analyze()
         
-        self.flow_data = self.project.get_label_flow_analysis()
+        self.flow_data = self.project.get_flow_graph()
         self.graph = self._build_networkx_graph()
     
     def _build_networkx_graph(self) -> nx.DiGraph:

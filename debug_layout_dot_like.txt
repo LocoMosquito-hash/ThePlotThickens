@@ -1,7 +1,7 @@
 === GRAPH ANALYSIS FOR DOT_LIKE LAYOUT ===
 
 Total nodes: 310
-Total edges: 427
+Total edges: 392
 Is directed: True
 
 === NODE ANALYSIS ===
@@ -21,7 +21,7 @@ Node: start
   Chapter indicators: []
   Start indicators: ['start']
   Predecessors: []
-  Successors: ['choice1s_no', 'choice1s_yes']
+  Successors: ['choice1s_yes', 'choice1s_no']
 
 Node: choice1s_yes
   In-degree: 1, Out-degree: 2
@@ -66,7 +66,7 @@ Node: choice1s_done
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['choice1k_yes']
-  Successors: ['choice1r_no', 'choice1r_yes']
+  Successors: ['choice1r_yes', 'choice1r_no']
 
 Node: choice1r_yes
   In-degree: 1, Out-degree: 2
@@ -465,13 +465,13 @@ Node: ch3undertable
   Successors: ['ch3unlockdoor']
 
 Node: ch3unlockdoor
-  In-degree: 1, Out-degree: 2
+  In-degree: 1, Out-degree: 1
   Type: regular
   Has menu: False
   Chapter indicators: ['ch3']
   Start indicators: []
   Predecessors: ['ch3undertable']
-  Successors: ['choice32n', 'choice31y']
+  Successors: ['choice31y']
 
 Node: choice31y
   In-degree: 1, Out-degree: 2
@@ -480,7 +480,7 @@ Node: choice31y
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['ch3unlockdoor']
-  Successors: ['choice32n', 'choice32y']
+  Successors: ['choice32y', 'choice32n']
 
 Node: choice32y
   In-degree: 1, Out-degree: 2
@@ -489,7 +489,7 @@ Node: choice32y
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['choice31y']
-  Successors: ['choice33n', 'choice33y']
+  Successors: ['choice33y', 'choice33n']
 
 Node: choice33y
   In-degree: 1, Out-degree: 1
@@ -528,12 +528,12 @@ Node: choice34y
   Successors: ['ch3jackandjill']
 
 Node: choice32n
-  In-degree: 2, Out-degree: 1
+  In-degree: 1, Out-degree: 1
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
-  Predecessors: ['ch3unlockdoor', 'choice31y']
+  Predecessors: ['choice31y']
   Successors: ['choice35y']
 
 Node: choice35y
@@ -552,7 +552,7 @@ Node: ch3jackandjill
   Chapter indicators: ['ch3']
   Start indicators: []
   Predecessors: ['choice34y']
-  Successors: ['choice36n', 'choice36y']
+  Successors: ['choice36y', 'choice36n']
 
 Node: choice36y
   In-degree: 1, Out-degree: 1
@@ -573,31 +573,31 @@ Node: choice36n
   Successors: ['after36']
 
 Node: after36
-  In-degree: 2, Out-degree: 2
+  In-degree: 2, Out-degree: 1
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['choice36y', 'choice36n']
-  Successors: ['ch4ashbagdone', 'choice3nap']
+  Successors: ['choice3nap']
 
 Node: choice3nap
-  In-degree: 1, Out-degree: 4
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['after36']
-  Successors: ['ch4ashbagdone', 'choice3jess', 'choice3moll', 'choice3cory']
-
-Node: choice3jess
   In-degree: 1, Out-degree: 3
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
+  Predecessors: ['after36']
+  Successors: ['choice3jess', 'choice3moll', 'choice3cory']
+
+Node: choice3jess
+  In-degree: 1, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
   Predecessors: ['choice3nap']
-  Successors: ['ch4ashbagdone', 'choice3jess1s', 'choice3jess1c']
+  Successors: ['choice3jess1s', 'choice3jess1c']
 
 Node: choice3jess1s
   In-degree: 1, Out-degree: 0
@@ -618,13 +618,13 @@ Node: ch3rejected
   Successors: ['chapter4']
 
 Node: choice3jess1c
-  In-degree: 1, Out-degree: 3
+  In-degree: 1, Out-degree: 2
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['choice3jess']
-  Successors: ['ch4ashbagdone', 'choice3jess2s', 'choice3jess2c']
+  Successors: ['choice3jess2s', 'choice3jess2c']
 
 Node: choice3jess2s
   In-degree: 1, Out-degree: 1
@@ -645,13 +645,13 @@ Node: choice3jess2c
   Successors: ['chapter4']
 
 Node: choice3moll
-  In-degree: 1, Out-degree: 3
+  In-degree: 1, Out-degree: 2
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['choice3nap']
-  Successors: ['ch4ashbagdone', 'choice3molly1y', 'choice3molly1n']
+  Successors: ['choice3molly1y', 'choice3molly1n']
 
 Node: choice3molly1y
   In-degree: 1, Out-degree: 1
@@ -672,13 +672,13 @@ Node: choice3molly1n
   Successors: []
 
 Node: ch3tmdate
-  In-degree: 5, Out-degree: 7
+  In-degree: 5, Out-degree: 6
   Type: regular
   Has menu: False
   Chapter indicators: ['ch3']
   Start indicators: []
   Predecessors: ['ch3tmdate', 'choice3molly2a', 'choice3molly2b', 'choice3molly2c', 'choice3molly2d']
-  Successors: ['ch4ashbagdone', 'ch3tmdate', 'choice3molly2a', 'choice3molly2b', 'choice3molly2c', 'choice3molly2d', 'choice3molly2e']
+  Successors: ['choice3molly2a', 'choice3molly2b', 'choice3molly2c', 'choice3molly2d', 'choice3molly2e', 'ch3tmdate']
 
 Node: choice3molly2a
   In-degree: 1, Out-degree: 1
@@ -717,13 +717,13 @@ Node: choice3molly2d
   Successors: ['ch3tmdate']
 
 Node: choice3molly2e
-  In-degree: 1, Out-degree: 4
+  In-degree: 1, Out-degree: 3
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['ch3tmdate']
-  Successors: ['ch4ashbagdone', 'choice3molly3a', 'choice3molly3b', 'choice3molly3c']
+  Successors: ['choice3molly3a', 'choice3molly3b', 'choice3molly3c']
 
 Node: choice3molly3a
   In-degree: 1, Out-degree: 1
@@ -753,13 +753,13 @@ Node: choice3molly3c
   Successors: ['chapter4']
 
 Node: choice3cory
-  In-degree: 2, Out-degree: 3
+  In-degree: 2, Out-degree: 2
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['choice3nap', 'v4goouty']
-  Successors: ['ch4ashbagdone', 'choice3corygym1a', 'choice3corygym1b']
+  Successors: ['choice3corygym1a', 'choice3corygym1b']
 
 Node: choice3corygym1a
   In-degree: 1, Out-degree: 1
@@ -780,13 +780,13 @@ Node: choice3corygym1b
   Successors: ['ch3coryasksout']
 
 Node: ch3coryasksout
-  In-degree: 2, Out-degree: 2
+  In-degree: 2, Out-degree: 1
   Type: regular
   Has menu: False
   Chapter indicators: ['ch3']
   Start indicators: []
   Predecessors: ['choice3corygym1a', 'choice3corygym1b']
-  Successors: ['ch4ashbagdone', 'choice3corygym2a']
+  Successors: ['choice3corygym2a']
 
 Node: choice3corygym2a
   In-degree: 1, Out-degree: 1
@@ -798,13 +798,13 @@ Node: choice3corygym2a
   Successors: ['coryshowerchoice']
 
 Node: choice3corygym2c
-  In-degree: 0, Out-degree: 3
+  In-degree: 0, Out-degree: 2
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: []
-  Successors: ['ch4ashbagdone', 'choice3corygym4a', 'choice3corygym4b']
+  Successors: ['choice3corygym4a', 'choice3corygym4b']
 
 Node: choice3corygym4a
   In-degree: 1, Out-degree: 1
@@ -825,13 +825,13 @@ Node: choice3corygym4b
   Successors: ['chapter4']
 
 Node: coryshowerchoice
-  In-degree: 1, Out-degree: 3
+  In-degree: 1, Out-degree: 2
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['choice3corygym2a']
-  Successors: ['ch4ashbagdone', 'choice3corygym3a', 'choice3corygym3b']
+  Successors: ['choice3corygym3a', 'choice3corygym3b']
 
 Node: choice3corygym3a
   In-degree: 1, Out-degree: 1
@@ -861,22 +861,22 @@ Node: chapter4
   Successors: ['ch4morningqn1']
 
 Node: ch4morningqn1
-  In-degree: 1, Out-degree: 2
+  In-degree: 1, Out-degree: 1
   Type: regular
   Has menu: False
   Chapter indicators: ['ch4']
   Start indicators: []
   Predecessors: ['chapter4']
-  Successors: ['ch4ashbagdone', 'ch4tothebeach']
+  Successors: ['ch4tothebeach']
 
 Node: ch4tothebeach
-  In-degree: 1, Out-degree: 3
+  In-degree: 1, Out-degree: 2
   Type: regular
   Has menu: False
   Chapter indicators: ['ch4']
   Start indicators: []
   Predecessors: ['ch4morningqn1']
-  Successors: ['ch4ashbagdone', 'ch4ashbagy', 'ch4ashbagdontlook']
+  Successors: ['ch4ashbagy', 'ch4ashbagdontlook']
 
 Node: ch4ashbagy
   In-degree: 1, Out-degree: 2
@@ -885,7 +885,7 @@ Node: ch4ashbagy
   Chapter indicators: ['ch4']
   Start indicators: []
   Predecessors: ['ch4tothebeach']
-  Successors: ['ch4ashbagdone', 'ch4ashbag2']
+  Successors: ['ch4ashbag2', 'ch4ashbagdone']
 
 Node: ch4ashbag2
   In-degree: 1, Out-degree: 2
@@ -933,12 +933,12 @@ Node: ch4ashtellsstory
   Successors: ['ch4nikkibackatbeach']
 
 Node: ch4ashbagdone
-  In-degree: 17, Out-degree: 4
+  In-degree: 4, Out-degree: 4
   Type: regular
   Has menu: False
   Chapter indicators: ['ch4']
   Start indicators: []
-  Predecessors: ['after36', 'choice3nap', 'choice3jess', 'choice3jess1c', 'choice3moll', 'ch3tmdate', 'choice3molly2e', 'choice3cory', 'ch3coryasksout', 'choice3corygym2c', 'coryshowerchoice', 'ch4morningqn1', 'ch4tothebeach', 'ch4ashbagy', 'ch4ashbag2', 'ch4ashbag3', 'ch4ashbag4']
+  Predecessors: ['ch4ashbagy', 'ch4ashbag2', 'ch4ashbag3', 'ch4ashbag4']
   Successors: ['ch4ashfashion', 'ch4ashdrink', 'ch4ashanimal', 'ch4ashveg']
 
 Node: ch4ashfashion
@@ -1797,22 +1797,22 @@ Node: version4
   Successors: ['v4aftershower']
 
 Node: v4aftershower
-  In-degree: 1, Out-degree: 4
+  In-degree: 1, Out-degree: 1
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['version4']
-  Successors: ['corydate2q4a', 'corydate2q4b', 'corydate2q4c', 'v4mbeach2y']
+  Successors: ['v4mbeach2y']
 
 Node: v4mbeach2y
-  In-degree: 1, Out-degree: 6
+  In-degree: 1, Out-degree: 3
   Type: regular
   Has menu: False
   Chapter indicators: ['ch2']
   Start indicators: []
   Predecessors: ['v4aftershower']
-  Successors: ['corydate2q4a', 'corydate2q4b', 'corydate2q4c', 'v4mollydoor1', 'v4mollydoor2', 'v4mollydoor3']
+  Successors: ['v4mollydoor1', 'v4mollydoor2', 'v4mollydoor3']
 
 Node: v4mollydoor1
   In-degree: 1, Out-degree: 1
@@ -1833,13 +1833,13 @@ Node: v4mollydoor2
   Successors: ['afterv4mollydoor']
 
 Node: v4mollydoor3
-  In-degree: 1, Out-degree: 5
+  In-degree: 1, Out-degree: 2
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['v4mbeach2y']
-  Successors: ['corydate2q4a', 'corydate2q4b', 'corydate2q4c', 'v4molly2door1', 'v4molly2door2']
+  Successors: ['v4molly2door1', 'v4molly2door2']
 
 Node: v4molly2door1
   In-degree: 1, Out-degree: 1
@@ -1860,13 +1860,13 @@ Node: v4molly2door2
   Successors: ['afterv4mollydoor']
 
 Node: afterv4mollydoor
-  In-degree: 4, Out-degree: 5
+  In-degree: 4, Out-degree: 2
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['v4mollydoor1', 'v4mollydoor2', 'v4molly2door1', 'v4molly2door2']
-  Successors: ['corydate2q4a', 'corydate2q4b', 'corydate2q4c', 'v4gooutn', 'v4goouty']
+  Successors: ['v4gooutn', 'v4goouty']
 
 Node: v4gooutn
   In-degree: 1, Out-degree: 1
@@ -1887,13 +1887,13 @@ Node: v4goouty
   Successors: ['choice3cory', 'corydate2']
 
 Node: corydate2
-  In-degree: 1, Out-degree: 5
+  In-degree: 1, Out-degree: 2
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['v4goouty']
-  Successors: ['corydate2q4a', 'corydate2q4b', 'corydate2q4c', 'corydate2q1a', 'corydate2q1b']
+  Successors: ['corydate2q1a', 'corydate2q1b']
 
 Node: corydate2q1a
   In-degree: 1, Out-degree: 1
@@ -1914,13 +1914,13 @@ Node: corydate2q1b
   Successors: ['aftercoredate2q1']
 
 Node: aftercoredate2q1
-  In-degree: 2, Out-degree: 5
+  In-degree: 2, Out-degree: 2
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['corydate2q1a', 'corydate2q1b']
-  Successors: ['corydate2q4a', 'corydate2q4b', 'corydate2q4c', 'corydate2q2a', 'corydate2q2b']
+  Successors: ['corydate2q2a', 'corydate2q2b']
 
 Node: corydate2q2a
   In-degree: 1, Out-degree: 1
@@ -1941,13 +1941,13 @@ Node: corydate2q2b
   Successors: ['aftercorydate2q2']
 
 Node: aftercorydate2q2
-  In-degree: 1, Out-degree: 5
+  In-degree: 1, Out-degree: 2
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
   Predecessors: ['corydate2q2b']
-  Successors: ['corydate2q4a', 'corydate2q4b', 'corydate2q4c', 'corydate2q3a', 'corydate2q3b']
+  Successors: ['corydate2q3a', 'corydate2q3b']
 
 Node: corydate2q3a
   In-degree: 1, Out-degree: 1
@@ -1977,30 +1977,30 @@ Node: aftercorydate2q3
   Successors: ['corydate2q4a', 'corydate2q4b', 'corydate2q4c']
 
 Node: corydate2q4a
-  In-degree: 8, Out-degree: 1
+  In-degree: 1, Out-degree: 1
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
-  Predecessors: ['v4aftershower', 'v4mbeach2y', 'v4mollydoor3', 'afterv4mollydoor', 'corydate2', 'aftercoredate2q1', 'aftercorydate2q2', 'aftercorydate2q3']
+  Predecessors: ['aftercorydate2q3']
   Successors: ['aftercorydate2q4']
 
 Node: corydate2q4b
-  In-degree: 8, Out-degree: 1
+  In-degree: 1, Out-degree: 1
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
-  Predecessors: ['v4aftershower', 'v4mbeach2y', 'v4mollydoor3', 'afterv4mollydoor', 'corydate2', 'aftercoredate2q1', 'aftercorydate2q2', 'aftercorydate2q3']
+  Predecessors: ['aftercorydate2q3']
   Successors: ['aftercorydate2q4']
 
 Node: corydate2q4c
-  In-degree: 8, Out-degree: 1
+  In-degree: 1, Out-degree: 1
   Type: regular
   Has menu: False
   Chapter indicators: []
   Start indicators: []
-  Predecessors: ['v4aftershower', 'v4mbeach2y', 'v4mollydoor3', 'afterv4mollydoor', 'corydate2', 'aftercoredate2q1', 'aftercorydate2q2', 'aftercorydate2q3']
+  Predecessors: ['aftercorydate2q3']
   Successors: ['aftercorydate2q4']
 
 Node: aftercorydate2q4
@@ -2800,16 +2800,16 @@ Component 1: 1 nodes
   Nodes: ['after_load']
 
 Component 2: 295 nodes
-  Nodes: ['v4mollydoor3', 'choice3moll', 'nikkiflicks', 'choice3molly2b', 'v4mollydoor1', 'v10onlywatch', 'v11gettoclass', 'v8movies', 'choice2b1_yes', 'v13contclass', 'v11ntdormconvo', 'choice3molly2c', 'version5', 'v6econvo1', 'v8shoppingno', 'v14donewithbeach', 'ch4clubq3', 'choice2k_yes', 'ch4clubdrink1', 'corydate2q4c', 'v9m1turn', 'after2e', 'ch3tmdate', 'v12profbjno', 'choice1s_no', 'ch4ashtellsstory', 'v12ndorm', 'v13professor', 'v15homewithmolly', 'ch4ashbag2', 'corydate2q1b', 'choice3jess1c', 'choice3corygym4b', 'choice3corygym2c', 'choice3molly3b', 'version4', 'v8night', 'ch4ashbagdone', 'v8beforeparty', 'v8skybeer', 'v10trytostay', 'v8nonikkifun', 'nikkiback', 'choice33n', 'ch4nmkissn', 'v6econvo3', 'v15sollainsex', 'ch4ashanimal', 'ch4clubq2', 'v12afterprofdorm', 'v13profsex', 'v14partywithmolly', 'version10', 'v15letsgohome', 'v5tellmolly', 'v14spawithcc', 'choice2f_yes', 'after36', 'ch4tothebeach', 'v9sar3truth', 'choice_2jcomein', 'v5mollypeek', 'v8boupeekcaught', 'afterv5q1', 'choice3molly3a', 'corydate2q2a', 'corydate2q1a', 'corydate2hj', 'v10haulfurniture', 'v15backtomrskitchen', 'after2b', 'choice3jess', 'v11lastwords', 'v4molly2door2', 'choice1c_yes', 'v4aftershower', 'v9m2turn', 'v9afterntext', 'v14ashleysex', 'v10sexwithsollain', 'choice2d_yes', 'choice3jess2c', 'choice21_yes', 'ch4ashfashion', 'ch4ashbathroom2', 'v5fuckoff', 'v14afewweekslater', 'choice3corygym3b', 'v8afterpeek', 'ch4ashbathroom1', 'v11end', 'v14point5', 'choice3molly2a', 'v9n1dare', 'ch4nmkissy', 'version6', 'choice_2ksit', 'v14nochels', 'ch4morningqn1', 'v4molly2door1', 'choice3molly3c', 'v9Sar3turn', 'ch3jackandjill', 'v14afterashley', 'v9sar2turn', 'v9t2turn', 'jback2', 'v5aftermollypeek', 'choice36n', 'choice3nap', 'v8coffee', 'v14nofoursome', 'choice1c_no', 'version8', 'v6gotostudio', 'v8boupeekno', 'v15goodmorning', 'ch4nikkibackatbeach', 'choice_2findmolly', 'corydate2over', 'v6stayindorm', 'v4gooutn', 'v9tiembikini', 'v6nophotoemail', 'v14backtonikki', 'v9aftergame', 'ch3undertable', 'v14', 'v13volleytourn', 'v7taylorshower', 'afterch4', 'choice3molly2e', 'v9t3turn', 'choice1k_yes', 'v7nchat1', 'choice_2phoneback', 'ch4ashbag4', 'corydate2q2b', 'ch4ashveg', 'choice31y', 'choice3corygym1a', 'v6afteremail', 'v14nikkiguard', 'v9n3turn', 'v6end', 'coryshowerchoice', 'v13end', 'choice2c_yes', 'CH3WAKEUP', 'choice2a_no', 'v5needhelp', 'afterv5photoemail', 'v6yesphotoemail', 'v14beforecourt', 'choice3corygym2a', 'v7profkoffice', 'choice1s_done', 'v9n1truth', 'v10dinner', 'v11answer', 'v7nchatdressed', 'choice2j_no', 'choice32n', 'v9t1turn', 'v13profnothanks', 'choice2b_yes', 'ch3deal', 'choice34y', 'choice3corygym3a', 'choice2k_no', 'choice2b1_no', 'chapter4', 'v15', 'v14noashleysex', 'ch4ashbagy', 'v12nocory', 'v9n2turn', 'choice3molly1y', 'v4goouty', 'v14nogunnoproblem', 'v9mslipyes', 'v6letithappen', 'ch4clubq1', 'choice3corygym1b', 'v9m3turn', 'v8boupeekyes', 'v13cc3some', 'choice2l_yes', 'v14chelssex', 'v15jessdthreesome', 'choice2a_yes', 'choice32playdumb', 'ch3coryasksout', 'ch4ashdrink', 'ch4ashbagdontlook', 'v14partywithcory', 'v15breakfastwithmolly', 'v13nobf', 'choice1r_done', 'v10nothanks', 'ch3unlockdoor', 'v10joinin', 'v14partytalk', 'ch4ashbag3', 'v4mbeach2y', 'v11nikkiscene', 'v15jessica', 'choice2l_no', 'v6nikkijesssex', 'aftercorydate2q4', 'version9', 'after2nsex', 'v9m3dare', 'v10end', 'v15jesshallway', 'choice33y', 'choice2e_no', 'choice1r_no', 'choice1d_no', 'v5visitnikki', 'v12profbjyes', 'v12coryapartment', 'choice36y', 'choice1d_yes', 'v6econvo2', 'v5donttellmolly', 'v9call1', 'v13', 'choice3corygym4a', 'aftercorydate2q3', 'v10threesome', 'v11ignore', 'choice32forgive', 'corydate2q4a', 'v4mollydoor2', 'v13mollyroom', 'v14ccno', 'afternikkidate', 'v15xmaswithsollain', 'choice2c_no', 'v7profdoorknock', 'aftercorydate2q2', 'v9mroom2change', 'choice3jess2s', 'choice1s_yes', 'choice35y', 'v10goafterher', 'afterv4mollydoor', 'v15wakewithnikki', 'choice3molly1n', 'ch3rejected', 'choice2e_yes', 'v13sarbarconvo', 'v14tryforgun', 'choice2d_no', 'v13party', 'v8skypictalk', 'corydate2', 'v12postsex', 'choice3molly2d', 'choice3jess1s', 'choice32y', 'corydate2q3a', 'v10nothreesome', 'v11mrsscene', 'v14contspa', 'v14ccyes', 'v15homewithnikki', 'v6econvo4', 'v15breakfastwithnikki', 'mollyleaving', 'choice2i_yes', 'choice3cory', 'v8shoppingyes', 'v9sar1turn', 'v14sextoyshop', 'v6stepin', 'choice1k_no', 'choice1c_done', 'AFTER1Q', 'v8nikkifun', 'v9m3truth', 'v14foursome', 'start', 'choice1r_yes', 'v9sar3dare', 'endv4', 'corydate2q3b', 'after2c', 'v6gotbacktosleep', 'aftercoredate2q1', 'v8boutique', 'v13yesbf', 'corydate2q4b', 'choice2j_yes']
+  Nodes: ['choice2e_no', 'ch3deal', 'corydate2q4b', 'ch4ashbathroom2', 'v7taylorshower', 'v12profbjyes', 'ch4clubq2', 'v13nobf', 'choice3molly3c', 'choice3jess', 'choice2j_yes', 'aftercorydate2q4', 'v6yesphotoemail', 'v15letsgohome', 'v14partywithcory', 'v15sollainsex', 'v14contspa', 'v14nogunnoproblem', 'v10trytostay', 'version4', 'v9call1', 'v13profsex', 'v15goodmorning', 'v14donewithbeach', 'choice1c_done', 'v8movies', 'choice3molly3a', 'ch4clubq1', 'ch4ashdrink', 'choice3corygym4a', 'v13party', 'v14nikkiguard', 'corydate2', 'ch4ashbagy', 'ch4ashbagdone', 'v9aftergame', 'v4goouty', 'choice3corygym2c', 'afterch4', 'choice3cory', 'choice3jess2c', 'aftercorydate2q3', 'v8beforeparty', 'v14backtonikki', 'v15', 'choice3molly2a', 'v11ntdormconvo', 'v14afewweekslater', 'v8nikkifun', 'v8boupeekcaught', 'version6', 'v15breakfastwithnikki', 'v9sar1turn', 'v6econvo1', 'ch3coryasksout', 'v8shoppingyes', 'v9m3truth', 'v8nonikkifun', 'v10joinin', 'nikkiflicks', 'coryshowerchoice', 'v14nochels', 'aftercoredate2q1', 'v15homewithmolly', 'choice1r_done', 'v8afterpeek', 'v10dinner', 'ch4ashbathroom1', 'choice2k_yes', 'choice2c_yes', 'v10haulfurniture', 'v14nofoursome', 'v14spawithcc', 'choice3molly3b', 'afterv5photoemail', 'choice_2ksit', 'v6gotostudio', 'choice3corygym3b', 'corydate2q4c', 'choice2f_yes', 'v5aftermollypeek', 'v10nothreesome', 'ch4nmkissn', 'choice3corygym3a', 'after36', 'choice2i_yes', 'v6econvo3', 'v11mrsscene', 'afternikkidate', 'choice2c_no', 'version5', 'ch4ashfashion', 'v13sarbarconvo', 'choice2l_yes', 'corydate2q3a', 'v15jessdthreesome', 'choice2l_no', 'v8boupeekyes', 'v4mollydoor3', 'v9n1dare', 'v12postsex', 'corydate2over', 'v5tellmolly', 'corydate2q1b', 'ch4morningqn1', 'v14foursome', 'v12afterprofdorm', 'choice2b_yes', 'choice33y', 'v6econvo2', 'v6nophotoemail', 'v10threesome', 'version9', 'choice3molly1y', 'choice3jess2s', 'after2e', 'v5fuckoff', 'v5visitnikki', 'v5mollypeek', 'v8boupeekno', 'v5needhelp', 'v9mslipyes', 'ch4ashbagdontlook', 'v8night', 'choice3nap', 'v9sar2turn', 'v9m2turn', 'v13end', 'v15breakfastwithmolly', 'v9sar3dare', 'v9m3dare', 'v9sar3truth', 'v14beforecourt', 'v9afterntext', 'after2c', 'choice31y', 'choice3jess1s', 'choice3corygym2a', 'v10end', 'choice1c_no', 'ch4tothebeach', 'v11gettoclass', 'v14', 'choice1d_no', 'choice32n', 'v6stepin', 'choice3moll', 'after2nsex', 'v4gooutn', 'v15homewithnikki', 'v13volleytourn', 'corydate2q2b', 'v7nchat1', 'choice3corygym1b', 'endv4', 'v10nothanks', 'v4mollydoor2', 'ch4ashbag2', 'choice36y', 'chapter4', 'choice32forgive', 'aftercorydate2q2', 'ch4clubq3', 'v9m3turn', 'v11end', 'v11ignore', 'v13profnothanks', 'v14ccno', 'choice1c_yes', 'v6econvo4', 'afterv5q1', 'ch3jackandjill', 'v15wakewithnikki', 'v15backtomrskitchen', 'v6nikkijesssex', 'choice35y', 'v13mollyroom', 'v6end', 'ch4clubdrink1', 'v15jessica', 'afterv4mollydoor', 'choice2j_no', 'choice1k_no', 'choice1d_yes', 'v5donttellmolly', 'v9mroom2change', 'v10sexwithsollain', 'v14partywithmolly', 'choice1r_yes', 'choice1s_yes', 'v6gotbacktosleep', 'corydate2q4a', 'choice34y', 'ch3unlockdoor', 'v14partytalk', 'v7profdoorknock', 'v4molly2door2', 'start', 'v10goafterher', 'v6afteremail', 'choice2e_yes', 'choice_2findmolly', 'v13professor', 'v15xmaswithsollain', 'choice32playdumb', 'v4mollydoor1', 'v4molly2door1', 'ch4nikkibackatbeach', 'v6stayindorm', 'choice3molly2d', 'v14ashleysex', 'v14afterashley', 'choice3corygym1a', 'choice21_yes', 'v7nchatdressed', 'choice1s_no', 'v9t1turn', 'v13', 'ch3undertable', 'ch4ashbag3', 'v13contclass', 'v11lastwords', 'choice1k_yes', 'v8coffee', 'v11nikkiscene', 'version10', 'v9m1turn', 'choice3molly2b', 'v11answer', 'choice2d_yes', 'v14sextoyshop', 'mollyleaving', 'v9tiembikini', 'v9n3turn', 'v8boutique', 'corydate2q3b', 'v14tryforgun', 'after2b', 'choice2k_no', 'choice1s_done', 'v9t3turn', 'v12ndorm', 'choice36n', 'ch4ashtellsstory', 'v14point5', 'AFTER1Q', 'v14chelssex', 'v8shoppingno', 'v8skypictalk', 'choice3molly2c', 'ch4ashbag4', 'v10onlywatch', 'choice33n', 'v13yesbf', 'choice1r_no', 'choice2b1_no', 'choice_2jcomein', 'choice3molly1n', 'v4aftershower', 'v9Sar3turn', 'v12profbjno', 'ch3rejected', 'corydate2q1a', 'ch4nmkissy', 'v6letithappen', 'v14ccyes', 'v12nocory', 'choice2a_no', 'v4mbeach2y', 'v12coryapartment', 'choice2a_yes', 'choice2d_no', 'choice2b1_yes', 'jback2', 'nikkiback', 'choice3molly2e', 'CH3WAKEUP', 'choice3jess1c', 'ch3tmdate', 'v9n2turn', 'corydate2q2a', 'v15jesshallway', 'choice3corygym4b', 'v7profkoffice', 'choice_2phoneback', 'ch4ashanimal', 'version8', 'v9n1truth', 'ch4ashveg', 'v9t2turn', 'v14noashleysex', 'v13cc3some', 'v8skybeer', 'choice32y', 'corydate2hj']
 
 Component 3: 5 nodes
-  Nodes: ['_game_menu_load', '_game_menu_preferences', '_enter_game_menu', '_game_menu_save', '_noisy_return']
+  Nodes: ['_game_menu_load', '_game_menu_save', '_game_menu_preferences', '_noisy_return', '_enter_game_menu']
 
 Component 4: 2 nodes
   Nodes: ['_quit', '_quit_prompt']
 
 Component 5: 3 nodes
-  Nodes: ['_return', '_return_fast_skipping', '_return_skipping']
+  Nodes: ['_return_skipping', '_return_fast_skipping', '_return']
 
 Component 6: 1 nodes
   Nodes: ['_confirm_quit']
@@ -2830,14 +2830,14 @@ Component 1 start candidates: ['after_load']
 Component 2 start candidates: ['start']
   Nodes with no incoming edges: ['choice3corygym2c', 'v11ignore', 'start']
 
-Component 3 start candidates: ['_game_menu_load', '_game_menu_preferences', '_game_menu_save']
-  Nodes with no incoming edges: ['_game_menu_load', '_game_menu_preferences', '_game_menu_save']
+Component 3 start candidates: ['_game_menu_load', '_game_menu_save', '_game_menu_preferences']
+  Nodes with no incoming edges: ['_game_menu_load', '_game_menu_save', '_game_menu_preferences']
 
 Component 4 start candidates: ['_quit_prompt']
   Nodes with no incoming edges: ['_quit_prompt']
 
 Component 5 start candidates: ['_return_fast_skipping', '_return_skipping']
-  Nodes with no incoming edges: ['_return_fast_skipping', '_return_skipping']
+  Nodes with no incoming edges: ['_return_skipping', '_return_fast_skipping']
 
 Component 6 start candidates: ['_confirm_quit']
   Nodes with no incoming edges: ['_confirm_quit']
