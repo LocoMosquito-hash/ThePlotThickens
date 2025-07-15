@@ -82,18 +82,24 @@ class VNLabelNode(QGraphicsObject):
         
         # Phase 2: Intelligent Node Classification Color Scheme
         color_map = {
-            'start': QColor(100, 250, 100),      # Green - True start node
-            'decision': QColor(250, 200, 100),    # Yellow - Decision points from MenuAnalyzer
-            'linear': QColor(100, 150, 250),      # Blue - Linear story progression
-            'orphaned': QColor(150, 150, 150),    # Gray - Orphaned/unreachable nodes
-            'jump_target': QColor(200, 100, 250), # Purple - Jump targets
+            'start': QColor(100, 250, 100),         # Green - True start node
+            'decision': QColor(250, 200, 100),      # Yellow - Decision points (legacy)
+            'decision_point': QColor(255, 215, 0),  # GOLD - Menu decision points from MenuAnalyzer
+            'menu_container': QColor(255, 140, 0),  # ORANGE - Menu container nodes
+            'linear': QColor(100, 150, 250),        # Blue - Linear story progression
+            'orphaned': QColor(150, 150, 150),      # Gray - Orphaned/unreachable nodes
+            'jump_target': QColor(200, 100, 250),   # Purple - Jump targets
         }
         
         # Get base color from semantic classification
         base_color = color_map.get(self.semantic_classification, QColor(100, 150, 250))
         
-        # Special handling for endings (no outgoing flows)
-        if not self.node_data.get('outgoing_flows', []) and self.semantic_classification != 'orphaned':
+        # Priority 1: Check node_type (overrides everything)
+        node_type = self.node_data.get('node_type')
+        if node_type == 'menu_container':
+            base_color = QColor(255, 140, 0)  # ORANGE for menu containers
+        # Priority 2: Special handling for endings (no outgoing flows)
+        elif not self.node_data.get('outgoing_flows', []) and self.semantic_classification != 'orphaned':
             base_color = QColor(250, 100, 100)  # Red for endings
             
         return {
@@ -538,26 +544,96 @@ class VNFlowVisualizer(QGraphicsView):
         self.connections.clear()
         
     def create_visualization(self):
-        """Create visual elements from flow graph data."""
+        """Create visual elements from flow graph data with menu containers."""
         if not self.graph:
             return
-             
-        # Create nodes with semantic classification
+        
+        # Step 1: Create all regular nodes with semantic classification
         for node_id in self.graph.nodes:
             semantic_classification = self.semantic_classifications.get(node_id, "linear")
             node_item = VNLabelNode(node_id, self.graph.nodes[node_id], semantic_classification)
             self.scene.addItem(node_item)
             self.nodes[node_id] = node_item
-             
-        # Create connections based on graph edges
+        
+        # Step 2: Create menu container nodes and build edge mapping
+        menu_containers = {}
+        menu_choice_edges = set()
+        
+        # Analyze flow graph data to find menu containers needed
+        for node_id, node_data in self.graph.nodes.items():
+            outgoing_flows = node_data.get('outgoing_flows', [])
+            menu_choices = [flow for flow in outgoing_flows 
+                          if flow.get('flow_type') == 'menu_choice']
+            
+            if menu_choices:
+                # Create menu container node
+                menu_node_id = f"{node_id}_menu_container"
+                
+                # Build outgoing_flows for the menu container
+                menu_outgoing_flows = []
+                for choice in menu_choices:
+                    target = choice.get('target_label')
+                    if target:
+                        menu_outgoing_flows.append({
+                            'target_label': target,
+                            'flow_type': 'menu_choice',
+                            'choice_text': choice.get('choice_text', f"Choice -> {target}")
+                        })
+                
+                menu_item = VNLabelNode(menu_node_id, {
+                    'name': f"Menu: {node_id}",
+                    'node_type': 'menu_container',
+                    'has_menu': True,
+                    'menu_choices': len(menu_choices),
+                    'outgoing_flows': menu_outgoing_flows  # FIX: Add missing outgoing_flows
+                }, 'menu_container')
+                
+                self.scene.addItem(menu_item)
+                self.nodes[menu_node_id] = menu_item
+                menu_containers[node_id] = menu_node_id
+                
+                # Track which edges should go through menu containers
+                for choice in menu_choices:
+                    target = choice.get('target_label')
+                    if target:
+                        menu_choice_edges.add((node_id, target))
+        
+        # Step 3: Create connections with menu container logic
         for source_id, target_id in self.graph.edges:
             if source_id in self.nodes and target_id in self.nodes:
-                source_node = self.nodes[source_id]
-                target_node = self.nodes[target_id]
                 edge_data = self.graph.edges[source_id, target_id]
-                connection = VNFlowConnection(source_node, target_node, edge_data)
-                self.scene.addItem(connection)
-                self.connections.append(connection)
+                edge_key = (source_id, target_id)
+                
+                # Check if this edge should go through a menu container
+                if edge_key in menu_choice_edges and source_id in menu_containers:
+                    menu_container_id = menu_containers[source_id]
+                    
+                    # Create: label -> menu container
+                    if source_id in self.nodes and menu_container_id in self.nodes:
+                        connection1 = VNFlowConnection(
+                            self.nodes[source_id], 
+                            self.nodes[menu_container_id], 
+                            {'flow_type': 'to_menu', 'style': 'menu_entry'}
+                        )
+                        self.scene.addItem(connection1)
+                        self.connections.append(connection1)
+                    
+                    # Create: menu container -> target
+                    if menu_container_id in self.nodes and target_id in self.nodes:
+                        connection2 = VNFlowConnection(
+                            self.nodes[menu_container_id], 
+                            self.nodes[target_id], 
+                            {'flow_type': 'menu_choice', 'style': 'menu_choice'}
+                        )
+                        self.scene.addItem(connection2)
+                        self.connections.append(connection2)
+                else:
+                    # Create direct connection for non-menu edges
+                    source_node = self.nodes[source_id]
+                    target_node = self.nodes[target_id]
+                    connection = VNFlowConnection(source_node, target_node, edge_data)
+                    self.scene.addItem(connection)
+                    self.connections.append(connection)
                 
         # Apply initial layout and ensure proper scaling
         self.apply_layout('narrative')
@@ -616,12 +692,41 @@ class VNFlowVisualizer(QGraphicsView):
             if node_id in self.nodes:
                 self.nodes[node_id].setPos(x, y)
         
+        # Step 2: Apply menu container positioning fixes
+        self._position_menu_containers_relative_to_parents()
+        
         # Update connections
         for connection in self.connections:
             connection.update_path()
             
         # Automatically fit view after layout
         self.fit_view_to_content()
+        
+    def _position_menu_containers_relative_to_parents(self):
+        """
+        Position menu container nodes relative to their parent label nodes.
+        
+        This fixes the issue where menu containers get positioned by layout algorithms
+        as if they were disconnected nodes, causing them to pile up.
+        """
+        menu_container_offset = 80  # Distance from parent node
+        
+        for node_id, node_item in self.nodes.items():
+            if node_id.endswith('_menu_container'):
+                # Extract parent node ID
+                parent_id = node_id.replace('_menu_container', '')
+                
+                if parent_id in self.nodes:
+                    parent_node = self.nodes[parent_id]
+                    parent_pos = parent_node.pos()
+                    
+                    # Position menu container to the right of its parent
+                    menu_pos_x = parent_pos.x() + menu_container_offset
+                    menu_pos_y = parent_pos.y()  # Same vertical level
+                    
+                    node_item.setPos(menu_pos_x, menu_pos_y)
+                    
+                    print(f"Positioned {node_id} relative to parent {parent_id}")
         
     def _narrative_hierarchical_layout(self) -> Dict[str, Tuple[float, float]]:
         """
@@ -1843,6 +1948,58 @@ class VNFlowVisualizer(QGraphicsView):
     def reset_view(self):
         """Reset view to show all content."""
         self.fit_view_to_content()
+        
+    def search_and_select_node(self, search_text: str) -> bool:
+        """
+        Search for a node by name and select it if found.
+        
+        Args:
+            search_text: Partial or full node name to search for
+            
+        Returns:
+            True if node was found and selected, False otherwise
+        """
+        search_text = search_text.lower().strip()
+        found_nodes = []
+        
+        # Search through all nodes
+        for node_id, node_item in self.nodes.items():
+            node_name = node_item.node_name.lower()
+            if search_text in node_name or search_text in node_id.lower():
+                found_nodes.append((node_id, node_item))
+        
+        if not found_nodes:
+            print(f"No nodes found matching '{search_text}'")
+            return False
+        
+        # If multiple matches, prefer exact matches first
+        exact_matches = [(nid, ni) for nid, ni in found_nodes 
+                        if nid.lower() == search_text or ni.node_name.lower() == search_text]
+        
+        if exact_matches:
+            target_node_id, target_node = exact_matches[0]
+        else:
+            target_node_id, target_node = found_nodes[0]
+            if len(found_nodes) > 1:
+                print(f"Multiple matches found for '{search_text}', selecting first: {target_node_id}")
+                print("Other matches:", [nid for nid, _ in found_nodes[1:5]])  # Show first 5 others
+        
+        # Clear current selection
+        self.scene.clearSelection()
+        
+        # Select and center on the found node
+        target_node.setSelected(True)
+        
+        # Center the view on the selected node
+        node_pos = target_node.scenePos()
+        self.centerOn(node_pos)
+        
+        # Optionally highlight with a brief animation effect
+        target_node._highlighted = True
+        target_node.update()
+        
+        print(f"Found and selected node: {target_node_id}")
+        return True
         
     def wheelEvent(self, event):
         """Handle mouse wheel for zooming."""

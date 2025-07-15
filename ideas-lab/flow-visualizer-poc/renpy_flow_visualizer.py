@@ -130,6 +130,7 @@ class RenpyFlowMapper(QMainWindow):
         # Connect signals
         self.visualizer.node_selected.connect(self.control_panel.update_node_details)
         self.control_panel.layout_changed.connect(self.visualizer.apply_layout)
+        self.control_panel.search_node.connect(self.visualizer.search_and_select_node)
         
         # Connect the reset button to the visualizer's reset_view method
         self.control_panel.reset_button.clicked.connect(self.visualizer.reset_view)

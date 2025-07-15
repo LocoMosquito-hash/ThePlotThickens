@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, 
     QPushButton, QComboBox, QTextEdit, QScrollArea, QFrame,
-    QGridLayout, QSizePolicy
+    QGridLayout, QSizePolicy, QLineEdit
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -24,6 +24,7 @@ class VNControlPanel(QWidget):
     """
     
     layout_changed = pyqtSignal(str)  # layout_type
+    search_node = pyqtSignal(str)  # node_name
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -37,6 +38,10 @@ class VNControlPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(5)  # Reduced spacing
         layout.setContentsMargins(3, 3, 3, 3)  # Reduced margins
+        
+        # Node Search section
+        search_group = self.create_search_section()
+        layout.addWidget(search_group)
         
         # Layout Controls section
         layout_group = self.create_layout_controls()
@@ -52,6 +57,41 @@ class VNControlPanel(QWidget):
         
         # Add stretch to push everything up
         layout.addStretch()
+        
+    def create_search_section(self) -> QGroupBox:
+        """Create the node search section."""
+        group = QGroupBox("Find Node")
+        layout = QVBoxLayout(group)
+        layout.setSpacing(3)
+        
+        # Search input
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel("Search:"))
+        
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Enter node name (e.g., ch4ashbagdone)")
+        self.search_input.returnPressed.connect(self.perform_search)
+        search_layout.addWidget(self.search_input)
+        
+        self.search_button = QPushButton("Find")
+        self.search_button.clicked.connect(self.perform_search)
+        search_layout.addWidget(self.search_button)
+        
+        layout.addLayout(search_layout)
+        
+        # Search help text
+        help_text = QLabel("Enter partial or full node name\nPress Enter or click Find")
+        help_text.setFont(QFont("", 7))
+        help_text.setStyleSheet("color: gray;")
+        layout.addWidget(help_text)
+        
+        return group
+        
+    def perform_search(self):
+        """Emit search signal with the search text."""
+        search_text = self.search_input.text().strip()
+        if search_text:
+            self.search_node.emit(search_text)
         
     def create_layout_controls(self) -> QGroupBox:
         """Create the layout algorithm controls."""

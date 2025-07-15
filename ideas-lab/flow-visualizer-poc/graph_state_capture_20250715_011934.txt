@@ -1,0 +1,104 @@
+=== REAL-TIME GRAPH STATE CAPTURE ===
+Timestamp: 2025-07-15 01:19:34.746820
+Project: T:\AG\MySisterMyRoommateV1.69-pc\game
+
+ORIGINAL GRAPH STATE:
+  Nodes: 297
+  Edges: 390
+
+=== MENU CONTAINER CREATION SIMULATION ===
+Menu containers created: 108
+Menu choice edges to reroute: 187
+Edges removed: 187
+Edges added: 374
+
+=== FINAL GRAPH STATE ===
+  Total nodes: 405
+  Total edges: 498
+  Original nodes: 297
+  Container nodes: 108
+
+=== DISASTER ANALYSIS ===
+ch4ashbagdone status:
+  Exists: True
+  Has menu: True
+  In-degree: 4
+  Out-degree: 1
+  Successors: ['ch4ashbagdone_menu_container']
+
+Menu container nodes:
+  start_menu_container:
+    Type: menu_container
+    In-degree: 1
+    Out-degree: 2
+    Predecessors: ['start']
+    Successors: ['choice1s_yes', 'choice1s_no']...
+
+  choice1s_yes_menu_container:
+    Type: menu_container
+    In-degree: 1
+    Out-degree: 2
+    Predecessors: ['choice1s_yes']
+    Successors: ['choice1k_yes', 'choice1k_no']...
+
+  choice1s_done_menu_container:
+    Type: menu_container
+    In-degree: 1
+    Out-degree: 2
+    Predecessors: ['choice1s_done']
+    Successors: ['choice1r_yes', 'choice1r_no']...
+
+  choice1r_yes_menu_container:
+    Type: menu_container
+    In-degree: 1
+    Out-degree: 2
+    Predecessors: ['choice1r_yes']
+    Successors: ['choice1c_yes', 'choice1c_no']...
+
+  choice1r_no_menu_container:
+    Type: menu_container
+    In-degree: 1
+    Out-degree: 2
+    Predecessors: ['choice1r_no']
+    Successors: ['choice1d_yes', 'choice1d_no']...
+
+  choice1r_done_menu_container:
+    Type: menu_container
+    In-degree: 1
+    Out-degree: 1
+    Predecessors: ['choice1r_done']
+    Successors: ['choice21_yes']...
+
+  choice21_yes_menu_container:
+    Type: menu_container
+    In-degree: 1
+    Out-degree: 2
+    Predecessors: ['choice21_yes']
+    Successors: ['choice2a_yes', 'choice2a_no']...
+
+  nikkiflicks_menu_container:
+    Type: menu_container
+    In-degree: 1
+    Out-degree: 1
+    Predecessors: ['nikkiflicks']
+    Successors: ['choice2b_yes']...
+
+  choice2b_yes_menu_container:
+    Type: menu_container
+    In-degree: 1
+    Out-degree: 2
+    Predecessors: ['choice2b_yes']
+    Successors: ['choice2b1_yes', 'choice2b1_no']...
+
+  after2b_menu_container:
+    Type: menu_container
+    In-degree: 1
+    Out-degree: 2
+    Predecessors: ['after2b']
+    Successors: ['choice2c_yes', 'choice2c_no']...
+
+  ... and 98 more container nodes
+
+PROBLEM PATTERNS:
+Nodes with >10 outgoing edges: 0
+Isolated container nodes: 0
