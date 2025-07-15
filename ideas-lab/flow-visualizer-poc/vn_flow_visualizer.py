@@ -274,15 +274,58 @@ class VNFlowConnection(QGraphicsPathItem):
         
     def _get_rectangle_intersection(self, center_pos: QPointF, ux: float, uy: float, node: 'VNLabelNode', is_source: bool) -> QPointF:
         """Calculate intersection point of line with rectangular node edge."""
-        # Get node dimensions - handle both VNLabelNode and MenuContainerGraphicsItem
+        # NEW: Choice-aware landing zones for MenuContainerGraphicsItem
+        if hasattr(node, 'container_width') and hasattr(node, 'get_outgoing_connection_point'):
+            # This is a MenuContainerGraphicsItem - use sophisticated landing zones
+            
+            if is_source:
+                # Outgoing connection FROM menu container
+                # Use the target destination to find the appropriate choice zone
+                target_destination = self.connection_data.get('target_destination')
+                if target_destination:
+                    landing_point = node.get_outgoing_connection_point(target_destination)
+                    if landing_point:
+                        # Convert from local to scene coordinates
+                        return node.mapToScene(landing_point)
+                
+                # Fallback to center-right if no specific choice found
+                container_rect = node.rect()
+                fallback_point = QPointF(container_rect.right(), container_rect.center().y())
+                return node.mapToScene(fallback_point)
+            
+            else:
+                # Incoming connection TO menu container
+                # Use header zone or general connection logic
+                import math
+                connection_angle = math.atan2(uy, ux)
+                
+                # For incoming connections, use header zone (simpler approach)
+                landing_zones = node.calculate_choice_landing_zones()
+                if 'header' in landing_zones:
+                    header_zone = landing_zones['header']['boundaries']
+                    header_center_y = header_zone['choice_center_y']
+                    
+                    # Choose side based on connection angle
+                    angle = connection_angle % (2 * math.pi)
+                    if angle < math.pi / 2 or angle > 3 * math.pi / 2:
+                        # Coming from left -> land on left side of header
+                        landing_point = QPointF(header_zone['left_top'][0], header_center_y)
+                    else:
+                        # Coming from right -> land on right side of header  
+                        landing_point = QPointF(header_zone['right_top'][0], header_center_y)
+                    
+                    return node.mapToScene(landing_point)
+                
+                # Fallback to center-left for incoming
+                container_rect = node.rect()
+                fallback_point = QPointF(container_rect.left(), container_rect.center().y())
+                return node.mapToScene(fallback_point)
+        
+        # EXISTING: Standard rectangular intersection for VNLabelNode
         if hasattr(node, 'width'):
             # VNLabelNode
             half_width = node.width / 2
             half_height = node.height / 2
-        elif hasattr(node, 'container_width'):
-            # MenuContainerGraphicsItem
-            half_width = node.container_width / 2
-            half_height = node.container_height / 2
         else:
             # Fallback for unknown node types
             rect = node.boundingRect()
@@ -642,7 +685,7 @@ class VNFlowVisualizer(QGraphicsView):
                         connection2 = VNFlowConnection(
                             self.nodes[menu_container_id], 
                             self.nodes[target_id], 
-                            {'flow_type': 'menu_choice', 'style': 'menu_choice'}
+                            {'flow_type': 'menu_choice', 'style': 'menu_choice', 'target_destination': target_id}
                         )
                         self.scene.addItem(connection2)
                         self.connections.append(connection2)

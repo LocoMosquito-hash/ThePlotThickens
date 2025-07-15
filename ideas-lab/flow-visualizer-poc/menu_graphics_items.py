@@ -8,7 +8,7 @@ Custom PyQt6 graphics items for rendering menu containers with choice buttons.
 
 from typing import List, Dict, Any, Optional
 from PyQt6.QtWidgets import QGraphicsItem, QGraphicsRectItem, QGraphicsTextItem, QStyleOptionGraphicsItem
-from PyQt6.QtCore import QRectF, Qt, pyqtSignal
+from PyQt6.QtCore import QRectF, Qt, pyqtSignal, QPointF
 from PyQt6.QtGui import QPainter, QPen, QBrush, QColor, QFont, QFontMetrics
 
 
@@ -177,6 +177,19 @@ class MenuContainerGraphicsItem(QGraphicsRectItem):
         # Make it selectable but not movable by default
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)  # Allow moving the entire container
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)  # Enable geometry change notifications
+        
+        # Initialize connected edges list for edge following
+        self.connected_edges = []
+    
+    def itemChange(self, change, value):
+        """Handle item changes (like position updates) to update connected edges."""
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            # Notify connected edges to update when menu container moves
+            if hasattr(self, 'connected_edges'):
+                for edge in self.connected_edges:
+                    edge.update_path()
+        return super().itemChange(change, value)
     
     def get_choice_destinations(self) -> List[Optional[str]]:
         """Get list of destinations for all choices in this menu."""
@@ -195,4 +208,155 @@ class MenuContainerGraphicsItem(QGraphicsRectItem):
                 }
                 for choice in self.choice_buttons
             ]
-        } 
+        }
+    
+    def get_choice_by_destination(self, destination: str) -> Optional[Dict[str, Any]]:
+        """Find choice data by destination label."""
+        for i, choice_data in enumerate(self.menu_choices):
+            if choice_data.get('destination') == destination:
+                return {
+                    'text': choice_data.get('text', f'Choice {i+1}'),
+                    'destination': destination,
+                    'index': i,
+                    'button': self.choice_buttons[i] if i < len(self.choice_buttons) else None
+                }
+        return None
+    
+    def calculate_choice_landing_zones(self) -> Dict[int, Dict[str, Any]]:
+        """
+        Calculate landing zones for each choice on the container borders.
+        
+        Returns:
+            Dict mapping choice_index to landing zone data including boundaries
+        """
+        landing_zones = {}
+        
+        # Container boundaries in local coordinates
+        container_rect = self.rect()
+        left = container_rect.left()
+        right = container_rect.right()
+        top = container_rect.top()
+        bottom = container_rect.bottom()
+        
+        # Header zone boundaries
+        header_bottom = self.header_height
+        choice_start_y = header_bottom + self.padding
+        choice_height = 24
+        
+        for i, choice_button in enumerate(self.choice_buttons):
+            choice_top = choice_start_y + i * (choice_height + self.choice_spacing)
+            choice_bottom = choice_top + choice_height
+            
+            # Calculate landing zone boundaries for this choice
+            # Each choice gets its vertical slice of the container sides
+            landing_zones[i] = {
+                'choice_text': choice_button.choice_text,
+                'destination': choice_button.destination,
+                'boundaries': {
+                    # Left side zone
+                    'left_top': (left, choice_top),
+                    'left_bottom': (left, choice_bottom),
+                    # Right side zone  
+                    'right_top': (right, choice_top),
+                    'right_bottom': (right, choice_bottom),
+                    # Choice vertical range
+                    'choice_y_min': choice_top,
+                    'choice_y_max': choice_bottom,
+                    'choice_center_y': choice_top + choice_height / 2
+                }
+            }
+        
+        # Header zone (for incoming connections)
+        landing_zones['header'] = {
+            'choice_text': 'Header Zone',
+            'destination': None,
+            'boundaries': {
+                'left_top': (left, top),
+                'left_bottom': (left, header_bottom),
+                'right_top': (right, top), 
+                'right_bottom': (right, header_bottom),
+                'top_left': (left, top),
+                'top_right': (right, top),
+                'choice_y_min': top,
+                'choice_y_max': header_bottom,
+                'choice_center_y': header_bottom / 2
+            }
+        }
+        
+        return landing_zones
+    
+    def get_landing_point_for_choice(self, choice_index: int, connection_angle: float, 
+                                   connection_target: str) -> Optional[QPointF]:
+        """
+        Get specific landing point for a choice based on connection angle.
+        
+        Args:
+            choice_index: Index of the choice (0-based)
+            connection_angle: Angle of incoming connection in radians
+            connection_target: Target destination for validation
+            
+        Returns:
+            QPointF of the landing point in local coordinates
+        """
+        landing_zones = self.calculate_choice_landing_zones()
+        
+        if choice_index not in landing_zones:
+            return None
+            
+        zone = landing_zones[choice_index]
+        boundaries = zone['boundaries']
+        
+        # Determine which side of the container to use based on angle
+        # Angle 0 = right, π/2 = down, π = left, 3π/2 = up
+        import math
+        
+        # Normalize angle to 0-2π range
+        angle = connection_angle % (2 * math.pi)
+        
+        choice_center_y = boundaries['choice_center_y']
+        
+        # Choose side based on angle - prefer left/right over top/bottom for clarity
+        if angle < math.pi / 4 or angle > 7 * math.pi / 4:
+            # Connection coming from left -> land on right side
+            return QPointF(boundaries['right_top'][0], choice_center_y)
+        elif angle > 3 * math.pi / 4 and angle < 5 * math.pi / 4:
+            # Connection coming from right -> land on left side  
+            return QPointF(boundaries['left_top'][0], choice_center_y)
+        elif angle >= math.pi / 4 and angle <= 3 * math.pi / 4:
+            # Connection coming from above -> prefer side, but can use choice area
+            # Use right side by default
+            return QPointF(boundaries['right_top'][0], choice_center_y)
+        else:
+            # Connection coming from below -> prefer side
+            # Use right side by default
+            return QPointF(boundaries['right_top'][0], choice_center_y)
+    
+    def get_outgoing_connection_point(self, destination: str) -> Optional[QPointF]:
+        """
+        Get connection point for outgoing connection to specific destination.
+        
+        Args:
+            destination: Target label destination
+            
+        Returns:
+            QPointF of the connection point in local coordinates
+        """
+        # Find which choice this destination corresponds to
+        choice_data = self.get_choice_by_destination(destination)
+        if not choice_data:
+            # If destination not found, use center-right as fallback
+            container_rect = self.rect()
+            return QPointF(container_rect.right(), container_rect.center().y())
+        
+        choice_index = choice_data['index']
+        landing_zones = self.calculate_choice_landing_zones()
+        
+        if choice_index not in landing_zones:
+            return None
+            
+        zone = landing_zones[choice_index]
+        boundaries = zone['boundaries']
+        
+        # For outgoing connections, use the right side of the choice zone
+        choice_center_y = boundaries['choice_center_y']
+        return QPointF(boundaries['right_top'][0], choice_center_y) 
