@@ -154,7 +154,7 @@ class FlowGraphVisualizer:
                     # Only add direct edge if it's not handled by a menu node
                     if not is_handled_by_menu:
                         G.add_edge(label_name, target, **{
-                            'flow_type': connection.get('type', 'unknown'),
+                            'flow_type': connection.get('flow_type', 'unknown'),
                             'edge_style': 'label_to_label',
                             'condition': connection.get('condition', ''),
                             'file': connection.get('file', ''),
