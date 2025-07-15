@@ -709,7 +709,8 @@ class VNFlowVisualizer(QGraphicsView):
         This fixes the issue where menu containers get positioned by layout algorithms
         as if they were disconnected nodes, causing them to pile up.
         """
-        menu_container_offset = 80  # Distance from parent node
+        # Increased offset to prevent overlap, accounting for node widths
+        base_offset = 140  # Base separation distance
         
         for node_id, node_item in self.nodes.items():
             if node_id.endswith('_menu_container'):
@@ -720,13 +721,20 @@ class VNFlowVisualizer(QGraphicsView):
                     parent_node = self.nodes[parent_id]
                     parent_pos = parent_node.pos()
                     
-                    # Position menu container to the right of its parent
-                    menu_pos_x = parent_pos.x() + menu_container_offset
+                    # Calculate separation based on parent node width + base offset
+                    parent_width = getattr(parent_node, 'width', 120)  # Default width if not available
+                    menu_width = getattr(node_item, 'width', 120)
+                    
+                    # Ensure enough separation: half parent width + base offset + half menu width
+                    separation = (parent_width / 2) + base_offset + (menu_width / 2)
+                    
+                    # Position menu container to the right of its parent with proper separation
+                    menu_pos_x = parent_pos.x() + separation
                     menu_pos_y = parent_pos.y()  # Same vertical level
                     
                     node_item.setPos(menu_pos_x, menu_pos_y)
                     
-                    print(f"Positioned {node_id} relative to parent {parent_id}")
+                    print(f"Positioned {node_id} at ({menu_pos_x:.1f}, {menu_pos_y:.1f}) - separation: {separation:.1f}px")
         
     def _narrative_hierarchical_layout(self) -> Dict[str, Tuple[float, float]]:
         """
