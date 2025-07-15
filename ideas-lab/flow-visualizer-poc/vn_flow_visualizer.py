@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QGraphicsView, QGraphicsScene, QGraphicsItem, QGraphicsObject,
     QGraphicsEllipseItem, QGraphicsPathItem, QGraphicsTextItem,
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QMenu, QMessageBox
+    QMenu, QMessageBox, QGraphicsRectItem, QGraphicsLineItem
 )
 from PyQt6.QtCore import Qt, QPointF, QRectF, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import (
@@ -37,6 +37,9 @@ try:
 except ImportError as e:
     print(f"Warning: Could not import control_flow modules: {e}")
     CONTROL_FLOW_AVAILABLE = False
+
+# Import the new menu graphics components
+from menu_graphics_items import MenuContainerGraphicsItem, ChoiceButtonGraphicsItem
 
 
 class VNLabelNode(QGraphicsObject):
@@ -271,9 +274,20 @@ class VNFlowConnection(QGraphicsPathItem):
         
     def _get_rectangle_intersection(self, center_pos: QPointF, ux: float, uy: float, node: 'VNLabelNode', is_source: bool) -> QPointF:
         """Calculate intersection point of line with rectangular node edge."""
-        # Get node dimensions
-        half_width = node.width / 2
-        half_height = node.height / 2
+        # Get node dimensions - handle both VNLabelNode and MenuContainerGraphicsItem
+        if hasattr(node, 'width'):
+            # VNLabelNode
+            half_width = node.width / 2
+            half_height = node.height / 2
+        elif hasattr(node, 'container_width'):
+            # MenuContainerGraphicsItem
+            half_width = node.container_width / 2
+            half_height = node.container_height / 2
+        else:
+            # Fallback for unknown node types
+            rect = node.boundingRect()
+            half_width = rect.width() / 2
+            half_height = rect.height() / 2
         
         # Calculate intersection with rectangle edges
         # We need to find which edge the line intersects first
@@ -566,28 +580,33 @@ class VNFlowVisualizer(QGraphicsView):
                           if flow.get('flow_type') == 'menu_choice']
             
             if menu_choices:
-                # Create menu container node
+                # Create menu container node with proper choice data
                 menu_node_id = f"{node_id}_menu_container"
                 
-                # Build outgoing_flows for the menu container
-                menu_outgoing_flows = []
+                # Prepare menu choice data for the graphics item
+                choice_data_list = []
+                seen_destinations = set()  # Track destinations to avoid duplicates
+                
                 for choice in menu_choices:
-                    target = choice.get('target_label')
-                    if target:
-                        menu_outgoing_flows.append({
-                            'target_label': target,
-                            'flow_type': 'menu_choice',
-                            'choice_text': choice.get('choice_text', f"Choice -> {target}")
-                        })
+                    destination = choice.get('target_label')
+                    
+                    # Skip if we've already seen this destination
+                    if destination and destination in seen_destinations:
+                        continue
+                        
+                    choice_data = {
+                        'text': choice.get('choice_text', f"Choice -> {destination or 'unknown'}"),
+                        'destination': destination,
+                        'condition': choice.get('condition', ''),
+                        'flow_type': choice.get('flow_type', 'menu_choice')
+                    }
+                    
+                    choice_data_list.append(choice_data)
+                    if destination:
+                        seen_destinations.add(destination)
                 
-                menu_item = VNLabelNode(menu_node_id, {
-                    'name': f"Menu: {node_id}",
-                    'node_type': 'menu_container',
-                    'has_menu': True,
-                    'menu_choices': len(menu_choices),
-                    'outgoing_flows': menu_outgoing_flows  # FIX: Add missing outgoing_flows
-                }, 'menu_container')
-                
+                # Create the new menu container graphics item
+                menu_item = MenuContainerGraphicsItem(menu_node_id, choice_data_list)
                 self.scene.addItem(menu_item)
                 self.nodes[menu_node_id] = menu_item
                 menu_containers[node_id] = menu_node_id
@@ -721,9 +740,10 @@ class VNFlowVisualizer(QGraphicsView):
                     parent_node = self.nodes[parent_id]
                     parent_pos = parent_node.pos()
                     
-                    # Calculate separation based on parent node width + base offset
-                    parent_width = getattr(parent_node, 'width', 120)  # Default width if not available
-                    menu_width = getattr(node_item, 'width', 120)
+                    # Calculate separation based on node widths
+                    # Parent node is VNLabelNode, menu container is MenuContainerGraphicsItem
+                    parent_width = getattr(parent_node, 'width', 120)  # VNLabelNode width
+                    menu_width = getattr(node_item, 'container_width', 200)  # MenuContainerGraphicsItem width
                     
                     # Ensure enough separation: half parent width + base offset + half menu width
                     separation = (parent_width / 2) + base_offset + (menu_width / 2)
@@ -1972,7 +1992,17 @@ class VNFlowVisualizer(QGraphicsView):
         
         # Search through all nodes
         for node_id, node_item in self.nodes.items():
-            node_name = node_item.node_name.lower()
+            # Handle both VNLabelNode and MenuContainerGraphicsItem
+            if hasattr(node_item, 'node_name'):
+                # VNLabelNode
+                node_name = node_item.node_name.lower()
+            elif hasattr(node_item, 'menu_id'):
+                # MenuContainerGraphicsItem
+                node_name = node_item.menu_id.lower()
+            else:
+                # Fallback to node_id
+                node_name = node_id.lower()
+                
             if search_text in node_name or search_text in node_id.lower():
                 found_nodes.append((node_id, node_item))
         
@@ -1981,8 +2011,18 @@ class VNFlowVisualizer(QGraphicsView):
             return False
         
         # If multiple matches, prefer exact matches first
-        exact_matches = [(nid, ni) for nid, ni in found_nodes 
-                        if nid.lower() == search_text or ni.node_name.lower() == search_text]
+        exact_matches = []
+        for nid, ni in found_nodes:
+            # Handle both node types for exact matching too
+            if hasattr(ni, 'node_name'):
+                node_name = ni.node_name.lower()
+            elif hasattr(ni, 'menu_id'):
+                node_name = ni.menu_id.lower()
+            else:
+                node_name = nid.lower()
+                
+            if nid.lower() == search_text or node_name == search_text:
+                exact_matches.append((nid, ni))
         
         if exact_matches:
             target_node_id, target_node = exact_matches[0]
