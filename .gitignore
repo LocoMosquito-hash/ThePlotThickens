@@ -46,3 +46,6 @@ app/renpy-source-api/savior_flow_complete/*.html
 app/renpy-source-api/savior_flow_complete/*.png
 app/renpy-source-api/savior_flow_visualization/*.png
 renpy_source_api.db-journal
+debug_layout_dot_like.txt
+debug_layout_narrative.txt
+

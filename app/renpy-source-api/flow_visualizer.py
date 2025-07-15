@@ -48,34 +48,106 @@ class FlowGraphVisualizer:
         self.graph = self._build_networkx_graph()
     
     def _build_networkx_graph(self) -> nx.DiGraph:
-        """Build a NetworkX directed graph from flow analysis data."""
+        """Build a NetworkX directed graph from flow analysis data with separate menu nodes."""
         G = nx.DiGraph()
         
         labels = self.flow_data.get('labels', {})
         
-        # Add nodes with attributes
+        # Get menu nodes from the project
+        menu_nodes_by_label = self.project.parser.get_menu_nodes_by_label(self.project.project_path)
+        
+        # Add label nodes with attributes
         for label_name, label_data in labels.items():
             G.add_node(label_name, **{
+                'node_type': 'label',
                 'file': label_data.get('file', ''),
                 'line': label_data.get('line', 0),
                 'reachable': label_data.get('reachable', True),
                 'incoming_count': len(label_data.get('incoming_connections', [])),
                 'outgoing_count': len(label_data.get('outgoing_connections', [])),
                 'complexity': len(label_data.get('outgoing_connections', [])),
-                'depth': label_data.get('depth', 0)
+                'depth': label_data.get('depth', 0),
+                'has_menu': label_name in menu_nodes_by_label
             })
         
-        # Add edges with attributes
+        # Add menu nodes with attributes
+        menu_choice_edges = {}  # Track menu choice edges to avoid duplicating direct label edges
+        
+        for label_name, menu_nodes in menu_nodes_by_label.items():
+            for menu_node in menu_nodes:
+                # Add menu node to graph
+                G.add_node(menu_node.node_id, **{
+                    'node_type': 'menu',
+                    'parent_label': menu_node.parent_label,
+                    'menu_prompt': menu_node.prompt or '',
+                    'choice_count': menu_node.total_choices,
+                    'complexity_level': menu_node.complexity_level,
+                    'menu_type': menu_node.menu_type,
+                    'branching_factor': menu_node.branching_factor,
+                    'story_significance': menu_node.story_significance,
+                    'file': menu_node.file_path,
+                    'line': menu_node.line_number,
+                    'reachable': True,  # Assume reachable if parent label is reachable
+                    'estimated_play_time': menu_node.estimated_play_time,
+                    'referenced_assets': menu_node.referenced_assets,
+                    'asset_categories': menu_node.asset_categories
+                })
+                
+                # Add edge from parent label to menu
+                if label_name in G:
+                    G.add_edge(label_name, menu_node.node_id, **{
+                        'flow_type': 'menu_entry',
+                        'edge_style': 'label_to_menu',
+                        'file': menu_node.file_path,
+                        'line': menu_node.line_number
+                    })
+                
+                # Add edges from menu to choice destinations
+                for choice in menu_node.choices:
+                    if choice.destination and choice.destination in labels:
+                        # Track this menu choice edge
+                        choice_key = (label_name, choice.destination)
+                        if choice_key not in menu_choice_edges:
+                            menu_choice_edges[choice_key] = []
+                        menu_choice_edges[choice_key].append({
+                            'menu_id': menu_node.node_id,
+                            'choice': choice
+                        })
+                        
+                        # Add edge from menu to destination
+                        G.add_edge(menu_node.node_id, choice.destination, **{
+                            'flow_type': 'menu_choice',
+                            'edge_style': 'menu_to_destination',
+                            'choice_text': choice.text,
+                            'choice_condition': choice.condition,
+                            'choice_action': choice.action_type,
+                            'choice_index': choice.choice_index,
+                            'estimated_story_impact': choice.estimated_story_impact,
+                            'file': choice.file_path,
+                            'line': choice.line_number
+                        })
+        
+        # Add non-menu edges (avoiding menu choice edges that are now handled by menu nodes)
         for label_name, label_data in labels.items():
             for connection in label_data.get('outgoing_connections', []):
                 target = connection.get('target')
                 if target and target in labels:
-                    G.add_edge(label_name, target, **{
-                        'flow_type': connection.get('type', 'unknown'),
-                        'condition': connection.get('condition', ''),
-                        'file': connection.get('file', ''),
-                        'line': connection.get('line', 0)
-                    })
+                    # Check if this is a menu choice edge that should be handled by menu nodes
+                    choice_key = (label_name, target)
+                    is_menu_choice = (
+                        choice_key in menu_choice_edges and 
+                        connection.get('type') == 'menu_choice'
+                    )
+                    
+                    # Only add direct edge if it's not a menu choice or if there's no menu handling it
+                    if not is_menu_choice:
+                        G.add_edge(label_name, target, **{
+                            'flow_type': connection.get('type', 'unknown'),
+                            'edge_style': 'label_to_label',
+                            'condition': connection.get('condition', ''),
+                            'file': connection.get('file', ''),
+                            'line': connection.get('line', 0)
+                        })
         
         return G
     
@@ -174,50 +246,106 @@ class FlowGraphVisualizer:
         node_sizes = []
         
         for node, data in subgraph.nodes(data=True):
-            # Node info for hover
-            incoming = data.get('incoming_count', 0)
-            outgoing = data.get('outgoing_count', 0)
+            node_type = data.get('node_type', 'label')
             reachable = data.get('reachable', True)
             
-            node_text.append(f"Label: {node}<br>"
-                           f"Incoming: {incoming}<br>"
-                           f"Outgoing: {outgoing}<br>"
-                           f"Reachable: {reachable}<br>"
-                           f"File: {data.get('file', 'N/A')}")
-            
-            # Color by reachability and complexity
-            if not reachable:
-                node_colors.append('red')
-            elif outgoing == 0:
-                node_colors.append('orange')  # Dead end
-            elif incoming > 10 or outgoing > 10:
-                node_colors.append('purple')  # Hub
+            if node_type == 'menu':
+                # Menu node hover information
+                choice_count = data.get('choice_count', 0)
+                menu_prompt = data.get('menu_prompt', '')
+                parent_label = data.get('parent_label', 'N/A')
+                complexity_level = data.get('complexity_level', 'unknown')
+                story_significance = data.get('story_significance', 'unknown')
+                
+                node_text.append(f"Menu: {node}<br>"
+                               f"Parent: {parent_label}<br>"
+                               f"Choices: {choice_count}<br>"
+                               f"Complexity: {complexity_level}<br>"
+                               f"Significance: {story_significance}<br>"
+                               f"Prompt: {menu_prompt[:50]}{'...' if len(menu_prompt) > 50 else ''}<br>"
+                               f"File: {data.get('file', 'N/A')}")
+                
+                # Color scheme for menu nodes
+                node_colors.append('gold')  # 🟡 Yellow (Decision Points)
+                
+                # Size menu nodes uniformly as requested
+                node_sizes.append(25)
+                
             else:
-                node_colors.append('lightblue')
+                # Label node hover information
+                incoming = data.get('incoming_count', 0)
+                outgoing = data.get('outgoing_count', 0)
+                has_menu = data.get('has_menu', False)
+                
+                node_text.append(f"Label: {node}<br>"
+                               f"Incoming: {incoming}<br>"
+                               f"Outgoing: {outgoing}<br>"
+                               f"Has Menu: {has_menu}<br>"
+                               f"Reachable: {reachable}<br>"
+                               f"File: {data.get('file', 'N/A')}")
+                
+                # Color scheme for label nodes
+                if not reachable:
+                    node_colors.append('gray')  # ⚫ Gray (Orphaned)
+                elif node == 'start' or incoming == 0:
+                    node_colors.append('green')  # 🟢 Green (Start)
+                elif outgoing == 0:
+                    node_colors.append('orange')  # 🟠 Orange (Dead Ends)
+                elif incoming > 10 or outgoing > 10:
+                    node_colors.append('purple')  # 🟣 Purple (Jump Targets/Hubs)
+                else:
+                    node_colors.append('lightblue')  # 🔵 Blue (Linear)
+                
+                # Size by total connectivity for labels
+                total_connections = incoming + outgoing
+                node_sizes.append(max(15, min(50, total_connections * 2)))
+        
+        # Edge traces - separate by type for different styling
+        label_to_menu_x, label_to_menu_y = [], []
+        menu_to_dest_x, menu_to_dest_y = [], []
+        label_to_label_x, label_to_label_y = [], []
+        
+        for edge in subgraph.edges(data=True):
+            source, target, edge_data = edge
+            x0, y0 = pos[source]
+            x1, y1 = pos[target]
             
-            # Size by total connectivity
-            total_connections = incoming + outgoing
-            node_sizes.append(max(10, min(50, total_connections * 2)))
-        
-        # Edge traces
-        edge_x = []
-        edge_y = []
-        
-        for edge in subgraph.edges():
-            x0, y0 = pos[edge[0]]
-            x1, y1 = pos[edge[1]]
-            edge_x.extend([x0, x1, None])
-            edge_y.extend([y0, y1, None])
+            edge_style = edge_data.get('edge_style', 'label_to_label')
+            
+            if edge_style == 'label_to_menu':
+                label_to_menu_x.extend([x0, x1, None])
+                label_to_menu_y.extend([y0, y1, None])
+            elif edge_style == 'menu_to_destination':
+                menu_to_dest_x.extend([x0, x1, None])
+                menu_to_dest_y.extend([y0, y1, None])
+            else:  # label_to_label and others
+                label_to_label_x.extend([x0, x1, None])
+                label_to_label_y.extend([y0, y1, None])
         
         # Create the plot
         fig = go.Figure()
         
-        # Add edges
-        fig.add_trace(go.Scatter(x=edge_x, y=edge_y,
-                                line=dict(width=0.5, color='#888'),
-                                hoverinfo='none',
-                                mode='lines',
-                                name='Flow Connections'))
+        # Add different edge types with different styles
+        if label_to_label_x:
+            fig.add_trace(go.Scatter(x=label_to_label_x, y=label_to_label_y,
+                                    line=dict(width=1.0, color='#666666'),
+                                    hoverinfo='none',
+                                    mode='lines',
+                                    name='Label Connections'))
+        
+        if label_to_menu_x:
+            fig.add_trace(go.Scatter(x=label_to_menu_x, y=label_to_menu_y,
+                                    line=dict(width=2.0, color='#FF8C00', dash='dot'),
+                                    hoverinfo='none',
+                                    mode='lines',
+                                    name='Menu Entry'))
+        
+        if menu_to_dest_x:
+            fig.add_trace(go.Scatter(x=menu_to_dest_x, y=menu_to_dest_y,
+                                    line=dict(width=1.5, color='#4169E1', dash='dash'),
+                                    hoverinfo='none',
+                                    mode='lines',
+                                    name='Choice Destinations'))
         
         # Add nodes
         fig.add_trace(go.Scatter(x=node_x, y=node_y,

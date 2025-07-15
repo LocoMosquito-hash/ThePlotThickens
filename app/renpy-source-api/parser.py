@@ -49,6 +49,134 @@ class MenuChoice:
     file_path: str = ""
     line_number: int = 0
     subsequent_lines: List[str] = field(default_factory=list)  # Lines that follow this choice
+    
+    # Enhanced metadata for app consumption
+    choice_index: int = 0  # Order within the menu (0-based)
+    has_condition: bool = False  # Computed from condition field
+    leads_to_label: bool = False  # True if destination is a label
+    leads_to_return: bool = False  # True if action_type is return
+    contains_media_references: List[str] = field(default_factory=list)  # Assets referenced in choice block
+    contains_variable_changes: List[str] = field(default_factory=list)  # Variables modified in choice block
+    estimated_story_impact: str = "unknown"  # "major", "minor", "cosmetic", "unknown"
+    
+    def __post_init__(self):
+        """Compute derived fields after initialization."""
+        self.has_condition = bool(self.condition)
+        self.leads_to_label = bool(self.destination and self.action_type in ['jump', 'call'])
+        self.leads_to_return = bool(self.action_type == 'return')
+
+
+@dataclass
+class MenuNode:
+    """
+    Represents a menu node in the flow graph with comprehensive metadata.
+    This serves as a rich data source for the entire application.
+    """
+    # Core identification
+    node_id: str  # Unique identifier for graph (e.g., "ch4ashbagdone_menu_1")
+    name: str  # Display name (descriptive, kept short)
+    parent_label: str  # Label that contains this menu
+    menu_index: int = 0  # Index if label has multiple menus (0-based)
+    
+    # Source location
+    file_path: str = ""
+    line_number: int = 0
+    
+    # Menu content and structure
+    prompt: Optional[str] = None  # Menu question/prompt text
+    choices: List[MenuChoice] = field(default_factory=list)
+    total_choices: int = 0
+    
+    # Enhanced metadata for app consumption
+    menu_type: str = "standard"  # "standard", "conditional", "nested", "set_based"
+    complexity_level: str = "simple"  # "simple", "moderate", "complex", "expert"
+    branching_factor: int = 0  # Number of unique destinations
+    
+    # Conditional and set-based menu features
+    has_conditions: bool = False
+    has_menu_set: bool = False
+    menu_set_variable: Optional[str] = None
+    
+    # Nesting and hierarchy
+    is_nested: bool = False
+    nesting_level: int = 0
+    parent_menu_id: Optional[str] = None  # If this is a nested menu
+    nested_menu_ids: List[str] = field(default_factory=list)  # Child menus
+    
+    # Story and flow analysis
+    story_significance: str = "unknown"  # "critical", "major", "minor", "cosmetic"
+    choice_destinations: List[str] = field(default_factory=list)  # All unique destinations
+    creates_branches: bool = True  # Whether this menu creates meaningful story branches
+    can_create_loops: bool = False  # Whether choices might loop back
+    
+    # Media and asset references
+    referenced_assets: List[str] = field(default_factory=list)  # All assets used in menu/choices
+    asset_categories: List[str] = field(default_factory=list)  # Types of assets (images, audio, etc.)
+    
+    # Technical metadata
+    estimated_play_time: int = 0  # Estimated seconds to read and choose
+    choice_complexity_scores: List[float] = field(default_factory=list)  # Per-choice complexity
+    
+    def __post_init__(self):
+        """Compute derived fields after initialization."""
+        self.total_choices = len(self.choices)
+        self.has_conditions = any(choice.has_condition for choice in self.choices)
+        self.choice_destinations = list(set(
+            choice.destination for choice in self.choices 
+            if choice.destination and choice.destination != '<return>'
+        ))
+        self.branching_factor = len(self.choice_destinations)
+        
+        # Determine complexity level
+        if self.total_choices <= 2 and not self.has_conditions:
+            self.complexity_level = "simple"
+        elif self.total_choices <= 4 and not self.has_menu_set:
+            self.complexity_level = "moderate"
+        elif self.has_menu_set or self.total_choices > 4 or self.has_conditions:
+            self.complexity_level = "complex"
+        else:
+            self.complexity_level = "expert"
+        
+        # Generate descriptive name if not provided
+        if not self.name:
+            self.name = self._generate_descriptive_name()
+    
+    def _generate_descriptive_name(self) -> str:
+        """Generate a descriptive but short name for the menu."""
+        if self.prompt:
+            # Extract key words from prompt
+            words = self.prompt.replace('"', '').split()
+            key_words = [w for w in words if len(w) > 3 and w.lower() not in ['what', 'where', 'when', 'should', 'would']]
+            if key_words:
+                return f"Menu: {' '.join(key_words[:2])}"
+        
+        # Fallback based on choices
+        if self.total_choices == 2:
+            return "Binary Choice"
+        elif self.total_choices <= 4:
+            return f"{self.total_choices}-Way Choice"
+        else:
+            return f"Complex ({self.total_choices} options)"
+    
+    def get_choice_by_text(self, text: str) -> Optional[MenuChoice]:
+        """Find a choice by its text content."""
+        for choice in self.choices:
+            if choice.text == text:
+                return choice
+        return None
+    
+    def get_choices_leading_to(self, destination: str) -> List[MenuChoice]:
+        """Get all choices that lead to a specific destination."""
+        return [choice for choice in self.choices if choice.destination == destination]
+    
+    def has_circular_references(self) -> bool:
+        """Check if any choices might create circular references."""
+        return self.parent_label in self.choice_destinations
+    
+    def get_asset_summary(self) -> Dict[str, int]:
+        """Get a summary of assets referenced by category."""
+        from collections import Counter
+        return dict(Counter(self.asset_categories))
 
 
 @dataclass
@@ -87,6 +215,29 @@ class LabelNode:
     is_reachable: bool = False
     is_dead_end: bool = False
     flow_complexity: int = 0  # Number of possible paths from this label
+    
+    # Enhanced menu tracking
+    menu_structures: List[MenuStructure] = field(default_factory=list)  # Original MenuStructure objects
+    menu_nodes: List[MenuNode] = field(default_factory=list)  # Enhanced MenuNode objects
+    menu_count: int = 0  # Number of menus in this label
+    
+    def __post_init__(self):
+        """Compute derived fields after initialization."""
+        self.has_menu = len(self.menu_structures) > 0 or len(self.menu_nodes) > 0
+        self.menu_count = max(len(self.menu_structures), len(self.menu_nodes))
+    
+    def get_menu_by_index(self, index: int) -> Optional[MenuNode]:
+        """Get a menu node by its index within this label."""
+        if 0 <= index < len(self.menu_nodes):
+            return self.menu_nodes[index]
+        return None
+    
+    def get_all_menu_destinations(self) -> List[str]:
+        """Get all destinations from all menus in this label."""
+        destinations = []
+        for menu_node in self.menu_nodes:
+            destinations.extend(menu_node.choice_destinations)
+        return list(set(destinations))
 
 
 @dataclass
@@ -592,6 +743,167 @@ class RenpyParser:
         menu.total_choices = len(menu.choices)
         return menu
     
+    def _create_menu_node_from_structure(self, menu_structure: MenuStructure, menu_index: int = 0) -> MenuNode:
+        """
+        Create a MenuNode with rich metadata from a MenuStructure.
+        
+        Args:
+            menu_structure: The original MenuStructure to convert
+            menu_index: Index of this menu within its parent label (0-based)
+            
+        Returns:
+            MenuNode with comprehensive metadata
+        """
+        parent_label = menu_structure.label_context or "unknown"
+        node_id = f"{parent_label}_menu_{menu_index + 1}"
+        
+        # Create enhanced MenuChoice objects
+        enhanced_choices = []
+        for i, choice in enumerate(menu_structure.choices):
+            enhanced_choice = MenuChoice(
+                text=choice.text,
+                condition=choice.condition,
+                destination=choice.destination,
+                action_type=choice.action_type,
+                file_path=choice.file_path,
+                line_number=choice.line_number,
+                subsequent_lines=choice.subsequent_lines,
+                choice_index=i
+            )
+            
+            # Analyze choice for metadata
+            self._enhance_choice_metadata(enhanced_choice)
+            enhanced_choices.append(enhanced_choice)
+        
+        # Determine menu type
+        menu_type = "standard"
+        if any(choice.condition for choice in enhanced_choices):
+            menu_type = "conditional"
+        # Additional type determination can be added here
+        
+        # Create the MenuNode
+        menu_node = MenuNode(
+            node_id=node_id,
+            name="",  # Will be generated in __post_init__
+            parent_label=parent_label,
+            menu_index=menu_index,
+            file_path=menu_structure.file_path,
+            line_number=menu_structure.line_number,
+            choices=enhanced_choices,
+            menu_type=menu_type
+        )
+        
+        # Extract prompt from menu structure if available
+        # Look for dialogue lines right before choices in the original structure
+        if menu_structure.choices:
+            # Try to find a prompt by looking at the first few lines before the menu
+            try:
+                with open(menu_structure.file_path, 'r', encoding='utf-8') as file:
+                    lines = file.readlines()
+                    menu_line_idx = menu_structure.line_number - 1  # Convert to 0-based
+                    
+                    # Look for a dialogue line in the few lines after the menu statement
+                    for i in range(menu_line_idx + 1, min(menu_line_idx + 5, len(lines))):
+                        line = lines[i].strip()
+                        if line.startswith('"') and not ':' in line:
+                            # This looks like a prompt
+                            menu_node.prompt = line.strip('"')
+                            break
+            except Exception:
+                pass  # If we can't read the file, skip prompt detection
+        
+        # Analyze for asset references and other metadata
+        self._enhance_menu_metadata(menu_node)
+        
+        return menu_node
+    
+    def _enhance_choice_metadata(self, choice: MenuChoice) -> None:
+        """
+        Enhance a MenuChoice with additional metadata analysis.
+        
+        Args:
+            choice: The MenuChoice to enhance
+        """
+        # Analyze subsequent lines for media references and variable changes
+        for line in choice.subsequent_lines:
+            line_lower = line.lower()
+            
+            # Look for asset references
+            for category, extensions in self.asset_extensions.items():
+                for ext in extensions:
+                    if ext in line_lower:
+                        # Found potential asset reference
+                        words = line.split()
+                        for word in words:
+                            if ext in word.lower():
+                                choice.contains_media_references.append(word.strip('"\''))
+                                break
+            
+            # Look for variable assignments
+            if line.strip().startswith('$') or ' = ' in line:
+                # This line modifies variables
+                var_match = re.search(r'([a-zA-Z_][a-zA-Z0-9_]*)\s*[=\+\-\*\/]', line)
+                if var_match:
+                    choice.contains_variable_changes.append(var_match.group(1))
+        
+        # Estimate story impact based on destination and content
+        if choice.action_type == 'return':
+            choice.estimated_story_impact = "major"  # Ending the story
+        elif choice.destination and choice.destination.lower() in ['end', 'ending', 'finale']:
+            choice.estimated_story_impact = "major"
+        elif len(choice.contains_variable_changes) > 2:
+            choice.estimated_story_impact = "major"  # Many variable changes
+        elif choice.contains_media_references:
+            choice.estimated_story_impact = "minor"  # Has some media content
+        else:
+            choice.estimated_story_impact = "cosmetic"
+    
+    def _enhance_menu_metadata(self, menu_node: MenuNode) -> None:
+        """
+        Enhance a MenuNode with additional metadata analysis.
+        
+        Args:
+            menu_node: The MenuNode to enhance
+        """
+        # Collect all assets referenced in choices
+        all_assets = []
+        for choice in menu_node.choices:
+            all_assets.extend(choice.contains_media_references)
+        
+        menu_node.referenced_assets = list(set(all_assets))
+        
+        # Categorize assets
+        categories = set()
+        for asset in menu_node.referenced_assets:
+            category = self.get_asset_category(asset)
+            if category != 'unknown':
+                categories.add(category)
+        menu_node.asset_categories = list(categories)
+        
+        # Check for potential circular references
+        menu_node.can_create_loops = menu_node.has_circular_references()
+        
+        # Estimate story significance based on choices
+        impact_scores = {'major': 3, 'minor': 2, 'cosmetic': 1, 'unknown': 0}
+        total_impact = sum(impact_scores.get(choice.estimated_story_impact, 0) for choice in menu_node.choices)
+        avg_impact = total_impact / len(menu_node.choices) if menu_node.choices else 0
+        
+        if avg_impact >= 2.5:
+            menu_node.story_significance = "critical"
+        elif avg_impact >= 2.0:
+            menu_node.story_significance = "major"
+        elif avg_impact >= 1.0:
+            menu_node.story_significance = "minor"
+        else:
+            menu_node.story_significance = "cosmetic"
+        
+        # Estimate play time (rough calculation)
+        # Base time: 5 seconds per choice to read + 3 seconds to decide
+        base_time = len(menu_node.choices) * 5 + 3
+        if menu_node.prompt:
+            base_time += len(menu_node.prompt.split()) * 0.5  # ~0.5 seconds per word
+        menu_node.estimated_play_time = int(base_time)
+
     def find_all_menus(self, project_path: str) -> List[MenuStructure]:
         """
         Find and parse all menu structures in the project.
@@ -794,9 +1106,29 @@ class RenpyParser:
             if flow.target_label in graph:
                 graph[flow.target_label].incoming_flows.append(flow)
         
-        # Analyze label properties
+        # Analyze label properties and create menu nodes
         menus = self.find_all_menus(project_path)
-        menu_labels = set(menu.label_context for menu in menus if menu.label_context)
+        
+        # Group menus by their label context for processing
+        menus_by_label = {}
+        for menu in menus:
+            if menu.label_context:
+                if menu.label_context not in menus_by_label:
+                    menus_by_label[menu.label_context] = []
+                menus_by_label[menu.label_context].append(menu)
+        
+        # Create MenuNode objects and associate them with labels
+        for label_name, label_menus in menus_by_label.items():
+            if label_name in graph:
+                node = graph[label_name]
+                
+                # Store original MenuStructure objects
+                node.menu_structures = label_menus
+                
+                # Create enhanced MenuNode objects
+                for i, menu_structure in enumerate(label_menus):
+                    menu_node = self._create_menu_node_from_structure(menu_structure, i)
+                    node.menu_nodes.append(menu_node)
         
         dialogue_lines = []
         for file_path, line_num, line in all_lines:
@@ -817,10 +1149,10 @@ class RenpyParser:
         
         # Set label properties
         for label_name, node in graph.items():
-            node.has_menu = label_name in menu_labels
             node.has_dialogue = label_name in dialogue_labels
             node.is_dead_end = len(node.outgoing_flows) == 0
             node.flow_complexity = len(node.outgoing_flows)
+            # has_menu and menu_count are now computed in LabelNode.__post_init__()
         
         # Analyze reachability from common starting points
         start_labels = ['start', 'main', 'scene1', 'intro', 'begin']
@@ -856,6 +1188,43 @@ class RenpyParser:
         
         return graph
     
+    def get_all_menu_nodes(self, project_path: str) -> List[MenuNode]:
+        """
+        Get all MenuNode objects from the project with rich metadata.
+        
+        Args:
+            project_path: Path to the Ren'Py project
+            
+        Returns:
+            List of all MenuNode objects found in the project
+        """
+        graph = self.build_flow_graph(project_path)
+        menu_nodes = []
+        
+        for label_name, label_node in graph.items():
+            menu_nodes.extend(label_node.menu_nodes)
+        
+        return menu_nodes
+    
+    def get_menu_nodes_by_label(self, project_path: str) -> Dict[str, List[MenuNode]]:
+        """
+        Get MenuNode objects grouped by their parent label.
+        
+        Args:
+            project_path: Path to the Ren'Py project
+            
+        Returns:
+            Dictionary mapping label names to their MenuNode objects
+        """
+        graph = self.build_flow_graph(project_path)
+        menu_nodes_by_label = {}
+        
+        for label_name, label_node in graph.items():
+            if label_node.menu_nodes:
+                menu_nodes_by_label[label_name] = label_node.menu_nodes
+        
+        return menu_nodes_by_label
+
     def analyze_flow_patterns(self, project_path: str) -> Dict[str, Any]:
         """
         Analyze flow patterns and narrative structure.
