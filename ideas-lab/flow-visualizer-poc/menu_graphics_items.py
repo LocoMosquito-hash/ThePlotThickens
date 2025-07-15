@@ -331,12 +331,13 @@ class MenuContainerGraphicsItem(QGraphicsRectItem):
             # Use right side by default
             return QPointF(boundaries['right_top'][0], choice_center_y)
     
-    def get_outgoing_connection_point(self, destination: str) -> Optional[QPointF]:
+    def get_outgoing_connection_point(self, destination: str, target_position: Optional[QPointF] = None) -> Optional[QPointF]:
         """
         Get connection point for outgoing connection to specific destination.
         
         Args:
             destination: Target label destination
+            target_position: Position of the target node (in scene coordinates) for optimal side selection
             
         Returns:
             QPointF of the connection point in local coordinates
@@ -356,7 +357,19 @@ class MenuContainerGraphicsItem(QGraphicsRectItem):
             
         zone = landing_zones[choice_index]
         boundaries = zone['boundaries']
-        
-        # For outgoing connections, use the right side of the choice zone
         choice_center_y = boundaries['choice_center_y']
-        return QPointF(boundaries['right_top'][0], choice_center_y) 
+        
+        # Direction-aware side selection
+        if target_position is not None:
+            # Convert target position to local coordinates for comparison
+            menu_center_scene = self.mapToScene(self.rect().center())
+            
+            # If target is to the left of the menu container, use left side
+            if target_position.x() < menu_center_scene.x():
+                return QPointF(boundaries['left_top'][0], choice_center_y)
+            else:
+                # If target is to the right or same position, use right side
+                return QPointF(boundaries['right_top'][0], choice_center_y)
+        else:
+            # Fallback: use right side if no target position provided
+            return QPointF(boundaries['right_top'][0], choice_center_y) 

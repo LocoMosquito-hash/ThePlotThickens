@@ -272,7 +272,7 @@ class VNFlowConnection(QGraphicsPathItem):
         
         self.update_path()
         
-    def _get_rectangle_intersection(self, center_pos: QPointF, ux: float, uy: float, node: 'VNLabelNode', is_source: bool) -> QPointF:
+    def _get_rectangle_intersection(self, center_pos: QPointF, ux: float, uy: float, node: 'VNLabelNode', is_source: bool, target_pos: Optional[QPointF] = None) -> QPointF:
         """Calculate intersection point of line with rectangular node edge."""
         # NEW: Choice-aware landing zones for MenuContainerGraphicsItem
         if hasattr(node, 'container_width') and hasattr(node, 'get_outgoing_connection_point'):
@@ -283,7 +283,7 @@ class VNFlowConnection(QGraphicsPathItem):
                 # Use the target destination to find the appropriate choice zone
                 target_destination = self.connection_data.get('target_destination')
                 if target_destination:
-                    landing_point = node.get_outgoing_connection_point(target_destination)
+                    landing_point = node.get_outgoing_connection_point(target_destination, target_pos)
                     if landing_point:
                         # Convert from local to scene coordinates
                         return node.mapToScene(landing_point)
@@ -388,8 +388,8 @@ class VNFlowConnection(QGraphicsPathItem):
         uy = dy / distance
         
         # Calculate intersection points with rectangular node edges
-        start_point = self._get_rectangle_intersection(source_pos, ux, uy, self.source_node, True)
-        end_point = self._get_rectangle_intersection(target_pos, -ux, -uy, self.target_node, False)
+        start_point = self._get_rectangle_intersection(source_pos, ux, uy, self.source_node, True, target_pos)
+        end_point = self._get_rectangle_intersection(target_pos, -ux, -uy, self.target_node, False, source_pos)
         
         # Create bezier curve
         path = QPainterPath()
