@@ -76,7 +76,7 @@ def test_menu_container_fixes():
                             menu_outgoing_flows.append({
                                 'target_label': target,
                                 'flow_type': 'menu_choice',
-                                'choice_text': choice.get('choice_text', f"Choice -> {target}")
+                                'choice_text': choice.get('context', f"Choice -> {target}")
                             })
                     
                     # Test node data with fixes

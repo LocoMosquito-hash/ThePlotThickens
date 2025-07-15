@@ -638,7 +638,7 @@ class VNFlowVisualizer(QGraphicsView):
                         continue
                         
                     choice_data = {
-                        'text': choice.get('choice_text', f"Choice -> {destination or 'unknown'}"),
+                        'text': choice.get('context', f"Choice -> {destination or 'unknown'}"),
                         'destination': destination,
                         'condition': choice.get('condition', ''),
                         'flow_type': choice.get('flow_type', 'menu_choice')
