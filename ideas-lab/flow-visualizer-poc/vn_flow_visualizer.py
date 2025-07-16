@@ -628,14 +628,9 @@ class VNFlowVisualizer(QGraphicsView):
                 
                 # Prepare menu choice data for the graphics item
                 choice_data_list = []
-                seen_destinations = set()  # Track destinations to avoid duplicates
                 
                 for choice in menu_choices:
                     destination = choice.get('target_label')
-                    
-                    # Skip if we've already seen this destination
-                    if destination and destination in seen_destinations:
-                        continue
                         
                     choice_data = {
                         'text': choice.get('context', f"Choice -> {destination or 'unknown'}"),
@@ -645,8 +640,6 @@ class VNFlowVisualizer(QGraphicsView):
                     }
                     
                     choice_data_list.append(choice_data)
-                    if destination:
-                        seen_destinations.add(destination)
                 
                 # Create the new menu container graphics item
                 menu_item = MenuContainerGraphicsItem(menu_node_id, choice_data_list)
