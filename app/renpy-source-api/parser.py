@@ -195,7 +195,7 @@ class LabelFlow:
     """Represents navigation flow between labels."""
     source_label: Optional[str] = None
     target_label: str = ""
-    flow_type: str = ""  # 'jump', 'call', 'return', 'menu_choice'
+    flow_type: str = ""  # 'jump', 'call', 'return', 'menu_choice', 'implicit'
     file_path: str = ""
     line_number: int = 0
     context: Optional[str] = None  # Additional context (e.g., choice text for menu flows)
@@ -956,92 +956,356 @@ class RenpyParser:
     
     def find_all_label_flows(self, project_path: str) -> List[LabelFlow]:
         """
-        Find all navigation flows between labels (jumps, calls, returns).
+        Find all navigation flows between labels (jumps, calls, returns, and implicit flows).
+        
+        Enhanced to detect Ren'Py's implicit flow behavior where labels without 
+        explicit flow control automatically continue to the next statement/label.
         
         Args:
             project_path: Path to the Ren'Py project
             
         Returns:
-            List of all LabelFlow objects found
+            List of all LabelFlow objects found (explicit + implicit)
         """
         flows = []
-        current_label = None
         
         try:
-            rpy_files = self.find_rpy_files(project_path)
+            # PHASE 1: Collect all labels with their positions for implicit flow detection
+            all_labels_with_positions = self._collect_all_labels_with_positions(project_path)
             
-            for rpy_file in rpy_files:
-                file_path = os.path.join(project_path, rpy_file)
-                
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as file:
-                        lines = file.readlines()
-                except UnicodeDecodeError:
-                    try:
-                        with open(file_path, 'r', encoding='latin-1') as file:
-                            lines = file.readlines()
-                    except Exception:
-                        continue  # Skip problematic files
-                
-                for line_num, line in enumerate(lines, 1):
-                    stripped_line = line.strip()
-                    
-                    # Track current label for context
-                    label_match = self.patterns['label'].match(line)
-                    if label_match:
-                        current_label = label_match.group(1)
-                        continue
-                    
-                    # Find direct jumps and calls
-                    jump_match = self.patterns['jump'].match(line)
-                    if jump_match:
-                        flows.append(LabelFlow(
-                            source_label=current_label,
-                            target_label=jump_match.group(1),
-                            flow_type='jump',
-                            file_path=file_path,
-                            line_number=line_num
-                        ))
-                    
-                    call_match = self.patterns['call'].match(line)
-                    if call_match:
-                        flows.append(LabelFlow(
-                            source_label=current_label,
-                            target_label=call_match.group(1),
-                            flow_type='call',
-                            file_path=file_path,
-                            line_number=line_num
-                        ))
-                    
-                    # Find return statements
-                    if self.patterns['return'].match(line):
-                        flows.append(LabelFlow(
-                            source_label=current_label,
-                            target_label='<return>',
-                            flow_type='return',
-                            file_path=file_path,
-                            line_number=line_num
-                        ))
-                
-                # Add flows from menu choices
-                menus = self.find_all_menus(project_path)
-                for menu in menus:
-                    for choice in menu.choices:
-                        if choice.destination:
-                            flows.append(LabelFlow(
-                                source_label=menu.label_context,
-                                target_label=choice.destination,
-                                flow_type='menu_choice',
-                                file_path=choice.file_path,
-                                line_number=choice.line_number,
-                                context=choice.text,
-                                condition=choice.condition
-                            ))
-        
+            # PHASE 2: Detect explicit flows (existing logic)
+            explicit_flows = self._find_explicit_flows(project_path)
+            flows.extend(explicit_flows)
+            
+            # PHASE 3: Detect implicit flows (NEW)
+            implicit_flows = self._find_implicit_flows(project_path, all_labels_with_positions, explicit_flows)
+            flows.extend(implicit_flows)
+            
         except Exception as e:
             raise RenpyParseError(f"Failed to find label flows: {str(e)}")
         
         return flows
+    
+    def _collect_all_labels_with_positions(self, project_path: str) -> List[Dict]:
+        """
+        Collect all labels with their file positions in execution order.
+        
+        Returns:
+            List of label info dictionaries sorted by file order, then line number
+        """
+        all_labels = []
+        
+        rpy_files = self.find_rpy_files(project_path)
+        
+        for rpy_file in rpy_files:
+            file_path = os.path.join(project_path, rpy_file)
+            
+            try:
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    lines = file.readlines()
+            except UnicodeDecodeError:
+                try:
+                    with open(file_path, 'r', encoding='latin-1') as file:
+                        lines = file.readlines()
+                except Exception:
+                    continue  # Skip problematic files
+            
+            for line_num, line in enumerate(lines, 1):
+                label_match = self.patterns['label'].match(line)
+                if label_match:
+                    label_name = label_match.group(1)
+                    all_labels.append({
+                        'name': label_name,
+                        'file_path': file_path,
+                        'file_name': rpy_file,
+                        'line_number': line_num,
+                        'file_order': rpy_files.index(rpy_file)  # Order in file list
+                    })
+        
+        # Sort by file order, then by line number within each file
+        all_labels.sort(key=lambda x: (x['file_order'], x['line_number']))
+        
+        return all_labels
+    
+    def _find_explicit_flows(self, project_path: str) -> List[LabelFlow]:
+        """
+        Find explicit flows (jumps, calls, returns, menu choices) - existing logic.
+        """
+        flows = []
+        current_label = None
+        
+        rpy_files = self.find_rpy_files(project_path)
+        
+        for rpy_file in rpy_files:
+            file_path = os.path.join(project_path, rpy_file)
+            
+            try:
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    lines = file.readlines()
+            except UnicodeDecodeError:
+                try:
+                    with open(file_path, 'r', encoding='latin-1') as file:
+                        lines = file.readlines()
+                except Exception:
+                    continue  # Skip problematic files
+            
+            for line_num, line in enumerate(lines, 1):
+                stripped_line = line.strip()
+                
+                # Track current label for context
+                label_match = self.patterns['label'].match(line)
+                if label_match:
+                    current_label = label_match.group(1)
+                    continue
+                
+                # Find direct jumps and calls
+                jump_match = self.patterns['jump'].match(line)
+                if jump_match:
+                    flows.append(LabelFlow(
+                        source_label=current_label,
+                        target_label=jump_match.group(1),
+                        flow_type='jump',
+                        file_path=file_path,
+                        line_number=line_num
+                    ))
+                
+                call_match = self.patterns['call'].match(line)
+                if call_match:
+                    flows.append(LabelFlow(
+                        source_label=current_label,
+                        target_label=call_match.group(1),
+                        flow_type='call',
+                        file_path=file_path,
+                        line_number=line_num
+                    ))
+                
+                # Find return statements
+                if self.patterns['return'].match(line):
+                    flows.append(LabelFlow(
+                        source_label=current_label,
+                        target_label='<return>',
+                        flow_type='return',
+                        file_path=file_path,
+                        line_number=line_num
+                    ))
+        
+        # Add flows from menu choices
+        menus = self.find_all_menus(project_path)
+        for menu in menus:
+            for choice in menu.choices:
+                if choice.destination:
+                    flows.append(LabelFlow(
+                        source_label=menu.label_context,
+                        target_label=choice.destination,
+                        flow_type='menu_choice',
+                        file_path=choice.file_path,
+                        line_number=choice.line_number,
+                        context=choice.text,
+                        condition=choice.condition
+                    ))
+        
+        return flows
+    
+    def _find_implicit_flows(self, project_path: str, all_labels: List[Dict], explicit_flows: List[LabelFlow]) -> List[LabelFlow]:
+        """
+        Find implicit flows - labels that fall through to the next label.
+        
+        Enhanced to handle conditionals properly - labels with only conditional 
+        or invalid explicit flows can still have implicit flows.
+        
+        Args:
+            project_path: Path to the Ren'Py project
+            all_labels: List of all labels sorted by execution order
+            explicit_flows: Already detected explicit flows
+            
+        Returns:
+            List of implicit flow objects
+        """
+        implicit_flows = []
+        
+        # Build more sophisticated analysis of label flow completeness
+        label_flow_analysis = self._analyze_label_flow_completeness(project_path, explicit_flows)
+        
+        # Build set of labels that have menus (which provide their own flow)
+        labels_with_menus = set()
+        menus = self.find_all_menus(project_path)
+        for menu in menus:
+            if menu.label_context:
+                labels_with_menus.add(menu.label_context)
+        
+        # For each label, check if it needs an implicit flow
+        for i, current_label_info in enumerate(all_labels):
+            current_label = current_label_info['name']
+            
+            # Skip if this label has menus (they handle their own flow)
+            if current_label in labels_with_menus:
+                continue
+            
+            # Check if this label has guaranteed outgoing flow
+            flow_analysis = label_flow_analysis.get(current_label, {})
+            has_guaranteed_outgoing_flow = flow_analysis.get('has_guaranteed_outgoing_flow', False)
+            
+            # Add implicit flow if no guaranteed outgoing flow exists
+            if not has_guaranteed_outgoing_flow:
+                # Find the next label to connect to
+                next_label_info = self._find_next_sequential_label(all_labels, i)
+                
+                if next_label_info:
+                    # Create implicit flow to next label
+                    implicit_flows.append(LabelFlow(
+                        source_label=current_label,
+                        target_label=next_label_info['name'],
+                        flow_type='implicit',  # NEW flow type for implicit flows
+                        file_path=current_label_info['file_path'],
+                        line_number=current_label_info['line_number'],
+                        context=f"implicit_flow:{flow_analysis.get('reason', 'no_explicit_flow')}",  # Debug info
+                        condition=None
+                    ))
+        
+        return implicit_flows
+    
+    def _analyze_label_flow_completeness(self, project_path: str, explicit_flows: List[LabelFlow]) -> Dict[str, Dict]:
+        """
+        Analyze each label to determine if it has guaranteed outgoing flow.
+        
+        A label has guaranteed outgoing flow if:
+        1. It has unconditional return statement
+        2. It has unconditional jump/call statement  
+        3. It has menu choices that cover all cases
+        
+        Args:
+            project_path: Path to the Ren'Py project
+            explicit_flows: All explicit flows detected
+            
+        Returns:
+            Dict mapping label names to analysis results
+        """
+        analysis = {}
+        
+        # Group flows by source label
+        flows_by_label = {}
+        for flow in explicit_flows:
+            if flow.source_label:
+                if flow.source_label not in flows_by_label:
+                    flows_by_label[flow.source_label] = []
+                flows_by_label[flow.source_label].append(flow)
+        
+        # Analyze each label that has explicit flows
+        for label_name, flows in flows_by_label.items():
+            analysis[label_name] = self._analyze_single_label_flows(label_name, flows, project_path)
+        
+        return analysis
+    
+    def _analyze_single_label_flows(self, label_name: str, flows: List[LabelFlow], project_path: str) -> Dict:
+        """
+        Analyze a single label's flows to determine if they guarantee execution control.
+        
+        Args:
+            label_name: Name of the label to analyze
+            flows: All flows from this label
+            project_path: Path to the project
+            
+        Returns:
+            Analysis dict with 'has_guaranteed_outgoing_flow' and 'reason'
+        """
+        # Check for unconditional control flows
+        unconditional_flows = []
+        conditional_flows = []
+        
+        for flow in flows:
+            if flow.flow_type in ['jump', 'call', 'return']:
+                # Check if this flow is conditional by examining the source
+                is_conditional = self._is_flow_conditional(flow, project_path)
+                
+                if is_conditional:
+                    conditional_flows.append(flow)
+                else:
+                    unconditional_flows.append(flow)
+        
+        # If there are unconditional flows, control is guaranteed to transfer
+        if unconditional_flows:
+            return {
+                'has_guaranteed_outgoing_flow': True,
+                'reason': f'unconditional_{unconditional_flows[0].flow_type}',
+                'unconditional_flows': len(unconditional_flows),
+                'conditional_flows': len(conditional_flows)
+            }
+        
+        # If only conditional flows, check if they're comprehensive
+        if conditional_flows:
+            # For now, assume conditional flows don't guarantee control transfer
+            # This could be enhanced to analyze if conditions cover all cases
+            return {
+                'has_guaranteed_outgoing_flow': False,
+                'reason': 'only_conditional_flows',
+                'unconditional_flows': 0,
+                'conditional_flows': len(conditional_flows)
+            }
+        
+        # No flows found
+        return {
+            'has_guaranteed_outgoing_flow': False,
+            'reason': 'no_explicit_flows',
+            'unconditional_flows': 0,
+            'conditional_flows': 0
+        }
+    
+    def _is_flow_conditional(self, flow: LabelFlow, project_path: str) -> bool:
+        """
+        Check if a flow is inside a conditional block (if/elif/else).
+        
+        This is a simplified implementation that looks for common conditional patterns.
+        A more sophisticated version would parse the full AST structure.
+        
+        Args:
+            flow: The flow to check
+            project_path: Path to the project
+            
+        Returns:
+            True if the flow appears to be conditional
+        """
+        try:
+            # Read the file and examine the context around the flow
+            with open(flow.file_path, 'r', encoding='utf-8') as file:
+                lines = file.readlines()
+            
+            flow_line_idx = flow.line_number - 1  # Convert to 0-based
+            
+            if flow_line_idx < 0 or flow_line_idx >= len(lines):
+                return False
+            
+            # Look backwards from the flow line to find if we're in a conditional block
+            for i in range(max(0, flow_line_idx - 10), flow_line_idx + 1):
+                line = lines[i].strip()
+                
+                # Check for conditional keywords with proper indentation context
+                if re.match(r'^\s*if\s+', line, re.IGNORECASE):
+                    return True
+                elif re.match(r'^\s*elif\s+', line, re.IGNORECASE):
+                    return True
+                elif re.match(r'^\s*else\s*:', line, re.IGNORECASE):
+                    return True
+            
+            return False
+            
+        except Exception:
+            # If we can't determine, assume it's not conditional
+            return False
+    
+    def _find_next_sequential_label(self, all_labels: List[Dict], current_index: int) -> Optional[Dict]:
+        """
+        Find the next label that would be executed after the current label.
+        
+        Args:
+            all_labels: List of all labels sorted by execution order
+            current_index: Index of current label in the list
+            
+        Returns:
+            Next label info dict or None if no next label exists
+        """
+        if current_index + 1 < len(all_labels):
+            return all_labels[current_index + 1]
+        return None
     
     def build_flow_graph(self, project_path: str) -> Dict[str, LabelNode]:
         """

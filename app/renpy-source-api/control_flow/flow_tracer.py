@@ -212,6 +212,24 @@ class FlowTracer:
         
         return None
 
+    def _find_next_label_for_implicit_flow(self, current_file: str, current_line_idx: int) -> Optional[Tuple[str, int]]:
+        """
+        Find the location of the next label in the current file.
+        This is used to handle implicit flow when reaching the end of a label.
+        """
+        current_file_lines = self._get_file_lines(current_file)
+        for i in range(current_line_idx + 1, len(current_file_lines)):
+            if current_file_lines[i].line_type == 'label':
+                return (current_file, i + 1) # Return 1-based line number
+        return None
+
+    def _is_explicit_flow_statement(self, stmt_type: str) -> bool:
+        """
+        Check if a statement type is an explicit flow control statement
+        (jump, call, return, menu).
+        """
+        return stmt_type in self.flow_control_statements or stmt_type == 'menu'
+
     def _parse_menu_choices(self, current_file_lines: List[RenpyLine], menu_line_idx: int) -> List[Tuple[str, str]]:
         """
         Parse menu choices and return all available choices with their targets.
@@ -353,18 +371,50 @@ class FlowTracer:
             while step_count < max_steps:
                 # Check if we're still within the current file
                 if current_line_idx >= len(current_file_lines):
-                    # End of file reached
-                    return FlowTraceResult(
-                        start_location=self.start_location,
-                        steps=steps,
-                        stop_reason="end_of_file",
-                        stop_location=(current_file, current_line_idx + 1),
-                        total_lines_traced=len(steps)
-                    )
+                    # End of file reached - check for implicit flow to next label
+                    next_label_location = self._find_next_label_for_implicit_flow(current_file, current_line_idx)
+                    
+                    if next_label_location:
+                        target_file, target_line = next_label_location
+                        
+                        # If jumping to a different file, load it  
+                        if target_file != current_file:
+                            current_file = target_file
+                            current_file_lines = self._get_file_lines(current_file)
+                        
+                        # Jump to the next label (implicit flow)
+                        current_line_idx = target_line - 1  # Convert to 0-based index
+                        step_count += 1
+                        continue
+                    else:
+                        # No next label found - true end of execution
+                        return FlowTraceResult(
+                            start_location=self.start_location,
+                            steps=steps,
+                            stop_reason="end_of_file_no_implicit_flow",
+                            stop_location=(current_file, current_line_idx + 1),
+                            total_lines_traced=len(steps)
+                        )
                 
                 # Get current line
                 current_renpy_line = current_file_lines[current_line_idx]
                 content = current_renpy_line.content.strip()
+                
+                # Check if we've reached a new label while tracing
+                if current_renpy_line.line_type == 'label':
+                    # We've encountered a new label - check if this is implicit flow
+                    if step_count > 0:  # Not the starting label
+                        previous_step = steps[-1] if steps else None
+                        if previous_step and not self._is_explicit_flow_statement(previous_step.statement_type):
+                            # This is implicit flow - add a step to mark it
+                            implicit_step = FlowStep(
+                                line_number=current_line_idx + 1,
+                                file_path=current_file,
+                                content=content,
+                                statement_type='implicit_flow',
+                                parsed_data={'target': current_renpy_line.label_name, 'flow_type': 'implicit'}
+                            )
+                            steps.append(implicit_step)
                 
                 # Classify the statement - use both our classifier and the parser's classification
                 stmt_type, parsed_data = self._classify_statement(content)
