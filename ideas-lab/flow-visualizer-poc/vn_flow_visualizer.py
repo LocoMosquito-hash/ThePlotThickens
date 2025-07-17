@@ -647,10 +647,37 @@ class VNFlowVisualizer(QGraphicsView):
                 self.nodes[menu_node_id] = menu_item
                 menu_containers[node_id] = menu_node_id
                 
-                # Track which edges should go through menu containers
+                # ENHANCED: Track ALL potential menu-related flows
+                # For complex menus, we need to detect both menu choices AND direct flows
+                # that should be routed through the menu container
+                
+                # Get all non-menu-choice flows from this label
+                other_flows = [flow for flow in outgoing_flows 
+                              if flow.get('flow_type') != 'menu_choice']
+                
+                # Collect all potential menu choice destinations
+                menu_choice_destinations = set()
+                for choice in menu_choices:
+                    dest = choice.get('target_label')
+                    if dest:
+                        menu_choice_destinations.add(dest)
+                
+                # Find direct flows that might correspond to menu choice destinations
+                # These are flows that bypass the menu structure and should be routed through the container
+                for flow in other_flows:
+                    target = flow.get('target_label')
+                    flow_type = flow.get('flow_type', '')
+                    
+                    # If this is a jump flow to a potential menu destination, route it through menu container
+                    if target and flow_type == 'jump':
+                        # Check if this could be a menu choice destination
+                        # (even if not explicitly listed in menu choices due to complex conditionals)
+                        menu_choice_edges.add((node_id, target))
+                
+                # Also track the explicit menu choice edges (for any that don't self-loop)
                 for choice in menu_choices:
                     target = choice.get('target_label')
-                    if target:
+                    if target and target != node_id:  # Don't track self-loops as direct connections
                         menu_choice_edges.add((node_id, target))
         
         # Step 3: Create connections with menu container logic
