@@ -77,6 +77,10 @@ class ComplexityDetector:
             
             if regex_results.total_characters == 0 and regex_results.total_dialogue_lines > 100:
                 reasons.append("No characters found despite having dialogue (potential parsing issue)")
+            
+            # Enhanced check: Look for complex menu indicators in basic results
+            if regex_results.total_menus > 20:
+                reasons.append(f"High menu count ({regex_results.total_menus}) may have complex structures")
         
         # Check file content for complex patterns
         complex_patterns_found = self._scan_for_complex_patterns(project_path)
@@ -87,6 +91,11 @@ class ComplexityDetector:
         large_files = self._find_large_files(project_path)
         if large_files:
             reasons.append(f"Large files detected: {len(large_files)} files > 50KB")
+        
+        # Enhanced: Check for conditional menu patterns
+        conditional_menu_indicators = self._scan_for_conditional_menus(project_path)
+        if conditional_menu_indicators:
+            reasons.append(f"Conditional menu patterns detected: {conditional_menu_indicators}")
         
         needs_sdk = len(reasons) > 0
         return needs_sdk, reasons
@@ -118,6 +127,34 @@ class ComplexityDetector:
         
         return found_patterns
     
+    def _scan_for_conditional_menus(self, project_path: str) -> int:
+        """Scan for conditional menu patterns that indicate complexity."""
+        import re
+        conditional_count = 0
+        
+        try:
+            project_dir = Path(project_path)
+            rpy_files = list(project_dir.glob("**/*.rpy"))
+            
+            # Pattern for conditional choices: "choice" if condition:
+            conditional_pattern = re.compile(r'^\s*"[^"]+"\s+if\s+.+:', re.MULTILINE | re.IGNORECASE)
+            
+            for rpy_file in rpy_files[:10]:  # Sample files for performance
+                try:
+                    with open(rpy_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                    
+                    matches = conditional_pattern.findall(content)
+                    conditional_count += len(matches)
+                
+                except Exception:
+                    continue  # Skip problematic files
+        
+        except Exception:
+            pass  # If scanning fails, don't block the process
+        
+        return conditional_count
+    
     def _find_large_files(self, project_path: str) -> List[str]:
         """Find unusually large .rpy files that may have complex structures."""
         large_files = []
@@ -138,6 +175,86 @@ class ComplexityDetector:
             pass
         
         return large_files
+    
+    def analyze_sdk_menu_complexity(self, sdk_results: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Analyze menu complexity from SDK results.
+        
+        Args:
+            sdk_results: Results from the enhanced SDK analyzer
+            
+        Returns:
+            Dict with complexity analysis
+        """
+        complexity_analysis = {
+            "total_menus": 0,
+            "total_choices": 0,
+            "conditional_menus": 0,
+            "complex_menus": 0,
+            "named_menus": 0,
+            "menu_set_menus": 0,
+            "dynamic_menus": 0,
+            "average_choices_per_menu": 0,
+            "complexity_distribution": {},
+            "most_complex_menus": []
+        }
+        
+        if "menus" not in sdk_results:
+            return complexity_analysis
+        
+        menus = sdk_results["menus"]
+        complexity_analysis["total_menus"] = len(menus)
+        
+        complexity_counts = {"simple": 0, "moderate": 0, "conditional": 0, "complex": 0, "dynamic": 0}
+        complex_menu_details = []
+        
+        for menu in menus:
+            choices = menu.get("choices", [])
+            choice_count = len(choices)
+            complexity_analysis["total_choices"] += choice_count
+            
+            # Count menu types
+            if menu.get("has_conditions", False):
+                complexity_analysis["conditional_menus"] += 1
+            
+            if menu.get("menu_name"):
+                complexity_analysis["named_menus"] += 1
+            
+            if menu.get("menu_set"):
+                complexity_analysis["menu_set_menus"] += 1
+            
+            complexity = menu.get("complexity", "simple")
+            
+            if complexity == "dynamic":
+                complexity_analysis["dynamic_menus"] += 1
+            
+            if complexity in ["complex", "dynamic"]:
+                complexity_analysis["complex_menus"] += 1
+                
+                # Track complex menu details
+                complex_menu_details.append({
+                    "file": menu.get("file", "unknown"),
+                    "line": menu.get("line", 0),
+                    "choice_count": choice_count,
+                    "complexity": complexity,
+                    "has_conditions": menu.get("has_conditions", False),
+                    "prompt": menu.get("prompt", "")[:50] + "..." if menu.get("prompt", "") and len(menu.get("prompt", "")) > 50 else menu.get("prompt", "")
+                })
+            
+            # Count complexity distribution
+            if complexity in complexity_counts:
+                complexity_counts[complexity] += 1
+        
+        complexity_analysis["complexity_distribution"] = complexity_counts
+        
+        if complexity_analysis["total_menus"] > 0:
+            complexity_analysis["average_choices_per_menu"] = complexity_analysis["total_choices"] / complexity_analysis["total_menus"]
+        
+        # Keep top 5 most complex menus
+        complex_menu_details.sort(key=lambda x: (x["choice_count"], x["complexity"] == "dynamic"), reverse=True)
+        complexity_analysis["most_complex_menus"] = complex_menu_details[:5]
+        
+        return complexity_analysis
 
 
 class SDKResultsCache:
