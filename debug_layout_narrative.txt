@@ -1,10 +1,4402 @@
 === GRAPH ANALYSIS FOR NARRATIVE LAYOUT ===
 
-Total nodes: 310
-Total edges: 409
+Total nodes: 490
+Total edges: 566
 Is directed: True
 
 === NODE ANALYSIS ===
+Node: Chapter001
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['start']
+  Successors: ['scene1']
+
+Node: scene1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter001']
+  Successors: ['scene2']
+
+Node: scene2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['scene1']
+  Successors: ['scene3']
+
+Node: scene3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['scene2']
+  Successors: ['scene4']
+
+Node: scene4
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['scene3']
+  Successors: ['sitcouchline', 'sitcouch']
+
+Node: sitcouchline
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['scene4', 'sitcouchline']
+  Successors: ['sitcouchline', 'pizza']
+
+Node: sitcouch
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['scene4', 'sitcouch']
+  Successors: ['sitcouch', 'pizza']
+
+Node: pizza
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['sitcouchline', 'sitcouch']
+  Successors: ['pizza_arrived']
+
+Node: pizza_arrived
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['pizza']
+  Successors: ['desk']
+
+Node: desk
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['pizza_arrived']
+  Successors: ['toilet']
+
+Node: toilet
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['desk']
+  Successors: ['check_first']
+
+Node: check_first
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['toilet', 'check_first']
+  Successors: ['check_first', 'bath_first']
+
+Node: bath_first
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['check_first']
+  Successors: ['motherhome']
+
+Node: motherhome
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['bath_first']
+  Successors: ['endfirst']
+
+Node: endfirst
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['motherhome']
+  Successors: ['endone']
+
+Node: endone
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['endfirst']
+  Successors: ['end_001']
+
+Node: end_001
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['endone']
+  Successors: ['Chapter002']
+
+Node: Chapter002
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_001']
+  Successors: ['call_jess']
+
+Node: call_jess
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter002']
+  Successors: ['bump_hall']
+
+Node: bump_hall
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['call_jess']
+  Successors: ['bumb_hall1']
+
+Node: bumb_hall1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['bump_hall']
+  Successors: ['d_home']
+
+Node: d_home
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['bumb_hall1']
+  Successors: ['tan_salon']
+
+Node: tan_salon
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_home']
+  Successors: ['tanbed_d']
+
+Node: tanbed_d
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['tan_salon']
+  Successors: ['tanbed_c']
+
+Node: tanbed_c
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['tanbed_d']
+  Successors: ['home_shower']
+
+Node: home_shower
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['tanbed_c']
+  Successors: ['dinner1']
+
+Node: dinner1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['home_shower']
+  Successors: ['dinner2']
+
+Node: dinner2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dinner1']
+  Successors: ['dinner3']
+
+Node: dinner3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dinner2']
+  Successors: ['dinner4']
+
+Node: dinner4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dinner3']
+  Successors: ['dinner5']
+
+Node: dinner5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dinner4']
+  Successors: ['dinner6']
+
+Node: dinner6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dinner5']
+  Successors: ['dinner6a']
+
+Node: dinner6a
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dinner6']
+  Successors: ['dinner7']
+
+Node: dinner7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dinner6a']
+  Successors: ['dinner7a']
+
+Node: dinner7a
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dinner7']
+  Successors: ['dinner8']
+
+Node: dinner8
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dinner7a']
+  Successors: ['dinner8a']
+
+Node: dinner8a
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dinner8']
+  Successors: ['couch1']
+
+Node: couch1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['dinner8a']
+  Successors: ['couch2']
+
+Node: couch2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['couch1']
+  Successors: ['couch3']
+
+Node: couch3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['couch2']
+  Successors: ['end_second']
+
+Node: end_second
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['couch3']
+  Successors: ['end_002']
+
+Node: end_002
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_second']
+  Successors: ['Chapter003']
+
+Node: Chapter003
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_002']
+  Successors: ['breakfast_first']
+
+Node: breakfast_first
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter003']
+  Successors: ['breakfast_first1']
+
+Node: breakfast_first1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_first']
+  Successors: ['showerD_first']
+
+Node: showerD_first
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_first1']
+  Successors: ['company_first']
+
+Node: company_first
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['showerD_first']
+  Successors: ['office_first']
+
+Node: office_first
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['company_first']
+  Successors: ['shopping1']
+
+Node: shopping1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_first']
+  Successors: ['shopping2']
+
+Node: shopping2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping1']
+  Successors: ['shopping3']
+
+Node: shopping3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping2']
+  Successors: ['shopping31']
+
+Node: shopping31
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping3']
+  Successors: ['shopping4']
+
+Node: shopping4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping31']
+  Successors: ['shopping5']
+
+Node: shopping5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping4']
+  Successors: ['shopping6']
+
+Node: shopping6
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping5']
+  Successors: ['shopping7']
+
+Node: shopping7
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping6']
+  Successors: ['shopping8']
+
+Node: shopping8
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping7']
+  Successors: ['shopping9']
+
+Node: shopping9
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping8']
+  Successors: ['shopping10']
+
+Node: shopping10
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping9']
+  Successors: ['shopping11']
+
+Node: shopping11
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping10']
+  Successors: ['shopping12']
+
+Node: shopping12
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping11']
+  Successors: ['shopping13end']
+
+Node: shopping13end
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping12']
+  Successors: ['second_dinner1']
+
+Node: second_dinner1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping13end']
+  Successors: ['second_dinner2']
+
+Node: second_dinner2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['second_dinner1']
+  Successors: ['second_dinner3']
+
+Node: second_dinner3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['second_dinner2']
+  Successors: ['second_dinner31']
+
+Node: second_dinner31
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['second_dinner3']
+  Successors: ['second_dinner4']
+
+Node: second_dinner4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['second_dinner31']
+  Successors: ['second_dinner41']
+
+Node: second_dinner41
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['second_dinner4']
+  Successors: ['second_dinner5']
+
+Node: second_dinner5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['second_dinner41']
+  Successors: ['second_couch1']
+
+Node: second_couch1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: ['ch1']
+  Start indicators: []
+  Predecessors: ['second_dinner5']
+  Successors: ['second_couch2']
+
+Node: second_couch2
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch2']
+  Start indicators: []
+  Predecessors: ['second_couch1', 'second_couch2']
+  Successors: ['second_couch2', 'second_couch3']
+
+Node: second_couch3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: ['ch3']
+  Start indicators: []
+  Predecessors: ['second_couch2']
+  Successors: ['end_003']
+
+Node: end_003
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['second_couch3']
+  Successors: ['Chapter004']
+
+Node: Chapter004
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_003']
+  Successors: ['pickup_d1']
+
+Node: pickup_d1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter004']
+  Successors: ['pickup_d2']
+
+Node: pickup_d2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['pickup_d1']
+  Successors: ['office_4_1']
+
+Node: office_4_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['pickup_d2']
+  Successors: ['office_4_2']
+
+Node: office_4_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_4_1']
+  Successors: ['office_4_3']
+
+Node: office_4_3
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_4_2', 'office_4_3']
+  Successors: ['office_4_3', 'office_4_5']
+
+Node: office_4_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_4_3']
+  Successors: ['office_4_6']
+
+Node: office_4_6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_4_5']
+  Successors: ['office_4_7']
+
+Node: office_4_7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_4_6']
+  Successors: ['office_4_71']
+
+Node: office_4_71
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_4_7']
+  Successors: ['office_4_8', 'office_4_72']
+
+Node: office_4_72
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_4_71']
+  Successors: ['office_4_8']
+
+Node: office_4_8
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_4_71', 'office_4_72']
+  Successors: ['office_4_9']
+
+Node: office_4_9
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_4_8']
+  Successors: ['jess_yumi1']
+
+Node: jess_yumi1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_4_9']
+  Successors: ['office_4_10', 'jess_yumi2']
+
+Node: jess_yumi2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['jess_yumi1']
+  Successors: ['jess_yumi3']
+
+Node: jess_yumi3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['jess_yumi2']
+  Successors: ['office_4_10']
+
+Node: office_4_10
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['jess_yumi1', 'jess_yumi3']
+  Successors: ['office_4_11']
+
+Node: office_4_11
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_4_10']
+  Successors: ['M_bath4_1']
+
+Node: M_bath4_1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_4_11']
+  Successors: ['M_bath4_2', 'M_bath4_4']
+
+Node: M_bath4_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['M_bath4_1']
+  Successors: ['M_bath4_3']
+
+Node: M_bath4_3
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['M_bath4_2']
+  Successors: ['M_bath_towel_true_4', 'M_bath_towel_false_4']
+
+Node: M_bath_towel_false_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['M_bath4_3']
+  Successors: ['M_bath_towel_false1_4']
+
+Node: M_bath_towel_false1_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['M_bath_towel_false_4']
+  Successors: ['M_bath4_4']
+
+Node: M_bath_towel_true_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['M_bath4_3']
+  Successors: ['M_bath_towel_true1_4']
+
+Node: M_bath_towel_true1_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['M_bath_towel_true_4']
+  Successors: ['M_bath4_4']
+
+Node: M_bath4_4
+  In-degree: 3, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['M_bath4_1', 'M_bath_towel_false1_4', 'M_bath_towel_true1_4']
+  Successors: ['restaurant_4_1']
+
+Node: restaurant_4_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['M_bath4_4']
+  Successors: ['restaurant_4_2']
+
+Node: restaurant_4_2
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_4_1', 'restaurant_4_2']
+  Successors: ['restaurant_4_2', 'restaurant_4_3']
+
+Node: restaurant_4_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_4_2']
+  Successors: ['restaurant_4_4']
+
+Node: restaurant_4_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_4_3']
+  Successors: ['dhome_4_1']
+
+Node: dhome_4_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_4_4']
+  Successors: ['dhome_4_2']
+
+Node: dhome_4_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dhome_4_1']
+  Successors: ['restaurant_4_5']
+
+Node: restaurant_4_5
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dhome_4_2']
+  Successors: ['restaurant_4_6']
+
+Node: restaurant_4_6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_4_5']
+  Successors: ['restaurant_4_7']
+
+Node: restaurant_4_7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_4_6']
+  Successors: ['restaurant_4_8']
+
+Node: restaurant_4_8
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_4_7']
+  Successors: ['restaurant_4_9']
+
+Node: restaurant_4_9
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_4_8']
+  Successors: ['end_004']
+
+Node: end_004
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_4_9']
+  Successors: ['Chapter005']
+
+Node: Chapter005
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_004']
+  Successors: ['wakeup_4_2', 'wakeup_4_1']
+
+Node: wakeup_4_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter005']
+  Successors: ['shower_5_1']
+
+Node: wakeup_4_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter005']
+  Successors: ['shower_5_1']
+
+Node: shower_5_1
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['wakeup_4_1', 'wakeup_4_2']
+  Successors: ['kitchen_d_5']
+
+Node: kitchen_d_5
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shower_5_1']
+  Successors: ['shower_5_2', 'shower_5_4']
+
+Node: shower_5_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['kitchen_d_5']
+  Successors: ['shower_5_3']
+
+Node: shower_5_3
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shower_5_2']
+  Successors: ['shower_5_4', 'office_5_1']
+
+Node: shower_5_4
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['kitchen_d_5', 'shower_5_3']
+  Successors: ['office_5_1']
+
+Node: office_5_1
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shower_5_3', 'shower_5_4']
+  Successors: ['office_5_2']
+
+Node: office_5_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_5_1']
+  Successors: ['office_5_3']
+
+Node: office_5_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_5_2']
+  Successors: ['office_5_4']
+
+Node: office_5_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_5_3']
+  Successors: ['office_5_5']
+
+Node: office_5_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_5_4']
+  Successors: ['officebath_5_1']
+
+Node: officebath_5_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_5_5']
+  Successors: ['office_5_6']
+
+Node: office_5_6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['officebath_5_1']
+  Successors: ['office_5_61']
+
+Node: office_5_61
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_5_6']
+  Successors: ['office_5_7']
+
+Node: office_5_7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_5_61']
+  Successors: ['office_5_8']
+
+Node: office_5_8
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_5_7']
+  Successors: ['office_5_9']
+
+Node: office_5_9
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_5_8']
+  Successors: ['office_5_10']
+
+Node: office_5_10
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_5_9']
+  Successors: ['office_5_11']
+
+Node: office_5_11
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_5_10']
+  Successors: ['sexshop_5_1']
+
+Node: sexshop_5_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_5_11']
+  Successors: ['ghome_5_1']
+
+Node: ghome_5_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['sexshop_5_1']
+  Successors: ['ghome_5_2']
+
+Node: ghome_5_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_1']
+  Successors: ['ghome_5_3']
+
+Node: ghome_5_3
+  In-degree: 3, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_2', 'ghome_5_3', 'ghome_5_4']
+  Successors: ['ghome_5_4', 'ghome_5_3']
+
+Node: ghome_5_4
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_3']
+  Successors: ['ghome_5_3', 'ghome_5_5']
+
+Node: ghome_5_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_4']
+  Successors: ['ghome_5_6']
+
+Node: ghome_5_6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_5']
+  Successors: ['ghome_5_7']
+
+Node: ghome_5_7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_6']
+  Successors: ['ghome_5_71']
+
+Node: ghome_5_71
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_7', 'ghome_5_71']
+  Successors: ['ghome_5_8', 'ghome_5_71']
+
+Node: ghome_5_8
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_71']
+  Successors: ['ghome_5_9']
+
+Node: ghome_5_9
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_8']
+  Successors: ['ghome_5_10']
+
+Node: ghome_5_10
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_9']
+  Successors: ['ghome_5_11']
+
+Node: ghome_5_11
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_10']
+  Successors: ['ghome_5_12']
+
+Node: ghome_5_12
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_11']
+  Successors: ['ghome_5_13']
+
+Node: ghome_5_13
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_12']
+  Successors: ['end_005']
+
+Node: end_005
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_5_13']
+  Successors: ['Chapter006']
+
+Node: Chapter006
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_005']
+  Successors: ['mroom_6_1']
+
+Node: mroom_6_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter006']
+  Successors: ['mroom_6_2']
+
+Node: mroom_6_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['mroom_6_1']
+  Successors: ['mroom_6_3']
+
+Node: mroom_6_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['mroom_6_2']
+  Successors: ['droom_6_1']
+
+Node: droom_6_1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['mroom_6_3']
+  Successors: ['groom_6_1', 'droom_6_2']
+
+Node: droom_6_2
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_6_1']
+  Successors: ['groom_6_1', 'droom_6_3']
+
+Node: droom_6_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_6_2']
+  Successors: ['groom_6_1']
+
+Node: groom_6_1
+  In-degree: 3, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_6_1', 'droom_6_2', 'droom_6_3']
+  Successors: ['groom_6_2']
+
+Node: groom_6_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['groom_6_1']
+  Successors: ['groom_6_3']
+
+Node: groom_6_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['groom_6_2']
+  Successors: ['groom_6_4']
+
+Node: groom_6_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['groom_6_3']
+  Successors: ['groom_6_5']
+
+Node: groom_6_5
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['groom_6_4']
+  Successors: ['reception_6_1']
+
+Node: reception_6_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['groom_6_5']
+  Successors: ['hotelroom_6_1']
+
+Node: hotelroom_6_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['reception_6_1']
+  Successors: ['hotelroom_6_2']
+
+Node: hotelroom_6_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotelroom_6_1']
+  Successors: ['hotelroom_6_3']
+
+Node: hotelroom_6_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotelroom_6_2']
+  Successors: ['hotelroom_6_4']
+
+Node: hotelroom_6_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotelroom_6_3']
+  Successors: ['hotelroom_6_5']
+
+Node: hotelroom_6_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotelroom_6_4']
+  Successors: ['hotelroom_6_6']
+
+Node: hotelroom_6_6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotelroom_6_5']
+  Successors: ['hotelroom_6_7']
+
+Node: hotelroom_6_7
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotelroom_6_6']
+  Successors: ['beach_6_1']
+
+Node: beach_6_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotelroom_6_7']
+  Successors: ['beach_6_2']
+
+Node: beach_6_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_6_1']
+  Successors: ['beach_6_3']
+
+Node: beach_6_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_6_2']
+  Successors: ['beach_6_4']
+
+Node: beach_6_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_6_3']
+  Successors: ['beach_6_5']
+
+Node: beach_6_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_6_4']
+  Successors: ['beach_6_6']
+
+Node: beach_6_6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_6_5']
+  Successors: ['beach_6_7']
+
+Node: beach_6_7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_6_6']
+  Successors: ['beach_6_8']
+
+Node: beach_6_8
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_6_7']
+  Successors: ['beach_6_9']
+
+Node: beach_6_9
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_6_8']
+  Successors: ['beach_6_10']
+
+Node: beach_6_10
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_6_9']
+  Successors: ['beach_6_11', 'evening_6_1']
+
+Node: beach_6_11
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_6_10']
+  Successors: ['beach_6_12']
+
+Node: beach_6_12
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_6_11']
+  Successors: ['evening_6_1']
+
+Node: evening_6_1
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_6_10', 'beach_6_12']
+  Successors: ['evening_6_2']
+
+Node: evening_6_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_6_1']
+  Successors: ['evening_6_3']
+
+Node: evening_6_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_6_2']
+  Successors: ['end_006']
+
+Node: end_006
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_6_3']
+  Successors: ['Chapter007']
+
+Node: Chapter007
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_006']
+  Successors: ['morning_d_7_1', 'morning_m_7_1']
+
+Node: morning_m_7_1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter007']
+  Successors: ['morning_7_1', 'morning_m_7_2']
+
+Node: morning_m_7_2
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_m_7_1', 'morning_m_7_2']
+  Successors: ['morning_m_7_2', 'morning_m_7_3']
+
+Node: morning_m_7_3
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_m_7_2']
+  Successors: ['morning_m_7_5', 'morning_m_7_4']
+
+Node: morning_m_7_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_m_7_3']
+  Successors: ['morning_m_7_6']
+
+Node: morning_m_7_6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_m_7_4']
+  Successors: ['morning_m_7_7']
+
+Node: morning_m_7_7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_m_7_6']
+  Successors: ['lobby_alone_7_1']
+
+Node: morning_m_7_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_m_7_3']
+  Successors: ['lobby_alone_7_1']
+
+Node: morning_d_7_1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter007']
+  Successors: ['morning_7_1', 'morning_d_7_2']
+
+Node: morning_d_7_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_d_7_1']
+  Successors: ['morning_d_7_3']
+
+Node: morning_d_7_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_d_7_2']
+  Successors: ['morning_d_7_4']
+
+Node: morning_d_7_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_d_7_3']
+  Successors: ['morning_d_7_5']
+
+Node: morning_d_7_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_d_7_4']
+  Successors: ['morning_d_7_6']
+
+Node: morning_d_7_6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_d_7_5']
+  Successors: ['morning_d_7_61']
+
+Node: morning_d_7_61
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_d_7_6']
+  Successors: ['morning_d_7_7']
+
+Node: morning_d_7_7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_d_7_61']
+  Successors: ['lobby_withD_7_1']
+
+Node: morning_7_1
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_m_7_1', 'morning_d_7_1']
+  Successors: ['morning_7_2']
+
+Node: morning_7_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_7_1']
+  Successors: ['lobby_alone_7_1']
+
+Node: lobby_withD_7_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_d_7_7']
+  Successors: ['lobby_7_2']
+
+Node: lobby_alone_7_1
+  In-degree: 3, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_m_7_7', 'morning_m_7_5', 'morning_7_2']
+  Successors: ['lobby_alone_7_2']
+
+Node: lobby_alone_7_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_alone_7_1']
+  Successors: ['lobby_7_2']
+
+Node: lobby_7_2
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_withD_7_1', 'lobby_alone_7_2']
+  Successors: ['hotelroom_7_1']
+
+Node: hotelroom_7_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_7_2']
+  Successors: ['hotelroom_7_2']
+
+Node: hotelroom_7_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotelroom_7_1']
+  Successors: ['meeting_7_1']
+
+Node: meeting_7_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotelroom_7_2']
+  Successors: ['meeting_7_2']
+
+Node: meeting_7_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['meeting_7_1']
+  Successors: ['massage_7_1']
+
+Node: massage_7_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['meeting_7_2']
+  Successors: ['massage_7_2']
+
+Node: massage_7_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['massage_7_1']
+  Successors: ['lobby_7_1']
+
+Node: lobby_7_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['massage_7_2']
+  Successors: ['lobby_7_7']
+
+Node: lobby_7_7
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_7_1']
+  Successors: ['lobby_7_3']
+
+Node: lobby_7_3
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_7_7']
+  Successors: ['lobby_7_5', 'lobby_7_4']
+
+Node: lobby_7_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_7_3']
+  Successors: ['hotelroom_7_3']
+
+Node: lobby_7_5
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_7_3']
+  Successors: ['lobby_7_6']
+
+Node: lobby_7_6
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_7_5']
+  Successors: ['hotelroom_7_3']
+
+Node: hotelroom_7_3
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_7_4', 'lobby_7_6']
+  Successors: ['hotelroom_7_4']
+
+Node: hotelroom_7_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotelroom_7_3']
+  Successors: ['hotelroomD_7_1']
+
+Node: hotelroomD_7_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotelroom_7_4']
+  Successors: ['evening_7_1']
+
+Node: evening_7_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hotelroomD_7_1']
+  Successors: ['evening_7_2']
+
+Node: evening_7_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_7_1']
+  Successors: ['evening_7_3']
+
+Node: evening_7_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_7_2']
+  Successors: ['evening_7_4']
+
+Node: evening_7_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_7_3']
+  Successors: ['evening_7_5']
+
+Node: evening_7_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_7_4']
+  Successors: ['evening_7_6']
+
+Node: evening_7_6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_7_5']
+  Successors: ['evening_7_7']
+
+Node: evening_7_7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_7_6']
+  Successors: ['evening_7_8']
+
+Node: evening_7_8
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_7_7']
+  Successors: ['end_007']
+
+Node: end_007
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_7_8']
+  Successors: ['Chapter008']
+
+Node: Chapter008
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_007']
+  Successors: ['lm_false_8_1', 'lm_true_8_1']
+
+Node: lm_false_8_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter008']
+  Successors: ['morning_8_1']
+
+Node: lm_true_8_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter008']
+  Successors: ['morning_8_1']
+
+Node: morning_8_1
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lm_false_8_1', 'lm_true_8_1']
+  Successors: ['morning_8_2']
+
+Node: morning_8_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_8_1']
+  Successors: ['morning_8_3']
+
+Node: morning_8_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_8_2']
+  Successors: ['droom_8_1']
+
+Node: droom_8_1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_8_3']
+  Successors: ['droom_8_2', 'droom_8_3']
+
+Node: droom_8_3
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_8_1']
+  Successors: ['hall_8_1', 'droom_8_4']
+
+Node: droom_8_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_8_3']
+  Successors: ['droom_8_5']
+
+Node: droom_8_5
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_8_4']
+  Successors: ['droom_8_6', 'droom_8_7']
+
+Node: droom_8_6
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_8_5']
+  Successors: ['droom_8_7']
+
+Node: droom_8_7
+  In-degree: 2, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_8_5', 'droom_8_6']
+  Successors: ['shopping_8_1', 'droom_8_2']
+
+Node: droom_8_2
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_8_1', 'droom_8_7']
+  Successors: ['hall_8_1']
+
+Node: hall_8_1
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_8_3', 'droom_8_2']
+  Successors: ['shopping_8_1']
+
+Node: shopping_8_1
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_8_7', 'hall_8_1']
+  Successors: ['shopping_8_2']
+
+Node: shopping_8_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping_8_1']
+  Successors: ['shopping_8_3']
+
+Node: shopping_8_3
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping_8_2']
+  Successors: ['shopping_8_D_1', 'shopping_8_M_1']
+
+Node: shopping_8_D_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping_8_3']
+  Successors: ['checkout_8_1']
+
+Node: shopping_8_M_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping_8_3']
+  Successors: ['checkout_8_1']
+
+Node: checkout_8_1
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['shopping_8_D_1', 'shopping_8_M_1']
+  Successors: ['checkout_8_2']
+
+Node: checkout_8_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['checkout_8_1']
+  Successors: ['beach_8_1']
+
+Node: beach_8_1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['checkout_8_2']
+  Successors: ['look_m_8_1', 'look_d_8_1']
+
+Node: look_m_8_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_8_1']
+  Successors: ['cabin_8_1']
+
+Node: look_d_8_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_8_1']
+  Successors: ['look_d_8_2']
+
+Node: look_d_8_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['look_d_8_1']
+  Successors: ['cabin_8_1']
+
+Node: cabin_8_1
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['look_m_8_1', 'look_d_8_2']
+  Successors: ['cabin_8_11', 'cabin_8_5']
+
+Node: cabin_8_11
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['cabin_8_1']
+  Successors: ['cabin_8_2', 'cabin_8_5']
+
+Node: cabin_8_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['cabin_8_11']
+  Successors: ['cabin_8_3']
+
+Node: cabin_8_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['cabin_8_2']
+  Successors: ['cabin_8_4']
+
+Node: cabin_8_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['cabin_8_3']
+  Successors: ['cabin_8_5']
+
+Node: cabin_8_5
+  In-degree: 3, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['cabin_8_1', 'cabin_8_11', 'cabin_8_4']
+  Successors: ['cabin_8_6', 'beach_8_2']
+
+Node: cabin_8_6
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['cabin_8_5']
+  Successors: ['beach_8_2']
+
+Node: beach_8_2
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['cabin_8_5', 'cabin_8_6']
+  Successors: ['beach_8_3']
+
+Node: beach_8_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_8_2']
+  Successors: ['beach_8_4']
+
+Node: beach_8_4
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_8_3']
+  Successors: ['beach_8_5', 'beach_8_41']
+
+Node: beach_8_41
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_8_4']
+  Successors: ['beach_8_42']
+
+Node: beach_8_42
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_8_41']
+  Successors: ['beach_8_5']
+
+Node: beach_8_5
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_8_4', 'beach_8_42']
+  Successors: ['restaurant_8_1']
+
+Node: restaurant_8_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['beach_8_5']
+  Successors: ['restaurant_8_2']
+
+Node: restaurant_8_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_8_1']
+  Successors: ['restaurant_8_3']
+
+Node: restaurant_8_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_8_2']
+  Successors: ['restaurant_8_4']
+
+Node: restaurant_8_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_8_3']
+  Successors: ['evening_8_1']
+
+Node: evening_8_1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restaurant_8_4']
+  Successors: ['evening_8_3', 'evening_8_2']
+
+Node: evening_8_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_8_1']
+  Successors: ['evening_8_4']
+
+Node: evening_8_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_8_1']
+  Successors: ['evening_8_4']
+
+Node: evening_8_4
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_8_2', 'evening_8_3']
+  Successors: ['end_008']
+
+Node: end_008
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_8_4']
+  Successors: ['Chapter009']
+
+Node: Chapter009
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_008']
+  Successors: ['m_route_9', 'd_route_9']
+
+Node: d_route_9
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter009']
+  Successors: ['d_route_9_1']
+
+Node: m_route_9
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter009']
+  Successors: ['m_route_9_1']
+
+Node: m_route_9_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['m_route_9']
+  Successors: ['m_route_9_2']
+
+Node: m_route_9_2
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['m_route_9_1']
+  Successors: ['lobby_9_1', 'm_route_9_3']
+
+Node: m_route_9_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['m_route_9_2']
+  Successors: ['lobby_9_1']
+
+Node: d_route_9_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_route_9']
+  Successors: ['d_route_9_2']
+
+Node: d_route_9_2
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_route_9_1']
+  Successors: ['lobby_9_1', 'd_route_9_3']
+
+Node: d_route_9_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_route_9_2']
+  Successors: ['lobby_9_1']
+
+Node: lobby_9_1
+  In-degree: 4, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['m_route_9_2', 'm_route_9_3', 'd_route_9_2', 'd_route_9_3']
+  Successors: ['lobby_9_2']
+
+Node: lobby_9_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_9_1']
+  Successors: ['lobby_9_3']
+
+Node: lobby_9_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_9_2']
+  Successors: ['lobby_9_4']
+
+Node: lobby_9_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_9_3']
+  Successors: ['plane_9_1']
+
+Node: plane_9_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['lobby_9_4']
+  Successors: ['plane_9_2']
+
+Node: plane_9_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['plane_9_1']
+  Successors: ['plane_9_3']
+
+Node: plane_9_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['plane_9_2']
+  Successors: ['plane_9_31']
+
+Node: plane_9_31
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['plane_9_3']
+  Successors: ['hallway_9_1', 'plane_9_4']
+
+Node: plane_9_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['plane_9_31']
+  Successors: ['plane_9_5']
+
+Node: plane_9_5
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['plane_9_4']
+  Successors: ['hallway_9_1']
+
+Node: hallway_9_1
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['plane_9_31', 'plane_9_5']
+  Successors: ['home_9_1']
+
+Node: home_9_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hallway_9_1']
+  Successors: ['home_9_2']
+
+Node: home_9_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['home_9_1']
+  Successors: ['ghome_9_1']
+
+Node: ghome_9_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['home_9_2']
+  Successors: ['ghome_9_2']
+
+Node: ghome_9_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_9_1']
+  Successors: ['ghome_9_3']
+
+Node: ghome_9_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_9_2']
+  Successors: ['home_9_3']
+
+Node: home_9_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_9_3']
+  Successors: ['hallway_9_2']
+
+Node: hallway_9_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['home_9_3']
+  Successors: ['hallway_9_3']
+
+Node: hallway_9_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hallway_9_2']
+  Successors: ['hallway_9_4']
+
+Node: hallway_9_4
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hallway_9_3']
+  Successors: ['coffeeshop_9_1', 'homealone_9_1']
+
+Node: coffeeshop_9_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hallway_9_4']
+  Successors: ['coffeeshop_9_2']
+
+Node: coffeeshop_9_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['coffeeshop_9_1']
+  Successors: ['coffeeshop_9_21']
+
+Node: coffeeshop_9_21
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['coffeeshop_9_2']
+  Successors: ['coffeeshop_9_4']
+
+Node: coffeeshop_9_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['coffeeshop_9_21']
+  Successors: ['coffeeshop_9_5']
+
+Node: coffeeshop_9_5
+  In-degree: 1, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['coffeeshop_9_4']
+  Successors: ['leave_coffeeshop_9_1', 'coffeeshop_9_6']
+
+Node: coffeeshop_9_6
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['coffeeshop_9_5']
+  Successors: ['coffeeshop_9_7']
+
+Node: coffeeshop_9_7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['coffeeshop_9_6']
+  Successors: ['ghome_9_4']
+
+Node: leave_coffeeshop_9_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['coffeeshop_9_5']
+  Successors: ['homealone_9_1']
+
+Node: homealone_9_1
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['hallway_9_4', 'leave_coffeeshop_9_1']
+  Successors: ['ghome_9_5']
+
+Node: ghome_9_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['coffeeshop_9_7']
+  Successors: ['ghome_9_5']
+
+Node: ghome_9_5
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['homealone_9_1', 'ghome_9_4']
+  Successors: ['ghome_9_6']
+
+Node: ghome_9_6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_9_5']
+  Successors: ['ghome_9_7']
+
+Node: ghome_9_7
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_9_6']
+  Successors: ['couch_9_1']
+
+Node: couch_9_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_9_7']
+  Successors: ['couch_9_2']
+
+Node: couch_9_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['couch_9_1']
+  Successors: ['mroom_9_1']
+
+Node: mroom_9_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['couch_9_2']
+  Successors: ['mroom_9_2']
+
+Node: droom_9_2
+  In-degree: 0, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: []
+  Successors: ['droom_9_3']
+
+Node: droom_9_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_9_2']
+  Successors: ['mroom_9_3']
+
+Node: mroom_9_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['mroom_9_1']
+  Successors: ['end_009']
+
+Node: mroom_9_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['droom_9_3']
+  Successors: ['end_009']
+
+Node: end_009
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['mroom_9_2', 'mroom_9_3']
+  Successors: ['Chapter010']
+
+Node: Chapter010
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_009']
+  Successors: ['morning_10_2', 'morning_10_1']
+
+Node: morning_10_1
+  In-degree: 1, Out-degree: 3
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter010']
+  Successors: ['morning_10_2', 'morning_10_21', 'morning_10_7']
+
+Node: morning_10_2
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter010', 'morning_10_1']
+  Successors: ['morning_10_21']
+
+Node: morning_10_21
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_10_1', 'morning_10_2']
+  Successors: ['morning_10_3']
+
+Node: morning_10_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_10_21']
+  Successors: ['morning_10_4']
+
+Node: morning_10_4
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_10_3']
+  Successors: ['morning_10_5', 'morning_d_10_6']
+
+Node: morning_10_5
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_10_4']
+  Successors: ['office_10_1']
+
+Node: morning_d_10_6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_10_4']
+  Successors: ['office_10_1']
+
+Node: morning_10_7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_10_1']
+  Successors: ['office_10_1']
+
+Node: office_10_1
+  In-degree: 3, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_10_5', 'morning_d_10_6', 'morning_10_7']
+  Successors: ['office_10_2']
+
+Node: office_10_2
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_10_1']
+  Successors: ['restroom_10_1', 'archive_d_10_1']
+
+Node: archive_d_10_1
+  In-degree: 1, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_10_2']
+  Successors: ['marg_10_1', 'archive_d_10_2']
+
+Node: marg_10_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['archive_d_10_1']
+  Successors: ['archive_d_10_2']
+
+Node: archive_d_10_2
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['archive_d_10_1', 'marg_10_1']
+  Successors: ['archive_d_10_21']
+
+Node: archive_d_10_21
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['archive_d_10_2']
+  Successors: ['restroom_10_1']
+
+Node: restroom_10_1
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_10_2', 'archive_d_10_21']
+  Successors: ['restroom_10_2']
+
+Node: restroom_10_2
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restroom_10_1']
+  Successors: ['restroom_10_4', 'restroom_10_3']
+
+Node: restroom_10_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restroom_10_2']
+  Successors: ['office_end_10_1']
+
+Node: restroom_10_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restroom_10_2']
+  Successors: ['restroom_10_5']
+
+Node: restroom_10_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restroom_10_4']
+  Successors: ['marg_desk_10_1']
+
+Node: marg_desk_10_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restroom_10_5']
+  Successors: ['marg_desk_10_2']
+
+Node: marg_desk_10_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['marg_desk_10_1']
+  Successors: ['office_end_10_1']
+
+Node: office_end_10_1
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['restroom_10_3', 'marg_desk_10_2']
+  Successors: ['office_end_10_2']
+
+Node: office_end_10_2
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_end_10_1']
+  Successors: ['druthers_10_1', 'gym_10_1']
+
+Node: druthers_10_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_end_10_2']
+  Successors: ['gym_10_1']
+
+Node: gym_10_1
+  In-degree: 2, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_end_10_2', 'druthers_10_1']
+  Successors: ['gym_10_2', 'apartment_10_1']
+
+Node: apartment_10_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_10_1']
+  Successors: ['office_m_10_1']
+
+Node: gym_10_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_10_1']
+  Successors: ['gym_10_3']
+
+Node: gym_10_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_10_2']
+  Successors: ['gym_10_31']
+
+Node: gym_10_31
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_10_3']
+  Successors: ['gym_10_4']
+
+Node: gym_10_4
+  In-degree: 1, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_10_31']
+  Successors: ['gym_10_5', 'gym_10_6']
+
+Node: gym_10_5
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_10_4']
+  Successors: ['gym_10_6']
+
+Node: gym_10_6
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_10_4', 'gym_10_5']
+  Successors: ['gym_10_7']
+
+Node: gym_10_7
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_10_6']
+  Successors: ['gym_10_8']
+
+Node: gym_10_8
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_10_7']
+  Successors: ['gym_j_10_1', 'gym_d_10_2']
+
+Node: gym_j_10_1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_10_8']
+  Successors: ['gym_j_10_2', 'gym_d_10_1']
+
+Node: gym_d_10_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_j_10_1']
+  Successors: ['gym_d_10_2']
+
+Node: gym_d_10_2
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_10_8', 'gym_d_10_1']
+  Successors: ['gym_end_10_1']
+
+Node: gym_j_10_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_j_10_1']
+  Successors: ['gym_j_10_3']
+
+Node: gym_j_10_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_j_10_2']
+  Successors: ['gym_end_10_1']
+
+Node: gym_end_10_1
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['gym_d_10_2', 'gym_j_10_3']
+  Successors: ['office_m_10_1']
+
+Node: office_m_10_1
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['apartment_10_1', 'gym_end_10_1']
+  Successors: ['office_m_10_2']
+
+Node: office_m_10_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_m_10_1']
+  Successors: ['office_m_10_3']
+
+Node: office_m_10_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_m_10_2']
+  Successors: ['office_m_10_4']
+
+Node: office_m_10_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_m_10_3']
+  Successors: ['evening_10_1']
+
+Node: evening_10_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_m_10_4']
+  Successors: ['evening_10_2']
+
+Node: evening_10_2
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_10_1']
+  Successors: ['end_010', 'evening_10_3']
+
+Node: evening_10_3
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_10_2']
+  Successors: ['d_hj_10_1', 'd_hj_10_2']
+
+Node: d_hj_10_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_10_3']
+  Successors: ['evening_10_4']
+
+Node: d_hj_10_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_10_3']
+  Successors: ['evening_10_4']
+
+Node: evening_10_4
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_hj_10_1', 'd_hj_10_2']
+  Successors: ['end_10_1']
+
+Node: end_10_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_10_4']
+  Successors: ['end_10_2']
+
+Node: end_10_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_10_1']
+  Successors: ['end_10_3']
+
+Node: end_10_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_10_2']
+  Successors: ['end_010']
+
+Node: end_010
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_10_2', 'end_10_3']
+  Successors: ['Chapter011']
+
+Node: Chapter011
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_010']
+  Successors: ['breakfast_11_1']
+
+Node: breakfast_11_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter011']
+  Successors: ['breakfast_11_2']
+
+Node: breakfast_11_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_11_1']
+  Successors: ['breakfast_11_3']
+
+Node: breakfast_11_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_11_2']
+  Successors: ['breakfast_11_4']
+
+Node: breakfast_11_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_11_3']
+  Successors: ['breakfast_11_5']
+
+Node: breakfast_11_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_11_4']
+  Successors: ['office_11_1']
+
+Node: office_11_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_11_5']
+  Successors: ['office_11_11']
+
+Node: office_11_11
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_11_1']
+  Successors: ['ghome_d_11_1']
+
+Node: ghome_d_11_1
+  In-degree: 1, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_11_11']
+  Successors: ['office_b_11_1', 'ghome_d_11_2']
+
+Node: ghome_d_11_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_d_11_1']
+  Successors: ['ghome_d_11_3']
+
+Node: ghome_d_11_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_d_11_2']
+  Successors: ['office_b_11_1']
+
+Node: office_b_11_1
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_d_11_1', 'ghome_d_11_3']
+  Successors: ['office_b_11_2']
+
+Node: office_b_11_2
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_b_11_1']
+  Successors: ['ghome_11_1', 'office_b_11_3']
+
+Node: office_b_11_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_b_11_2']
+  Successors: ['office_b_11_4']
+
+Node: office_b_11_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_b_11_3']
+  Successors: ['ghome_11_1']
+
+Node: ghome_11_1
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['office_b_11_2', 'office_b_11_4']
+  Successors: ['dhome_11_1']
+
+Node: dhome_11_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_11_1']
+  Successors: ['dhome_11_2']
+
+Node: dhome_11_2
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dhome_11_1']
+  Successors: ['jess_route_11_1', 'd_route_11_1']
+
+Node: jess_route_11_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dhome_11_2']
+  Successors: ['jess_route_11_2']
+
+Node: jess_route_11_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['jess_route_11_1']
+  Successors: ['ghome_m_11_1']
+
+Node: d_route_11_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dhome_11_2']
+  Successors: ['d_route_11_2']
+
+Node: d_route_11_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_route_11_1']
+  Successors: ['d_route_11_3']
+
+Node: d_route_11_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_route_11_2']
+  Successors: ['d_route_11_4']
+
+Node: d_route_11_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_route_11_3']
+  Successors: ['d_route_11_5']
+
+Node: d_route_11_5
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_route_11_4']
+  Successors: ['ghome_11_2']
+
+Node: ghome_11_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_route_11_5']
+  Successors: ['ghome_11_3']
+
+Node: ghome_11_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_11_2']
+  Successors: ['ghome_m_11_2']
+
+Node: ghome_m_11_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['jess_route_11_2']
+  Successors: ['ghome_m_11_3']
+
+Node: ghome_m_11_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_11_3']
+  Successors: ['ghome_m_11_3']
+
+Node: ghome_m_11_3
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_m_11_1', 'ghome_m_11_2']
+  Successors: ['ghome_m_11_4']
+
+Node: ghome_m_11_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_m_11_3']
+  Successors: ['ghome_m_11_5']
+
+Node: ghome_m_11_5
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_m_11_4']
+  Successors: ['evening_11_1']
+
+Node: evening_11_1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['ghome_m_11_5']
+  Successors: ['fuck_m_11_1', 'm_room_11_1']
+
+Node: fuck_m_11_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_11_1']
+  Successors: ['fuck_m_11_2']
+
+Node: fuck_m_11_2
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['fuck_m_11_1']
+  Successors: ['anal_m_11_1', 'fuck_m_11_3']
+
+Node: fuck_m_11_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['fuck_m_11_2']
+  Successors: ['fuck_m_11_4']
+
+Node: anal_m_11_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['fuck_m_11_2']
+  Successors: ['fuck_m_11_4']
+
+Node: fuck_m_11_4
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['fuck_m_11_3', 'anal_m_11_1']
+  Successors: ['m_room_11_1', 'fuck_m_11_5']
+
+Node: fuck_m_11_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['fuck_m_11_4']
+  Successors: ['d_home_11_1']
+
+Node: m_room_11_1
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['evening_11_1', 'fuck_m_11_4']
+  Successors: ['d_home_11_1']
+
+Node: d_home_11_1
+  In-degree: 2, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['fuck_m_11_5', 'm_room_11_1']
+  Successors: ['end_011', 'd_home_11_2']
+
+Node: d_home_11_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_home_11_1']
+  Successors: ['dhome_11_3']
+
+Node: dhome_11_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_home_11_2']
+  Successors: ['dhome_11_4']
+
+Node: dhome_11_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dhome_11_3']
+  Successors: ['dhome_11_5']
+
+Node: dhome_11_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dhome_11_4']
+  Successors: ['dhome_11_51']
+
+Node: dhome_11_51
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dhome_11_5']
+  Successors: ['end_011']
+
+Node: end_011
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_home_11_1', 'dhome_11_51']
+  Successors: ['Chapter012']
+
+Node: Chapter012
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_011']
+  Successors: ['morning_12_1']
+
+Node: morning_12_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['Chapter012']
+  Successors: ['morning_12_2']
+
+Node: morning_12_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_12_1']
+  Successors: ['morning_12_3']
+
+Node: morning_12_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_12_2']
+  Successors: ['morning_12_4']
+
+Node: morning_12_4
+  In-degree: 1, Out-degree: 4
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_12_3']
+  Successors: ['breakfast_12_1', 'toilet_12_1', 'toilet_watch_12_1', 'breakfast_12_2']
+
+Node: toilet_12_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_12_4']
+  Successors: ['toilet_12_2']
+
+Node: toilet_watch_12_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_12_4']
+  Successors: ['toilet_12_2']
+
+Node: toilet_12_2
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['toilet_12_1', 'toilet_watch_12_1']
+  Successors: ['breakfast_12_1']
+
+Node: breakfast_12_1
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_12_4', 'toilet_12_2']
+  Successors: ['breakfast_12_2']
+
+Node: breakfast_12_2
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['morning_12_4', 'breakfast_12_1']
+  Successors: ['breakfast_12_4', 'breakfast_12_3']
+
+Node: breakfast_12_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_12_2']
+  Successors: ['breakfast_12_4']
+
+Node: breakfast_12_4
+  In-degree: 2, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_12_2', 'breakfast_12_3']
+  Successors: ['breakfast_12_5', 'call_jess_12_1']
+
+Node: call_jess_12_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_12_4']
+  Successors: ['breakfast_12_5']
+
+Node: breakfast_12_5
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_12_4', 'call_jess_12_1']
+  Successors: ['breakfast_12_6']
+
+Node: breakfast_12_6
+  In-degree: 1, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_12_5']
+  Successors: ['breakfast_12_8', 'breakfast_12_7']
+
+Node: breakfast_12_7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_12_6']
+  Successors: ['photoshoot_12_1']
+
+Node: breakfast_12_8
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_12_6']
+  Successors: ['no_gym_12_1']
+
+Node: photoshoot_12_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_12_7']
+  Successors: ['photoshoot_12_2']
+
+Node: photoshoot_12_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_1']
+  Successors: ['photoshoot_12_3']
+
+Node: photoshoot_12_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_2']
+  Successors: ['photoshoot_12_4']
+
+Node: photoshoot_12_4
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_3']
+  Successors: ['photoshoot_12_5']
+
+Node: photoshoot_12_5
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_4']
+  Successors: ['photoshoot_12_6']
+
+Node: photoshoot_12_6
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_5']
+  Successors: ['photoshoot_12_7']
+
+Node: photoshoot_12_7
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_6']
+  Successors: ['photoshoot_12_8']
+
+Node: photoshoot_12_8
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_7']
+  Successors: ['photoshoot_12_9']
+
+Node: photoshoot_12_9
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_8']
+  Successors: ['photoshoot_12_10']
+
+Node: photoshoot_12_10
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_9']
+  Successors: ['photoshoot_12_11']
+
+Node: photoshoot_12_11
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_10']
+  Successors: ['photoshoot_12_12']
+
+Node: photoshoot_12_12
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_11']
+  Successors: ['j_gym_12_1', 'd_gym_12_1']
+
+Node: d_gym_12_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_12']
+  Successors: ['d_gym_12_2']
+
+Node: d_gym_12_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_gym_12_1']
+  Successors: ['d_gym_12_3']
+
+Node: d_gym_12_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_gym_12_2']
+  Successors: ['b_gym_12_1']
+
+Node: j_gym_12_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['photoshoot_12_12']
+  Successors: ['j_gym_12_2']
+
+Node: j_gym_12_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['j_gym_12_1']
+  Successors: ['j_gym_12_3']
+
+Node: j_gym_12_3
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['j_gym_12_2']
+  Successors: ['j_gym_12_4']
+
+Node: j_gym_12_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['j_gym_12_3']
+  Successors: ['b_gym_12_1']
+
+Node: b_gym_12_1
+  In-degree: 2, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['d_gym_12_3', 'j_gym_12_4']
+  Successors: ['b_gym_12_2', 'no_gym_12_1']
+
+Node: no_gym_12_1
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['breakfast_12_8', 'b_gym_12_1']
+  Successors: ['b_gym_12_2']
+
+Node: b_gym_12_2
+  In-degree: 2, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['b_gym_12_1', 'no_gym_12_1']
+  Successors: ['b_gym_12_3']
+
+Node: b_gym_12_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['b_gym_12_2']
+  Successors: ['bar_12_1']
+
+Node: bar_12_1
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['b_gym_12_3']
+  Successors: ['bar_12_2']
+
+Node: bar_12_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['bar_12_1']
+  Successors: ['dance_m_12_2']
+
+Node: dance_m_12_2
+  In-degree: 1, Out-degree: 1
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['bar_12_2']
+  Successors: ['dance_m_12_21']
+
+Node: dance_m_12_21
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dance_m_12_2']
+  Successors: ['bar_12_3']
+
+Node: bar_12_3
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['dance_m_12_21']
+  Successors: ['home_12_1', 'dance_d_12_1']
+
+Node: dance_d_12_1
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['bar_12_3']
+  Successors: ['home_12_1']
+
+Node: home_12_1
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['bar_12_3', 'dance_d_12_1']
+  Successors: ['home_12_2', 'home_12_3']
+
+Node: home_12_2
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['home_12_1']
+  Successors: ['home_12_4']
+
+Node: home_12_3
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['home_12_1']
+  Successors: ['home_12_5']
+
+Node: home_12_4
+  In-degree: 1, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['home_12_2']
+  Successors: ['home_12_5']
+
+Node: home_12_5
+  In-degree: 2, Out-degree: 2
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['home_12_3', 'home_12_4']
+  Successors: ['stop_d_12_1', 'love_d_12_1']
+
+Node: stop_d_12_1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['home_12_5']
+  Successors: ['home_12_6', 'end_012']
+
+Node: love_d_12_1
+  In-degree: 1, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['home_12_5']
+  Successors: ['home_12_6', 'love_d_12_2']
+
+Node: home_12_6
+  In-degree: 2, Out-degree: 2
+  Type: menu
+  Has menu: True
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['stop_d_12_1', 'love_d_12_1']
+  Successors: ['end_012', 'love_d_12_2']
+
+Node: love_d_12_2
+  In-degree: 2, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['love_d_12_1', 'home_12_6']
+  Successors: ['end_012']
+
+Node: end_012
+  In-degree: 3, Out-degree: 1
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['stop_d_12_1', 'home_12_6', 'love_d_12_2']
+  Successors: ['GameEnd']
+
+Node: GameInit
+  In-degree: 1, Out-degree: 0
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['start']
+  Successors: []
+
+Node: GameEnd
+  In-degree: 1, Out-degree: 0
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: ['end_012']
+  Successors: []
+
+Node: splashscreen
+  In-degree: 0, Out-degree: 0
+  Type: regular
+  Has menu: False
+  Chapter indicators: []
+  Start indicators: []
+  Predecessors: []
+  Successors: []
+
 Node: after_load
   In-degree: 0, Out-degree: 0
   Type: regular
@@ -17,2807 +4409,29 @@ Node: after_load
 Node: start
   In-degree: 0, Out-degree: 2
   Type: start
-  Has menu: True
+  Has menu: False
   Chapter indicators: []
   Start indicators: ['start']
   Predecessors: []
-  Successors: ['choice1s_yes', 'choice1s_no']
-
-Node: choice1s_yes
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['start']
-  Successors: ['choice1k_yes', 'choice1k_no']
-
-Node: choice1k_yes
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice1s_yes']
-  Successors: ['choice1s_done']
-
-Node: choice1k_no
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice1s_yes']
-  Successors: ['choice1s_no']
-
-Node: choice1s_no
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['start', 'choice1k_no']
-  Successors: ['choice1s_done']
-
-Node: choice1s_done
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice1k_yes', 'choice1s_no']
-  Successors: ['choice1r_yes', 'choice1r_no']
-
-Node: choice1r_yes
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice1s_done']
-  Successors: ['choice1c_yes', 'choice1c_no']
-
-Node: choice1c_yes
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice1r_yes']
-  Successors: ['choice1c_done']
-
-Node: choice1c_no
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice1r_yes']
-  Successors: ['choice1c_done']
-
-Node: choice1c_done
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice1c_yes', 'choice1c_no']
-  Successors: ['choice1r_done']
-
-Node: choice1r_no
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice1s_done']
-  Successors: ['choice1d_yes', 'choice1d_no']
-
-Node: choice1d_yes
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice1r_no']
-  Successors: ['choice1d_no']
-
-Node: choice1d_no
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice1r_no', 'choice1d_yes']
-  Successors: ['choice1r_done']
-
-Node: choice1r_done
-  In-degree: 2, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice1c_done', 'choice1d_no']
-  Successors: ['choice21_yes']
-
-Node: choice21_yes
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice1r_done']
-  Successors: ['choice2a_yes', 'choice2a_no']
-
-Node: choice2a_yes
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice21_yes']
-  Successors: ['nikkiflicks']
-
-Node: choice2a_no
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice21_yes']
-  Successors: ['nikkiflicks']
-
-Node: nikkiflicks
-  In-degree: 2, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2a_yes', 'choice2a_no']
-  Successors: ['choice2b_yes']
-
-Node: choice2b_yes
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['nikkiflicks']
-  Successors: ['choice2b1_yes', 'choice2b1_no']
-
-Node: choice2b1_yes
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2b_yes']
-  Successors: ['after2b']
-
-Node: choice2b1_no
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2b_yes']
-  Successors: ['after2b']
-
-Node: after2b
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2b1_yes', 'choice2b1_no']
-  Successors: ['choice2c_yes', 'choice2c_no']
-
-Node: choice2c_yes
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['after2b']
-  Successors: ['after2c']
-
-Node: choice2c_no
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['after2b']
-  Successors: ['after2c']
-
-Node: after2c
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2c_yes', 'choice2c_no']
-  Successors: ['choice2d_yes', 'choice2d_no']
-
-Node: choice2d_yes
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['after2c']
-  Successors: ['choice2e_yes', 'choice2e_no']
-
-Node: choice2e_yes
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2d_yes']
-  Successors: ['after2e']
-
-Node: choice2e_no
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2d_yes']
-  Successors: ['after2e']
-
-Node: after2e
-  In-degree: 2, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2e_yes', 'choice2e_no']
-  Successors: ['choice2f_yes']
-
-Node: choice2f_yes
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['after2e']
-  Successors: ['choice2i_yes', 'choice_2findmolly']
-
-Node: choice2i_yes
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2f_yes']
-  Successors: ['choice_2findmolly']
-
-Node: choice_2findmolly
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2f_yes', 'choice2i_yes']
-  Successors: ['choice2j_yes', 'choice2j_no']
-
-Node: choice2j_yes
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice_2findmolly']
-  Successors: ['nikkiback']
-
-Node: choice2j_no
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice_2findmolly']
-  Successors: ['nikkiback']
-
-Node: choice2d_no
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['after2c']
-  Successors: ['choice_2jcomein']
-
-Node: choice_2jcomein
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2d_no']
-  Successors: ['choice_2ksit']
-
-Node: choice_2ksit
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice_2jcomein']
-  Successors: ['choice2k_yes', 'choice2k_no']
-
-Node: choice2k_yes
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice_2ksit']
-  Successors: ['choice_2phoneback']
-
-Node: choice_2phoneback
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2k_yes']
-  Successors: ['jback2']
-
-Node: choice2k_no
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice_2ksit']
-  Successors: ['jback2']
-
-Node: jback2
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice_2phoneback', 'choice2k_no']
-  Successors: ['nikkiback']
-
-Node: nikkiback
-  In-degree: 3, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2j_yes', 'choice2j_no', 'jback2']
-  Successors: ['choice2l_yes', 'choice2l_no']
-
-Node: choice2l_yes
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['nikkiback']
-  Successors: ['after2nsex']
-
-Node: choice2l_no
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['nikkiback']
-  Successors: ['after2nsex']
-
-Node: after2nsex
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice2l_yes', 'choice2l_no']
-  Successors: ['CH3WAKEUP']
-
-Node: CH3WAKEUP
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch3']
-  Start indicators: []
-  Predecessors: ['after2nsex']
-  Successors: ['choice32playdumb', 'choice32forgive']
-
-Node: choice32playdumb
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['CH3WAKEUP']
-  Successors: ['AFTER1Q', 'choice32forgive']
-
-Node: choice32forgive
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['CH3WAKEUP', 'choice32playdumb']
-  Successors: ['AFTER1Q']
-
-Node: AFTER1Q
-  In-degree: 2, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice32playdumb', 'choice32forgive']
-  Successors: ['ch3undertable']
-
-Node: ch3undertable
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch3']
-  Start indicators: []
-  Predecessors: ['AFTER1Q']
-  Successors: ['ch3unlockdoor']
-
-Node: ch3unlockdoor
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch3']
-  Start indicators: []
-  Predecessors: ['ch3undertable']
-  Successors: ['choice31y']
-
-Node: choice31y
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['ch3unlockdoor']
-  Successors: ['choice32y', 'choice32n']
-
-Node: choice32y
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice31y']
-  Successors: ['choice33y', 'choice33n']
-
-Node: choice33y
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice32y']
-  Successors: ['ch3deal']
-
-Node: choice33n
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice32y']
-  Successors: ['ch3deal']
-
-Node: ch3deal
-  In-degree: 3, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch3']
-  Start indicators: []
-  Predecessors: ['choice33y', 'choice33n', 'choice35y']
-  Successors: ['choice34y']
-
-Node: choice34y
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['ch3deal']
-  Successors: ['ch3jackandjill']
-
-Node: choice32n
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice31y']
-  Successors: ['choice35y']
-
-Node: choice35y
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice32n']
-  Successors: ['ch3deal']
-
-Node: ch3jackandjill
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch3']
-  Start indicators: []
-  Predecessors: ['choice34y']
-  Successors: ['choice36y', 'choice36n']
-
-Node: choice36y
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['ch3jackandjill']
-  Successors: ['after36']
-
-Node: choice36n
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['ch3jackandjill']
-  Successors: ['after36']
-
-Node: after36
-  In-degree: 2, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice36y', 'choice36n']
-  Successors: ['choice3nap']
-
-Node: choice3nap
-  In-degree: 1, Out-degree: 3
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['after36']
-  Successors: ['choice3jess', 'choice3moll', 'choice3cory']
-
-Node: choice3jess
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3nap']
-  Successors: ['choice3jess1s', 'choice3jess1c']
-
-Node: choice3jess1s
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3jess']
-  Successors: ['ch3rejected']
-
-Node: ch3rejected
-  In-degree: 3, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: ['ch3']
-  Start indicators: []
-  Predecessors: ['choice3jess1s', 'choice3jess2s', 'choice3molly1y']
-  Successors: ['chapter4']
-
-Node: choice3jess1c
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3jess']
-  Successors: ['choice3jess2s', 'choice3jess2c']
-
-Node: choice3jess2s
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3jess1c']
-  Successors: ['ch3rejected']
-
-Node: choice3jess2c
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3jess1c']
-  Successors: ['chapter4']
-
-Node: choice3moll
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3nap']
-  Successors: ['choice3molly1y', 'choice3molly1n']
-
-Node: choice3molly1y
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3moll']
-  Successors: ['ch3rejected']
-
-Node: choice3molly1n
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3moll']
-  Successors: ['ch3tmdate']
-
-Node: ch3tmdate
-  In-degree: 6, Out-degree: 6
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch3']
-  Start indicators: []
-  Predecessors: ['choice3molly1n', 'ch3tmdate', 'choice3molly2a', 'choice3molly2b', 'choice3molly2c', 'choice3molly2d']
-  Successors: ['ch3tmdate', 'choice3molly2a', 'choice3molly2b', 'choice3molly2c', 'choice3molly2d', 'choice3molly2e']
-
-Node: choice3molly2a
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['ch3tmdate']
-  Successors: ['ch3tmdate']
-
-Node: choice3molly2b
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['ch3tmdate']
-  Successors: ['ch3tmdate']
-
-Node: choice3molly2c
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['ch3tmdate']
-  Successors: ['ch3tmdate']
-
-Node: choice3molly2d
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['ch3tmdate']
-  Successors: ['ch3tmdate']
-
-Node: choice3molly2e
-  In-degree: 1, Out-degree: 3
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['ch3tmdate']
-  Successors: ['choice3molly3a', 'choice3molly3b', 'choice3molly3c']
-
-Node: choice3molly3a
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3molly2e']
-  Successors: ['chapter4']
-
-Node: choice3molly3b
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3molly2e']
-  Successors: ['chapter4']
-
-Node: choice3molly3c
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3molly2e']
-  Successors: ['chapter4']
-
-Node: choice3cory
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3nap', 'v4goouty']
-  Successors: ['choice3corygym1a', 'choice3corygym1b']
-
-Node: choice3corygym1a
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3cory']
-  Successors: ['ch3coryasksout']
-
-Node: choice3corygym1b
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3cory']
-  Successors: ['ch3coryasksout']
-
-Node: ch3coryasksout
-  In-degree: 2, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch3']
-  Start indicators: []
-  Predecessors: ['choice3corygym1a', 'choice3corygym1b']
-  Successors: ['choice3corygym2a']
-
-Node: choice3corygym2a
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['ch3coryasksout']
-  Successors: ['coryshowerchoice']
-
-Node: choice3corygym2c
-  In-degree: 0, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: []
-  Successors: ['choice3corygym4a', 'choice3corygym4b']
-
-Node: choice3corygym4a
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3corygym2c']
-  Successors: ['chapter4']
-
-Node: choice3corygym4b
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3corygym2c']
-  Successors: ['chapter4']
-
-Node: coryshowerchoice
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3corygym2a']
-  Successors: ['choice3corygym3a', 'choice3corygym3b']
-
-Node: choice3corygym3a
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['coryshowerchoice']
-  Successors: ['choice3corygym3b']
-
-Node: choice3corygym3b
-  In-degree: 2, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['coryshowerchoice', 'choice3corygym3a']
-  Successors: ['endv4', 'chapter4']
-
-Node: chapter4
-  In-degree: 8, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['ch3rejected', 'choice3jess2c', 'choice3molly3a', 'choice3molly3b', 'choice3molly3c', 'choice3corygym4a', 'choice3corygym4b', 'choice3corygym3b']
-  Successors: ['ch4morningqn1']
-
-Node: ch4morningqn1
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['chapter4']
-  Successors: ['ch4tothebeach']
-
-Node: ch4tothebeach
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4morningqn1']
-  Successors: ['ch4ashbagy', 'ch4ashbagdontlook']
-
-Node: ch4ashbagy
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4tothebeach']
-  Successors: ['ch4ashbag2', 'ch4ashbagdone']
-
-Node: ch4ashbag2
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashbagy']
-  Successors: ['ch4ashbag3', 'ch4ashbagdone']
-
-Node: ch4ashbag3
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashbag2']
-  Successors: ['ch4ashbag4', 'ch4ashbagdone']
-
-Node: ch4ashbag4
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashbag3']
-  Successors: ['ch4ashbagdone']
-
-Node: ch4ashbagdontlook
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4tothebeach']
-  Successors: ['ch4ashtellsstory']
-
-Node: ch4ashtellsstory
-  In-degree: 5, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashbagdontlook', 'ch4ashfashion', 'ch4ashdrink', 'ch4ashanimal', 'ch4ashveg']
-  Successors: ['ch4nikkibackatbeach']
-
-Node: ch4ashbagdone
-  In-degree: 4, Out-degree: 4
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashbagy', 'ch4ashbag2', 'ch4ashbag3', 'ch4ashbag4']
-  Successors: ['ch4ashfashion', 'ch4ashdrink', 'ch4ashanimal', 'ch4ashveg']
-
-Node: ch4ashfashion
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashbagdone']
-  Successors: ['ch4ashtellsstory']
-
-Node: ch4ashdrink
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashbagdone']
-  Successors: ['ch4ashtellsstory']
-
-Node: ch4ashanimal
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashbagdone']
-  Successors: ['ch4ashtellsstory']
-
-Node: ch4ashveg
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashbagdone']
-  Successors: ['ch4ashtellsstory']
-
-Node: ch4nikkibackatbeach
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashtellsstory']
-  Successors: ['ch4clubdrink1']
-
-Node: ch4clubdrink1
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4nikkibackatbeach']
-  Successors: ['ch4clubq1']
-
-Node: ch4clubq1
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4clubdrink1']
-  Successors: ['ch4clubq2']
-
-Node: ch4clubq2
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4clubq1']
-  Successors: ['ch4clubq3']
-
-Node: ch4clubq3
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4clubq2']
-  Successors: ['ch4ashbathroom1', 'ch4ashbathroom2']
-
-Node: ch4ashbathroom1
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4clubq3']
-  Successors: ['afterch4']
-
-Node: ch4ashbathroom2
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4clubq3']
-  Successors: ['ch4nmkissn', 'ch4nmkissy']
-
-Node: ch4nmkissn
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashbathroom2']
-  Successors: ['afterch4']
-
-Node: ch4nmkissy
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashbathroom2']
-  Successors: ['afterch4']
-
-Node: afterch4
-  In-degree: 3, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: ['ch4']
-  Start indicators: []
-  Predecessors: ['ch4ashbathroom1', 'ch4nmkissn', 'ch4nmkissy']
-  Successors: ['version4']
-
-Node: version10
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9aftergame']
-  Successors: ['v10goafterher', 'v10haulfurniture']
-
-Node: v10goafterher
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['version10']
-  Successors: ['v10haulfurniture']
-
-Node: v10haulfurniture
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['version10', 'v10goafterher']
-  Successors: ['v10dinner']
-
-Node: v10dinner
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v10haulfurniture']
-  Successors: ['v10nothanks', 'v10trytostay']
-
-Node: v10trytostay
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v10dinner']
-  Successors: ['v10sexwithsollain']
-
-Node: v10nothanks
-  In-degree: 1, Out-degree: 3
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v10dinner']
-  Successors: ['v10end', 'v10onlywatch', 'v10joinin']
-
-Node: v10sexwithsollain
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v10trytostay']
-  Successors: ['v10end', 'v10nothreesome']
-
-Node: v10onlywatch
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v10nothanks']
-  Successors: ['v10end']
-
-Node: v10joinin
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v10nothanks']
-  Successors: ['v10threesome', 'v10nothreesome']
-
-Node: v10threesome
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v10joinin']
-  Successors: ['v10nothreesome', 'v10end']
-
-Node: v10nothreesome
-  In-degree: 3, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v10sexwithsollain', 'v10joinin', 'v10threesome']
-  Successors: ['v10end']
-
-Node: v10end
-  In-degree: 5, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v10nothanks', 'v10sexwithsollain', 'v10onlywatch', 'v10threesome', 'v10nothreesome']
-  Successors: ['v11gettoclass']
-
-Node: v11gettoclass
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v10end']
-  Successors: ['v11ntdormconvo']
-
-Node: v11ntdormconvo
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v11gettoclass']
-  Successors: ['v11mrsscene', 'v11nikkiscene']
-
-Node: v11mrsscene
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v11ntdormconvo']
-  Successors: ['v11lastwords']
-
-Node: v11nikkiscene
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v11ntdormconvo']
-  Successors: ['v11lastwords']
-
-Node: v11lastwords
-  In-degree: 2, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v11mrsscene', 'v11nikkiscene']
-  Successors: ['v11answer']
-
-Node: v11answer
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v11lastwords', 'v11ignore']
-  Successors: ['v11end']
-
-Node: v11ignore
-  In-degree: 0, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: []
-  Successors: ['v11answer']
-
-Node: v11end
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v11answer']
-  Successors: ['v12profbjyes', 'v12profbjno']
-
-Node: v12profbjyes
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v11end']
-  Successors: ['v12afterprofdorm']
-
-Node: v12profbjno
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v11end']
-  Successors: ['v12afterprofdorm']
-
-Node: v12afterprofdorm
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v12profbjyes', 'v12profbjno']
-  Successors: ['v12coryapartment', 'v12nocory']
-
-Node: v12coryapartment
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v12afterprofdorm']
-  Successors: ['v12ndorm']
-
-Node: v12nocory
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v12afterprofdorm']
-  Successors: ['v12ndorm']
-
-Node: v12ndorm
-  In-degree: 2, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v12coryapartment', 'v12nocory']
-  Successors: ['v12postsex']
-
-Node: v12postsex
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v12ndorm']
-  Successors: ['v13']
-
-Node: v13
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v12postsex']
-  Successors: ['v13yesbf', 'v13nobf']
-
-Node: v13nobf
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13']
-  Successors: ['v13contclass']
-
-Node: v13yesbf
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13']
-  Successors: ['v13contclass']
-
-Node: v13contclass
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13nobf', 'v13yesbf']
-  Successors: ['v13volleytourn', 'v13professor']
-
-Node: v13volleytourn
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13contclass']
-  Successors: ['v13sarbarconvo']
-
-Node: v13sarbarconvo
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13volleytourn']
-  Successors: ['v13party']
-
-Node: v13professor
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13contclass']
-  Successors: ['v13profsex', 'v13profnothanks']
-
-Node: v13profsex
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13professor']
-  Successors: ['v13party']
-
-Node: v13profnothanks
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13professor']
-  Successors: ['v13party']
-
-Node: v13party
-  In-degree: 3, Out-degree: 3
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13sarbarconvo', 'v13profsex', 'v13profnothanks']
-  Successors: ['v13cc3some', 'v13mollyroom', 'v13end']
-
-Node: v13cc3some
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13party']
-  Successors: ['v13mollyroom', 'v13end']
-
-Node: v13mollyroom
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13party', 'v13cc3some']
-  Successors: ['v13end']
-
-Node: v13end
-  In-degree: 3, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13party', 'v13cc3some', 'v13mollyroom']
-  Successors: ['v14']
-
-Node: v14
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v13end']
-  Successors: ['v14tryforgun', 'v14nogunnoproblem']
-
-Node: v14tryforgun
-  In-degree: 1, Out-degree: 0
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14']
-  Successors: []
-
-Node: v14nogunnoproblem
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14']
-  Successors: ['v14ashleysex', 'v14noashleysex']
-
-Node: v14ashleysex
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14nogunnoproblem']
-  Successors: ['v14afterashley']
-
-Node: v14noashleysex
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14nogunnoproblem']
-  Successors: ['v14afterashley']
-
-Node: v14afterashley
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14ashleysex', 'v14noashleysex']
-  Successors: ['v14point5']
-
-Node: v14beforecourt
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['afternikkidate']
-  Successors: ['v14chelssex', 'v14nochels']
-
-Node: v14chelssex
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14beforecourt']
-  Successors: ['v14nikkiguard']
-
-Node: v14nochels
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14beforecourt']
-  Successors: ['v14nikkiguard']
-
-Node: v14nikkiguard
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14chelssex', 'v14nochels']
-  Successors: ['v14donewithbeach']
-
-Node: v14donewithbeach
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14nikkiguard']
-  Successors: ['v14backtonikki']
-
-Node: v14backtonikki
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14donewithbeach']
-  Successors: ['v14partytalk']
-
-Node: v14partytalk
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14backtonikki']
-  Successors: ['v14partywithmolly', 'v14partywithcory']
-
-Node: v14partywithmolly
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14partytalk']
-  Successors: ['v15']
-
-Node: v14partywithcory
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14partytalk']
-  Successors: ['v15jessica', 'v14point5']
-
-Node: v14point5
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14afterashley', 'v14partywithcory']
-  Successors: ['v14sextoyshop', 'v14spawithcc']
-
-Node: v14sextoyshop
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14point5']
-  Successors: ['v14afewweekslater']
-
-Node: v14spawithcc
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14point5']
-  Successors: ['v14contspa']
-
-Node: v14contspa
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14spawithcc']
-  Successors: ['v14ccyes', 'v14ccno']
-
-Node: v14ccyes
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14contspa']
-  Successors: ['v14foursome', 'v14nofoursome']
-
-Node: v14foursome
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14ccyes']
-  Successors: ['v14afewweekslater']
-
-Node: v14nofoursome
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14ccyes']
-  Successors: ['v14afewweekslater']
-
-Node: v14ccno
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14contspa']
-  Successors: ['v14afewweekslater']
-
-Node: v14afewweekslater
-  In-degree: 4, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14sextoyshop', 'v14foursome', 'v14nofoursome', 'v14ccno']
-  Successors: ['afternikkidate']
-
-Node: afternikkidate
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14afewweekslater']
-  Successors: ['v14beforecourt']
-
-Node: v15
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14partywithmolly']
-  Successors: ['v15goodmorning']
-
-Node: v15goodmorning
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v15']
-  Successors: ['v15jessica']
-
-Node: v15jessica
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v14partywithcory', 'v15goodmorning']
-  Successors: ['v15jessdthreesome', 'v15jesshallway']
-
-Node: v15jessdthreesome
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v15jessica']
-  Successors: ['v15letsgohome']
-
-Node: v15jesshallway
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v15jessica']
-  Successors: ['v15letsgohome']
-
-Node: v15letsgohome
-  In-degree: 2, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v15jessdthreesome', 'v15jesshallway']
-  Successors: ['v15homewithmolly', 'v15homewithnikki']
-
-Node: v15homewithmolly
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v15letsgohome']
-  Successors: ['mollyleaving']
-
-Node: mollyleaving
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v15homewithmolly']
-  Successors: ['v15wakewithnikki']
-
-Node: v15homewithnikki
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v15letsgohome']
-  Successors: ['v15wakewithnikki']
-
-Node: v15wakewithnikki
-  In-degree: 2, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['mollyleaving', 'v15homewithnikki']
-  Successors: ['v15breakfastwithmolly', 'v15breakfastwithnikki']
-
-Node: v15breakfastwithnikki
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v15wakewithnikki']
-  Successors: ['v15xmaswithsollain']
-
-Node: v15breakfastwithmolly
-  In-degree: 1, Out-degree: 0
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v15wakewithnikki']
-  Successors: []
-
-Node: v15xmaswithsollain
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v15breakfastwithnikki']
-  Successors: ['v15sollainsex', 'v15backtomrskitchen']
-
-Node: v15sollainsex
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v15xmaswithsollain']
-  Successors: ['v15backtomrskitchen']
-
-Node: v15backtomrskitchen
-  In-degree: 2, Out-degree: 0
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v15xmaswithsollain', 'v15sollainsex']
-  Successors: []
-
-Node: version4
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['afterch4']
-  Successors: ['v4aftershower']
-
-Node: v4aftershower
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['version4']
-  Successors: ['v4mbeach2y']
-
-Node: v4mbeach2y
-  In-degree: 1, Out-degree: 3
-  Type: menu
-  Has menu: True
-  Chapter indicators: ['ch2']
-  Start indicators: []
-  Predecessors: ['v4aftershower']
-  Successors: ['v4mollydoor1', 'v4mollydoor2', 'v4mollydoor3']
-
-Node: v4mollydoor1
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v4mbeach2y']
-  Successors: ['afterv4mollydoor']
-
-Node: v4mollydoor2
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v4mbeach2y']
-  Successors: ['afterv4mollydoor']
-
-Node: v4mollydoor3
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v4mbeach2y']
-  Successors: ['v4molly2door1', 'v4molly2door2']
-
-Node: v4molly2door1
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v4mollydoor3']
-  Successors: ['afterv4mollydoor']
-
-Node: v4molly2door2
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v4mollydoor3']
-  Successors: ['afterv4mollydoor']
-
-Node: afterv4mollydoor
-  In-degree: 4, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v4mollydoor1', 'v4mollydoor2', 'v4molly2door1', 'v4molly2door2']
-  Successors: ['v4gooutn', 'v4goouty']
-
-Node: v4gooutn
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['afterv4mollydoor']
-  Successors: ['version5']
-
-Node: v4goouty
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['afterv4mollydoor']
-  Successors: ['choice3cory', 'corydate2']
-
-Node: corydate2
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v4goouty']
-  Successors: ['corydate2q1a', 'corydate2q1b']
-
-Node: corydate2q1a
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['corydate2']
-  Successors: ['aftercoredate2q1']
-
-Node: corydate2q1b
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['corydate2']
-  Successors: ['aftercoredate2q1']
-
-Node: aftercoredate2q1
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['corydate2q1a', 'corydate2q1b']
-  Successors: ['corydate2q2a', 'corydate2q2b']
-
-Node: corydate2q2a
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['aftercoredate2q1']
-  Successors: ['aftercorydate2q3']
-
-Node: corydate2q2b
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['aftercoredate2q1']
-  Successors: ['aftercorydate2q2']
-
-Node: aftercorydate2q2
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['corydate2q2b']
-  Successors: ['corydate2q3a', 'corydate2q3b']
-
-Node: corydate2q3a
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['aftercorydate2q2']
-  Successors: ['aftercorydate2q3']
-
-Node: corydate2q3b
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['aftercorydate2q2']
-  Successors: ['aftercorydate2q3']
-
-Node: aftercorydate2q3
-  In-degree: 3, Out-degree: 3
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['corydate2q2a', 'corydate2q3a', 'corydate2q3b']
-  Successors: ['corydate2q4a', 'corydate2q4b', 'corydate2q4c']
-
-Node: corydate2q4a
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['aftercorydate2q3']
-  Successors: ['aftercorydate2q4']
-
-Node: corydate2q4b
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['aftercorydate2q3']
-  Successors: ['aftercorydate2q4']
-
-Node: corydate2q4c
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['aftercorydate2q3']
-  Successors: ['aftercorydate2q4']
-
-Node: aftercorydate2q4
-  In-degree: 3, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['corydate2q4a', 'corydate2q4b', 'corydate2q4c']
-  Successors: ['corydate2hj', 'corydate2over']
-
-Node: corydate2hj
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['aftercorydate2q4']
-  Successors: ['endv4']
-
-Node: corydate2over
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['aftercorydate2q4']
-  Successors: ['endv4']
-
-Node: endv4
-  In-degree: 3, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['choice3corygym3b', 'corydate2hj', 'corydate2over']
-  Successors: ['version5']
-
-Node: version5
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v4gooutn', 'endv4']
-  Successors: ['v5mollypeek', 'v5aftermollypeek']
-
-Node: v5mollypeek
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['version5']
-  Successors: ['v5aftermollypeek']
-
-Node: v5aftermollypeek
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['version5', 'v5mollypeek']
-  Successors: ['v5tellmolly', 'v5donttellmolly']
-
-Node: v5tellmolly
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v5aftermollypeek']
-  Successors: ['afterv5q1']
-
-Node: v5donttellmolly
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v5aftermollypeek']
-  Successors: ['afterv5q1']
-
-Node: afterv5q1
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v5tellmolly', 'v5donttellmolly']
-  Successors: ['v5needhelp', 'v5fuckoff']
-
-Node: v5needhelp
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['afterv5q1']
-  Successors: ['afterv5photoemail']
-
-Node: v5fuckoff
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['afterv5q1']
-  Successors: ['afterv5photoemail']
-
-Node: afterv5photoemail
-  In-degree: 2, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v5needhelp', 'v5fuckoff']
-  Successors: ['v5visitnikki']
-
-Node: v5visitnikki
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['afterv5photoemail']
-  Successors: ['version6']
-
-Node: version6
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v5visitnikki']
-  Successors: ['v6nophotoemail', 'v6yesphotoemail']
-
-Node: v6nophotoemail
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['version6']
-  Successors: ['v6afteremail']
-
-Node: v6yesphotoemail
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['version6']
-  Successors: ['v6afteremail']
-
-Node: v6afteremail
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6nophotoemail', 'v6yesphotoemail']
-  Successors: ['v6stayindorm', 'v6gotostudio']
-
-Node: v6gotostudio
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6afteremail']
-  Successors: ['v6econvo1']
-
-Node: v6econvo1
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6gotostudio']
-  Successors: ['v6econvo2']
-
-Node: v6econvo2
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6econvo1']
-  Successors: ['v6econvo3']
-
-Node: v6econvo3
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6econvo2']
-  Successors: ['v6econvo4']
-
-Node: v6econvo4
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6econvo3']
-  Successors: ['v6stepin', 'v6letithappen']
-
-Node: v6stepin
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6econvo4']
-  Successors: ['v6end']
-
-Node: v6letithappen
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6econvo4']
-  Successors: ['v6end']
-
-Node: v6stayindorm
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6afteremail']
-  Successors: ['v6nikkijesssex', 'v6gotbacktosleep']
-
-Node: v6nikkijesssex
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6stayindorm']
-  Successors: ['v6end']
-
-Node: v6gotbacktosleep
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6stayindorm']
-  Successors: ['v6end']
-
-Node: v6end
-  In-degree: 4, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6stepin', 'v6letithappen', 'v6nikkijesssex', 'v6gotbacktosleep']
-  Successors: ['v7taylorshower']
-
-Node: v7taylorshower
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v6end']
-  Successors: ['v7profkoffice', 'v7profdoorknock']
-
-Node: v7profdoorknock
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v7taylorshower']
-  Successors: ['v7profkoffice']
-
-Node: v7profkoffice
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v7taylorshower', 'v7profdoorknock']
-  Successors: ['v7nchat1']
-
-Node: v7nchat1
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v7profkoffice']
-  Successors: ['v7nchatdressed']
-
-Node: v7nchatdressed
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v7nchat1']
-  Successors: ['version8']
-
-Node: version8
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v7nchatdressed']
-  Successors: ['v8shoppingyes', 'v8shoppingno']
-
-Node: v8shoppingyes
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['version8']
-  Successors: ['v8boutique']
-
-Node: v8shoppingno
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['version8']
-  Successors: ['v8boutique']
-
-Node: v8boutique
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8shoppingyes', 'v8shoppingno']
-  Successors: ['v8boupeekyes', 'v8boupeekno']
-
-Node: v8boupeekyes
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8boutique']
-  Successors: ['v8boupeekcaught']
-
-Node: v8boupeekcaught
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8boupeekyes']
-  Successors: ['v8afterpeek']
-
-Node: v8boupeekno
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8boutique']
-  Successors: ['v8afterpeek']
-
-Node: v8afterpeek
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8boupeekcaught', 'v8boupeekno']
-  Successors: ['v8movies', 'v8coffee']
-
-Node: v8movies
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8afterpeek']
-  Successors: ['v8night']
-
-Node: v8coffee
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8afterpeek']
-  Successors: ['v8night']
-
-Node: v8night
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8movies', 'v8coffee']
-  Successors: ['v8beforeparty']
-
-Node: v8beforeparty
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8night']
-  Successors: ['v8skybeer']
-
-Node: v8skybeer
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8beforeparty']
-  Successors: ['v8skypictalk']
-
-Node: v8skypictalk
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8skybeer']
-  Successors: ['v8nikkifun', 'v8nonikkifun']
-
-Node: v8nikkifun
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8skypictalk']
-  Successors: ['version9']
-
-Node: v8nonikkifun
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8skypictalk']
-  Successors: ['version9']
-
-Node: version9
-  In-degree: 2, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v8nikkifun', 'v8nonikkifun']
-  Successors: ['v9call1']
-
-Node: v9call1
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['version9']
-  Successors: ['v9afterntext']
-
-Node: v9afterntext
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9call1']
-  Successors: ['v9mroom2change']
-
-Node: v9mroom2change
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9afterntext']
-  Successors: ['v9mslipyes', 'v9tiembikini']
-
-Node: v9mslipyes
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9mroom2change']
-  Successors: ['v9tiembikini']
-
-Node: v9tiembikini
-  In-degree: 2, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9mroom2change', 'v9mslipyes']
-  Successors: ['v9n1truth', 'v9n1dare']
-
-Node: v9n1truth
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9tiembikini']
-  Successors: ['v9sar1turn']
-
-Node: v9n1dare
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9tiembikini']
-  Successors: ['v9sar1turn']
-
-Node: v9sar1turn
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9n1truth', 'v9n1dare']
-  Successors: ['v9t1turn']
-
-Node: v9t1turn
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9sar1turn']
-  Successors: ['v9m1turn']
-
-Node: v9m1turn
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9t1turn']
-  Successors: ['v9n2turn']
-
-Node: v9n2turn
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9m1turn']
-  Successors: ['v9sar2turn']
-
-Node: v9sar2turn
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9n2turn']
-  Successors: ['v9t2turn']
-
-Node: v9t2turn
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9sar2turn']
-  Successors: ['v9m2turn']
-
-Node: v9m2turn
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9t2turn']
-  Successors: ['v9n3turn']
-
-Node: v9n3turn
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9m2turn']
-  Successors: ['v9Sar3turn']
-
-Node: v9Sar3turn
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9n3turn']
-  Successors: ['v9sar3truth', 'v9sar3dare']
-
-Node: v9sar3truth
-  In-degree: 1, Out-degree: 1
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9Sar3turn']
-  Successors: ['v9t3turn']
-
-Node: v9sar3dare
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9Sar3turn']
-  Successors: ['v9t3turn']
-
-Node: v9t3turn
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9sar3truth', 'v9sar3dare']
-  Successors: ['v9m3turn']
-
-Node: v9m3turn
-  In-degree: 1, Out-degree: 2
-  Type: menu
-  Has menu: True
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9t3turn']
-  Successors: ['v9m3truth', 'v9m3dare']
-
-Node: v9m3truth
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9m3turn']
-  Successors: ['v9aftergame']
-
-Node: v9m3dare
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9m3turn']
-  Successors: ['v9aftergame']
-
-Node: v9aftergame
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['v9m3truth', 'v9m3dare']
-  Successors: ['version10']
-
-Node: _enter_game_menu
-  In-degree: 4, Out-degree: 3
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['_enter_game_menu', '_game_menu_save', '_game_menu_load', '_game_menu_preferences']
-  Successors: ['_enter_game_menu', '_noisy_return', '_game_menu_save']
-
-Node: _game_menu_save
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['_enter_game_menu']
-  Successors: ['_enter_game_menu', '_game_menu_load']
-
-Node: _game_menu_load
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['_game_menu_save']
-  Successors: ['_enter_game_menu', '_game_menu_preferences']
-
-Node: _game_menu_preferences
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['_game_menu_load']
-  Successors: ['_enter_game_menu', '_quit']
-
-Node: _quit
-  In-degree: 2, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['_game_menu_preferences', '_quit_prompt']
-  Successors: ['_return_fast_skipping']
-
-Node: _return_fast_skipping
-  In-degree: 1, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['_quit']
-  Successors: ['_return', '_return_skipping']
-
-Node: _return_skipping
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['_return_fast_skipping']
-  Successors: ['_return']
-
-Node: _noisy_return
-  In-degree: 1, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['_enter_game_menu']
-  Successors: ['_return']
-
-Node: _return
-  In-degree: 3, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['_return_fast_skipping', '_return_skipping', '_noisy_return']
-  Successors: ['_confirm_quit']
-
-Node: _confirm_quit
-  In-degree: 1, Out-degree: 0
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['_return']
-  Successors: []
-
-Node: _quit_prompt
-  In-degree: 0, Out-degree: 2
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: []
-  Successors: ['_quit', '_main_menu_prompt']
-
-Node: _main_menu_prompt
-  In-degree: 1, Out-degree: 0
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: ['main']
-  Predecessors: ['_quit_prompt']
-  Successors: []
-
-Node: _renpy_return
-  In-degree: 0, Out-degree: 1
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: []
-  Successors: ['_developer']
-
-Node: _developer
-  In-degree: 1, Out-degree: 0
-  Type: regular
-  Has menu: False
-  Chapter indicators: []
-  Start indicators: []
-  Predecessors: ['_renpy_return']
-  Successors: []
+  Successors: ['GameInit', 'Chapter001']
 
 === COMPONENT ANALYSIS ===
-Component 1: 1 nodes
+Component 1: 488 nodes
+  Nodes: ['shopping13end', 'morning_m_7_3', 'lobby_7_1', 'evening_10_1', 'morning_d_10_6', 'end_10_2', 'cabin_8_11', 'end_005', 'beach_6_11', 'endone', 'breakfast_12_3', 'shower_5_2', 'ghome_5_12', 'shopping_8_3', 'd_gym_12_3', 'restaurant_8_2', 'lobby_7_3', 'lobby_7_4', 'breakfast_12_8', 'coffeeshop_9_6', 'office_5_11', 'second_dinner3', 'ghome_5_7', 'beach_6_4', 'm_route_9_2', 'dance_m_12_21', 'lobby_alone_7_1', 'office_b_11_2', 'end_010', 'evening_8_1', 'dinner7a', 'office_m_10_2', 'end_001', 'plane_9_1', 'd_gym_12_1', 'dhome_11_1', 'couch1', 'second_couch3', 'end_002', 'Chapter007', 'beach_6_12', 'ghome_5_9', 'office_5_9', 'wakeup_4_1', 'shopping2', 'd_route_9', 'home_12_6', 'home_12_4', 'beach_6_10', 'dinner6a', 'restaurant_4_9', 'dinner6', 'hotelroom_6_7', 'fuck_m_11_5', 'gym_10_8', 'evening_6_3', 'droom_8_1', 'd_home_11_2', 'kitchen_d_5', 'lm_true_8_1', 'M_bath_towel_false1_4', 'morning_d_7_61', 'd_route_11_1', 'beach_8_1', 'GameEnd', 'dinner2', 'second_dinner41', 'ghome_9_7', 'ghome_d_11_2', 'GameInit', 'breakfast_12_5', 'shower_5_1', 'droom_9_2', 'j_gym_12_4', 'end_003', 'shower_5_4', 'home_9_3', 'photoshoot_12_9', 'hotelroom_6_6', 'office_5_61', 'gym_10_1', 'restaurant_4_6', 'dhome_11_5', 'beach_8_3', 'meeting_7_2', 'cabin_8_5', 'coffeeshop_9_2', 'cabin_8_4', 'end_012', 'pickup_d2', 'gym_10_7', 'pizza_arrived', 'morning_10_7', 'showerD_first', 'office_10_1', 'restaurant_4_5', 'massage_7_2', 'photoshoot_12_2', 'morning_10_21', 'restaurant_4_7', 'second_dinner4', 'hotelroom_6_4', 'restaurant_8_1', 'home_12_1', 'bump_hall', 'marg_desk_10_1', 'hallway_9_3', 'office_5_8', 'reception_6_1', 'morning_12_3', 'morning_10_5', 'coffeeshop_9_5', 'ghome_11_3', 'breakfast_12_2', 'shopping10', 'officebath_5_1', 'beach_8_42', 'jess_yumi2', 'ghome_9_2', 'cabin_8_1', 'breakfast_11_1', 'breakfast_12_7', 'hotelroom_6_2', 'evening_7_5', 'shopping8', 'beach_8_4', 'end_004', 'mroom_9_1', 'office_11_1', 'plane_9_3', 'end_007', 'lobby_7_5', 'fuck_m_11_4', 'meeting_7_1', 'd_home_11_1', 'breakfast_first', 'jess_yumi1', 'photoshoot_12_3', 'breakfast_11_4', 'droom_6_2', 'morning_7_1', 'office_4_2', 'office_5_10', 'shopping_8_M_1', 'photoshoot_12_12', 'sitcouch', 'end_009', 'jess_route_11_1', 'dhome_4_1', 'apartment_10_1', 'beach_6_9', 'morning_12_2', 'love_d_12_2', 'morning_8_2', 'shopping3', 'home_9_2', 'ghome_m_11_3', 'evening_6_2', 'gym_j_10_3', 'ghome_5_11', 'ghome_m_11_4', 'hall_8_1', 'dinner4', 'office_5_1', 'morning_d_7_4', 'home_12_2', 'dance_d_12_1', 'M_bath_towel_false_4', 'mroom_6_2', 'd_home', 'office_m_10_4', 'dinner8a', 'gym_d_10_2', 'shopping31', 'evening_7_4', 'droom_8_3', 'beach_8_41', 'ghome_5_4', 'dinner1', 'restroom_10_2', 'lobby_9_1', 'office_4_6', 'd_route_11_5', 'second_couch2', 'b_gym_12_3', 'fuck_m_11_2', 'tanbed_d', 'motherhome', 'Chapter008', 'office_b_11_3', 'photoshoot_12_7', 'checkout_8_2', 'Chapter006', 'jess_route_11_2', 'sitcouchline', 'fuck_m_11_3', 'scene3', 'bath_first', 'ghome_11_2', 'office_5_5', 'checkout_8_1', 'couch3', 'lobby_9_3', 'lobby_7_7', 'groom_6_2', 'office_5_3', 'office_b_11_4', 'hotelroom_6_3', 'droom_8_4', 'anal_m_11_1', 'dhome_11_3', 'restroom_10_4', 'dinner7', 'call_jess', 'ghome_9_3', 'home_12_3', 'evening_6_1', 'evening_10_4', 'morning_10_3', 'office_4_3', 'morning_12_4', 'evening_7_3', 'b_gym_12_2', 'coffeeshop_9_4', 'scene2', 'morning_m_7_4', 'restaurant_4_2', 'evening_7_8', 'shopping_8_D_1', 'office_5_6', 'd_hj_10_2', 'd_route_11_2', 'beach_6_1', 'evening_11_1', 'beach_6_6', 'shopping6', 'dhome_11_51', 'd_route_11_3', 'Chapter011', 'ghome_m_11_5', 'mroom_9_3', 'restroom_10_3', 'd_gym_12_2', 'photoshoot_12_6', 'second_dinner31', 'archive_d_10_2', 'ghome_5_2', 'morning_m_7_1', 'look_m_8_1', 'beach_6_5', 'marg_desk_10_2', 'check_first', 'breakfast_first1', 'Chapter004', 'bar_12_2', 'office_5_7', 'droom_9_3', 'sexshop_5_1', 'gym_10_4', 'Chapter002', 'ghome_9_5', 'cabin_8_3', 'toilet_watch_12_1', 'second_dinner5', 'morning_10_4', 'Chapter001', 'photoshoot_12_4', 'company_first', 'm_route_9', 'evening_8_2', 'lm_false_8_1', 'office_first', 'breakfast_11_2', 'second_couch1', 'ghome_11_1', 'breakfast_12_6', 'ghome_5_10', 'ghome_5_3', 'bumb_hall1', 'm_route_9_3', 'jess_yumi3', 'morning_d_7_5', 'mroom_6_3', 'no_gym_12_1', 'fuck_m_11_1', 'gym_10_3', 'breakfast_11_5', 'toilet_12_2', 'shopping9', 'morning_d_7_1', 'home_12_5', 'Chapter010', 'endfirst', 'scene4', 'restroom_10_1', 'gym_10_2', 'evening_8_3', 'second_dinner1', 'morning_12_1', 'bar_12_3', 'gym_j_10_2', 'home_shower', 'shopping5', 'office_11_11', 'ghome_9_6', 'office_end_10_2', 'morning_m_7_6', 'call_jess_12_1', 'Chapter012', 'shopping1', 'look_d_8_1', 'leave_coffeeshop_9_1', 'shopping7', 'evening_7_2', 'pizza', 'photoshoot_12_11', 'evening_7_1', 'morning_d_7_3', 'lobby_9_2', 'pickup_d1', 'morning_8_1', 'M_bath4_1', 'groom_6_5', 'end_011', 'end_second', 'hotelroomD_7_1', 'office_5_4', 'plane_9_4', 'ghome_5_8', 'dhome_11_2', 'lobby_withD_7_1', 'massage_7_1', 'droom_8_7', 'groom_6_1', 'ghome_5_71', 'ghome_5_5', 'morning_m_7_2', 'shower_5_3', 'hotelroom_6_5', 'tan_salon', 'stop_d_12_1', 'd_route_9_1', 'plane_9_2', 'couch_9_1', 'wakeup_4_2', 'lobby_9_4', 'toilet', 'restaurant_8_3', 'gym_10_6', 'end_10_3', 'homealone_9_1', 'hallway_9_1', 'archive_d_10_1', 'couch2', 'breakfast_11_3', 'cabin_8_6', 'archive_d_10_21', 'evening_7_7', 'office_4_1', 'love_d_12_1', 'b_gym_12_1', 'gym_10_5', 'M_bath_towel_true_4', 'couch_9_2', 'restaurant_4_1', 'restroom_10_5', 'gym_j_10_1', 'end_008', 'ghome_m_11_1', 'morning_m_7_7', 'groom_6_3', 'office_10_2', 'shopping_8_1', 'hallway_9_2', 'dhome_4_2', 'office_4_7', 'restaurant_4_3', 'evening_8_4', 'office_4_11', 'morning_d_7_2', 'hallway_9_4', 'home_9_1', 'office_m_10_3', 'cabin_8_2', 'gym_end_10_1', 'office_4_10', 'droom_6_3', 'Chapter005', 'd_route_9_3', 'plane_9_5', 'dance_m_12_2', 'office_4_72', 'd_hj_10_1', 'j_gym_12_2', 'end_006', 'desk', 'hotelroom_6_1', 'lobby_7_2', 'tanbed_c', 'breakfast_12_1', 'groom_6_4', 'm_route_9_1', 'droom_8_6', 'coffeeshop_9_1', 'shopping_8_2', 'dhome_11_4', 'evening_7_6', 'restaurant_8_4', 'morning_m_7_5', 'evening_10_2', 'office_5_2', 'j_gym_12_1', 'beach_8_5', 'Chapter003', 'ghome_9_4', 'droom_8_5', 'breakfast_12_4', 'beach_6_2', 'ghome_d_11_1', 'lobby_alone_7_2', 'mroom_9_2', 'photoshoot_12_10', 'ghome_5_6', 'coffeeshop_9_7', 'office_end_10_1', 'droom_8_2', 'droom_6_1', 'hotelroom_7_4', 'morning_10_2', 'office_4_8', 'd_route_11_4', 'm_room_11_1', 'hotelroom_7_2', 'second_dinner2', 'ghome_d_11_3', 'beach_8_2', 'hotelroom_7_1', 'lobby_7_6', 'shopping11', 'office_4_9', 'morning_8_3', 'dinner8', 'marg_10_1', 'office_4_5', 'druthers_10_1', 'j_gym_12_3', 'M_bath4_4', 'morning_10_1', 'dinner5', 'dinner3', 'ghome_m_11_2', 'shopping12', 'office_m_10_1', 'toilet_12_1', 'beach_6_7', 'evening_10_3', 'M_bath_towel_true1_4', 'ghome_9_1', 'beach_6_8', 'morning_7_2', 'scene1', 'ghome_5_13', 'morning_d_7_6', 'gym_d_10_1', 'coffeeshop_9_21', 'office_b_11_1', 'photoshoot_12_5', 'end_10_1', 'd_route_9_2', 'ghome_5_1', 'mroom_6_1', 'gym_10_31', 'photoshoot_12_1', 'morning_d_7_7', 'bar_12_1', 'plane_9_31', 'M_bath4_2', 'hotelroom_7_3', 'shopping4', 'photoshoot_12_8', 'start', 'restaurant_4_8', 'beach_6_3', 'office_4_71', 'Chapter009', 'look_d_8_2', 'restaurant_4_4', 'M_bath4_3']
+
+Component 2: 1 nodes
+  Nodes: ['splashscreen']
+
+Component 3: 1 nodes
   Nodes: ['after_load']
 
-Component 2: 295 nodes
-  Nodes: ['aftercoredate2q1', 'choice2l_no', 'v8coffee', 'aftercorydate2q4', 'v13profnothanks', 'nikkiback', 'endv4', 'corydate2q4c', 'v10goafterher', 'v13mollyroom', 'v10haulfurniture', 'corydate2q4a', 'v10onlywatch', 'v14chelssex', 'v14foursome', 'v9mroom2change', 'choice3molly2d', 'chapter4', 'v7profdoorknock', 'choice2d_yes', 'v14', 'choice1c_no', 'choice3molly3b', 'v8shoppingyes', 'v13professor', 'v9tiembikini', 'choice3corygym2c', 'v14backtonikki', 'ch4clubq2', 'choice1d_yes', 'v11gettoclass', 'ch4clubdrink1', 'choice2c_no', 'corydate2q1b', 'v8movies', 'v14nofoursome', 'ch4tothebeach', 'v4mollydoor1', 'v4molly2door1', 'choice3corygym3a', 'v11ntdormconvo', 'choice2l_yes', 'jback2', 'choice3molly2b', 'ch4morningqn1', 'choice2k_yes', 'choice3corygym1a', 'choice32y', 'choice3molly3c', 'aftercorydate2q2', 'ch3tmdate', 'v5needhelp', 'choice1s_done', 'v9n2turn', 'v13nobf', 'choice3jess2s', 'choice2c_yes', 'ch4nmkissy', 'choice3molly1n', 'v15jessdthreesome', 'v14nochels', 'ch4ashbagy', 'v15breakfastwithnikki', 'v9m3dare', 'v15homewithnikki', 'ch3unlockdoor', 'choice34y', 'corydate2', 'ch3coryasksout', 'v10threesome', 'v9sar3dare', 'choice32forgive', 'afterv4mollydoor', 'choice35y', 'choice2j_yes', 'v6end', 'v8boupeekcaught', 'v12profbjyes', 'v11nikkiscene', 'v15', 'v14nikkiguard', 'choice3corygym1b', 'choice1c_yes', 'choice2b_yes', 'choice2b1_yes', 'v13party', 'afternikkidate', 'v15backtomrskitchen', 'v6gotostudio', 'choice2f_yes', 'v9sar2turn', 'v12postsex', 'choice1k_yes', 'choice3moll', 'afterv5photoemail', 'corydate2q1a', 'v9sar3truth', 'v8skybeer', 'v11lastwords', 'v9afterntext', 'ch4ashbag3', 'v9n1dare', 'v14partywithcory', 'choice2j_no', 'choice_2phoneback', 'choice3jess1c', 'v8nonikkifun', 'ch3jackandjill', 'v10dinner', 'aftercorydate2q3', 'v9sar1turn', 'choice1d_no', 'choice2a_yes', 'choice3molly2e', 'v10nothreesome', 'ch4nikkibackatbeach', 'v12coryapartment', 'choice1k_no', 'after2b', 'afterv5q1', 'choice33y', 'v6gotbacktosleep', 'v6econvo3', 'v9mslipyes', 'v15wakewithnikki', 'v8beforeparty', 'v8afterpeek', 'ch4ashbathroom2', 'choice3corygym4b', 'v11end', 'afterch4', 'ch4ashdrink', 'corydate2q3a', 'choice3molly3a', 'v6econvo1', 'v13volleytourn', 'ch4ashfashion', 'v9n1truth', 'v15breakfastwithmolly', 'v15goodmorning', 'ch4clubq1', 'ch4ashbagdontlook', 'v14nogunnoproblem', 'v14ccno', 'v6afteremail', 'v8skypictalk', 'v4goouty', 'v15homewithmolly', 'choice1r_done', 'v15xmaswithsollain', 'choice3molly1y', 'choice2k_no', 'v12profbjno', 'ch4ashtellsstory', 'v9call1', 'v13', 'v15jesshallway', 'start', 'choice2a_no', 'choice_2ksit', 'choice33n', 'v9m1turn', 'ch4ashbathroom1', 'corydate2q4b', 'v5tellmolly', 'v5visitnikki', 'v15sollainsex', 'v14beforecourt', 'v8boupeekyes', 'v9t1turn', 'v5aftermollypeek', 'v4molly2door2', 'v6nophotoemail', 'ch4ashbag4', 'v14noashleysex', 'version4', 'v9m3turn', 'v14ashleysex', 'v9n3turn', 'choice32playdumb', 'ch4nmkissn', 'v7nchat1', 'v13yesbf', 'v13profsex', 'v14ccyes', 'ch4ashbag2', 'choice1r_yes', 'v10nothanks', 'v14afewweekslater', 'v6letithappen', 'choice3jess', 'v14tryforgun', 'v7profkoffice', 'choice2b1_no', 'v13contclass', 'corydate2over', 'v10sexwithsollain', 'choice1s_yes', 'AFTER1Q', 'after2e', 'v12nocory', 'v12afterprofdorm', 'v4mollydoor3', 'v15letsgohome', 'choice_2findmolly', 'v14donewithbeach', 'choice2e_no', 'v8boupeekno', 'version10', 'v9Sar3turn', 'choice3molly2a', 'v9t3turn', 'v14contspa', 'choice3jess2c', 'v14partywithmolly', 'v8night', 'corydate2hj', 'choice31y', 'v5donttellmolly', 'choice3cory', 'after2nsex', 'v10joinin', 'CH3WAKEUP', 'ch4ashanimal', 'v9t2turn', 'v6stepin', 'after36', 'v5fuckoff', 'v4gooutn', 'corydate2q3b', 'choice1c_done', 'choice1r_no', 'v7nchatdressed', 'choice3nap', 'v14point5', 'choice2i_yes', 'v9m2turn', 'v8shoppingno', 'v13end', 'v4mbeach2y', 'v14partytalk', 'nikkiflicks', 'choice3corygym4a', 'v13sarbarconvo', 'v7taylorshower', 'mollyleaving', 'v14spawithcc', 'choice3corygym2a', 'corydate2q2a', 'choice1s_no', 'choice21_yes', 'v9aftergame', 'v14afterashley', 'v6yesphotoemail', 'v4mollydoor2', 'v10end', 'v15jessica', 'ch3deal', 'choice_2jcomein', 'choice32n', 'v6stayindorm', 'version8', 'v11mrsscene', 'choice3corygym3b', 'v13cc3some', 'version6', 'corydate2q2b', 'choice36n', 'choice2e_yes', 'ch4clubq3', 'choice2d_no', 'choice3molly2c', 'v11answer', 'ch4ashveg', 'v5mollypeek', 'v10trytostay', 'v8boutique', 'v11ignore', 'choice36y', 'v4aftershower', 'ch3rejected', 'ch4ashbagdone', 'v6nikkijesssex', 'v6econvo4', 'after2c', 'version9', 'coryshowerchoice', 'v9m3truth', 'choice3jess1s', 'v8nikkifun', 'v14sextoyshop', 'version5', 'v12ndorm', 'v6econvo2', 'ch3undertable']
-
-Component 3: 12 nodes
-  Nodes: ['_return_skipping', '_enter_game_menu', '_noisy_return', '_game_menu_save', '_game_menu_load', '_return', '_quit_prompt', '_main_menu_prompt', '_confirm_quit', '_return_fast_skipping', '_quit', '_game_menu_preferences']
-
-Component 4: 2 nodes
-  Nodes: ['_developer', '_renpy_return']
-
 === START NODE DETECTION ===
-Component 1 start candidates: ['after_load']
+Component 1 start candidates: ['start']
+  Nodes with no incoming edges: ['droom_9_2', 'start']
+
+Component 2 start candidates: ['splashscreen']
+  Nodes with no incoming edges: ['splashscreen']
+
+Component 3 start candidates: ['after_load']
   Nodes with no incoming edges: ['after_load']
-
-Component 2 start candidates: ['start']
-  Nodes with no incoming edges: ['choice3corygym2c', 'start', 'v11ignore']
-
-Component 3 start candidates: ['_main_menu_prompt']
-  Nodes with no incoming edges: ['_quit_prompt']
-
-Component 4 start candidates: ['_renpy_return']
-  Nodes with no incoming edges: ['_renpy_return']
 

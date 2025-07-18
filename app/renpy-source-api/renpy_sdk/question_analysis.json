@@ -1,0 +1,138 @@
+{
+  "metadata": {
+    "analyzer_version": "1.0",
+    "analysis_timestamp": "2025-07-18T11:46:38.249042",
+    "target_project": "renpy-8.4.0-sdk\\the_question\\game"
+  },
+  "project_info": {
+    "rpy_files": 51,
+    "file_list": [
+      "gui.rpy",
+      "options.rpy",
+      "screens.rpy",
+      "script.rpy",
+      "tl\\czech\\common.rpy",
+      "tl\\czech\\options.rpy",
+      "tl\\czech\\screens.rpy",
+      "tl\\czech\\script.rpy",
+      "tl\\danish\\common.rpy",
+      "tl\\danish\\options.rpy",
+      "tl\\danish\\screens.rpy",
+      "tl\\danish\\script.rpy",
+      "tl\\french\\common.rpy",
+      "tl\\french\\options.rpy",
+      "tl\\french\\screens.rpy",
+      "tl\\french\\script.rpy",
+      "tl\\italian\\common.rpy",
+      "tl\\italian\\options.rpy",
+      "tl\\italian\\screens.rpy",
+      "tl\\italian\\script.rpy",
+      "tl\\japanese\\common.rpy",
+      "tl\\japanese\\options.rpy",
+      "tl\\japanese\\screens.rpy",
+      "tl\\japanese\\script.rpy",
+      "tl\\korean\\common.rpy",
+      "tl\\korean\\options.rpy",
+      "tl\\korean\\screens.rpy",
+      "tl\\korean\\script.rpy",
+      "tl\\malay\\common.rpy",
+      "tl\\malay\\options.rpy",
+      "tl\\malay\\screens.rpy",
+      "tl\\malay\\script.rpy",
+      "tl\\russian\\common.rpy",
+      "tl\\russian\\options.rpy",
+      "tl\\russian\\screens.rpy",
+      "tl\\russian\\script.rpy",
+      "tl\\schinese\\common.rpy",
+      "tl\\schinese\\options.rpy",
+      "tl\\schinese\\screens.rpy",
+      "tl\\schinese\\script.rpy",
+      "tl\\spanish\\common.rpy",
+      "tl\\spanish\\options.rpy",
+      "tl\\spanish\\screens.rpy",
+      "tl\\spanish\\script.rpy",
+      "tl\\tchinese\\options.rpy",
+      "tl\\tchinese\\screens.rpy",
+      "tl\\tchinese\\script.rpy",
+      "tl\\ukrainian\\common.rpy",
+      "tl\\ukrainian\\options.rpy",
+      "tl\\ukrainian\\screens.rpy",
+      "tl\\ukrainian\\script.rpy"
+    ],
+    "total_labels": 8,
+    "total_characters": 2,
+    "total_menus": 2,
+    "total_assets": 0,
+    "total_errors": 0
+  },
+  "labels": [
+    {
+      "name": "h.who",
+      "file": "screens.rpy",
+      "line": 965
+    },
+    {
+      "name": "_(message)",
+      "file": "screens.rpy",
+      "line": 1216
+    },
+    {
+      "name": "start",
+      "file": "script.rpy",
+      "line": 10
+    },
+    {
+      "name": "rightaway",
+      "file": "script.rpy",
+      "line": 53
+    },
+    {
+      "name": "game",
+      "file": "script.rpy",
+      "line": 108
+    },
+    {
+      "name": "book",
+      "file": "script.rpy",
+      "line": 133
+    },
+    {
+      "name": "marry",
+      "file": "script.rpy",
+      "line": 159
+    },
+    {
+      "name": "later",
+      "file": "script.rpy",
+      "line": 237
+    }
+  ],
+  "characters": [
+    {
+      "name": "s",
+      "file": "script.rpy",
+      "line": 2,
+      "definition": "define s = Character(_(\"Sylvie\"), color=\"#c8ffc8\")"
+    },
+    {
+      "name": "m",
+      "file": "script.rpy",
+      "line": 3,
+      "definition": "define m = Character(_(\"Me\"), color=\"#c8c8ff\")"
+    }
+  ],
+  "menus": [
+    {
+      "file": "script.rpy",
+      "line": 40,
+      "type": "menu_start"
+    },
+    {
+      "file": "script.rpy",
+      "line": 97,
+      "type": "menu_start"
+    }
+  ],
+  "assets": [],
+  "errors": []
+}

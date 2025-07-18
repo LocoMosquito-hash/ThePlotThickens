@@ -1,0 +1,10 @@
+﻿I'm sorry, but errors were detected in your script. Please correct the
+errors listed below, and try again.
+
+
+File "game/screens.rpy", line 97: expected statement.
+    example say_screen:
+                      ^
+
+Ren'Py Version: Ren'Py 8.4.0.25071206
+Fri Jul 18 11:32:27 2025

@@ -1,0 +1,9 @@
+{
+  "build_update": false,
+  "display_name": "VN Analyzer Tool",
+  "executable": "VNAnalyzer",
+  "include_update": false,
+  "packages": ["pc"],
+  "template": "english",
+  "version": "1.0"
+}
