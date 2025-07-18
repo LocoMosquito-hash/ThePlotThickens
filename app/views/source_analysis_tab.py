@@ -186,6 +186,12 @@ class SourceAnalysisSetupTab(QWidget):
         self.start_button.setEnabled(False)
         button_layout.addWidget(self.start_button)
         
+        self.enhanced_button = QPushButton("Enhanced Analysis (SDK)")
+        self.enhanced_button.clicked.connect(self.start_enhanced_analysis)
+        self.enhanced_button.setEnabled(False)
+        self.enhanced_button.setToolTip("Use official Ren'Py SDK for more accurate parsing of complex VNs")
+        button_layout.addWidget(self.enhanced_button)
+        
         self.stop_button = QPushButton("Stop Analysis")
         self.stop_button.clicked.connect(self.stop_analysis)
         self.stop_button.setEnabled(False)
@@ -272,7 +278,9 @@ class SourceAnalysisSetupTab(QWidget):
             
         # Update UI
         self.update_path_info(path)
-        self.start_button.setEnabled(bool(path.strip() and os.path.isdir(path)))
+        is_valid_path = bool(path.strip() and os.path.isdir(path))
+        self.start_button.setEnabled(is_valid_path)
+        self.enhanced_button.setEnabled(is_valid_path)
         
     def update_path_info(self, path: str):
         """Update the path information display.
@@ -318,6 +326,7 @@ class SourceAnalysisSetupTab(QWidget):
             
         # Update UI
         self.start_button.setEnabled(False)
+        self.enhanced_button.setEnabled(False)
         self.stop_button.setEnabled(True)
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
@@ -332,6 +341,81 @@ class SourceAnalysisSetupTab(QWidget):
         self.analysis_worker.finished.connect(self.on_analysis_finished)
         
         self.analysis_worker.start()
+    
+    def start_enhanced_analysis(self):
+        """Start enhanced source code analysis using SDK integration."""
+        if not self.story_id:
+            QMessageBox.warning(self, "No Story", "Please select a story first.")
+            return
+            
+        source_path = self.source_path_edit.text().strip()
+        if not source_path or not os.path.isdir(source_path):
+            QMessageBox.warning(self, "Invalid Path", "Please select a valid source code directory.")
+            return
+        
+        # Simple enhanced analysis approach
+        try:
+            self.status_label.setText("Running enhanced analysis...")
+            self.enhanced_button.setEnabled(False)
+            self.start_button.setEnabled(False)
+            
+            # Import and run SDK analysis
+            import sys
+            import os
+            
+            # Add the renpy-source-api directory to the Python path
+            api_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'renpy-source-api')
+            if api_dir not in sys.path:
+                sys.path.insert(0, api_dir)
+            
+            from core import RenpyProject
+            
+            # Run with hybrid parser
+            project = RenpyProject(source_path, use_hybrid_parser=True)
+            overview = project.analyze()
+            
+            # Display enhanced results
+            results_text = "Enhanced Analysis (SDK) completed successfully!\n\n"
+            results_text += f"Files analyzed: {overview.total_rpy_files}\n"
+            results_text += f"Characters found: {overview.total_characters}\n"
+            results_text += f"Labels found: {overview.total_labels}\n"
+            results_text += f"Menus found: {overview.total_menus}\n"
+            results_text += f"Total lines: {overview.total_lines}\n"
+            results_text += f"Dialogue lines: {overview.total_dialogue_lines}\n"
+            
+            if overview.errors:
+                results_text += f"\nErrors encountered: {len(overview.errors)}\n"
+                for error in overview.errors[:3]:  # Show first 3 errors
+                    results_text += f"  • {error}\n"
+                if len(overview.errors) > 3:
+                    results_text += f"  • ... and {len(overview.errors) - 3} more\n"
+            
+            # Check if project has hybrid parser and show stats
+            if hasattr(project.parser, 'get_analysis_stats'):
+                stats = project.parser.get_analysis_stats()
+                results_text += f"\nAnalysis Method Used:\n"
+                if stats['sdk_usage_percent'] > 0:
+                    results_text += f"  • SDK Enhancement: {stats['sdk_usage_percent']:.1f}% of analysis\n"
+                    results_text += f"  • More accurate parsing of complex structures\n"
+                else:
+                    results_text += f"  • Standard regex parsing (no complex structures detected)\n"
+            
+            self.results_text.setPlainText(results_text)
+            self.status_label.setText("Enhanced analysis complete")
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self, 
+                "Enhanced Analysis Failed", 
+                f"Enhanced analysis encountered an error:\n{str(e)}"
+            )
+            self.status_label.setText("Enhanced analysis failed")
+            
+        finally:
+            # Re-enable buttons
+            is_valid_path = bool(source_path.strip() and os.path.isdir(source_path))
+            self.start_button.setEnabled(is_valid_path)
+            self.enhanced_button.setEnabled(is_valid_path)
         
     def stop_analysis(self):
         """Stop the running analysis."""
@@ -372,6 +456,7 @@ class SourceAnalysisSetupTab(QWidget):
     def on_analysis_finished(self):
         """Handle analysis thread finishing (success or failure)."""
         self.start_button.setEnabled(True)
+        self.enhanced_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.progress_bar.setVisible(False)
         

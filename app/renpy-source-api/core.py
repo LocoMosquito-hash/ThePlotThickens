@@ -16,11 +16,16 @@ try:
     from .parser import RenpyParser, ProjectOverview
     from .database_basic import RenpyDatabase
     from .exceptions import RenpyProjectError, RenpyAnalysisError
+    from .sdk_integration import HybridRenpyParser
 except ImportError:
     # Fall back to direct imports (when run standalone)
     from parser import RenpyParser, ProjectOverview
     from database_basic import RenpyDatabase
     from exceptions import RenpyProjectError, RenpyAnalysisError
+    try:
+        from sdk_integration import HybridRenpyParser
+    except ImportError:
+        HybridRenpyParser = None
 
 
 class RenpyProject:
@@ -35,18 +40,25 @@ class RenpyProject:
     - Label flow analysis
     """
     
-    def __init__(self, project_path: str, db_connection: Optional[sqlite3.Connection] = None):
+    def __init__(self, project_path: str, db_connection: Optional[sqlite3.Connection] = None, use_hybrid_parser: bool = False):
         """
         Initialize a Ren'Py project analyzer.
         
         Args:
             project_path: Path to the Ren'Py game folder (containing .rpy files)
             db_connection: Optional database connection for caching
+            use_hybrid_parser: If True, use hybrid parser with SDK integration
         """
         self.project_path = str(Path(project_path).resolve())
         
         # Initialize components
-        self.parser = RenpyParser()
+        if use_hybrid_parser and HybridRenpyParser:
+            self.parser = HybridRenpyParser()
+            self.is_hybrid = True
+        else:
+            self.parser = RenpyParser()
+            self.is_hybrid = False
+        
         self.db = RenpyDatabase(db_connection) if db_connection else None
         
         # Analysis state
