@@ -55,6 +55,9 @@ class RenpyFlowMapperV2(QMainWindow):
         self.setWindowTitle("Renpy Flow Visualizer - POC (Clean Architecture)")
         self.resize(1400, 900)
         
+        # Start maximized for better workflow
+        self.showMaximized()
+        
     def load_recent_paths(self):
         """Load recent paths from settings file."""
         try:

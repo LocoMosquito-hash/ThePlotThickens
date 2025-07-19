@@ -24,11 +24,11 @@ class BezierConnection(QGraphicsPathItem):
         self.target_node = target_node
         self.update_path()
         
-        # Set appearance
+        # Set appearance - NO FILL, only stroke
         pen = QPen(QColor(80, 80, 80), 2)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         self.setPen(pen)
-        self.setBrush(QBrush(QColor(80, 80, 80)))
+        self.setBrush(QBrush(Qt.BrushStyle.NoBrush))  # No fill - only stroke
         
         # Make sure connections are drawn behind nodes
         self.setZValue(-1)
