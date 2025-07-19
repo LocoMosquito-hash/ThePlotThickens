@@ -6,7 +6,7 @@ This shows how the visualizer can use VisualizationData without direct renpy-sou
 """
 
 from typing import Dict, Any, Optional, List
-from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsTextItem, QGraphicsPathItem
+from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsTextItem, QGraphicsPathItem, QGraphicsItem
 from PyQt6.QtCore import Qt, pyqtSignal, QPointF
 from PyQt6.QtGui import QPen, QBrush, QColor, QFont, QPainterPath, QPolygonF
 import math
@@ -117,6 +117,9 @@ class SimpleVisualNode(QGraphicsRectItem):
         self.vis_node = vis_node
         self.node_id = vis_node.node_id
         
+        # Track connections attached to this node for automatic updates
+        self.connected_beziers: List[BezierConnection] = []
+        
         # Set size based on node type
         if vis_node.node_type == 'menu_container':
             width, height = 200, 150
@@ -156,6 +159,7 @@ class SimpleVisualNode(QGraphicsRectItem):
         # Make interactive
         self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsSelectable)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)  # Enable position change notifications
         
         # Tooltip
         tooltip_lines = [f"ID: {vis_node.node_id}", f"Type: {vis_node.node_type}"]
@@ -188,6 +192,32 @@ class SimpleVisualNode(QGraphicsRectItem):
             return QColor(0, 0, 0)  # Black text
         else:
             return QColor(255, 255, 255)  # White text
+    
+    def add_connection(self, connection: 'BezierConnection'):
+        """Register a Bezier connection attached to this node."""
+        if connection not in self.connected_beziers:
+            self.connected_beziers.append(connection)
+    
+    def remove_connection(self, connection: 'BezierConnection'):
+        """Unregister a Bezier connection from this node."""
+        if connection in self.connected_beziers:
+            self.connected_beziers.remove(connection)
+    
+    def itemChange(self, change, value):
+        """Override to detect position changes and update connected Bezier curves."""
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            # Update all connected Bezier curves when this node moves
+            for connection in self.connected_beziers:
+                connection.update_path()
+            
+            # Also update connections for child nodes (e.g., choice buttons in menu containers)
+            # When a parent moves, children move with it but don't trigger their own itemChange
+            for child in self.childItems():
+                if isinstance(child, SimpleVisualNode):
+                    for child_connection in child.connected_beziers:
+                        child_connection.update_path()
+        
+        return super().itemChange(change, value)
 
 
 class VNFlowVisualizerV2Simple(QGraphicsView):
@@ -328,13 +358,17 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         
         # Create visual connections with Bezier curves and arrows
         for connection in data.connections:
-            source_node = self.nodes.get(connection.source_node_id)
-            target_node = self.nodes.get(connection.target_node_id)
+            source_node: Optional[SimpleVisualNode] = self.nodes.get(connection.source_node_id)
+            target_node: Optional[SimpleVisualNode] = self.nodes.get(connection.target_node_id)
             
             if source_node and target_node:
                 # Create Bezier connection with arrow
                 bezier_connection = BezierConnection(source_node, target_node)
                 self.scene.addItem(bezier_connection)
+                
+                # Register connection with both source and target nodes for automatic updates
+                source_node.add_connection(bezier_connection)
+                target_node.add_connection(bezier_connection)
                 
                 # Store connection for potential updates
                 self.connections.append(bezier_connection)
@@ -343,11 +377,18 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         
         # Auto-apply default layout (dot_like) and fit view
         self.apply_layout("dot_like")
-        self.update_all_connections()
+        self.update_all_connections()  # Ensure connections reflect layout positions
         self.fit_view_to_content()
     
     def clear_visualization(self):
         """Clear the current visualization."""
+        # Unregister all connections from nodes before clearing
+        for connection in self.connections:
+            if hasattr(connection, 'source_node') and isinstance(connection.source_node, SimpleVisualNode):
+                connection.source_node.remove_connection(connection)
+            if hasattr(connection, 'target_node') and isinstance(connection.target_node, SimpleVisualNode):
+                connection.target_node.remove_connection(connection)
+        
         self.scene.clear()
         self.nodes.clear()
         self.connections.clear()
@@ -402,6 +443,9 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         else:
             # Default grid layout
             self._apply_grid_layout(top_level_nodes)
+        
+        # Update all connections to reflect new node positions after layout
+        self.update_all_connections()
     
     def _apply_grid_layout(self, nodes):
         """Simple grid layout."""
