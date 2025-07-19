@@ -167,9 +167,8 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         nodes = []
         
         for label_name, label_node in flow_graph.items():
-            # Skip labels that will be represented by menu containers
-            if label_node.has_menu:
-                continue
+            # Always include labels, even if they have menus
+            # Labels represent entry points and any content before the menu
                 
             node_type = self._determine_node_type(label_name, label_node)
             color_hint = self._get_color_for_type(node_type)

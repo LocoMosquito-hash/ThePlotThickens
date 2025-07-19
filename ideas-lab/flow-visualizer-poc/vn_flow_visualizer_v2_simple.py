@@ -160,8 +160,22 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             self.scene.addItem(visual_node)
             self.nodes[node_data.node_id] = visual_node
         
-        # For this simple version, we'll skip connections to focus on the interface
-        print(f"✅ Created {len(self.nodes)} visual nodes")
+        # Create visual connections
+        for connection in data.connections:
+            # For now, we'll create simple lines between connected nodes
+            source_node = self.nodes.get(connection.source_node_id)
+            target_node = self.nodes.get(connection.target_node_id)
+            
+            if source_node and target_node:
+                line = self.scene.addLine(
+                    source_node.pos().x() + source_node.rect().width() / 2,
+                    source_node.pos().y() + source_node.rect().height(),
+                    target_node.pos().x() + target_node.rect().width() / 2,
+                    target_node.pos().y(),
+                    QPen(QColor(100, 100, 100), 2)
+                )
+        
+        print(f"✅ Created {len(self.nodes)} visual nodes and {len(data.connections)} connections")
         
         # Auto-apply default layout (dot_like) and fit view
         self.apply_layout("dot_like")
@@ -255,10 +269,25 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         # Group nodes by type and create layers
         layers = []
         
-        # Layer 0: Start nodes (nodes with no incoming connections)
-        start_nodes = [n for n in nodes if 'start' in n.vis_node.node_id.lower() or 'intro' in n.vis_node.node_id.lower()]
+        # Layer 0: Start nodes (better detection)
+        start_nodes = []
+        
+        # First priority: nodes literally named "start"
+        start_nodes = [n for n in nodes if n.vis_node.node_id.lower() == 'start']
+        
+        # Second priority: nodes with "start" or "intro" in the name
+        if not start_nodes:
+            start_nodes = [n for n in nodes if 'start' in n.vis_node.node_id.lower() or 'intro' in n.vis_node.node_id.lower()]
+        
+        # Third priority: first label node (fallback)
+        if not start_nodes:
+            label_nodes = [n for n in nodes if n.vis_node.node_type == 'label']
+            if label_nodes:
+                start_nodes = [label_nodes[0]]
+        
+        # Last resort: first node
         if not start_nodes and nodes:
-            start_nodes = [nodes[0]]  # Fallback to first node
+            start_nodes = [nodes[0]]
         
         # Layer 1: Labels
         labels = [n for n in nodes if n.vis_node.node_type == 'label' and n not in start_nodes]
