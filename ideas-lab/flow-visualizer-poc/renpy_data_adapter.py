@@ -111,6 +111,10 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             nodes.extend(menu_nodes)
             connections.extend(menu_connections)
             
+            # Add connections from labels to their menu containers
+            label_to_menu_connections = self._create_label_to_menu_connections(flow_graph)
+            connections.extend(label_to_menu_connections)
+            
             return VisualizationData(
                 nodes=nodes,
                 connections=connections,
@@ -360,6 +364,48 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                         choice_connections.append(connection)
         
         return container_nodes, choice_connections
+    
+    def _create_label_to_menu_connections(self, flow_graph: Dict[str, Any]) -> List[VisualizationConnection]:
+        """
+        Create connections from labels to their menu containers.
+        
+        Args:
+            flow_graph: Dictionary mapping label names to LabelNode objects
+            
+        Returns:
+            List of VisualizationConnection objects for label-to-menu flows
+        """
+        connections = []
+        
+        for label_name, label_node in flow_graph.items():
+            # Only create connections for labels that have menus
+            if not label_node.has_menu:
+                continue
+                
+            # Create connection from label to its first menu container
+            for menu_idx, menu_node in enumerate(label_node.menu_nodes):
+                container_id = f"{label_name}_menu_{menu_idx + 1}"
+                connection_id = f"{label_name}_to_{container_id}"
+                
+                connection = VisualizationConnection(
+                    connection_id=connection_id,
+                    source_node_id=label_name,
+                    target_node_id=container_id,
+                    connection_type='label_to_menu',
+                    line_style='solid',
+                    color_hint='blue',
+                    weight_hint=2.0,  # Slightly thicker for label-to-menu connections
+                    label=f"Menu {menu_idx + 1}" if len(label_node.menu_nodes) > 1 else None,
+                    metadata={
+                        'menu_index': menu_idx,
+                        'menu_prompt': menu_node.prompt,
+                        'choice_count': menu_node.total_choices,
+                        'complexity_level': menu_node.complexity_level
+                    }
+                )
+                connections.append(connection)
+        
+        return connections
     
     def _determine_node_type(self, label_name: str, label_node) -> str:
         """

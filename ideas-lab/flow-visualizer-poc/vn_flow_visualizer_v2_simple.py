@@ -6,12 +6,106 @@ This shows how the visualizer can use VisualizationData without direct renpy-sou
 """
 
 from typing import Dict, Any, Optional, List
-from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsTextItem
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPen, QBrush, QColor, QFont
+from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsTextItem, QGraphicsPathItem
+from PyQt6.QtCore import Qt, pyqtSignal, QPointF
+from PyQt6.QtGui import QPen, QBrush, QColor, QFont, QPainterPath, QPolygonF
+import math
 
 from flow_visualizer_interface import VisualizationData, VisualizationNode, VisualizationConnection
 from renpy_data_adapter import RenpyFlowDataAdapter
+
+
+class BezierConnection(QGraphicsPathItem):
+    """A Bezier curve connection with an arrowhead."""
+    
+    def __init__(self, source_node: QGraphicsRectItem, target_node: QGraphicsRectItem):
+        super().__init__()
+        self.source_node = source_node
+        self.target_node = target_node
+        self.update_path()
+        
+        # Set appearance
+        pen = QPen(QColor(80, 80, 80), 2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        self.setPen(pen)
+        self.setBrush(QBrush(QColor(80, 80, 80)))
+        
+        # Make sure connections are drawn behind nodes
+        self.setZValue(-1)
+    
+    def update_path(self):
+        """Update the Bezier path and arrow."""
+        # Get anchor points on the edges of nodes
+        source_point = self._get_source_anchor()
+        target_point = self._get_target_anchor()
+        
+        # Create Bezier curve
+        path = QPainterPath()
+        path.moveTo(source_point)
+        
+        # Calculate control points for smooth curve
+        dx = target_point.x() - source_point.x()
+        dy = target_point.y() - source_point.y()
+        
+        # Control points for nice curve
+        ctrl1 = QPointF(source_point.x() + dx * 0.3, source_point.y() + abs(dy) * 0.2)
+        ctrl2 = QPointF(target_point.x() - dx * 0.3, target_point.y() - abs(dy) * 0.2)
+        
+        path.cubicTo(ctrl1, ctrl2, target_point)
+        
+        # Add arrowhead at target
+        arrow = self._create_arrowhead(target_point, source_point)
+        path.addPolygon(arrow)
+        
+        self.setPath(path)
+    
+    def _get_source_anchor(self) -> QPointF:
+        """Get connection point on source node (right edge center)."""
+        if self.source_node.parentItem():
+            # For child items, get scene position
+            source_rect = self.source_node.sceneBoundingRect()
+        else:
+            source_rect = self.source_node.boundingRect()
+            source_rect.translate(self.source_node.pos())
+        
+        return QPointF(source_rect.right(), source_rect.center().y())
+    
+    def _get_target_anchor(self) -> QPointF:
+        """Get connection point on target node (left edge center)."""
+        if self.target_node.parentItem():
+            # For child items, get scene position
+            target_rect = self.target_node.sceneBoundingRect()
+        else:
+            target_rect = self.target_node.boundingRect()
+            target_rect.translate(self.target_node.pos())
+        
+        return QPointF(target_rect.left(), target_rect.center().y())
+    
+    def _create_arrowhead(self, tip: QPointF, tail: QPointF) -> QPolygonF:
+        """Create an arrowhead polygon pointing toward the tip."""
+        # Calculate arrow direction
+        dx = tip.x() - tail.x()
+        dy = tip.y() - tail.y()
+        length = math.sqrt(dx*dx + dy*dy)
+        
+        if length == 0:
+            return QPolygonF()
+        
+        # Normalize direction
+        dx /= length
+        dy /= length
+        
+        # Arrow dimensions
+        arrow_length = 12
+        arrow_width = 6
+        
+        # Calculate arrow points
+        base = QPointF(tip.x() - dx * arrow_length, tip.y() - dy * arrow_length)
+        side1 = QPointF(base.x() - dy * arrow_width, base.y() + dx * arrow_width)
+        side2 = QPointF(base.x() + dy * arrow_width, base.y() - dx * arrow_width)
+        
+        arrow = QPolygonF([tip, side1, side2])
+        return arrow
 
 
 class SimpleVisualNode(QGraphicsRectItem):
@@ -117,6 +211,7 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         # Current state
         self.current_data: Optional[VisualizationData] = None
         self.nodes: Dict[str, SimpleVisualNode] = {}
+        self.connections: List[BezierConnection] = []
         
         # View settings
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
@@ -230,31 +325,31 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                 self.scene.addItem(choice_visual)
                 self.nodes[choice_data.node_id] = choice_visual
         
-        # Create visual connections
+        # Create visual connections with Bezier curves and arrows
         for connection in data.connections:
-            # For now, we'll create simple lines between connected nodes
             source_node = self.nodes.get(connection.source_node_id)
             target_node = self.nodes.get(connection.target_node_id)
             
             if source_node and target_node:
-                line = self.scene.addLine(
-                    source_node.pos().x() + source_node.rect().width() / 2,
-                    source_node.pos().y() + source_node.rect().height(),
-                    target_node.pos().x() + target_node.rect().width() / 2,
-                    target_node.pos().y(),
-                    QPen(QColor(100, 100, 100), 2)
-                )
+                # Create Bezier connection with arrow
+                bezier_connection = BezierConnection(source_node, target_node)
+                self.scene.addItem(bezier_connection)
+                
+                # Store connection for potential updates
+                self.connections.append(bezier_connection)
         
         print(f"✅ Created {len(self.nodes)} visual nodes and {len(data.connections)} connections")
         
         # Auto-apply default layout (dot_like) and fit view
         self.apply_layout("dot_like")
+        self.update_all_connections()
         self.fit_view_to_content()
     
     def clear_visualization(self):
         """Clear the current visualization."""
         self.scene.clear()
         self.nodes.clear()
+        self.connections.clear()
     
     def fit_view_to_content(self):
         """Fit the view to show all content."""
@@ -275,6 +370,11 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             self.centerOn(node)
             # Emit selection signal
             self.node_selected.emit(node_id, node.vis_node.metadata or {})
+    
+    def update_all_connections(self):
+        """Update all connection paths after nodes have been moved."""
+        for connection in self.connections:
+            connection.update_path()
     
     def apply_layout(self, layout_type: str):
         """Apply a layout algorithm based on the selected type."""
