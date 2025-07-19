@@ -12,8 +12,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from renpy_flow_visualizer import main
-    print("Starting Renpy Flow Visualizer POC...")
+    from renpy_flow_visualizer_v2_main import main
+    print("Starting Renpy Flow Visualizer POC (Clean Architecture)...")
     main()
 except ImportError as e:
     print(f"Import error: {e}")

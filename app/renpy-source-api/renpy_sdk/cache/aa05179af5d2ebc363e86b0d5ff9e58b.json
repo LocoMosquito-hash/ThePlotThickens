@@ -1,0 +1,844 @@
+{
+  "project_path": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\app\\renpy-source-api\\renpy_sdk\\renpy-8.4.0-sdk\\the_question\\game",
+  "cache_timestamp": "2025-07-19T12:56:17.938747",
+  "project_hash": "aa05179af5d2ebc363e86b0d5ff9e58b",
+  "analysis_result": {
+    "metadata": {
+      "analyzer_version": "2.0",
+      "analysis_timestamp": "2025-07-19T12:56:17.811016",
+      "target_project": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\app\\renpy-source-api\\renpy_sdk\\renpy-8.4.0-sdk\\the_question\\game"
+    },
+    "project_info": {
+      "rpy_files": 51,
+      "file_list": [
+        "gui.rpy",
+        "options.rpy",
+        "screens.rpy",
+        "script.rpy",
+        "tl\\czech\\common.rpy",
+        "tl\\czech\\options.rpy",
+        "tl\\czech\\screens.rpy",
+        "tl\\czech\\script.rpy",
+        "tl\\danish\\common.rpy",
+        "tl\\danish\\options.rpy",
+        "tl\\danish\\screens.rpy",
+        "tl\\danish\\script.rpy",
+        "tl\\french\\common.rpy",
+        "tl\\french\\options.rpy",
+        "tl\\french\\screens.rpy",
+        "tl\\french\\script.rpy",
+        "tl\\italian\\common.rpy",
+        "tl\\italian\\options.rpy",
+        "tl\\italian\\screens.rpy",
+        "tl\\italian\\script.rpy",
+        "tl\\japanese\\common.rpy",
+        "tl\\japanese\\options.rpy",
+        "tl\\japanese\\screens.rpy",
+        "tl\\japanese\\script.rpy",
+        "tl\\korean\\common.rpy",
+        "tl\\korean\\options.rpy",
+        "tl\\korean\\screens.rpy",
+        "tl\\korean\\script.rpy",
+        "tl\\malay\\common.rpy",
+        "tl\\malay\\options.rpy",
+        "tl\\malay\\screens.rpy",
+        "tl\\malay\\script.rpy",
+        "tl\\russian\\common.rpy",
+        "tl\\russian\\options.rpy",
+        "tl\\russian\\screens.rpy",
+        "tl\\russian\\script.rpy",
+        "tl\\schinese\\common.rpy",
+        "tl\\schinese\\options.rpy",
+        "tl\\schinese\\screens.rpy",
+        "tl\\schinese\\script.rpy",
+        "tl\\spanish\\common.rpy",
+        "tl\\spanish\\options.rpy",
+        "tl\\spanish\\screens.rpy",
+        "tl\\spanish\\script.rpy",
+        "tl\\tchinese\\options.rpy",
+        "tl\\tchinese\\screens.rpy",
+        "tl\\tchinese\\script.rpy",
+        "tl\\ukrainian\\common.rpy",
+        "tl\\ukrainian\\options.rpy",
+        "tl\\ukrainian\\screens.rpy",
+        "tl\\ukrainian\\script.rpy"
+      ],
+      "total_labels": 8,
+      "total_characters": 2,
+      "total_menus": 2,
+      "total_assets": 78,
+      "total_errors": 0,
+      "menu_statistics": {
+        "complexities": {
+          "simple": 2
+        },
+        "total_choices": 6,
+        "conditional_menus": 0,
+        "average_choices_per_menu": 3.0
+      }
+    },
+    "labels": [
+      {
+        "name": "h.who",
+        "file": "screens.rpy",
+        "line": 965
+      },
+      {
+        "name": "_(message)",
+        "file": "screens.rpy",
+        "line": 1216
+      },
+      {
+        "name": "start",
+        "file": "script.rpy",
+        "line": 10
+      },
+      {
+        "name": "rightaway",
+        "file": "script.rpy",
+        "line": 53
+      },
+      {
+        "name": "game",
+        "file": "script.rpy",
+        "line": 108
+      },
+      {
+        "name": "book",
+        "file": "script.rpy",
+        "line": 133
+      },
+      {
+        "name": "marry",
+        "file": "script.rpy",
+        "line": 159
+      },
+      {
+        "name": "later",
+        "file": "script.rpy",
+        "line": 237
+      }
+    ],
+    "characters": [
+      {
+        "name": "s",
+        "file": "script.rpy",
+        "line": 2,
+        "definition": "define s = Character(_(\"Sylvie\"), color=\"#c8ffc8\")"
+      },
+      {
+        "name": "m",
+        "file": "script.rpy",
+        "line": 3,
+        "definition": "define m = Character(_(\"Me\"), color=\"#c8c8ff\")"
+      }
+    ],
+    "menus": [
+      {
+        "file": "script.rpy",
+        "line": 40,
+        "type": "menu_structure",
+        "prompt": "As soon as she catches my eye, I decide...",
+        "choices": [
+          {
+            "text": "To ask her right away.",
+            "line": 44,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "rightaway"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 46,
+                "destination": "rightaway"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump rightaway"
+            ]
+          },
+          {
+            "text": "To ask her later.",
+            "line": 48,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "later"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 50,
+                "destination": "later"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump later"
+            ]
+          },
+          {
+            "text": "To ask her later.",
+            "line": 48,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "later"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 50,
+                "destination": "later"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump later"
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": null,
+        "menu_set": null,
+        "complexity": "simple"
+      },
+      {
+        "file": "script.rpy",
+        "line": 97,
+        "type": "menu_structure",
+        "prompt": null,
+        "choices": [
+          {
+            "text": "It's a videogame.",
+            "line": 101,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "game"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 102,
+                "destination": "game"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump game"
+            ]
+          },
+          {
+            "text": "It's an interactive book.",
+            "line": 104,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "book"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 105,
+                "destination": "book"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump book"
+            ]
+          },
+          {
+            "text": "It's an interactive book.",
+            "line": 104,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "book"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 105,
+                "destination": "book"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump book"
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": null,
+        "menu_set": null,
+        "complexity": "simple"
+      }
+    ],
+    "assets": [
+      {
+        "name": "illurock.opus",
+        "type": "music",
+        "file": "script.rpy",
+        "line": 13,
+        "context": "play music \"illurock.opus\""
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "script.rpy",
+        "line": 15,
+        "context": "scene bg lecturehall"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "script.rpy",
+        "line": 26,
+        "context": "scene bg uni"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 31,
+        "context": "show sylvie green normal"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 55,
+        "context": "show sylvie green smile"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "script.rpy",
+        "line": 67,
+        "context": "scene bg meadow"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 78,
+        "context": "show sylvie green smile"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 89,
+        "context": "show sylvie green surprised"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 95,
+        "context": "show sylvie green smile"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 124,
+        "context": "show sylvie green normal"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 139,
+        "context": "show sylvie green surprised"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 149,
+        "context": "show sylvie green smile"
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "script.rpy",
+        "line": 161,
+        "context": "scene black"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "script.rpy",
+        "line": 166,
+        "context": "scene bg club"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 179,
+        "context": "show sylvie blue normal"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 186,
+        "context": "show sylvie blue giggle"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 192,
+        "context": "show sylvie blue surprised"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 198,
+        "context": "show sylvie blue smile"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 206,
+        "context": "show sylvie blue giggle"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 210,
+        "context": "show sylvie blue normal"
+      },
+      {
+        "name": "sylvie",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 220,
+        "context": "show sylvie blue giggle"
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "script.rpy",
+        "line": 224,
+        "context": "scene black"
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "script.rpy",
+        "line": 241,
+        "context": "scene black"
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\czech\\common.rpy",
+        "line": 513,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\czech\\common.rpy",
+        "line": 993,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\czech\\common.rpy",
+        "line": 997,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\czech\\common.rpy",
+        "line": 1148,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "deleted",
+        "type": "sprite",
+        "file": "tl\\czech\\common.rpy",
+        "line": 1176,
+        "context": "old \"Show deleted\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\danish\\common.rpy",
+        "line": 512,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\danish\\common.rpy",
+        "line": 992,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\danish\\common.rpy",
+        "line": 996,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\french\\common.rpy",
+        "line": 420,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\french\\common.rpy",
+        "line": 421,
+        "context": "new \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\french\\common.rpy",
+        "line": 611,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\french\\common.rpy",
+        "line": 914,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\french\\common.rpy",
+        "line": 918,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "deleted",
+        "type": "sprite",
+        "file": "tl\\french\\common.rpy",
+        "line": 1160,
+        "context": "old \"Show deleted\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\italian\\common.rpy",
+        "line": 609,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "statements",
+        "type": "background",
+        "file": "tl\\italian\\options.rpy",
+        "line": 100,
+        "context": "old \"## This controls when the dialogue window is displayed. If \\\"show\\\", it is always displayed. If \\\"hide\\\", it is only displayed when dialogue is present. If \\\"auto\\\", the window is hidden before scene statements and shown again once dialogue is displayed.\""
+      },
+      {
+        "name": "and",
+        "type": "sprite",
+        "file": "tl\\italian\\options.rpy",
+        "line": 108,
+        "context": "old \"## Transitions used to show and hide the dialogue window\""
+      },
+      {
+        "name": "the",
+        "type": "sprite",
+        "file": "tl\\italian\\screens.rpy",
+        "line": 675,
+        "context": "old \"## The notify screen is used to show the player a message. (For example, when the game is quicksaved or a screenshot has been taken.)\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\japanese\\common.rpy",
+        "line": 473,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\japanese\\common.rpy",
+        "line": 669,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "deleted",
+        "type": "sprite",
+        "file": "tl\\japanese\\common.rpy",
+        "line": 697,
+        "context": "old \"Show deleted\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\japanese\\common.rpy",
+        "line": 993,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\japanese\\common.rpy",
+        "line": 997,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\korean\\common.rpy",
+        "line": 420,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\korean\\common.rpy",
+        "line": 604,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\korean\\common.rpy",
+        "line": 920,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\korean\\common.rpy",
+        "line": 924,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\malay\\common.rpy",
+        "line": 420,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\malay\\common.rpy",
+        "line": 604,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\malay\\common.rpy",
+        "line": 912,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\malay\\common.rpy",
+        "line": 916,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 417,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 421,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 565,
+        "context": "old \"Show Image Load Log\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 566,
+        "context": "new \"Show Image Load Log\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 661,
+        "context": "old \"help: show this help\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 893,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 1061,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\schinese\\common.rpy",
+        "line": 477,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\schinese\\common.rpy",
+        "line": 478,
+        "context": "new \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\schinese\\common.rpy",
+        "line": 681,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "deleted",
+        "type": "sprite",
+        "file": "tl\\schinese\\common.rpy",
+        "line": 709,
+        "context": "old \"Show deleted\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\schinese\\common.rpy",
+        "line": 1005,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\schinese\\common.rpy",
+        "line": 1009,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\spanish\\common.rpy",
+        "line": 421,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\spanish\\common.rpy",
+        "line": 605,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "deleted",
+        "type": "sprite",
+        "file": "tl\\spanish\\common.rpy",
+        "line": 633,
+        "context": "old \"Show deleted\""
+      },
+      {
+        "name": "deleted",
+        "type": "sprite",
+        "file": "tl\\spanish\\common.rpy",
+        "line": 634,
+        "context": "new \"Show deleted\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\spanish\\common.rpy",
+        "line": 929,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\spanish\\common.rpy",
+        "line": 933,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\common.rpy",
+        "line": 493,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\common.rpy",
+        "line": 721,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "deleted",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\common.rpy",
+        "line": 749,
+        "context": "old \"Show deleted\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\common.rpy",
+        "line": 1049,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\common.rpy",
+        "line": 1053,
+        "context": "old \"Continue, Don't show warning again\""
+      }
+    ],
+    "errors": []
+  }
+}

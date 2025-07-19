@@ -366,7 +366,14 @@ class RenpyFlowMapper(QMainWindow):
         self.control_panel.update_project_info(analysis_data.get('project_info', {}))
         
         # Load the flow graph into the visualizer
-        self.visualizer.load_flow_graph(analysis_data)
+        # Handle both old and new visualizer interfaces
+        if hasattr(self.visualizer, 'load_flow_graph'):
+            self.visualizer.load_flow_graph(analysis_data)
+        elif hasattr(self.visualizer, 'load_flow_data'):
+            # Convert analysis_data to VisualizationData format if needed
+            self.visualizer.load_flow_data(analysis_data)
+        else:
+            print("Warning: Visualizer has no compatible load method")
         
         # Update status
         total_labels = analysis_data.get('total_labels', 0)

@@ -187,19 +187,173 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             self.node_selected.emit(node_id, node.vis_node.metadata or {})
     
     def apply_layout(self, layout_type: str):
-        """Apply a layout algorithm (simplified for demo)."""
-        # For now, just do a simple grid layout
+        """Apply a layout algorithm based on the selected type."""
         if not self.nodes:
             return
             
         nodes = list(self.nodes.values())
-        cols = int(len(nodes) ** 0.5) + 1
+        print(f"🎨 Applying layout: {layout_type} to {len(nodes)} nodes")
         
+        if layout_type == "narrative":
+            self._apply_narrative_layout(nodes)
+        elif layout_type == "dot_like":
+            self._apply_dot_like_layout(nodes)
+        elif layout_type == "topological":
+            self._apply_topological_layout(nodes)
+        elif layout_type == "spring":
+            self._apply_spring_layout(nodes)
+        elif layout_type == "circular":
+            self._apply_circular_layout(nodes)
+        elif layout_type == "hierarchical":
+            self._apply_hierarchical_layout(nodes)
+        else:
+            # Default grid layout
+            self._apply_grid_layout(nodes)
+    
+    def _apply_grid_layout(self, nodes):
+        """Simple grid layout."""
+        cols = int(len(nodes) ** 0.5) + 1
         for i, node in enumerate(nodes):
             row = i // cols
             col = i % cols
             x = col * 250
             y = row * 200
+            node.setPos(x, y)
+    
+    def _apply_narrative_layout(self, nodes):
+        """Narrative flow layout - labels on top, menu containers below."""
+        labels = [n for n in nodes if n.vis_node.node_type == 'label']
+        menu_containers = [n for n in nodes if n.vis_node.node_type == 'menu_container']
+        choice_buttons = [n for n in nodes if n.vis_node.node_type == 'choice_button']
+        
+        # Labels in top tier
+        for i, node in enumerate(labels):
+            x = i * 180
+            y = 0
+            node.setPos(x, y)
+        
+        # Menu containers in middle tier
+        for i, node in enumerate(menu_containers):
+            x = i * 220
+            y = 300
+            node.setPos(x, y)
+        
+        # Choice buttons in bottom tier
+        for i, node in enumerate(choice_buttons):
+            x = i * 160
+            y = 500
+            node.setPos(x, y)
+    
+    def _apply_dot_like_layout(self, nodes):
+        """DOT-like hierarchical layout (Sugiyama framework simulation)."""
+        # Group nodes by type and create layers
+        layers = []
+        
+        # Layer 0: Start nodes (nodes with no incoming connections)
+        start_nodes = [n for n in nodes if 'start' in n.vis_node.node_id.lower() or 'intro' in n.vis_node.node_id.lower()]
+        if not start_nodes and nodes:
+            start_nodes = [nodes[0]]  # Fallback to first node
+        
+        # Layer 1: Labels
+        labels = [n for n in nodes if n.vis_node.node_type == 'label' and n not in start_nodes]
+        
+        # Layer 2: Menu containers
+        menu_containers = [n for n in nodes if n.vis_node.node_type == 'menu_container']
+        
+        # Layer 3: Choice buttons
+        choice_buttons = [n for n in nodes if n.vis_node.node_type == 'choice_button']
+        
+        layers = [start_nodes, labels, menu_containers, choice_buttons]
+        
+        # Position nodes layer by layer
+        y_positions = [0, 200, 400, 600]
+        
+        for layer_idx, layer in enumerate(layers):
+            if not layer:
+                continue
+                
+            y = y_positions[layer_idx]
+            
+            # Spread nodes horizontally within each layer
+            total_width = max(1200, len(layer) * 180)
+            x_spacing = total_width / (len(layer) + 1)
+            
+            for i, node in enumerate(layer):
+                x = (i + 1) * x_spacing - total_width / 2
+                node.setPos(x, y)
+    
+    def _apply_topological_layout(self, nodes):
+        """Simple topological sort layout."""
+        # Sort nodes by node_id for consistent ordering
+        sorted_nodes = sorted(nodes, key=lambda n: n.vis_node.node_id)
+        
+        # Create tiers based on node type priority
+        tiers = {
+            'label': 0,
+            'menu_container': 1,
+            'choice_button': 2
+        }
+        
+        tier_nodes = {0: [], 1: [], 2: []}
+        
+        for node in sorted_nodes:
+            tier = tiers.get(node.vis_node.node_type, 2)
+            tier_nodes[tier].append(node)
+        
+        # Position each tier
+        for tier, tier_node_list in tier_nodes.items():
+            y = tier * 250
+            for i, node in enumerate(tier_node_list):
+                x = i * 200
+                node.setPos(x, y)
+    
+    def _apply_spring_layout(self, nodes):
+        """Simple spring-based layout simulation."""
+        import math
+        
+        # Initialize positions randomly
+        for i, node in enumerate(nodes):
+            angle = (i * 2 * math.pi) / len(nodes)
+            radius = 200 + (i % 3) * 100
+            x = math.cos(angle) * radius
+            y = math.sin(angle) * radius
+            node.setPos(x, y)
+    
+    def _apply_circular_layout(self, nodes):
+        """Arrange nodes in a circle."""
+        import math
+        
+        if len(nodes) <= 1:
+            return
+            
+        center_x, center_y = 0, 0
+        radius = max(300, len(nodes) * 30)
+        
+        for i, node in enumerate(nodes):
+            angle = (i * 2 * math.pi) / len(nodes)
+            x = center_x + math.cos(angle) * radius
+            y = center_y + math.sin(angle) * radius
+            node.setPos(x, y)
+    
+    def _apply_hierarchical_layout(self, nodes):
+        """Tree-like hierarchical layout."""
+        # Group by node type
+        labels = [n for n in nodes if n.vis_node.node_type == 'label']
+        others = [n for n in nodes if n.vis_node.node_type != 'label']
+        
+        # Labels at root level
+        for i, node in enumerate(labels):
+            x = i * 300
+            y = 0
+            node.setPos(x, y)
+        
+        # Others spread below
+        cols = max(1, int(len(others) ** 0.5))
+        for i, node in enumerate(others):
+            row = i // cols
+            col = i % cols
+            x = col * 250
+            y = 200 + row * 150
             node.setPos(x, y)
     
     def get_project_info(self) -> Dict[str, Any]:
