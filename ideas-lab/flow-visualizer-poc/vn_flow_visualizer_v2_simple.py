@@ -92,6 +92,11 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         # View settings
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         
+        # Enable middle mouse button panning
+        self.setRenderHint(self.renderHints())
+        self._pan_active = False
+        self._last_pan_point = None
+        
     def load_project(self, project_path: str, use_sdk: bool = False) -> bool:
         """
         Load a project using the clean interface.
@@ -158,7 +163,8 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         # For this simple version, we'll skip connections to focus on the interface
         print(f"✅ Created {len(self.nodes)} visual nodes")
         
-        # Fit view to content
+        # Auto-apply default layout (dot_like) and fit view
+        self.apply_layout("dot_like")
         self.fit_view_to_content()
     
     def clear_visualization(self):
@@ -373,6 +379,37 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             self.scale(zoom_factor, zoom_factor)
         else:
             self.scale(1/zoom_factor, 1/zoom_factor)
+    
+    def mousePressEvent(self, event):
+        """Handle mouse press events."""
+        if event.button() == Qt.MouseButton.MiddleButton:
+            self._pan_active = True
+            self._last_pan_point = event.position().toPoint()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        else:
+            super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        """Handle mouse move events."""
+        if self._pan_active and self._last_pan_point is not None:
+            # Calculate delta
+            delta = event.position().toPoint() - self._last_pan_point
+            self._last_pan_point = event.position().toPoint()
+            
+            # Pan the view
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
+        else:
+            super().mouseMoveEvent(event)
+    
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release events."""
+        if event.button() == Qt.MouseButton.MiddleButton:
+            self._pan_active = False
+            self._last_pan_point = None
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        else:
+            super().mouseReleaseEvent(event)
         event.accept()
 
 

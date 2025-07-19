@@ -107,7 +107,7 @@ class VNControlPanel(QWidget):
         self.layout_combo.addItems([
             "narrative", "narrative_flow", "flow_aware", "dot_like", "topological", "spring", "circular", "hierarchical", "random"
         ])
-        self.layout_combo.setCurrentText("narrative")
+        self.layout_combo.setCurrentText("dot_like")
         alg_layout.addWidget(self.layout_combo)
         
         layout.addLayout(alg_layout)
