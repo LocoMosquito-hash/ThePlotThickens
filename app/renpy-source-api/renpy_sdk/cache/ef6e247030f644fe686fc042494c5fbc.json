@@ -1,0 +1,53 @@
+{
+  "project_path": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\app\\renpy-source-api\\renpy_sdk\\vn_analyzer\\game",
+  "cache_timestamp": "2025-07-19T01:54:47.281595",
+  "project_hash": "ef6e247030f644fe686fc042494c5fbc",
+  "analysis_result": {
+    "metadata": {
+      "analyzer_version": "2.0",
+      "analysis_timestamp": "2025-07-19T01:54:47.235513",
+      "target_project": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\app\\renpy-source-api\\renpy_sdk\\vn_analyzer\\game"
+    },
+    "project_info": {
+      "rpy_files": 4,
+      "file_list": [
+        "gui.rpy",
+        "options.rpy",
+        "screens.rpy",
+        "script.rpy"
+      ],
+      "total_labels": 3,
+      "total_characters": 0,
+      "total_menus": 0,
+      "total_assets": 0,
+      "total_errors": 0,
+      "menu_statistics": {
+        "complexities": {},
+        "total_choices": 0,
+        "conditional_menus": 0,
+        "average_choices_per_menu": 0
+      }
+    },
+    "labels": [
+      {
+        "name": "h.who",
+        "file": "screens.rpy",
+        "line": 943
+      },
+      {
+        "name": "_(message)",
+        "file": "screens.rpy",
+        "line": 1194
+      },
+      {
+        "name": "start",
+        "file": "script.rpy",
+        "line": 135
+      }
+    ],
+    "characters": [],
+    "menus": [],
+    "assets": [],
+    "errors": []
+  }
+}

@@ -29,7 +29,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QThread, pyqtSlot, QStandardPaths
 from PyQt6.QtGui import QAction
 
 # Import our custom components
-from vn_flow_visualizer import VNFlowVisualizer
+from vn_flow_visualizer_v2_simple import VNFlowVisualizerV2Simple
 from vn_control_panel import VNControlPanel
 
 # Import renpy-source-api modules directly
@@ -213,7 +213,7 @@ class RenpyFlowMapper(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         
         # Visualization area
-        self.visualizer = VNFlowVisualizer()
+        self.visualizer = VNFlowVisualizerV2Simple()
         splitter.addWidget(self.visualizer)
         
         # Control panel
