@@ -130,6 +130,7 @@ class SimpleVisualNode(QGraphicsRectItem):
         # Set color based on hint
         color_map = {
             'green': QColor(100, 250, 100),
+            'lightgreen': QColor(180, 255, 180),  # Light green for entry point
             'red': QColor(250, 100, 100),
             'blue': QColor(100, 150, 250),
             'lightblue': QColor(150, 200, 250),
@@ -437,25 +438,28 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         # Group nodes by type and create layers
         layers = []
         
-        # Layer 0: Start nodes (better detection)
+        # Layer 0: Start nodes (FIXED - detect visual Start node properly)
         start_nodes = []
         
-        # First priority: nodes literally named "start"
-        start_nodes = [n for n in nodes if n.vis_node.node_id.lower() == 'start']
+        # FIRST PRIORITY: Visual Start node (always __VISUAL_START__)
+        start_nodes = [n for n in nodes if n.vis_node.node_id == '__VISUAL_START__']
         
-        # Second priority: nodes with "start" or "intro" in the name
+        # Second priority: nodes with node_type='start' 
+        if not start_nodes:
+            start_nodes = [n for n in nodes if n.vis_node.node_type == 'start']
+        
+        # Third priority: nodes literally named "start"
+        if not start_nodes:
+            start_nodes = [n for n in nodes if n.vis_node.node_id.lower() == 'start']
+        
+        # Fourth priority: nodes with "start" or "intro" in the name
         if not start_nodes:
             start_nodes = [n for n in nodes if 'start' in n.vis_node.node_id.lower() or 'intro' in n.vis_node.node_id.lower()]
-        
-        # Third priority: first label node (fallback)
-        if not start_nodes:
-            label_nodes = [n for n in nodes if n.vis_node.node_type == 'label']
-            if label_nodes:
-                start_nodes = [label_nodes[0]]
         
         # Last resort: first node
         if not start_nodes and nodes:
             start_nodes = [nodes[0]]
+
         
         # Layer 1: Labels
         labels = [n for n in nodes if n.vis_node.node_type == 'label' and n not in start_nodes]

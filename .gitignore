@@ -49,3 +49,4 @@ renpy_source_api.db-journal
 debug_layout_dot_like.txt
 debug_layout_narrative.txt
 app/renpy-source-api/renpy_sdk/renpy-8.4.0-sdk
+app/renpy-source-api/renpy_sdk/cache/

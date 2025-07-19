@@ -102,9 +102,18 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             # Build flow graph using parser
             flow_graph = self.parser.build_flow_graph(project_path)
             
-            # Convert to visualization format
-            nodes = self._convert_labels_to_nodes(flow_graph)
+            # PHASE 1: Detect actual entry point using SDK as source of truth
+            actual_entry_point = self._detect_actual_entry_point(project_path)
+            
+            # Convert to visualization format (entry point detection affects node classification)
+            nodes = self._convert_labels_to_nodes(flow_graph, actual_entry_point)
             connections = self._convert_flows_to_connections(flow_graph)
+            
+            # Add visual Start node and its connection to actual entry point
+            visual_start_node, start_connection = self._create_visual_start_node(actual_entry_point)
+            nodes.insert(0, visual_start_node)  # Add Start node at beginning
+            if start_connection:
+                connections.insert(0, start_connection)  # Add Start connection first
             
             # Add menu container nodes and connections
             menu_nodes, menu_connections = self._create_menu_containers(flow_graph)
@@ -158,15 +167,16 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         # For now, return empty list as placeholder
         return []
     
-    def _convert_labels_to_nodes(self, flow_graph: Dict[str, Any]) -> List[VisualizationNode]:
+    def _convert_labels_to_nodes(self, flow_graph: Dict[str, Any], actual_entry_point: Optional[str] = None) -> List[VisualizationNode]:
         """
         Convert LabelNode objects to VisualizationNode objects.
         
         Args:
             flow_graph: Dictionary mapping label names to LabelNode objects
+            actual_entry_point: The actual entry point label detected by SDK (used to avoid double-classification)
             
         Returns:
-            List of VisualizationNode objects for labels (excluding those with menus)
+            List of VisualizationNode objects for labels
         """
         nodes = []
         
@@ -174,7 +184,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             # Always include labels, even if they have menus
             # Labels represent entry points and any content before the menu
                 
-            node_type = self._determine_node_type(label_name, label_node)
+            node_type = self._determine_node_type(label_name, label_node, actual_entry_point)
             color_hint = self._get_color_for_type(node_type)
             
             # Create connections lists
@@ -384,7 +394,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 
             # Create connection from label to its first menu container
             for menu_idx, menu_node in enumerate(label_node.menu_nodes):
-                container_id = f"{label_name}_menu_{menu_idx + 1}"
+                container_id = f"{label_name}_menu_{menu_idx}"  # Fixed: should be menu_idx, not menu_idx + 1
                 connection_id = f"{label_name}_to_{container_id}"
                 
                 connection = VisualizationConnection(
@@ -407,20 +417,101 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         
         return connections
     
-    def _determine_node_type(self, label_name: str, label_node) -> str:
+    def _detect_actual_entry_point(self, project_path: str) -> Optional[str]:
+        """
+        Detect the actual entry point label using SDK as source of truth.
+        
+        Args:
+            project_path: Path to the Renpy project directory
+            
+        Returns:
+            Name of the actual entry point label, or None if not found
+        """
+        try:
+            # Try to use SDK to find the actual entry point
+            # Add the renpy-source-api path dynamically
+            import sys
+            sys.path.insert(0, str(app_dir / "renpy-source-api"))
+            from control_flow.start_label_finder import StartLabelFinder
+            
+            finder = StartLabelFinder(project_path)
+            start_line = finder.find_start_label()
+            actual_entry_point = start_line.label_name
+            
+            print(f"🎯 SDK detected actual entry point: '{actual_entry_point}'")
+            return actual_entry_point
+            
+        except Exception as e:
+            print(f"⚠️  Could not detect entry point via SDK: {e}")
+            # Fallback to common entry point names
+            fallback_names = ['start', 'main', 'begin', 'intro']
+            print(f"🔄 Using fallback detection for: {', '.join(fallback_names)}")
+            return 'start'  # Most common fallback
+    
+    def _create_visual_start_node(self, actual_entry_point: Optional[str]) -> Tuple[VisualizationNode, Optional[VisualizationConnection]]:
+        """
+        Create the visual "Start" node and its connection to the actual entry point.
+        
+        Args:
+            actual_entry_point: Name of the actual entry point label
+            
+        Returns:
+            Tuple of (visual_start_node, connection_to_entry_point)
+        """
+        # Create the visual Start node (always green, always present)
+        visual_start_node = VisualizationNode(
+            node_id="__VISUAL_START__",  # Special ID to avoid conflicts
+            node_type='start',  # This will get green color
+            display_name="Start",
+            color_hint='green',
+            size_hint=(100, 50),
+            metadata={
+                'is_visual_node': True,  # Flag to identify this as visual-only
+                'represents_entry_point': actual_entry_point,
+                'semantic_type': 'visual_start',
+                'description': 'Visual entry point - always shows where the story begins'
+            },
+            incoming_connections=[],  # Start node has no incoming connections
+            outgoing_connections=[actual_entry_point] if actual_entry_point else []
+        )
+        
+        # Create connection from visual Start to actual entry point
+        start_connection = None
+        if actual_entry_point:
+            start_connection = VisualizationConnection(
+                connection_id="__START_TO_ENTRY__",
+                source_node_id="__VISUAL_START__",
+                target_node_id=actual_entry_point,
+                connection_type='visual_start',
+                line_style='solid',
+                color_hint='green',
+                weight_hint=2.5,  # Thicker line to emphasize importance
+                label="Entry Point",
+                metadata={
+                    'is_visual_connection': True,
+                    'represents': 'game_entry_flow',
+                    'description': f'Visual flow from Start to actual entry point: {actual_entry_point}'
+                }
+            )
+        
+        return visual_start_node, start_connection
+    
+    def _determine_node_type(self, label_name: str, label_node, actual_entry_point: Optional[str] = None) -> str:
         """
         Determine the semantic type of a node for color coding.
         
         Args:
             label_name: Name of the label
             label_node: LabelNode object
+            actual_entry_point: The actual entry point label (to avoid marking as 'start' since we have visual Start)
             
         Returns:
-            Node type string ('start', 'ending', 'regular')
+            Node type string ('entry_point', 'ending', 'hub', 'regular')
         """
-        # Check for start label
-        if label_name.lower() in ['start', 'main', 'begin', 'intro']:
-            return 'start'
+        # NEVER mark any actual label as 'start' type since we have a visual Start node
+        # Instead, mark the actual entry point as 'entry_point' type for special styling
+        if actual_entry_point and label_name == actual_entry_point:
+            return 'entry_point'
             
         # Check for ending labels (dead ends with no outgoing flows)
         if label_node.is_dead_end or not label_node.outgoing_flows:
@@ -436,7 +527,8 @@ class RenpyFlowDataAdapter(FlowDataProvider):
     def _get_color_for_type(self, node_type: str) -> str:
         """Get color hint for node type."""
         color_map = {
-            'start': 'green',
+            'start': 'green',           # Visual Start node only
+            'entry_point': 'lightgreen', # Actual entry point label (slightly different from visual Start)
             'ending': 'red',
             'hub': 'purple',
             'regular': 'lightblue'
