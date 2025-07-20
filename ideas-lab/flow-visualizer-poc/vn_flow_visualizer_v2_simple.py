@@ -560,55 +560,87 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         # 🎯 STEP 1: DETECT CYCLES AND STRONGLY CONNECTED COMPONENTS
         print(f"🔍 Detecting cycles and SCCs...")
         
-        # Check if graph is acyclic using NetworkX
+        # Check if graph is a DAG (no cycles)
+        print(f"📊 Checking if graph is DAG...")
         is_dag = nx.is_directed_acyclic_graph(G)
         print(f"📊 Graph is DAG: {is_dag}")
         
+        # PERFORMANCE FIX: Skip expensive cycle enumeration, go straight to SCC analysis
         if not is_dag:
-            # Find all cycles for detailed analysis
-            try:
-                cycles = list(nx.simple_cycles(G))
-                print(f"🔴 Found {len(cycles)} cycles:")
-                for i, cycle in enumerate(cycles[:5]):  # Show first 5 cycles
-                    cycle_str = " → ".join(cycle) + f" → {cycle[0]}"
-                    print(f"   Cycle {i+1}: {cycle_str}")
-                if len(cycles) > 5:
-                    print(f"   ... and {len(cycles) - 5} more cycles")
-            except:
-                print(f"🔴 Graph has cycles (too complex to enumerate)")
+            print(f"🔴 Graph has cycles - using SCC-based approach (skipping expensive cycle enumeration)")
         
-        # Find Strongly Connected Components
-        sccs = list(nx.strongly_connected_components(G))
-        non_trivial_sccs = [scc for scc in sccs if len(scc) > 1]
-        
-        print(f"🔗 Found {len(sccs)} SCCs ({len(non_trivial_sccs)} non-trivial):")
-        for i, scc in enumerate(non_trivial_sccs[:3]):  # Show first 3 SCCs
-            scc_list = list(scc)
-            print(f"   SCC {i+1}: {scc_list[:5]}{'...' if len(scc_list) > 5 else ''} ({len(scc_list)} nodes)")
+        print(f"🔍 Finding Strongly Connected Components...")
+        try:
+            # Find SCCs using Tarjan's algorithm (efficient)
+            sccs = list(nx.strongly_connected_components(G))
+            scc_count = len(sccs)
+            non_trivial_sccs = [scc for scc in sccs if len(scc) > 1]
+            
+            print(f"🔗 Found {scc_count} SCCs ({len(non_trivial_sccs)} non-trivial):")
+            for i, scc in enumerate(non_trivial_sccs[:3]):  # Show first 3 non-trivial SCCs
+                scc_nodes = list(scc)[:5]  # Show first 5 nodes in SCC
+                more_nodes = f"... ({len(scc)} nodes)" if len(scc) > 5 else f" ({len(scc)} nodes)"
+                print(f"   SCC {i+1}: {scc_nodes}{more_nodes} ")
+            if len(non_trivial_sccs) > 3:
+                print(f"   ... and {len(non_trivial_sccs) - 3} more non-trivial SCCs")
+        except Exception as e:
+            print(f"⚠️ Error during SCC detection: {e}")
+            sccs = [set([node]) for node in G.nodes()]
         
         # 🎯 STEP 2: CREATE CONDENSATION GRAPH (SCC-based hierarchy)
         print(f"🏗️ Creating SCC-based hierarchical layout...")
         
-        # Create condensation graph where each SCC becomes a super-node
-        condensation_graph = nx.condensation(G)
-        print(f"📈 Condensation graph: {len(condensation_graph.nodes())} super-nodes, {len(condensation_graph.edges())} edges")
+        try:
+            # Create condensation graph where each SCC becomes a super-node
+            print(f"📈 Creating condensation graph...")
+            condensation_graph = nx.condensation(G)
+            print(f"📈 Condensation graph created: {len(condensation_graph.nodes())} super-nodes, {len(condensation_graph.edges())} edges")
+        except Exception as e:
+            print(f"⚠️ Error creating condensation graph: {e}")
+            print(f"⚠️ Falling back to simple grid layout")
+            self._apply_grid_layout(nodes)
+            return
         
         # The condensation graph is always a DAG, so we can use longest path on it
         if len(condensation_graph.edges()) > 0:
-            # Map each original node to its SCC
-            node_to_scc = {}
-            scc_to_nodes = {}
-            for scc_id, scc_data in condensation_graph.nodes(data=True):
-                scc_nodes = scc_data['members']
-                scc_to_nodes[scc_id] = list(scc_nodes)
-                for node in scc_nodes:
-                    node_to_scc[node] = scc_id
+            print(f"🗺️ Mapping nodes to SCCs...")
+            try:
+                # Map each original node to its SCC
+                node_to_scc = {}
+                scc_to_nodes = {}
+                for scc_id, scc_data in condensation_graph.nodes(data=True):
+                    scc_nodes = scc_data['members']
+                    scc_to_nodes[scc_id] = list(scc_nodes)
+                    for node in scc_nodes:
+                        node_to_scc[node] = scc_id
+                print(f"🗺️ Node mapping completed successfully")
+            except Exception as e:
+                print(f"⚠️ Error mapping nodes to SCCs: {e}")
+                print(f"⚠️ Falling back to simple grid layout")
+                self._apply_grid_layout(nodes)
+                return
             
-            # Compute longest path on condensation graph
-            scc_layers = self._compute_longest_path_on_condensation(condensation_graph, scc_to_nodes)
+            print(f"🔄 Computing longest path on condensation graph...")
+            try:
+                # Compute longest path on condensation graph
+                scc_layers = self._compute_longest_path_on_condensation(condensation_graph, scc_to_nodes)
+                print(f"🔄 Longest path computation completed")
+            except Exception as e:
+                print(f"⚠️ Error computing longest path: {e}")
+                print(f"⚠️ Falling back to simple grid layout")
+                self._apply_grid_layout(nodes)
+                return
             
-            # Position nodes within each SCC and across layers
-            self._position_nodes_with_scc_layout(scc_layers, scc_to_nodes, nodes, G)
+            print(f"📍 Positioning nodes with SCC layout...")
+            try:
+                # Position nodes within each SCC and across layers
+                self._position_nodes_with_scc_layout(scc_layers, scc_to_nodes, nodes, G)
+                print(f"📍 Node positioning completed")
+            except Exception as e:
+                print(f"⚠️ Error positioning nodes: {e}")
+                print(f"⚠️ Falling back to simple grid layout")
+                self._apply_grid_layout(nodes)
+                return
             
         else:
             # Single SCC or disconnected - use simple layout

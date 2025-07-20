@@ -231,12 +231,18 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             List of VisualizationConnection objects for label-to-label flows
         """
         connections = []
+        # DEDUPLICATION: Track created connections to prevent duplicates
+        created_connections = set()  # Track (source, target) pairs
         
         for label_name, label_node in flow_graph.items():
-            # Skip labels with menus - their connections will be handled by menu containers
-            if label_node.has_menu:
-                continue
-                
+            # DEBUG: Check if afternikkidate is being skipped
+            if label_name == 'afternikkidate':
+                print(f"[ADAPTER DEBUG] Processing afternikkidate: has_menu={label_node.has_menu}, outgoing_flows={len(label_node.outgoing_flows)}")
+                for i, flow in enumerate(label_node.outgoing_flows):
+                    print(f"  Flow {i+1}: {flow.source_label} → {flow.target_label} (type: {flow.flow_type}, context: {flow.context})")
+            
+            # FIXED: Instead of skipping ALL flows from labels with menus, 
+            # only skip menu_choice flows. Other flows (like conditional jumps) should be processed.
             for flow in label_node.outgoing_flows:
                 target_label = flow.target_label
                 
@@ -244,10 +250,19 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 if not target_label or target_label == '<return>' or target_label not in flow_graph:
                     continue
                 
-                # 🚨 FIXED: Allow connections to menu labels! They are valid narrative connections
-                # The old logic incorrectly filtered these out, causing orphaned menu labels
-                # if flow_graph[target_label].has_menu:
-                #     continue  # ❌ This was breaking connections to menu labels!
+                # FIXED: Only skip menu_choice flows, not all flows from menu labels
+                if flow.flow_type == 'menu_choice':
+                    continue  # Menu choices are handled by menu containers
+                
+                # DEDUPLICATION: Check if we already created this connection
+                connection_key = (label_name, target_label)
+                if connection_key in created_connections:
+                    if label_name == 'afternikkidate' or target_label == 'v14beforecourt':
+                        print(f"[DEDUP DEBUG] Skipping duplicate: {label_name} → {target_label}")
+                    continue
+                
+                # Mark this connection as created
+                created_connections.add(connection_key)
                 
                 # DEBUG: Track afternikkidate connections specifically
                 if label_name == 'afternikkidate' or target_label == 'v14beforecourt':

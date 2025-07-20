@@ -977,6 +977,15 @@ class RenpyParser:
             explicit_flows = self._find_explicit_flows(project_path)
             flows.extend(explicit_flows)
             
+            # DEBUG: Count conditional flows in explicit flows
+            conditional_flows_count = sum(1 for flow in explicit_flows if flow.context == "conditional_jump")
+            afternikkidate_flows = [flow for flow in explicit_flows if flow.source_label == 'afternikkidate']
+            print(f"[FLOW DEBUG] Total explicit flows: {len(explicit_flows)}")
+            print(f"[FLOW DEBUG] Conditional flows: {conditional_flows_count}")
+            print(f"[FLOW DEBUG] afternikkidate flows: {len(afternikkidate_flows)}")
+            for flow in afternikkidate_flows:
+                print(f"  → {flow.source_label} → {flow.target_label} (type: {flow.flow_type}, context: {flow.context})")
+            
             # PHASE 3: Detect implicit flows (NEW)
             implicit_flows = self._find_implicit_flows(project_path, all_labels_with_positions, explicit_flows)
             flows.extend(implicit_flows)
@@ -1468,14 +1477,29 @@ class RenpyParser:
         # Get all flows and populate the graph
         flows = self.find_all_label_flows(project_path)
         
+        # DEBUG: Track conditional flows being added to graph
+        conditional_flows_in_graph = [flow for flow in flows if flow.context == "conditional_jump"]
+        afternikkidate_flows_in_graph = [flow for flow in flows if flow.source_label == 'afternikkidate']
+        print(f"[GRAPH DEBUG] Total flows to add to graph: {len(flows)}")
+        print(f"[GRAPH DEBUG] Conditional flows in graph: {len(conditional_flows_in_graph)}")
+        print(f"[GRAPH DEBUG] afternikkidate flows in graph: {len(afternikkidate_flows_in_graph)}")
+        
         for flow in flows:
             # Add to source node's outgoing flows
             if flow.source_label and flow.source_label in graph:
                 graph[flow.source_label].outgoing_flows.append(flow)
+                
+                # DEBUG: Track afternikkidate flows being added
+                if flow.source_label == 'afternikkidate':
+                    print(f"[GRAPH DEBUG] Added outgoing flow: {flow.source_label} → {flow.target_label} (context: {flow.context})")
             
             # Add to target node's incoming flows (if target exists)
             if flow.target_label in graph:
                 graph[flow.target_label].incoming_flows.append(flow)
+                
+                # DEBUG: Track v14beforecourt flows being added
+                if flow.target_label == 'v14beforecourt':
+                    print(f"[GRAPH DEBUG] Added incoming flow: {flow.source_label} → {flow.target_label} (context: {flow.context})")
         
         # Analyze label properties and create menu nodes
         menus = self.find_all_menus(project_path)
