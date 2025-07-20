@@ -157,13 +157,33 @@ class SimpleVisualNode(QGraphicsRectItem):
         text_color = self._get_contrast_text_color(color)
         self.text_item.setDefaultTextColor(text_color)
         
-        # Make interactive
-        self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsMovable)
-        self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsSelectable)
-        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)  # Enable position change notifications
+        # FIXED: Set interactive flags based on node type for proper parent-child behavior
+        if vis_node.node_type == 'choice_button':
+            # Choice buttons should NOT be individually movable - they move with their container
+            self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsMovable, False)
+            self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsSelectable, True)
+            # Note: choice buttons get parented to containers later, so they'll move with container
+            
+        else:
+            # Regular nodes and containers can be moved independently
+            self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsMovable, True)
+            self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsSelectable, True)
+        
+        # Enable position change notifications for all node types
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
         
         # Tooltip
         tooltip_lines = [f"ID: {vis_node.node_id}", f"Type: {vis_node.node_type}"]
+        
+        # Add behavior info based on node type
+        if vis_node.node_type == 'choice_button':
+            tooltip_lines.append("[LINKED] Moves with parent container")
+            tooltip_lines.append("(Not individually draggable)")
+        elif vis_node.node_type == 'menu_container':
+            tooltip_lines.append("[CONTAINER] Drag to move with all choices")
+        else:
+            tooltip_lines.append("[MOVABLE] Drag to move")
+        
         if vis_node.metadata:
             for key, value in list(vis_node.metadata.items())[:3]:
                 tooltip_lines.append(f"{key}: {value}")
@@ -341,7 +361,7 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                 # Create choice button
                 choice_visual = SimpleVisualNode(choice_data)
                 
-                # Set container as parent BEFORE positioning (this is crucial)
+                # CRITICAL: Set container as parent BEFORE positioning (this makes them move together)
                 choice_visual.setParentItem(container)
                 
                 # Position relative to container (0,0 is container's top-left)
