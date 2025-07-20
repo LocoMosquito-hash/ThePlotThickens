@@ -43,13 +43,14 @@ class BezierConnection(QGraphicsPathItem):
         path = QPainterPath()
         path.moveTo(source_point)
         
-        # Calculate control points for smooth curve
+        # Calculate control points for smooth downward curve
         dx = target_point.x() - source_point.x()
         dy = target_point.y() - source_point.y()
         
-        # Control points for nice curve
-        ctrl1 = QPointF(source_point.x() + dx * 0.3, source_point.y() + abs(dy) * 0.2)
-        ctrl2 = QPointF(target_point.x() - dx * 0.3, target_point.y() - abs(dy) * 0.2)
+        # Control points for smooth hierarchical flow (downward curves)
+        control_offset = max(50, abs(dy) * 0.3)  # Minimum curve for readability
+        ctrl1 = QPointF(source_point.x(), source_point.y() + control_offset)
+        ctrl2 = QPointF(target_point.x(), target_point.y() - control_offset)
         
         path.cubicTo(ctrl1, ctrl2, target_point)
         
@@ -60,7 +61,7 @@ class BezierConnection(QGraphicsPathItem):
         self.setPath(path)
     
     def _get_source_anchor(self) -> QPointF:
-        """Get connection point on source node (right edge center)."""
+        """Get connection point on source node (bottom edge center for downward flow)."""
         if self.source_node.parentItem():
             # For child items, get scene position
             source_rect = self.source_node.sceneBoundingRect()
@@ -68,10 +69,10 @@ class BezierConnection(QGraphicsPathItem):
             source_rect = self.source_node.boundingRect()
             source_rect.translate(self.source_node.pos())
         
-        return QPointF(source_rect.right(), source_rect.center().y())
+        return QPointF(source_rect.center().x(), source_rect.bottom())
     
     def _get_target_anchor(self) -> QPointF:
-        """Get connection point on target node (left edge center)."""
+        """Get connection point on target node (top edge center for downward flow)."""
         if self.target_node.parentItem():
             # For child items, get scene position
             target_rect = self.target_node.sceneBoundingRect()
@@ -79,7 +80,7 @@ class BezierConnection(QGraphicsPathItem):
             target_rect = self.target_node.boundingRect()
             target_rect.translate(self.target_node.pos())
         
-        return QPointF(target_rect.left(), target_rect.center().y())
+        return QPointF(target_rect.center().x(), target_rect.top())
     
     def _create_arrowhead(self, tip: QPointF, tail: QPointF) -> QPolygonF:
         """Create an arrowhead polygon pointing toward the tip."""
@@ -478,60 +479,229 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         # Choice buttons are automatically positioned relative to their parent containers
     
     def _apply_dot_like_layout(self, nodes):
-        """DOT-like hierarchical layout (Sugiyama framework simulation)."""
-        # Group nodes by type and create layers
-        layers = []
+        """DOT-like hierarchical layout using proper Sugiyama framework."""
+        import networkx as nx
         
-        # Layer 0: Start nodes (FIXED - detect visual Start node properly)
+        # Build NetworkX graph from visualization connections
+        G = nx.DiGraph()
+        
+        # Add all nodes
+        for node in nodes:
+            G.add_node(node.vis_node.node_id, node_obj=node, node_type=node.vis_node.node_type)
+        
+        # Add edges from connections
+        for connection in self.connections:
+            if hasattr(connection, 'source_node') and hasattr(connection, 'target_node'):
+                source_id = connection.source_node.vis_node.node_id
+                target_id = connection.target_node.vis_node.node_id
+                if source_id in G and target_id in G:
+                    G.add_edge(source_id, target_id)
+        
+        # If graph is empty or has no edges, fall back to simple positioning
+        if len(G.nodes()) == 0:
+            return self._apply_grid_layout(nodes)
+        
+        if len(G.edges()) == 0:
+            # Just arrange nodes in a single row
+            for i, node in enumerate(nodes):
+                node.setPos(i * 200, 0)
+            return
+        
+        # STEP 1: Find start nodes (Visual Start or actual entry points)
         start_nodes = []
         
-        # FIRST PRIORITY: Visual Start node (always __VISUAL_START__)
-        start_nodes = [n for n in nodes if n.vis_node.node_id == '__VISUAL_START__']
+        # Priority 1: Visual Start node
+        for node_id in G.nodes():
+            if node_id == '__VISUAL_START__':
+                start_nodes = [node_id]
+                break
         
-        # Second priority: nodes with node_type='start' 
+        # Priority 2: Nodes with no incoming edges
         if not start_nodes:
-            start_nodes = [n for n in nodes if n.vis_node.node_type == 'start']
+            start_nodes = [n for n in G.nodes() if G.in_degree(n) == 0]
         
-        # Third priority: nodes literally named "start"
+        # Priority 3: Nodes with 'start' in name
         if not start_nodes:
-            start_nodes = [n for n in nodes if n.vis_node.node_id.lower() == 'start']
+            start_nodes = [n for n in G.nodes() if 'start' in n.lower()]
         
-        # Fourth priority: nodes with "start" or "intro" in the name
+        # Fallback: First node
         if not start_nodes:
-            start_nodes = [n for n in nodes if 'start' in n.vis_node.node_id.lower() or 'intro' in n.vis_node.node_id.lower()]
+            start_nodes = [list(G.nodes())[0]]
         
-        # Last resort: first node
-        if not start_nodes and nodes:
-            start_nodes = [nodes[0]]
-
+        # STEP 2: Compute hierarchical layers using topological sort from start nodes
+        try:
+            layers = self._compute_hierarchical_layers(G, start_nodes)
+        except:
+            # Fallback to simple layering if complex graph
+            layers = self._simple_layer_assignment(G, start_nodes)
         
-        # Layer 1: Labels
-        labels = [n for n in nodes if n.vis_node.node_type == 'label' and n not in start_nodes]
+        # Store graph for sub-tier analysis
+        self._current_graph = G
         
-        # Layer 2: Menu containers
-        menu_containers = [n for n in nodes if n.vis_node.node_type == 'menu_container']
+        # STEP 3: Position nodes in clear hierarchical tiers with sub-tier branching
+        self._position_nodes_in_layers(layers, nodes)
         
-        # Layer 3: Choice buttons
-        choice_buttons = [n for n in nodes if n.vis_node.node_type == 'choice_button']
+        print(f"✅ Applied dot-like layout: {len(layers)} layers, max width: {max(len(layer) for layer in layers) if layers else 0}")
+    
+    def _compute_hierarchical_layers(self, G, start_nodes):
+        """Compute proper hierarchical layers using modified BFS from start nodes."""
+        layers = []
+        visited = set()
+        current_layer = set(start_nodes)
         
-        layers = [start_nodes, labels, menu_containers, choice_buttons]
+        # Layer 0: Start nodes
+        if current_layer:
+            layers.append(list(current_layer))
+            visited.update(current_layer)
         
-        # Position nodes layer by layer
-        y_positions = [0, 200, 400, 600]
+        # Continue layering using BFS approach
+        while current_layer:
+            next_layer = set()
+            
+            for node in current_layer:
+                # Add all unvisited successors to next layer
+                for successor in G.successors(node):
+                    if successor not in visited:
+                        next_layer.add(successor)
+            
+            if next_layer:
+                layers.append(list(next_layer))
+                visited.update(next_layer)
+                current_layer = next_layer
+            else:
+                break
+        
+        # Add any remaining unvisited nodes to final layer
+        remaining = set(G.nodes()) - visited
+        if remaining:
+            layers.append(list(remaining))
+        
+        return layers
+    
+    def _simple_layer_assignment(self, G, start_nodes):
+        """Simple fallback layer assignment."""
+        layers = []
+        
+        # Group by node type as basic layering
+        labels = [n for n in G.nodes() if G.nodes[n].get('node_type') == 'label']
+        menus = [n for n in G.nodes() if G.nodes[n].get('node_type') == 'menu_container']
+        choices = [n for n in G.nodes() if G.nodes[n].get('node_type') == 'choice_button']
+        others = [n for n in G.nodes() if G.nodes[n].get('node_type') not in ['label', 'menu_container', 'choice_button']]
+        
+        # Create layers from node types
+        if start_nodes:
+            layers.append(start_nodes)
+        if labels:
+            layers.append(labels)
+        if menus:
+            layers.append(menus)
+        if choices:
+            layers.append(choices)
+        if others:
+            layers.append(others)
+        
+        return layers
+    
+    def _position_nodes_in_layers(self, layers, nodes):
+        """Position nodes in clear hierarchical layers with sub-tier branching."""
+        if not layers:
+            return
+        
+        # Create node lookup
+        node_lookup = {node.vis_node.node_id: node for node in nodes}
+        
+        # Layout parameters
+        LAYER_HEIGHT = 200  # Vertical spacing between layers
+        NODE_WIDTH = 180    # Horizontal spacing between nodes
+        MAX_NODES_PER_ROW = 10  # Maximum nodes per row before wrapping
+        SUB_TIER_OFFSET = 80   # Vertical offset for sub-tiers within same level
         
         for layer_idx, layer in enumerate(layers):
-            if not layer:
-                continue
+            y_base = layer_idx * LAYER_HEIGHT
+            
+            # Detect branching patterns within this layer
+            sub_tiers = self._create_sub_tiers(layer, layer_idx, layers)
+            
+            for sub_tier_idx, sub_tier in enumerate(sub_tiers):
+                y_tier = y_base + (sub_tier_idx * SUB_TIER_OFFSET)
                 
-            y = y_positions[layer_idx]
+                # Calculate how many rows we need for this sub-tier
+                nodes_in_tier = len(sub_tier)
+                
+                for i, node_id in enumerate(sub_tier):
+                    if node_id not in node_lookup:
+                        continue
+                    
+                    node = node_lookup[node_id]
+                    
+                    # Calculate row and column
+                    row = i // MAX_NODES_PER_ROW
+                    col = i % MAX_NODES_PER_ROW
+                    nodes_in_row = min(MAX_NODES_PER_ROW, nodes_in_tier - row * MAX_NODES_PER_ROW)
+                    
+                    # Center the row
+                    total_row_width = (nodes_in_row - 1) * NODE_WIDTH
+                    start_x = -total_row_width / 2
+                    
+                    x = start_x + col * NODE_WIDTH
+                    y = y_tier + row * (LAYER_HEIGHT * 0.2)  # Slight offset for multiple rows
+                    
+                    node.setPos(x, y)
+    
+    def _create_sub_tiers(self, layer, layer_idx, all_layers):
+        """Create sub-tiers within a layer for better branching visualization."""
+        MAX_NODES_PER_ROW = 10  # Use same constant
+        if len(layer) <= MAX_NODES_PER_ROW:
+            # Small layer, no need for sub-tiers
+            return [layer]
+        
+        # Try to group nodes that have common predecessors or successors
+        # This creates natural branching sub-tiers
+        
+        # Simple approach: group by node type first, then split large groups
+        node_groups = {}
+        
+        # Build graph to analyze connections (reuse if available)
+        if hasattr(self, '_current_graph'):
+            G = self._current_graph
+        else:
+            # Fallback: group by node type
+            return self._simple_sub_tier_split(layer)
+        
+        # Group nodes by their connection patterns
+        for node_id in layer:
+            # Get predecessors and successors
+            predecessors = list(G.predecessors(node_id)) if node_id in G else []
+            successors = list(G.successors(node_id)) if node_id in G else []
             
-            # Spread nodes horizontally within each layer
-            total_width = max(1200, len(layer) * 180)
-            x_spacing = total_width / (len(layer) + 1)
+            # Create a signature based on connection patterns
+            pred_sig = tuple(sorted(predecessors))
+            succ_sig = tuple(sorted(successors))
+            signature = (pred_sig, succ_sig)
             
-            for i, node in enumerate(layer):
-                x = (i + 1) * x_spacing - total_width / 2
-                node.setPos(x, y)
+            if signature not in node_groups:
+                node_groups[signature] = []
+            node_groups[signature].append(node_id)
+        
+        # Convert groups to sub-tiers, splitting large groups
+        sub_tiers = []
+        for group in node_groups.values():
+            if len(group) <= MAX_NODES_PER_ROW:
+                sub_tiers.append(group)
+            else:
+                # Split large groups into multiple sub-tiers
+                for i in range(0, len(group), MAX_NODES_PER_ROW):
+                    sub_tiers.append(group[i:i + MAX_NODES_PER_ROW])
+        
+        return sub_tiers if sub_tiers else [layer]
+    
+    def _simple_sub_tier_split(self, layer):
+        """Simple fallback sub-tier splitting when no graph data available."""
+        MAX_NODES_PER_ROW = 10  # Use same constant
+        sub_tiers = []
+        for i in range(0, len(layer), MAX_NODES_PER_ROW):
+            sub_tiers.append(layer[i:i + MAX_NODES_PER_ROW])
+        return sub_tiers
     
     def _apply_topological_layout(self, nodes):
         """Simple topological sort layout."""

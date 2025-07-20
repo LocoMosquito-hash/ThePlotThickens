@@ -368,7 +368,7 @@ class RenpyFlowMapper(QMainWindow):
         # Load the flow graph into the visualizer
         # Handle both old and new visualizer interfaces
         if hasattr(self.visualizer, 'load_flow_graph'):
-            self.visualizer.load_flow_graph(analysis_data)
+        self.visualizer.load_flow_graph(analysis_data)
         elif hasattr(self.visualizer, 'load_flow_data'):
             # Convert analysis_data to VisualizationData format if needed
             self.visualizer.load_flow_data(analysis_data)
