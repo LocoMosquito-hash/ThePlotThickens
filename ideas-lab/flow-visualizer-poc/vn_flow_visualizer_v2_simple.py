@@ -479,7 +479,7 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         # Choice buttons are automatically positioned relative to their parent containers
     
     def _apply_dot_like_layout(self, nodes):
-        """DOT-like hierarchical layout using proper Sugiyama framework."""
+        """DOT-like hierarchical layout using proper longest path algorithm for narrative depth."""
         import networkx as nx
         
         # Build NetworkX graph from visualization connections
@@ -490,12 +490,102 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             G.add_node(node.vis_node.node_id, node_obj=node, node_type=node.vis_node.node_type)
         
         # Add edges from connections
+        edges_added = 0
+        print(f"🐛 DEBUG: Processing {len(self.connections)} connections...")
+        
+        # Build a map of all connections including filtered nodes
+        all_connections = {}
         for connection in self.connections:
             if hasattr(connection, 'source_node') and hasattr(connection, 'target_node'):
-                source_id = connection.source_node.vis_node.node_id
-                target_id = connection.target_node.vis_node.node_id
-                if source_id in G and target_id in G:
-                    G.add_edge(source_id, target_id)
+                source_node = connection.source_node
+                target_node = connection.target_node
+                
+                if source_node and target_node:
+                    source_id = source_node.vis_node.node_id if hasattr(source_node, 'vis_node') else str(source_node)
+                    target_id = target_node.vis_node.node_id if hasattr(target_node, 'vis_node') else str(target_node)
+                    
+                    if source_id not in all_connections:
+                        all_connections[source_id] = []
+                    all_connections[source_id].append(target_id)
+        
+        # Create node lookup for all nodes (including filtered ones)
+        all_nodes_lookup = {}
+        if hasattr(self, 'all_visual_nodes'):
+            for node in self.all_visual_nodes:
+                all_nodes_lookup[node.vis_node.node_id] = node
+        
+        for i, connection in enumerate(self.connections):
+            print(f"🐛   Connection {i}: {type(connection).__name__}")
+            
+            # Check if connection has expected attributes
+            if hasattr(connection, 'source_node') and hasattr(connection, 'target_node'):
+                source_node = connection.source_node
+                target_node = connection.target_node
+                
+                if source_node and target_node:
+                    source_id = source_node.vis_node.node_id if hasattr(source_node, 'vis_node') else str(source_node)
+                    target_id = target_node.vis_node.node_id if hasattr(target_node, 'vis_node') else str(target_node)
+                    
+                    print(f"🐛     Source: {source_id}")
+                    print(f"🐛     Target: {target_id}")
+                    
+                    # Check if both nodes are in our graph (top-level nodes)
+                    if source_id in G and target_id in G:
+                        G.add_edge(source_id, target_id)
+                        edges_added += 1
+                        print(f"🐛     ✅ Added edge: {source_id} → {target_id}")
+                    else:
+                        # SPECIAL CASE: Handle connections through filtered choice buttons
+                        source_in_graph = source_id in G
+                        target_in_graph = target_id in G
+                        
+                        print(f"🐛     ❌ Skipped: source_in_G={source_in_graph}, target_in_G={target_in_graph}")
+                        
+                        # If source is in graph but target is not, try to find indirect path
+                        if source_in_graph and not target_in_graph:
+                            # Source is a menu, target is likely a choice button
+                            # Find what the choice button connects to
+                            if target_id in all_connections:
+                                for indirect_target in all_connections[target_id]:
+                                    if indirect_target in G:
+                                        G.add_edge(source_id, indirect_target)
+                                        edges_added += 1
+                                        print(f"🐛     ⚡ Added INDIRECT edge: {source_id} → {indirect_target} (via {target_id})")
+                        
+                        # If source is not in graph but target is, try to find the menu that contains this choice
+                        elif not source_in_graph and target_in_graph:
+                            # Source is likely a choice button, find its parent menu
+                            if 'choice' in source_id:
+                                # Extract menu name (e.g., "start_menu_0_choice_0" → "start_menu_0")
+                                menu_parts = source_id.split('_choice_')
+                                if len(menu_parts) > 1:
+                                    parent_menu = menu_parts[0]
+                                    if parent_menu in G:
+                                        G.add_edge(parent_menu, target_id)
+                                        edges_added += 1
+                                        print(f"🐛     ⚡ Added PARENT edge: {parent_menu} → {target_id} (via {source_id})")
+                else:
+                    print(f"🐛     ❌ Skipped: missing source or target node")
+            else:
+                print(f"🐛     ❌ Skipped: missing source_node or target_node attributes")
+                # Check what attributes it actually has
+                attrs = [attr for attr in dir(connection) if not attr.startswith('_')]
+                print(f"🐛     Available attributes: {attrs[:10]}...")  # Show first 10
+        
+        # 🐛 DEBUG: Check graph structure
+        print(f"🐛 DEBUG: Graph has {len(G.nodes())} nodes and {len(G.edges())} edges")
+        print(f"🐛 DEBUG: Added {edges_added} edges from {len(self.connections)} connections")
+        
+        # Show each node's in-degree
+        for node_id in G.nodes():
+            in_degree = G.in_degree(node_id)
+            out_degree = G.out_degree(node_id)
+            print(f"🐛   {node_id}: in={in_degree}, out={out_degree}")
+        
+        # Show all edges
+        print(f"🐛 All edges:")
+        for source, target in G.edges():
+            print(f"🐛   {source} → {target}")
         
         # If graph is empty or has no edges, fall back to simple positioning
         if len(G.nodes()) == 0:
@@ -507,59 +597,108 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                 node.setPos(i * 200, 0)
             return
         
-        # STEP 1: Find start nodes (Visual Start or actual entry points)
-        start_nodes = []
+        # STEP 1: Find source nodes (nodes with no incoming edges)
+        source_nodes = []
         
         # Priority 1: Visual Start node
         for node_id in G.nodes():
             if node_id == '__VISUAL_START__':
-                start_nodes = [node_id]
+                source_nodes = [node_id]
                 break
         
         # Priority 2: Nodes with no incoming edges
-        if not start_nodes:
-            start_nodes = [n for n in G.nodes() if G.in_degree(n) == 0]
+        if not source_nodes:
+            source_nodes = [n for n in G.nodes() if G.in_degree(n) == 0]
         
         # Priority 3: Nodes with 'start' in name
-        if not start_nodes:
-            start_nodes = [n for n in G.nodes() if 'start' in n.lower()]
+        if not source_nodes:
+            source_nodes = [n for n in G.nodes() if 'start' in n.lower()]
         
         # Fallback: First node
-        if not start_nodes:
-            start_nodes = [list(G.nodes())[0]]
+        if not source_nodes:
+            source_nodes = [list(G.nodes())[0]]
         
-        # STEP 2: Compute hierarchical layers using topological sort from start nodes
-        try:
-            layers = self._compute_hierarchical_layers(G, start_nodes)
-        except:
-            # Fallback to simple layering if complex graph
-            layers = self._simple_layer_assignment(G, start_nodes)
+        print(f"🐛 Source nodes identified: {source_nodes}")
         
-        # Store graph for sub-tier analysis
+        # STEP 2: Compute hierarchical layers using LONGEST PATH algorithm
+        layers = self._compute_longest_path_layers(G, source_nodes)
+        
+        # Store graph for potential debugging
         self._current_graph = G
         
-        # STEP 3: Position nodes in clear hierarchical tiers with sub-tier branching
-        self._position_nodes_in_layers(layers, nodes)
+        # STEP 3: Position nodes in clear hierarchical narrative depth
+        self._position_nodes_in_narrative_layers(layers, nodes)
         
-        print(f"✅ Applied dot-like layout: {len(layers)} layers, max width: {max(len(layer) for layer in layers) if layers else 0}")
+        print(f"✅ Applied LONGEST PATH layout: {len(layers)} narrative layers, max width: {max(len(layer) for layer in layers) if layers else 0}")
     
-    def _compute_hierarchical_layers(self, G, start_nodes):
-        """Compute proper hierarchical layers using modified BFS from start nodes."""
+    def _compute_longest_path_layers(self, G, source_nodes):
+        """
+        Compute proper narrative layers using longest path from sources.
+        Each node's layer = length of longest path from any source to that node.
+        This ensures proper parent-child hierarchy where parents ALWAYS appear before children.
+        """
+        import networkx as nx
+        
+        # Check if graph is acyclic (required for longest path)
+        if not nx.is_directed_acyclic_graph(G):
+            print("⚠️ Warning: Graph has cycles, falling back to simple topological sort")
+            return self._fallback_topological_layers(G, source_nodes)
+        
+        # Initialize all nodes with distance 0
+        longest_distances = {node: 0 for node in G.nodes()}
+        
+        # Set source nodes to distance 0
+        for source in source_nodes:
+            longest_distances[source] = 0
+        
+        # Get topological order to process nodes correctly
+        try:
+            topo_order = list(nx.topological_sort(G))
+        except:
+            print("⚠️ Warning: Failed to get topological order, using simple DFS")
+            return self._fallback_topological_layers(G, source_nodes)
+        
+        # Process nodes in topological order to compute longest paths
+        for node in topo_order:
+            # For each successor of this node
+            for successor in G.successors(node):
+                # Update successor's distance if we found a longer path
+                new_distance = longest_distances[node] + 1
+                if new_distance > longest_distances[successor]:
+                    longest_distances[successor] = new_distance
+        
+        # Group nodes by their longest path distance (this becomes their layer)
+        max_distance = max(longest_distances.values()) if longest_distances else 0
+        layers = [[] for _ in range(max_distance + 1)]
+        
+        for node, distance in longest_distances.items():
+            layers[distance].append(node)
+        
+        # Remove empty layers
+        layers = [layer for layer in layers if layer]
+        
+        print(f"🎯 Computed narrative layers using LONGEST PATH:")
+        for i, layer in enumerate(layers):
+            print(f"   Layer {i}: {len(layer)} nodes - {layer[:5]}{'...' if len(layer) > 5 else ''}")
+        
+        return layers
+    
+    def _fallback_topological_layers(self, G, source_nodes):
+        """Fallback layering using simple DFS from sources."""
         layers = []
         visited = set()
-        current_layer = set(start_nodes)
+        current_layer = set(source_nodes)
         
-        # Layer 0: Start nodes
+        # Layer 0: Source nodes
         if current_layer:
             layers.append(list(current_layer))
             visited.update(current_layer)
         
-        # Continue layering using BFS approach
+        # Continue layering using BFS approach (only as fallback)
         while current_layer:
             next_layer = set()
             
             for node in current_layer:
-                # Add all unvisited successors to next layer
                 for successor in G.successors(node):
                     if successor not in visited:
                         next_layer.add(successor)
@@ -578,8 +717,47 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         
         return layers
     
+    def _position_nodes_in_narrative_layers(self, layers, nodes):
+        """Position nodes in clear narrative hierarchy without artificial row wrapping."""
+        if not layers:
+            return
+        
+        # Create node lookup
+        node_lookup = {node.vis_node.node_id: node for node in nodes}
+        
+        # Layout parameters for clean narrative flow
+        LAYER_HEIGHT = 250  # Generous vertical spacing between narrative layers
+        NODE_WIDTH = 200    # Horizontal spacing between nodes
+        # NO MORE MAX_NODES_PER_ROW - let narrative depth dictate layout!
+        
+        for layer_idx, layer in enumerate(layers):
+            y_pos = layer_idx * LAYER_HEIGHT
+            
+            # Calculate total width needed for this layer
+            nodes_in_layer = len(layer)
+            total_layer_width = (nodes_in_layer - 1) * NODE_WIDTH if nodes_in_layer > 1 else 0
+            start_x = -total_layer_width / 2
+            
+            # Position each node in this narrative layer
+            for i, node_id in enumerate(layer):
+                if node_id not in node_lookup:
+                    continue
+                
+                node = node_lookup[node_id]
+                
+                # Simple horizontal positioning - no artificial constraints
+                x = start_x + i * NODE_WIDTH
+                y = y_pos
+                
+                node.setPos(x, y)
+                
+        print(f"✅ Positioned {len(nodes)} nodes across {len(layers)} narrative layers")
+        print(f"   Layer heights: {[len(layer) for layer in layers]}")
+    
     def _simple_layer_assignment(self, G, start_nodes):
-        """Simple fallback layer assignment."""
+        """Simple fallback layer assignment by node type (DEPRECATED - only for emergencies)."""
+        print("⚠️ Using deprecated simple layer assignment - this may not respect narrative hierarchy!")
+        
         layers = []
         
         # Group by node type as basic layering
@@ -601,107 +779,6 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             layers.append(others)
         
         return layers
-    
-    def _position_nodes_in_layers(self, layers, nodes):
-        """Position nodes in clear hierarchical layers with sub-tier branching."""
-        if not layers:
-            return
-        
-        # Create node lookup
-        node_lookup = {node.vis_node.node_id: node for node in nodes}
-        
-        # Layout parameters
-        LAYER_HEIGHT = 200  # Vertical spacing between layers
-        NODE_WIDTH = 180    # Horizontal spacing between nodes
-        MAX_NODES_PER_ROW = 10  # Maximum nodes per row before wrapping
-        SUB_TIER_OFFSET = 80   # Vertical offset for sub-tiers within same level
-        
-        for layer_idx, layer in enumerate(layers):
-            y_base = layer_idx * LAYER_HEIGHT
-            
-            # Detect branching patterns within this layer
-            sub_tiers = self._create_sub_tiers(layer, layer_idx, layers)
-            
-            for sub_tier_idx, sub_tier in enumerate(sub_tiers):
-                y_tier = y_base + (sub_tier_idx * SUB_TIER_OFFSET)
-                
-                # Calculate how many rows we need for this sub-tier
-                nodes_in_tier = len(sub_tier)
-                
-                for i, node_id in enumerate(sub_tier):
-                    if node_id not in node_lookup:
-                        continue
-                    
-                    node = node_lookup[node_id]
-                    
-                    # Calculate row and column
-                    row = i // MAX_NODES_PER_ROW
-                    col = i % MAX_NODES_PER_ROW
-                    nodes_in_row = min(MAX_NODES_PER_ROW, nodes_in_tier - row * MAX_NODES_PER_ROW)
-                    
-                    # Center the row
-                    total_row_width = (nodes_in_row - 1) * NODE_WIDTH
-                    start_x = -total_row_width / 2
-                    
-                    x = start_x + col * NODE_WIDTH
-                    y = y_tier + row * (LAYER_HEIGHT * 0.2)  # Slight offset for multiple rows
-                    
-                    node.setPos(x, y)
-    
-    def _create_sub_tiers(self, layer, layer_idx, all_layers):
-        """Create sub-tiers within a layer for better branching visualization."""
-        MAX_NODES_PER_ROW = 10  # Use same constant
-        if len(layer) <= MAX_NODES_PER_ROW:
-            # Small layer, no need for sub-tiers
-            return [layer]
-        
-        # Try to group nodes that have common predecessors or successors
-        # This creates natural branching sub-tiers
-        
-        # Simple approach: group by node type first, then split large groups
-        node_groups = {}
-        
-        # Build graph to analyze connections (reuse if available)
-        if hasattr(self, '_current_graph'):
-            G = self._current_graph
-        else:
-            # Fallback: group by node type
-            return self._simple_sub_tier_split(layer)
-        
-        # Group nodes by their connection patterns
-        for node_id in layer:
-            # Get predecessors and successors
-            predecessors = list(G.predecessors(node_id)) if node_id in G else []
-            successors = list(G.successors(node_id)) if node_id in G else []
-            
-            # Create a signature based on connection patterns
-            pred_sig = tuple(sorted(predecessors))
-            succ_sig = tuple(sorted(successors))
-            signature = (pred_sig, succ_sig)
-            
-            if signature not in node_groups:
-                node_groups[signature] = []
-            node_groups[signature].append(node_id)
-        
-        # Convert groups to sub-tiers, splitting large groups
-        sub_tiers = []
-        for group in node_groups.values():
-            if len(group) <= MAX_NODES_PER_ROW:
-                sub_tiers.append(group)
-            else:
-                # Split large groups into multiple sub-tiers
-                for i in range(0, len(group), MAX_NODES_PER_ROW):
-                    sub_tiers.append(group[i:i + MAX_NODES_PER_ROW])
-        
-        return sub_tiers if sub_tiers else [layer]
-    
-    def _simple_sub_tier_split(self, layer):
-        """Simple fallback sub-tier splitting when no graph data available."""
-        MAX_NODES_PER_ROW = 10  # Use same constant
-        sub_tiers = []
-        for i in range(0, len(layer), MAX_NODES_PER_ROW):
-            sub_tiers.append(layer[i:i + MAX_NODES_PER_ROW])
-        return sub_tiers
     
     def _apply_topological_layout(self, nodes):
         """Simple topological sort layout."""
