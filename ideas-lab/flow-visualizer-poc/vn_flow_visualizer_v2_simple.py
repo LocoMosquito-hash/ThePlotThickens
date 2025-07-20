@@ -491,6 +491,9 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         
         # Add edges from connections (with debug info)
         edges_added = 0
+        print(f"🐛 DEBUG: Processing {len(self.connections)} connections...")
+        
+        # Build a map of all connections including filtered nodes
         all_connections = {}
         for connection in self.connections:
             if hasattr(connection, 'source_node') and hasattr(connection, 'target_node'):
@@ -621,11 +624,12 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         # Find source nodes (SCCs with no incoming edges)
         source_sccs = [scc for scc in condensation_graph.nodes() if condensation_graph.in_degree(scc) == 0]
         
+        # Fallback: First node
         if not source_sccs:
-            # If no sources, pick the first SCC
             source_sccs = [list(condensation_graph.nodes())[0]]
         
-        print(f"🎯 Source SCCs: {source_sccs} (containing {sum(len(scc_to_nodes.get(scc, [])) for scc in source_sccs)} nodes)")
+        print(f"🐛 Source SCCs: {source_sccs} (containing {sum(len(scc_to_nodes.get(scc, [])) for scc in source_sccs)} nodes)")
+        print(f"🐛 Total nodes with in_degree=0: {len([n for n in condensation_graph.nodes() if condensation_graph.in_degree(n) == 0])}")
         
         # Compute longest path distances for each SCC
         scc_distances = {}
