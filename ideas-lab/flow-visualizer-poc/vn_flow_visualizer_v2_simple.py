@@ -479,7 +479,7 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         # Choice buttons are automatically positioned relative to their parent containers
     
     def _apply_dot_like_layout(self, nodes):
-        """DOT-like hierarchical layout using proper longest path algorithm for narrative depth."""
+        """DOT-like hierarchical layout with cycle detection and SCC handling."""
         import networkx as nx
         
         # Build NetworkX graph from visualization connections
@@ -489,11 +489,8 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         for node in nodes:
             G.add_node(node.vis_node.node_id, node_obj=node, node_type=node.vis_node.node_type)
         
-        # Add edges from connections
+        # Add edges from connections (with debug info)
         edges_added = 0
-        print(f"🐛 DEBUG: Processing {len(self.connections)} connections...")
-        
-        # Build a map of all connections including filtered nodes
         all_connections = {}
         for connection in self.connections:
             if hasattr(connection, 'source_node') and hasattr(connection, 'target_node'):
@@ -508,9 +505,8 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                         all_connections[source_id] = []
                     all_connections[source_id].append(target_id)
         
-        for i, connection in enumerate(self.connections):
-            print(f"🐛   Connection {i}: {type(connection).__name__}")
-            
+        # Build graph with indirect connections through filtered choice buttons
+        for connection in self.connections:
             if hasattr(connection, 'source_node') and hasattr(connection, 'target_node'):
                 source_node = connection.source_node
                 target_node = connection.target_node
@@ -519,75 +515,33 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                     source_id = source_node.vis_node.node_id if hasattr(source_node, 'vis_node') else str(source_node)
                     target_id = target_node.vis_node.node_id if hasattr(target_node, 'vis_node') else str(target_node)
                     
-                    print(f"🐛     Source: {source_id}")
-                    print(f"🐛     Target: {target_id}")
-                    
                     # Check if both nodes are in our graph (top-level nodes)
                     if source_id in G and target_id in G:
                         G.add_edge(source_id, target_id)
                         edges_added += 1
-                        print(f"🐛     ✅ Added edge: {source_id} → {target_id}")
                     else:
-                        # SPECIAL CASE: Handle connections through filtered choice buttons
+                        # Handle connections through filtered choice buttons
                         source_in_graph = source_id in G
                         target_in_graph = target_id in G
                         
-                        print(f"🐛     ❌ Skipped: source_in_G={source_in_graph}, target_in_G={target_in_graph}")
-                        
                         # If source is in graph but target is not, try to find indirect path
                         if source_in_graph and not target_in_graph:
-                            # Source is a menu, target is likely a choice button
-                            # Find what the choice button connects to
                             if target_id in all_connections:
                                 for indirect_target in all_connections[target_id]:
                                     if indirect_target in G:
                                         G.add_edge(source_id, indirect_target)
                                         edges_added += 1
-                                        print(f"🐛     ⚡ Added INDIRECT edge: {source_id} → {indirect_target} (via {target_id})")
                         
-                        # If source is not in graph but target is, try to find the menu that contains this choice
+                        # If source is not in graph but target is, find parent menu
                         elif not source_in_graph and target_in_graph:
-                            # Source is likely a choice button, find its parent menu
                             if 'choice' in source_id:
-                                # Extract menu name (e.g., "start_menu_0_choice_0" → "start_menu_0")
                                 menu_parts = source_id.split('_choice_')
                                 if len(menu_parts) > 1:
                                     parent_menu = menu_parts[0]
                                     if parent_menu in G:
                                         G.add_edge(parent_menu, target_id)
                                         edges_added += 1
-                                        print(f"🐛     ⚡ Added PARENT edge: {parent_menu} → {target_id} (via {source_id})")
-                else:
-                    print(f"🐛     ❌ Skipped: missing source or target node")
-            else:
-                print(f"🐛     ❌ Skipped: missing source_node or target_node attributes")
-                # Check what attributes it actually has
-                attrs = [attr for attr in dir(connection) if not attr.startswith('_')]
-                print(f"🐛     Available attributes: {attrs[:10]}...")  # Show first 10
         
-        # 🐛 DEBUG: Check graph structure
-        print(f"🐛 DEBUG: Graph has {len(G.nodes())} nodes and {len(G.edges())} edges")
-        print(f"🐛 DEBUG: Added {edges_added} edges from {len(self.connections)} connections")
-        
-        # Show each node's in-degree for first 20 nodes
-        print(f"🐛 Node degrees (first 20):")
-        for i, node_id in enumerate(list(G.nodes())[:20]):
-            in_degree = G.in_degree(node_id)
-            out_degree = G.out_degree(node_id)
-            print(f"🐛   {node_id}: in={in_degree}, out={out_degree}")
-        
-        if len(G.nodes()) > 20:
-            print(f"🐛   ... and {len(G.nodes()) - 20} more nodes")
-        
-        # Show all edges for first 20 edges
-        print(f"🐛 All edges (first 20):")
-        for i, (source, target) in enumerate(list(G.edges())[:20]):
-            print(f"🐛   {source} → {target}")
-        
-        if len(G.edges()) > 20:
-            print(f"🐛   ... and {len(G.edges()) - 20} more edges")
-        
-        # Success summary
         print(f"✅ Built narrative graph: {len(G.nodes())} nodes, {len(G.edges())} edges ({edges_added}/{len(self.connections)} connections)")
         
         # If graph is empty or has no edges, fall back to simple positioning
@@ -600,163 +554,167 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                 node.setPos(i * 200, 0)
             return
         
-        # STEP 1: Find source nodes (nodes with no incoming edges)
-        source_nodes = []
+        # 🎯 STEP 1: DETECT CYCLES AND STRONGLY CONNECTED COMPONENTS
+        print(f"🔍 Detecting cycles and SCCs...")
         
-        # Priority 1: Visual Start node
-        for node_id in G.nodes():
-            if node_id == '__VISUAL_START__':
-                source_nodes = [node_id]
-                break
+        # Check if graph is acyclic using NetworkX
+        is_dag = nx.is_directed_acyclic_graph(G)
+        print(f"📊 Graph is DAG: {is_dag}")
         
-        # Priority 2: Nodes with no incoming edges
-        if not source_nodes:
-            source_nodes = [n for n in G.nodes() if G.in_degree(n) == 0]
+        if not is_dag:
+            # Find all cycles for detailed analysis
+            try:
+                cycles = list(nx.simple_cycles(G))
+                print(f"🔴 Found {len(cycles)} cycles:")
+                for i, cycle in enumerate(cycles[:5]):  # Show first 5 cycles
+                    cycle_str = " → ".join(cycle) + f" → {cycle[0]}"
+                    print(f"   Cycle {i+1}: {cycle_str}")
+                if len(cycles) > 5:
+                    print(f"   ... and {len(cycles) - 5} more cycles")
+            except:
+                print(f"🔴 Graph has cycles (too complex to enumerate)")
         
-        # Priority 3: Nodes with 'start' in name
-        if not source_nodes:
-            source_nodes = [n for n in G.nodes() if 'start' in n.lower()]
+        # Find Strongly Connected Components
+        sccs = list(nx.strongly_connected_components(G))
+        non_trivial_sccs = [scc for scc in sccs if len(scc) > 1]
         
-        # Fallback: First node
-        if not source_nodes:
-            source_nodes = [list(G.nodes())[0]]
+        print(f"🔗 Found {len(sccs)} SCCs ({len(non_trivial_sccs)} non-trivial):")
+        for i, scc in enumerate(non_trivial_sccs[:3]):  # Show first 3 SCCs
+            scc_list = list(scc)
+            print(f"   SCC {i+1}: {scc_list[:5]}{'...' if len(scc_list) > 5 else ''} ({len(scc_list)} nodes)")
         
-        print(f"🐛 Source nodes identified: {source_nodes}")
-        print(f"🐛 Total nodes with in_degree=0: {len([n for n in G.nodes() if G.in_degree(n) == 0])}")
+        # 🎯 STEP 2: CREATE CONDENSATION GRAPH (SCC-based hierarchy)
+        print(f"🏗️ Creating SCC-based hierarchical layout...")
         
-        # STEP 2: Compute hierarchical layers using LONGEST PATH algorithm
-        layers = self._compute_longest_path_layers(G, source_nodes)
+        # Create condensation graph where each SCC becomes a super-node
+        condensation_graph = nx.condensation(G)
+        print(f"📈 Condensation graph: {len(condensation_graph.nodes())} super-nodes, {len(condensation_graph.edges())} edges")
         
-        # Store graph for potential debugging
-        self._current_graph = G
+        # The condensation graph is always a DAG, so we can use longest path on it
+        if len(condensation_graph.edges()) > 0:
+            # Map each original node to its SCC
+            node_to_scc = {}
+            scc_to_nodes = {}
+            for scc_id, scc_data in condensation_graph.nodes(data=True):
+                scc_nodes = scc_data['members']
+                scc_to_nodes[scc_id] = list(scc_nodes)
+                for node in scc_nodes:
+                    node_to_scc[node] = scc_id
+            
+            # Compute longest path on condensation graph
+            scc_layers = self._compute_longest_path_on_condensation(condensation_graph, scc_to_nodes)
+            
+            # Position nodes within each SCC and across layers
+            self._position_nodes_with_scc_layout(scc_layers, scc_to_nodes, nodes, G)
+            
+        else:
+            # Single SCC or disconnected - use simple layout
+            print("⚠️ Using fallback layout for disconnected graph")
+            self._apply_grid_layout(nodes)
         
-        # STEP 3: Position nodes in clear hierarchical narrative depth
-        self._position_nodes_in_narrative_layers(layers, nodes)
-        
-        print(f"✅ Applied LONGEST PATH layout: {len(layers)} narrative layers, max width: {max(len(layer) for layer in layers) if layers else 0}")
-    
-    def _compute_longest_path_layers(self, G, source_nodes):
-        """
-        Compute proper narrative layers using longest path from sources.
-        Each node's layer = length of longest path from any source to that node.
-        This ensures proper parent-child hierarchy where parents ALWAYS appear before children.
-        """
+        print(f"✅ Applied SCC-aware hierarchical layout successfully!")
+
+    def _compute_longest_path_on_condensation(self, condensation_graph, scc_to_nodes):
+        """Compute longest path layers on the condensation graph (which is always a DAG)."""
         import networkx as nx
         
-        # Check if graph is acyclic (required for longest path)
-        if not nx.is_directed_acyclic_graph(G):
-            print("⚠️ Warning: Graph has cycles, falling back to simple topological sort")
-            return self._fallback_topological_layers(G, source_nodes)
+        # Find source nodes (SCCs with no incoming edges)
+        source_sccs = [scc for scc in condensation_graph.nodes() if condensation_graph.in_degree(scc) == 0]
         
-        # Initialize all nodes with distance 0
-        longest_distances = {node: 0 for node in G.nodes()}
+        if not source_sccs:
+            # If no sources, pick the first SCC
+            source_sccs = [list(condensation_graph.nodes())[0]]
         
-        # Set source nodes to distance 0
-        for source in source_nodes:
-            longest_distances[source] = 0
+        print(f"🎯 Source SCCs: {source_sccs} (containing {sum(len(scc_to_nodes.get(scc, [])) for scc in source_sccs)} nodes)")
         
-        # Get topological order to process nodes correctly
+        # Compute longest path distances for each SCC
+        scc_distances = {}
+        for scc in condensation_graph.nodes():
+            scc_distances[scc] = 0
+        
+        # Process SCCs in topological order
         try:
-            topo_order = list(nx.topological_sort(G))
+            topo_order = list(nx.topological_sort(condensation_graph))
+            
+            for scc in topo_order:
+                for successor_scc in condensation_graph.successors(scc):
+                    scc_distances[successor_scc] = max(scc_distances[successor_scc], scc_distances[scc] + 1)
+            
+            # Group SCCs by distance (layer)
+            max_distance = max(scc_distances.values()) if scc_distances else 0
+            layers = [[] for _ in range(max_distance + 1)]
+            
+            for scc, distance in scc_distances.items():
+                layers[distance].append(scc)
+            
+            print(f"🎯 SCC layers: {[len(layer) for layer in layers]}")
+            return layers
+            
         except:
-            print("⚠️ Warning: Failed to get topological order, using simple DFS")
-            return self._fallback_topological_layers(G, source_nodes)
-        
-        # Process nodes in topological order to compute longest paths
-        for node in topo_order:
-            # For each successor of this node
-            for successor in G.successors(node):
-                # Update successor's distance if we found a longer path
-                new_distance = longest_distances[node] + 1
-                if new_distance > longest_distances[successor]:
-                    longest_distances[successor] = new_distance
-        
-        # Group nodes by their longest path distance (this becomes their layer)
-        max_distance = max(longest_distances.values()) if longest_distances else 0
-        layers = [[] for _ in range(max_distance + 1)]
-        
-        for node, distance in longest_distances.items():
-            layers[distance].append(node)
-        
-        # Remove empty layers
-        layers = [layer for layer in layers if layer]
-        
-        print(f"🎯 Computed narrative layers using LONGEST PATH:")
-        for i, layer in enumerate(layers):
-            print(f"   Layer {i}: {len(layer)} nodes - {layer[:5]}{'...' if len(layer) > 5 else ''}")
-        
-        return layers
-    
-    def _fallback_topological_layers(self, G, source_nodes):
-        """Fallback layering using simple DFS from sources."""
-        layers = []
-        visited = set()
-        current_layer = set(source_nodes)
-        
-        # Layer 0: Source nodes
-        if current_layer:
-            layers.append(list(current_layer))
-            visited.update(current_layer)
-        
-        # Continue layering using BFS approach (only as fallback)
-        while current_layer:
-            next_layer = set()
-            
-            for node in current_layer:
-                for successor in G.successors(node):
-                    if successor not in visited:
-                        next_layer.add(successor)
-            
-            if next_layer:
-                layers.append(list(next_layer))
-                visited.update(next_layer)
-                current_layer = next_layer
-            else:
-                break
-        
-        # Add any remaining unvisited nodes to final layer
-        remaining = set(G.nodes()) - visited
-        if remaining:
-            layers.append(list(remaining))
-        
-        return layers
-    
-    def _position_nodes_in_narrative_layers(self, layers, nodes):
-        """Position nodes in clear narrative hierarchy without artificial row wrapping."""
-        if not layers:
-            return
+            # Fallback if anything goes wrong
+            print("⚠️ Fallback: grouping all SCCs in single layer")
+            return [list(condensation_graph.nodes())]
+
+    def _position_nodes_with_scc_layout(self, scc_layers, scc_to_nodes, nodes, original_graph):
+        """Position nodes using SCC-aware hierarchical layout."""
         
         # Create node lookup
         node_lookup = {node.vis_node.node_id: node for node in nodes}
         
-        # Layout parameters for clean narrative flow
-        LAYER_HEIGHT = 250  # Generous vertical spacing between narrative layers
-        NODE_WIDTH = 200    # Horizontal spacing between nodes
-        # NO MORE MAX_NODES_PER_ROW - let narrative depth dictate layout!
+        # Layout parameters
+        LAYER_HEIGHT = 300   # Generous spacing between SCC layers
+        NODE_WIDTH = 200     # Horizontal spacing between nodes
+        SCC_SPACING = 100    # Extra spacing between different SCCs in same layer
+        MAX_NODES_PER_ROW = 12  # More nodes per row since we have better hierarchy now
         
-        for layer_idx, layer in enumerate(layers):
-            y_pos = layer_idx * LAYER_HEIGHT
+        for layer_idx, layer_sccs in enumerate(scc_layers):
+            y_base = layer_idx * LAYER_HEIGHT
             
             # Calculate total width needed for this layer
-            nodes_in_layer = len(layer)
-            total_layer_width = (nodes_in_layer - 1) * NODE_WIDTH if nodes_in_layer > 1 else 0
-            start_x = -total_layer_width / 2
+            total_nodes_in_layer = sum(len(scc_to_nodes.get(scc, [])) for scc in layer_sccs)
             
-            # Position each node in this narrative layer
-            for i, node_id in enumerate(layer):
-                if node_id not in node_lookup:
+            x_offset = 0
+            
+            for scc_idx, scc in enumerate(layer_sccs):
+                scc_nodes = scc_to_nodes.get(scc, [])
+                
+                if not scc_nodes:
                     continue
                 
-                node = node_lookup[node_id]
+                # Position nodes within this SCC
+                if len(scc_nodes) == 1:
+                    # Single node - place directly
+                    node_id = scc_nodes[0]
+                    if node_id in node_lookup:
+                        node_lookup[node_id].setPos(x_offset, y_base)
+                        x_offset += NODE_WIDTH
                 
-                # Simple horizontal positioning - no artificial constraints
-                x = start_x + i * NODE_WIDTH
-                y = y_pos
+                elif len(scc_nodes) <= MAX_NODES_PER_ROW:
+                    # Small SCC - arrange in single row
+                    for i, node_id in enumerate(scc_nodes):
+                        if node_id in node_lookup:
+                            node_lookup[node_id].setPos(x_offset + i * NODE_WIDTH, y_base)
+                    x_offset += len(scc_nodes) * NODE_WIDTH + SCC_SPACING
                 
-                node.setPos(x, y)
-                
-        print(f"✅ Positioned {len(nodes)} nodes across {len(layers)} narrative layers")
-        print(f"   Layer heights: {[len(layer) for layer in layers]}")
+                else:
+                    # Large SCC - arrange in compact grid within the SCC
+                    rows = (len(scc_nodes) + MAX_NODES_PER_ROW - 1) // MAX_NODES_PER_ROW
+                    
+                    for i, node_id in enumerate(scc_nodes):
+                        if node_id in node_lookup:
+                            row = i // MAX_NODES_PER_ROW
+                            col = i % MAX_NODES_PER_ROW
+                            
+                            x_pos = x_offset + col * NODE_WIDTH
+                            y_pos = y_base + row * 80  # Compact vertical spacing within SCC
+                            
+                            node_lookup[node_id].setPos(x_pos, y_pos)
+                    
+                    # Update offset for next SCC
+                    scc_width = min(len(scc_nodes), MAX_NODES_PER_ROW) * NODE_WIDTH
+                    x_offset += scc_width + SCC_SPACING
+        
+        print(f"✅ Positioned {len(nodes)} nodes across {len(scc_layers)} SCC layers")
     
     def _simple_layer_assignment(self, G, start_nodes):
         """Simple fallback layer assignment by node type (DEPRECATED - only for emergencies)."""
