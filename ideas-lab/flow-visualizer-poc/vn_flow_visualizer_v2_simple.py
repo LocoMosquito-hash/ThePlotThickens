@@ -508,16 +508,9 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                         all_connections[source_id] = []
                     all_connections[source_id].append(target_id)
         
-        # Create node lookup for all nodes (including filtered ones)
-        all_nodes_lookup = {}
-        if hasattr(self, 'all_visual_nodes'):
-            for node in self.all_visual_nodes:
-                all_nodes_lookup[node.vis_node.node_id] = node
-        
         for i, connection in enumerate(self.connections):
             print(f"🐛   Connection {i}: {type(connection).__name__}")
             
-            # Check if connection has expected attributes
             if hasattr(connection, 'source_node') and hasattr(connection, 'target_node'):
                 source_node = connection.source_node
                 target_node = connection.target_node
@@ -576,16 +569,26 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         print(f"🐛 DEBUG: Graph has {len(G.nodes())} nodes and {len(G.edges())} edges")
         print(f"🐛 DEBUG: Added {edges_added} edges from {len(self.connections)} connections")
         
-        # Show each node's in-degree
-        for node_id in G.nodes():
+        # Show each node's in-degree for first 20 nodes
+        print(f"🐛 Node degrees (first 20):")
+        for i, node_id in enumerate(list(G.nodes())[:20]):
             in_degree = G.in_degree(node_id)
             out_degree = G.out_degree(node_id)
             print(f"🐛   {node_id}: in={in_degree}, out={out_degree}")
         
-        # Show all edges
-        print(f"🐛 All edges:")
-        for source, target in G.edges():
+        if len(G.nodes()) > 20:
+            print(f"🐛   ... and {len(G.nodes()) - 20} more nodes")
+        
+        # Show all edges for first 20 edges
+        print(f"🐛 All edges (first 20):")
+        for i, (source, target) in enumerate(list(G.edges())[:20]):
             print(f"🐛   {source} → {target}")
+        
+        if len(G.edges()) > 20:
+            print(f"🐛   ... and {len(G.edges()) - 20} more edges")
+        
+        # Success summary
+        print(f"✅ Built narrative graph: {len(G.nodes())} nodes, {len(G.edges())} edges ({edges_added}/{len(self.connections)} connections)")
         
         # If graph is empty or has no edges, fall back to simple positioning
         if len(G.nodes()) == 0:
@@ -619,6 +622,7 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             source_nodes = [list(G.nodes())[0]]
         
         print(f"🐛 Source nodes identified: {source_nodes}")
+        print(f"🐛 Total nodes with in_degree=0: {len([n for n in G.nodes() if G.in_degree(n) == 0])}")
         
         # STEP 2: Compute hierarchical layers using LONGEST PATH algorithm
         layers = self._compute_longest_path_layers(G, source_nodes)
