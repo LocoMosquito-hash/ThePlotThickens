@@ -244,9 +244,10 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 if not target_label or target_label == '<return>' or target_label not in flow_graph:
                     continue
                 
-                # Skip flows that go to labels with menus (will be handled by menu container)
-                if flow_graph[target_label].has_menu:
-                    continue
+                # 🚨 FIXED: Allow connections to menu labels! They are valid narrative connections
+                # The old logic incorrectly filtered these out, causing orphaned menu labels
+                # if flow_graph[target_label].has_menu:
+                #     continue  # ❌ This was breaking connections to menu labels!
                 
                 connection_id = f"{label_name}_to_{target_label}_{flow.flow_type}"
                 line_style = self._get_line_style_for_flow_type(flow.flow_type)
@@ -264,7 +265,8 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                     metadata={
                         'file_path': flow.file_path,
                         'line_number': flow.line_number,
-                        'flow_type': flow.flow_type
+                        'flow_type': flow.flow_type,
+                        'connects_to_menu_label': flow_graph[target_label].has_menu if target_label in flow_graph else False
                     }
                 )
                 connections.append(connection)
