@@ -249,6 +249,10 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 # if flow_graph[target_label].has_menu:
                 #     continue  # ❌ This was breaking connections to menu labels!
                 
+                # DEBUG: Track afternikkidate connections specifically
+                if label_name == 'afternikkidate' or target_label == 'v14beforecourt':
+                    print(f"[CONNECTION DEBUG] Creating connection: {label_name} → {target_label} (flow_type: {flow.flow_type}, context: {flow.context})")
+                
                 connection_id = f"{label_name}_to_{target_label}_{flow.flow_type}"
                 line_style = self._get_line_style_for_flow_type(flow.flow_type)
                 color_hint = self._get_color_for_flow_type(flow.flow_type)

@@ -1029,10 +1029,12 @@ class RenpyParser:
     
     def _find_explicit_flows(self, project_path: str) -> List[LabelFlow]:
         """
-        Find explicit flows (jumps, calls, returns, menu choices) - existing logic.
+        Find explicit flows (jumps, calls, returns, menu choices) - enhanced with conditional jump detection.
         """
         flows = []
         current_label = None
+        current_label_start_line = None
+        current_file_path = None
         
         rpy_files = self.find_rpy_files(project_path)
         
@@ -1046,8 +1048,20 @@ class RenpyParser:
                 try:
                     with open(file_path, 'r', encoding='latin-1') as file:
                         lines = file.readlines()
-                except Exception:
+                except Exception as e:
+                    print(f"Failed to read {rpy_file}: {e}")
                     continue  # Skip problematic files
+            
+            # Simple debug check for v14point5.rpy
+            if 'v14point5' in rpy_file:
+                print(f"[DEBUG] Processing v14point5.rpy with {len(lines)} lines")
+                afternikkidate_found = False
+                for line_num, line in enumerate(lines, 1):
+                    if 'label afternikkidate' in line:
+                        print(f"[BINGO] Found 'label afternikkidate' at line {line_num} in v14point5.rpy!")
+                        afternikkidate_found = True
+                if not afternikkidate_found:
+                    print(f"[PROBLEM] afternikkidate label NOT found in v14point5.rpy")
             
             for line_num, line in enumerate(lines, 1):
                 stripped_line = line.strip()
@@ -1055,10 +1069,22 @@ class RenpyParser:
                 # Track current label for context
                 label_match = self.patterns['label'].match(line)
                 if label_match:
-                    current_label = label_match.group(1)
+                    label_name = label_match.group(1)
+                    
+                    # Before switching to new label, extract conditional jumps from previous label
+                    if current_label and current_label_start_line and current_file_path:
+                        conditional_flows = self._extract_conditional_jumps(
+                            current_label, current_file_path, current_label_start_line
+                        )
+                        flows.extend(conditional_flows)
+                    
+                    # Set new current label
+                    current_label = label_name
+                    current_label_start_line = line_num - 1  # Convert to 0-based for _extract_conditional_jumps
+                    current_file_path = file_path
                     continue
                 
-                # Find direct jumps and calls
+                # Find direct jumps and calls (existing logic)
                 jump_match = self.patterns['jump'].match(line)
                 if jump_match:
                     flows.append(LabelFlow(
@@ -1088,6 +1114,13 @@ class RenpyParser:
                         file_path=file_path,
                         line_number=line_num
                     ))
+            
+            # Handle the last label in the file
+            if current_label and current_label_start_line and current_file_path:
+                conditional_flows = self._extract_conditional_jumps(
+                    current_label, current_file_path, current_label_start_line
+                )
+                flows.extend(conditional_flows)
         
         # Add flows from menu choices
         menus = self.find_all_menus(project_path)
@@ -1105,7 +1138,81 @@ class RenpyParser:
                     ))
         
         return flows
-    
+
+    def _extract_conditional_jumps(self, label_name: str, file_path: str, start_line: int) -> List[LabelFlow]:
+        """
+        CONDITIONAL JUMP DETECTOR: Extract ALL possible jump targets from conditional blocks.
+        
+        This method performs static analysis to find jump statements in if/elif/else blocks,
+        creating flows for all possible execution paths regardless of variable values.
+        
+        Args:
+            label_name: Name of the label being analyzed
+            file_path: Path to the .rpy file
+            start_line: Starting line number for the label
+            
+        Returns:
+            List of LabelFlow objects for all conditional jumps found
+        """
+        conditional_flows = []
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                lines = file.readlines()
+            
+            # Find the end of this label (next label or end of file)
+            label_end_line = len(lines)
+            for i in range(start_line, len(lines)):
+                line = lines[i].strip()
+                if line.startswith('label ') and i > start_line:
+                    label_end_line = i
+                    break
+            
+            # SIMPLIFIED CONDITIONAL JUMP DETECTION
+            # Scan through the label content for jump statements in conditional blocks
+            i = start_line
+            while i < label_end_line:
+                line = lines[i].strip()
+                
+                # Look for jump statements preceded by if/elif/else  
+                if re.match(r'^\s*jump\s+([a-zA-Z_][a-zA-Z0-9_]*)', line, re.IGNORECASE):
+                    jump_match = re.match(r'^\s*jump\s+([a-zA-Z_][a-zA-Z0-9_]*)', line, re.IGNORECASE)
+                    if jump_match:
+                        target_label = jump_match.group(1)
+                        
+                        # Check if this jump is within a conditional block by looking backwards
+                        is_conditional = False
+                        for j in range(max(0, i - 20), i):  # Look back up to 20 lines
+                            prev_line = lines[j].strip()
+                            if re.match(r'^\s*if\s+', prev_line, re.IGNORECASE):
+                                is_conditional = True
+                                break
+                            elif re.match(r'^\s*elif\s+', prev_line, re.IGNORECASE):
+                                is_conditional = True
+                                break
+                            elif re.match(r'^\s*else\s*:', prev_line, re.IGNORECASE):
+                                is_conditional = True
+                                break
+                        
+                        if is_conditional:
+                            conditional_flows.append(LabelFlow(
+                                source_label=label_name,
+                                target_label=target_label,
+                                flow_type='jump',
+                                file_path=file_path,
+                                line_number=i + 1,
+                                context="conditional_jump",
+                                condition="conditional_statement"
+                            ))
+                            print(f"🔍 CONDITIONAL JUMP DETECTED: {label_name} → {target_label} (simplified detection)")
+                
+                i += 1
+            
+        except Exception as e:
+            print(f"⚠️  Error extracting conditional jumps from {label_name}: {e}")
+        
+        return conditional_flows
+
     def _find_implicit_flows(self, project_path: str, all_labels: List[Dict], explicit_flows: List[LabelFlow]) -> List[LabelFlow]:
         """
         Find implicit flows - labels that fall through to the next label.
