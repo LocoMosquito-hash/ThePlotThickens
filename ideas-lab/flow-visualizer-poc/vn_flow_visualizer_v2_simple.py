@@ -35,52 +35,91 @@ class BezierConnection(QGraphicsPathItem):
     
     def update_path(self):
         """Update the Bezier path and arrow."""
-        # Get anchor points on the edges of nodes
-        source_point = self._get_source_anchor()
-        target_point = self._get_target_anchor()
+        # SAFETY: Guard against invalid states that cause QPainter errors
+        if not self.source_node or not self.target_node:
+            return
         
-        # Create Bezier curve
-        path = QPainterPath()
-        path.moveTo(source_point)
+        # SAFETY: Don't update if nodes are not properly initialized
+        try:
+            source_scene = self.source_node.scene()
+            target_scene = self.target_node.scene()
+            if not source_scene or not target_scene:
+                return
+        except Exception as e:
+            print(f"[ERROR] Failed to get node scenes: {e}")
+            return
         
-        # Calculate control points for smooth downward curve
-        dx = target_point.x() - source_point.x()
-        dy = target_point.y() - source_point.y()
-        
-        # Control points for smooth hierarchical flow (downward curves)
-        control_offset = max(50, abs(dy) * 0.3)  # Minimum curve for readability
-        ctrl1 = QPointF(source_point.x(), source_point.y() + control_offset)
-        ctrl2 = QPointF(target_point.x(), target_point.y() - control_offset)
-        
-        path.cubicTo(ctrl1, ctrl2, target_point)
-        
-        # Add arrowhead at target
-        arrow = self._create_arrowhead(target_point, source_point)
-        path.addPolygon(arrow)
-        
-        self.setPath(path)
+        # SAFETY: Check if graphics items are in a valid state
+        try:
+            # Get anchor points on the edges of nodes
+            source_point = self._get_source_anchor()
+            target_point = self._get_target_anchor()
+            
+            # SAFETY: Validate anchor points
+            if source_point.isNull() or target_point.isNull():
+                return
+            
+            # Create Bezier curve
+            path = QPainterPath()
+            path.moveTo(source_point)
+            
+            # Calculate control points for smooth downward curve
+            dx = target_point.x() - source_point.x()
+            dy = target_point.y() - source_point.y()
+            
+            # Control points for smooth hierarchical flow (downward curves)
+            control_offset = max(50, abs(dy) * 0.3)  # Minimum curve for readability
+            ctrl1 = QPointF(source_point.x(), source_point.y() + control_offset)
+            ctrl2 = QPointF(target_point.x(), target_point.y() - control_offset)
+            
+            path.cubicTo(ctrl1, ctrl2, target_point)
+            
+            # Add arrowhead at target
+            arrow = self._create_arrowhead(target_point, source_point)
+            if not arrow.isEmpty():
+                path.addPolygon(arrow)
+            
+            # SAFETY: Only set path if we're in a valid state
+            try:
+                connection_scene = self.scene()
+                if connection_scene and path.elementCount() > 0:
+                    self.setPath(path)
+            except Exception as e:
+                print(f"[ERROR] Failed to set path on scene: {e}")
+                
+        except Exception as e:
+            # SAFETY: Catch any QPainter-related errors and skip update
+            pass
     
     def _get_source_anchor(self) -> QPointF:
         """Get connection point on source node (bottom edge center for downward flow)."""
-        if self.source_node.parentItem():
-            # For child items, get scene position
-            source_rect = self.source_node.sceneBoundingRect()
-        else:
-            source_rect = self.source_node.boundingRect()
-            source_rect.translate(self.source_node.pos())
-        
-        return QPointF(source_rect.center().x(), source_rect.bottom())
+        try:
+            if self.source_node.parentItem():
+                # For child items, get scene position
+                source_rect = self.source_node.sceneBoundingRect()
+            else:
+                source_rect = self.source_node.boundingRect()
+                source_rect.translate(self.source_node.pos())
+            
+            return QPointF(source_rect.center().x(), source_rect.bottom())
+        except Exception:
+            # Return null point if calculation fails
+            return QPointF()
     
     def _get_target_anchor(self) -> QPointF:
         """Get connection point on target node (top edge center for downward flow)."""
-        if self.target_node.parentItem():
-            # For child items, get scene position
-            target_rect = self.target_node.sceneBoundingRect()
-        else:
-            target_rect = self.target_node.boundingRect()
-            target_rect.translate(self.target_node.pos())
-        
-        return QPointF(target_rect.center().x(), target_rect.top())
+        try:
+            if self.target_node.parentItem():
+                # For child items, get scene position
+                target_rect = self.target_node.sceneBoundingRect()
+            else:
+                target_rect = self.target_node.boundingRect()
+                target_rect.translate(self.target_node.pos())
+            
+            return QPointF(target_rect.center().x(), target_rect.top())
+        except Exception:
+            # Return null point if calculation fails
+            return QPointF()
     
     def _create_arrowhead(self, tip: QPointF, tail: QPointF) -> QPolygonF:
         """Create an arrowhead polygon pointing toward the tip."""
@@ -227,16 +266,28 @@ class SimpleVisualNode(QGraphicsRectItem):
     def itemChange(self, change, value):
         """Override to detect position changes and update connected Bezier curves."""
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
-            # Update all connected Bezier curves when this node moves
-            for connection in self.connected_beziers:
-                connection.update_path()
-            
-            # Also update connections for child nodes (e.g., choice buttons in menu containers)
-            # When a parent moves, children move with it but don't trigger their own itemChange
-            for child in self.childItems():
-                if isinstance(child, SimpleVisualNode):
-                    for child_connection in child.connected_beziers:
-                        child_connection.update_path()
+            # THROTTLE: Only update connections if we're in a valid state and not during layout
+            # This prevents QPainter flooding during rapid position changes
+            try:
+                scene = self.scene()
+                if scene and hasattr(scene, 'views') and scene.views():
+                    try:
+                        # Update all connected Bezier curves when this node moves
+                        for connection in self.connected_beziers:
+                            if connection.scene():  # Only update if connection is still in scene
+                                connection.update_path()
+                        
+                        # Also update connections for child nodes (e.g., choice buttons in menu containers)
+                        # When a parent moves, children move with it but don't trigger their own itemChange
+                        for child in self.childItems():
+                            if isinstance(child, SimpleVisualNode):
+                                for child_connection in child.connected_beziers:
+                                    if child_connection.scene():  # Only update if connection is still in scene
+                                        child_connection.update_path()
+                    except Exception as e:
+                        print(f"[ERROR] Failed to update connections in itemChange: {e}")
+            except Exception as e:
+                print(f"[ERROR] Failed to get scene in itemChange: {e}")
         
         return super().itemChange(change, value)
 
@@ -436,37 +487,80 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
     
     def update_all_connections(self):
         """Update all connection paths after nodes have been moved."""
-        for connection in self.connections:
-            connection.update_path()
+        # SAFETY: Guard against QPainter errors during bulk updates
+        # Handle both scene() method and scene property
+        try:
+            if callable(getattr(self, 'scene', None)):
+                current_scene = self.scene()
+            else:
+                current_scene = getattr(self, 'scene', None)
+            
+            if current_scene is None:
+                print(f"[ERROR] No scene available in update_all_connections")
+                return
+        except Exception as e:
+            print(f"[ERROR] Failed to access scene in update_all_connections: {e}")
+            return
+        
+        # BATCH UPDATE: Disable scene updates during bulk connection updates
+        # This prevents QPainter flooding and improves performance
+        self.setUpdatesEnabled(False)
+        try:
+            for connection in self.connections:
+                try:
+                    # Check if connection has a scene and is still in it
+                    connection_scene = None
+                    if hasattr(connection, 'scene'):
+                        if callable(getattr(connection, 'scene')):
+                            connection_scene = connection.scene()
+                        else:
+                            connection_scene = connection.scene
+                    
+                    if connection_scene:  # Only update connections still in scene
+                        connection.update_path()
+                except Exception as e:
+                    print(f"[ERROR] Failed to update connection {connection}: {e}")
+        except Exception as e:
+            print(f"[ERROR] Failed during bulk connection updates: {e}")
+        finally:
+            # BATCH UPDATE: Re-enable updates
+            self.setUpdatesEnabled(True)
     
     def apply_layout(self, layout_type: str):
         """Apply a layout algorithm based on the selected type."""
         if not self.nodes:
             return
+        
+        # BATCH LAYOUT: Disable updates during layout to prevent QPainter flooding
+        self.setUpdatesEnabled(False)
+        try:
+            # Filter to only include top-level nodes (nodes without parents)
+            # This preserves parent-child visual hierarchy for menu containers and choice buttons
+            top_level_nodes = [node for node in self.nodes.values() if node.parentItem() is None]
+            print(f"🎨 Applying layout: {layout_type} to {len(top_level_nodes)} top-level nodes (filtered from {len(self.nodes)} total)")
             
-        # Filter to only include top-level nodes (nodes without parents)
-        # This preserves parent-child visual hierarchy for menu containers and choice buttons
-        top_level_nodes = [node for node in self.nodes.values() if node.parentItem() is None]
-        print(f"🎨 Applying layout: {layout_type} to {len(top_level_nodes)} top-level nodes (filtered from {len(self.nodes)} total)")
-        
-        if layout_type == "narrative":
-            self._apply_narrative_layout(top_level_nodes)
-        elif layout_type == "dot_like":
-            self._apply_dot_like_layout(top_level_nodes)
-        elif layout_type == "topological":
-            self._apply_topological_layout(top_level_nodes)
-        elif layout_type == "spring":
-            self._apply_spring_layout(top_level_nodes)
-        elif layout_type == "circular":
-            self._apply_circular_layout(top_level_nodes)
-        elif layout_type == "hierarchical":
-            self._apply_hierarchical_layout(top_level_nodes)
-        else:
-            # Default grid layout
-            self._apply_grid_layout(top_level_nodes)
-        
-        # Update all connections to reflect new node positions after layout
-        self.update_all_connections()
+            if layout_type == "narrative":
+                self._apply_narrative_layout(top_level_nodes)
+            elif layout_type == "dot_like":
+                self._apply_dot_like_layout(top_level_nodes)
+            elif layout_type == "topological":
+                self._apply_topological_layout(top_level_nodes)
+            elif layout_type == "spring":
+                self._apply_spring_layout(top_level_nodes)
+            elif layout_type == "circular":
+                self._apply_circular_layout(top_level_nodes)
+            elif layout_type == "hierarchical":
+                self._apply_hierarchical_layout(top_level_nodes)
+            else:
+                # Default grid layout
+                self._apply_grid_layout(top_level_nodes)
+            
+            # Update all connections to reflect new node positions after layout
+            self.update_all_connections()
+            
+        finally:
+            # BATCH LAYOUT: Re-enable updates after layout is complete
+            self.setUpdatesEnabled(True)
     
     def _apply_grid_layout(self, nodes):
         """Simple grid layout."""
