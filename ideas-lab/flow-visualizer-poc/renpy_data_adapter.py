@@ -235,14 +235,13 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         created_connections = set()  # Track (source, target) pairs
         
         for label_name, label_node in flow_graph.items():
-            # DEBUG: Check if afternikkidate is being skipped
-            if label_name == 'afternikkidate':
-                print(f"[ADAPTER DEBUG] Processing afternikkidate: has_menu={label_node.has_menu}, outgoing_flows={len(label_node.outgoing_flows)}")
-                for i, flow in enumerate(label_node.outgoing_flows):
-                    print(f"  Flow {i+1}: {flow.source_label} → {flow.target_label} (type: {flow.flow_type}, context: {flow.context})")
+            # CONSERVATIVE FILTERING: If a label has menus, skip ALL its outgoing flows
+            # The menu system will handle all choice-to-destination connections
+            if label_node.has_menu:
+                print(f"[FLOW FILTER] Skipping all outgoing flows from menu label: {label_name} (has {len(label_node.outgoing_flows)} flows)")
+                continue
             
-            # FIXED: Instead of skipping ALL flows from labels with menus, 
-            # only skip menu_choice flows. Other flows (like conditional jumps) should be processed.
+            # Process flows from labels without menus
             for flow in label_node.outgoing_flows:
                 target_label = flow.target_label
                 
@@ -250,23 +249,17 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 if not target_label or target_label == '<return>' or target_label not in flow_graph:
                     continue
                 
-                # FIXED: Only skip menu_choice flows, not all flows from menu labels
+                # Skip menu_choice flows (though these shouldn't exist on non-menu labels)
                 if flow.flow_type == 'menu_choice':
                     continue  # Menu choices are handled by menu containers
                 
                 # DEDUPLICATION: Check if we already created this connection
                 connection_key = (label_name, target_label)
                 if connection_key in created_connections:
-                    if label_name == 'afternikkidate' or target_label == 'v14beforecourt':
-                        print(f"[DEDUP DEBUG] Skipping duplicate: {label_name} → {target_label}")
                     continue
                 
                 # Mark this connection as created
                 created_connections.add(connection_key)
-                
-                # DEBUG: Track afternikkidate connections specifically
-                if label_name == 'afternikkidate' or target_label == 'v14beforecourt':
-                    print(f"[CONNECTION DEBUG] Creating connection: {label_name} → {target_label} (flow_type: {flow.flow_type}, context: {flow.context})")
                 
                 connection_id = f"{label_name}_to_{target_label}_{flow.flow_type}"
                 line_style = self._get_line_style_for_flow_type(flow.flow_type)
