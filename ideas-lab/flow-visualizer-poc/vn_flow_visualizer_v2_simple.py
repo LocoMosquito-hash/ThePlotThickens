@@ -308,6 +308,9 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         self.scene = QGraphicsScene()
         self.setScene(self.scene)
         
+        # Connect selection changes to update node details
+        self.scene.selectionChanged.connect(self.on_selection_changed)
+        
         # Data provider using clean interface
         self.data_provider = RenpyFlowDataAdapter(use_hybrid=True)
         
@@ -484,6 +487,18 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             self.centerOn(node)
             # Emit selection signal
             self.node_selected.emit(node_id, node.vis_node.metadata or {})
+    
+    def on_selection_changed(self):
+        """Handle selection changes in the scene."""
+        selected_items = self.scene.selectedItems()
+        if selected_items:
+            item = selected_items[0]
+            if hasattr(item, 'vis_node'):
+                # Emit signal with node data
+                self.node_selected.emit(item.vis_node.node_id, item.vis_node.metadata or {})
+        else:
+            # Clear selection - emit empty signal
+            self.node_selected.emit("", {})
     
     def update_all_connections(self):
         """Update all connection paths after nodes have been moved."""

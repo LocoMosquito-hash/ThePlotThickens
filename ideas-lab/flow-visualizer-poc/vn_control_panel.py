@@ -266,10 +266,60 @@ class VNControlPanel(QWidget):
         
     def update_node_details(self, node_id: str, node_data: Dict[str, Any]):
         """Update the selected node details display."""
+        # Handle case when no node is selected
+        if not node_id or not node_data:
+            self.clear_node_details()
+            return
+            
         self.current_node_data = node_data
         
         # Format node information
-        info_text = f"Label: {node_id}\n\n"
+        info_text = f"Label: {node_id}\n"
+        
+        # Special handling for menu choice nodes - show the choice text
+        if '_choice_' in node_id and 'full_text' in node_data:
+            choice_text = node_data['full_text']
+            info_text += f"\nChoice Text: \"{choice_text}\"\n"
+            
+            # Show parent container
+            if 'parent_container' in node_data:
+                parent = node_data['parent_container']
+                info_text += f"Parent Menu: {parent}\n"
+                
+            # Show choice index
+            if 'choice_index' in node_data:
+                choice_idx = node_data['choice_index']
+                info_text += f"Choice Index: {choice_idx}\n"
+            
+            # Show destination if available
+            if 'destination' in node_data:
+                destination = node_data['destination']
+                info_text += f"Destination: {destination}\n"
+                
+            # Show action type
+            if 'action_type' in node_data:
+                action_type = node_data['action_type']
+                info_text += f"Action Type: {action_type}\n"
+                
+            # Show condition if available
+            if 'condition' in node_data and node_data['condition']:
+                condition = node_data['condition']
+                info_text += f"Condition: {condition}\n"
+        
+        # Special handling for menu container nodes
+        elif '_menu_' in node_id and 'prompt' in node_data:
+            if node_data['prompt']:
+                info_text += f"\nMenu Prompt: \"{node_data['prompt']}\"\n"
+            
+            if 'total_choices' in node_data:
+                total_choices = node_data['total_choices']
+                info_text += f"Total Choices: {total_choices}\n"
+                
+            if 'parent_label' in node_data:
+                parent_label = node_data['parent_label']
+                info_text += f"Parent Label: {parent_label}\n"
+        
+        info_text += "\n"
         
         # Add basic node properties
         if 'file_path' in node_data:
