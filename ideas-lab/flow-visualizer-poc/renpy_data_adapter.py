@@ -235,13 +235,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         created_connections = set()  # Track (source, target) pairs
         
         for label_name, label_node in flow_graph.items():
-            # CONSERVATIVE FILTERING: If a label has menus, skip ALL its outgoing flows
-            # The menu system will handle all choice-to-destination connections
-            if label_node.has_menu:
-                print(f"[FLOW FILTER] Skipping all outgoing flows from menu label: {label_name} (has {len(label_node.outgoing_flows)} flows)")
-                continue
-            
-            # Process flows from labels without menus
+            # Process all flows from all labels (including those with menus)
             for flow in label_node.outgoing_flows:
                 target_label = flow.target_label
                 
@@ -249,9 +243,12 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 if not target_label or target_label == '<return>' or target_label not in flow_graph:
                     continue
                 
-                # Skip menu_choice flows (though these shouldn't exist on non-menu labels)
+                # SIMPLE FILTERING: Only skip menu_choice flows (handled by menu containers)
                 if flow.flow_type == 'menu_choice':
                     continue  # Menu choices are handled by menu containers
+                
+                # Allow all other flows (jump, call, conditional_jump, etc.)
+                # This includes jump statements from label bodies, regardless of conditionals
                 
                 # DEDUPLICATION: Check if we already created this connection
                 connection_key = (label_name, target_label)
