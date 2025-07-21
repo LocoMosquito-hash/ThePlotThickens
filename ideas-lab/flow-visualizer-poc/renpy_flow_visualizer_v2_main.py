@@ -51,6 +51,7 @@ class RenpyFlowMapperV2(QMainWindow):
         self.visualizer.node_selected.connect(self.control_panel.update_node_details)
         self.control_panel.layout_changed.connect(self.visualizer.apply_layout)
         self.control_panel.search_node.connect(self.visualizer.search_and_select_node)
+        self.control_panel.edge_highlighting_changed.connect(self.visualizer.set_edge_highlighting_enabled)
         
         self.setWindowTitle("Renpy Flow Visualizer - POC (Clean Architecture)")
         self.resize(1400, 900)

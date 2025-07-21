@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, 
     QPushButton, QComboBox, QTextEdit, QScrollArea, QFrame,
-    QGridLayout, QSizePolicy, QLineEdit
+    QGridLayout, QSizePolicy, QLineEdit, QCheckBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -25,6 +25,7 @@ class VNControlPanel(QWidget):
     
     layout_changed = pyqtSignal(str)  # layout_type
     search_node = pyqtSignal(str)  # node_name
+    edge_highlighting_changed = pyqtSignal(bool)  # highlight_enabled
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -46,6 +47,10 @@ class VNControlPanel(QWidget):
         # Layout Controls section
         layout_group = self.create_layout_controls()
         layout.addWidget(layout_group)
+        
+        # Visual Options section
+        visual_group = self.create_visual_options_section()
+        layout.addWidget(visual_group)
         
         # Project Information section
         self.project_group = self.create_project_info_section()
@@ -92,6 +97,11 @@ class VNControlPanel(QWidget):
         search_text = self.search_input.text().strip()
         if search_text:
             self.search_node.emit(search_text)
+            
+    def on_edge_highlighting_changed(self, state):
+        """Handle edge highlighting checkbox state change."""
+        enabled = state == Qt.CheckState.Checked.value
+        self.edge_highlighting_changed.emit(enabled)
         
     def create_layout_controls(self) -> QGroupBox:
         """Create the layout algorithm controls."""
@@ -131,6 +141,23 @@ class VNControlPanel(QWidget):
         help_text.setWordWrap(True)
         help_text.setStyleSheet("color: gray;")
         layout.addWidget(help_text)
+        
+        return group
+        
+    def create_visual_options_section(self) -> QGroupBox:
+        """Create the visual options controls."""
+        group = QGroupBox("Visual Options")
+        layout = QVBoxLayout(group)
+        layout.setSpacing(3)  # Reduced spacing
+        
+        # Edge highlighting checkbox
+        self.highlight_edges_checkbox = QCheckBox("Highlight selected node edges")
+        self.highlight_edges_checkbox.setToolTip(
+            "When enabled, selected node's incoming edges will be colored yellow\n"
+            "and outgoing edges will be colored red"
+        )
+        self.highlight_edges_checkbox.stateChanged.connect(self.on_edge_highlighting_changed)
+        layout.addWidget(self.highlight_edges_checkbox)
         
         return group
         

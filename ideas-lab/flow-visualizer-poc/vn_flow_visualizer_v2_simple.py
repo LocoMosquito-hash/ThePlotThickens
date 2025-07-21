@@ -319,6 +319,13 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         self.nodes: Dict[str, SimpleVisualNode] = {}
         self.connections: List[BezierConnection] = []
         
+        # Edge highlighting state
+        self.edge_highlighting_enabled: bool = False
+        self.highlighted_edges: List[BezierConnection] = []
+        self.default_edge_color = QColor(80, 80, 80)
+        self.incoming_edge_color = QColor(255, 255, 0)  # Yellow
+        self.outgoing_edge_color = QColor(255, 0, 0)    # Red
+        
         # View settings
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         
@@ -457,6 +464,9 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
     
     def clear_visualization(self):
         """Clear the current visualization."""
+        # Reset edge highlighting state
+        self.reset_edge_highlighting()
+        
         # Unregister all connections from nodes before clearing
         for connection in self.connections:
             if hasattr(connection, 'source_node') and isinstance(connection.source_node, SimpleVisualNode):
@@ -488,17 +498,79 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             # Emit selection signal
             self.node_selected.emit(node_id, node.vis_node.metadata or {})
     
+    def set_edge_highlighting_enabled(self, enabled: bool):
+        """Enable or disable edge highlighting for selected nodes."""
+        self.edge_highlighting_enabled = enabled
+        
+        if not enabled:
+            # Reset all highlighted edges to default color
+            self.reset_edge_highlighting()
+        else:
+            # If there's a current selection, highlight its edges
+            selected_items = self.scene.selectedItems()
+            if selected_items:
+                item = selected_items[0]
+                if hasattr(item, 'vis_node'):
+                    self.highlight_node_edges(item.vis_node.node_id)
+    
+    def reset_edge_highlighting(self):
+        """Reset all highlighted edges to their default color."""
+        for edge in self.highlighted_edges:
+            pen = edge.pen()
+            pen.setColor(self.default_edge_color)
+            edge.setPen(pen)
+        self.highlighted_edges.clear()
+    
+    def highlight_node_edges(self, node_id: str):
+        """Highlight incoming and outgoing edges for the specified node."""
+        if not self.edge_highlighting_enabled:
+            return
+            
+        # First reset any previously highlighted edges
+        self.reset_edge_highlighting()
+        
+        # Find all connections involving this node
+        for connection in self.connections:
+            if hasattr(connection, 'source_node') and hasattr(connection, 'target_node'):
+                source_id = getattr(connection.source_node, 'node_id', None)
+                target_id = getattr(connection.target_node, 'node_id', None)
+                
+                pen = connection.pen()
+                highlighted = False
+                
+                # Check if this is an incoming edge (target is selected node)
+                if target_id == node_id:
+                    pen.setColor(self.incoming_edge_color)  # Yellow for incoming
+                    highlighted = True
+                
+                # Check if this is an outgoing edge (source is selected node)
+                elif source_id == node_id:
+                    pen.setColor(self.outgoing_edge_color)  # Red for outgoing
+                    highlighted = True
+                
+                if highlighted:
+                    connection.setPen(pen)
+                    self.highlighted_edges.append(connection)
+
     def on_selection_changed(self):
         """Handle selection changes in the scene."""
         selected_items = self.scene.selectedItems()
         if selected_items:
             item = selected_items[0]
             if hasattr(item, 'vis_node'):
+                node_id = item.vis_node.node_id
                 # Emit signal with node data
-                self.node_selected.emit(item.vis_node.node_id, item.vis_node.metadata or {})
+                self.node_selected.emit(node_id, item.vis_node.metadata or {})
+                
+                # Highlight edges if enabled
+                if self.edge_highlighting_enabled:
+                    self.highlight_node_edges(node_id)
         else:
             # Clear selection - emit empty signal
             self.node_selected.emit("", {})
+            # Reset edge highlighting when no node is selected
+            if self.edge_highlighting_enabled:
+                self.reset_edge_highlighting()
     
     def update_all_connections(self):
         """Update all connection paths after nodes have been moved."""
