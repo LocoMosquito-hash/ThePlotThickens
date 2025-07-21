@@ -458,8 +458,7 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         print(f"✅ Created {len(self.nodes)} visual nodes and {len(data.connections)} connections")
         
         # Auto-apply default layout (dot_like) and fit view
-        self.apply_layout("dot_like")
-        self.update_all_connections()  # Ensure connections reflect layout positions
+        self.apply_layout("dot_like")  # This already calls update_all_connections() and _update_scene_margins()
         self.fit_view_to_content()
     
     def clear_visualization(self):
@@ -479,9 +478,20 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         self.connections.clear()
     
     def fit_view_to_content(self):
-        """Fit the view to show all content."""
+        """Fit the view to show all content with comfortable margins."""
         if self.scene.items():
-            self.fitInView(self.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
+            # Get the actual content bounds
+            content_rect = self.scene.itemsBoundingRect()
+            
+            # Add generous margins around the content for comfortable panning
+            margin = 500  # Generous margin on all sides
+            expanded_rect = content_rect.adjusted(-margin, -margin, margin, margin)
+            
+            # Set the scene rectangle to include the margins
+            self.scene.setSceneRect(expanded_rect)
+            
+            # Fit the view to the actual content (not the expanded scene)
+            self.fitInView(content_rect, Qt.AspectRatioMode.KeepAspectRatio)
     
     def reset_view(self):
         """Reset view to default zoom and position."""
@@ -645,9 +655,25 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             # Update all connections to reflect new node positions after layout
             self.update_all_connections()
             
+            # Update scene rectangle with margins for comfortable panning
+            self._update_scene_margins()
+            
         finally:
             # BATCH LAYOUT: Re-enable updates after layout is complete
             self.setUpdatesEnabled(True)
+    
+    def _update_scene_margins(self):
+        """Update scene rectangle with generous margins around content for comfortable panning."""
+        if self.scene.items():
+            # Get the actual content bounds
+            content_rect = self.scene.itemsBoundingRect()
+            
+            # Add generous margins around the content for comfortable panning
+            margin = 500  # Generous margin on all sides
+            expanded_rect = content_rect.adjusted(-margin, -margin, margin, margin)
+            
+            # Set the scene rectangle to include the margins
+            self.scene.setSceneRect(expanded_rect)
     
     def _apply_grid_layout(self, nodes):
         """Simple grid layout."""
@@ -1073,7 +1099,8 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
     
     def mousePressEvent(self, event):
         """Handle mouse press events."""
-        if event.button() == Qt.MouseButton.MiddleButton:
+        if event.button() == Qt.MouseButton.MiddleButton or (event.button() == Qt.MouseButton.LeftButton and event.modifiers() & Qt.KeyboardModifier.AltModifier):
+            # Middle mouse or Alt+Left mouse for panning
             self._pan_active = True
             self._last_pan_point = event.position().toPoint()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
@@ -1095,7 +1122,8 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
     
     def mouseReleaseEvent(self, event):
         """Handle mouse release events."""
-        if event.button() == Qt.MouseButton.MiddleButton:
+        if event.button() == Qt.MouseButton.MiddleButton or (event.button() == Qt.MouseButton.LeftButton and self._pan_active):
+            # Release middle mouse or Alt+Left mouse panning
             self._pan_active = False
             self._last_pan_point = None
             self.setCursor(Qt.CursorShape.ArrowCursor)
