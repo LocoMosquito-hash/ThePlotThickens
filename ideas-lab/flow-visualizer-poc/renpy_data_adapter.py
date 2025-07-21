@@ -312,7 +312,11 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             for menu_idx, menu_node in enumerate(label_node.menu_nodes):
                 # Create menu container
                 container_id = f"{label_name}_menu_{menu_idx}"
-                container_name = menu_node.name or f"Menu {menu_idx + 1}"
+                # Prioritize menu prompt for display name, fallback to generic name
+                if menu_node.prompt:
+                    container_name = menu_node.prompt
+                else:
+                    container_name = menu_node.name or f"Menu {menu_idx + 1}"
                 
                 container = VisualizationNode(
                     node_id=container_id,

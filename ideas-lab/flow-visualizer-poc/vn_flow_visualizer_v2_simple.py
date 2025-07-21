@@ -203,8 +203,8 @@ class SimpleVisualNode(QGraphicsRectItem):
         display_text = vis_node.display_name
         if vis_node.node_type == 'menu_container':
             total_choices = vis_node.metadata.get('total_choices', 0)
-            # Format: "Menu Name (X options)" or "Complex (5 options)"
             if total_choices > 0:
+                # Format with choice count
                 display_text = f"{vis_node.display_name} ({total_choices} options)"
         
         self.text_item = QGraphicsTextItem(display_text, self)
