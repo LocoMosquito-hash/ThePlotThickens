@@ -162,7 +162,18 @@ class SimpleVisualNode(QGraphicsRectItem):
         
         # Set size based on node type
         if vis_node.node_type == 'menu_container':
-            width, height = 200, 150
+            width = 200
+            # Calculate dynamic height based on number of choices
+            total_choices = vis_node.metadata.get('total_choices', 1)
+            spacing = SimpleVisualNode.get_menu_container_spacing()
+            
+            # Calculate total height needed for all choices
+            total_choice_height = total_choices * spacing['choice_height'] + (total_choices - 1) * spacing['choice_spacing']
+            height = spacing['header_height'] + spacing['padding'] + total_choice_height + spacing['padding']
+            
+            # Ensure minimum height for small menus
+            height = max(height, 80)
+            
         elif vis_node.node_type == 'choice_button':
             width, height = 180, 35  # Slightly wider for choice text
         else:  # label
@@ -188,13 +199,25 @@ class SimpleVisualNode(QGraphicsRectItem):
         self.setPen(QPen(color.darker(150), 2))
         
         # Add text with proper contrast
-        self.text_item = QGraphicsTextItem(vis_node.display_name, self)
+        # Enhanced display name for menu containers to show choice count
+        display_text = vis_node.display_name
+        if vis_node.node_type == 'menu_container':
+            total_choices = vis_node.metadata.get('total_choices', 0)
+            # Format: "Menu Name (X options)" or "Complex (5 options)"
+            if total_choices > 0:
+                display_text = f"{vis_node.display_name} ({total_choices} options)"
+        
+        self.text_item = QGraphicsTextItem(display_text, self)
         self.text_item.setPos(5, 5)
         self.text_item.setFont(QFont("Arial", 9))
         
         # Set text color for proper contrast based on background
         text_color = self._get_contrast_text_color(color)
         self.text_item.setDefaultTextColor(text_color)
+        
+        # Store the calculated dimensions for reference
+        self.calculated_width = width
+        self.calculated_height = height
         
         # FIXED: Set interactive flags based on node type for proper parent-child behavior
         if vis_node.node_type == 'choice_button':
@@ -290,6 +313,16 @@ class SimpleVisualNode(QGraphicsRectItem):
                 print(f"[ERROR] Failed to get scene in itemChange: {e}")
         
         return super().itemChange(change, value)
+    
+    @staticmethod
+    def get_menu_container_spacing():
+        """Get consistent spacing parameters for menu containers and choice buttons."""
+        return {
+            'header_height': 25,
+            'padding': 10,
+            'choice_height': 35,
+            'choice_spacing': 4
+        }
 
 
 class VNFlowVisualizerV2Simple(QGraphicsView):
@@ -426,8 +459,11 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                 choice_visual.setParentItem(container)
                 
                 # Position relative to container (0,0 is container's top-left)
-                x_offset = 10  # Left margin
-                y_offset = 25 + (choice_index * 40)  # Below container header
+                # Use consistent spacing calculations
+                spacing = SimpleVisualNode.get_menu_container_spacing()
+                
+                x_offset = spacing['padding']  # Left margin
+                y_offset = spacing['header_height'] + spacing['padding'] + (choice_index * (spacing['choice_height'] + spacing['choice_spacing']))
                 choice_visual.setPos(x_offset, y_offset)
                 
                 # Store in nodes dict for connections
