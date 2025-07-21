@@ -234,6 +234,9 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         # DEDUPLICATION: Track created connections to prevent duplicates
         created_connections = set()  # Track (source, target) pairs
         
+        # SMART FILTERING: Build set of destinations claimed by menu choices
+        menu_choice_destinations = self._get_menu_choice_destinations(flow_graph)
+        
         for label_name, label_node in flow_graph.items():
             # Process all flows from all labels (including those with menus)
             for flow in label_node.outgoing_flows:
@@ -243,12 +246,20 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 if not target_label or target_label == '<return>' or target_label not in flow_graph:
                     continue
                 
-                # SIMPLE FILTERING: Only skip menu_choice flows (handled by menu containers)
+                # SMART FILTERING: Only skip menu_choice flows (handled by menu containers)
                 if flow.flow_type == 'menu_choice':
                     continue  # Menu choices are handled by menu containers
                 
-                # Allow all other flows (jump, call, conditional_jump, etc.)
-                # This includes jump statements from label bodies, regardless of conditionals
+                # SMART FILTERING: Skip flows that compete with menu choice destinations
+                # BUT allow flows from labels that don't have menus (like afternikkidate → v14beforecourt)
+                if (target_label in menu_choice_destinations and 
+                    label_node.has_menu and 
+                    flow.flow_type in ['jump', 'call']):
+                    # This is a competing flow - a direct jump from a menu label to a choice destination
+                    print(f"[FLOW FILTER] Skipping competing flow: {label_name} → {target_label} (menu choice handles this)")
+                    continue
+                
+                # Allow all other flows (conditional jumps, story progression, etc.)
                 
                 # DEDUPLICATION: Check if we already created this connection
                 connection_key = (label_name, target_label)
@@ -281,6 +292,27 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 connections.append(connection)
         
         return connections
+    
+    def _get_menu_choice_destinations(self, flow_graph: Dict[str, Any]) -> set:
+        """
+        Get all destinations that are targeted by menu choices.
+        
+        Args:
+            flow_graph: Dictionary mapping label names to LabelNode objects
+            
+        Returns:
+            Set of label names that are destinations of menu choices
+        """
+        menu_destinations = set()
+        
+        for label_name, label_node in flow_graph.items():
+            if label_node.has_menu:
+                # Get all destinations from this label's menu choices
+                for menu_node in label_node.menu_nodes:
+                    menu_destinations.update(menu_node.choice_destinations)
+        
+        print(f"[FLOW FILTER] Found {len(menu_destinations)} menu choice destinations: {sorted(menu_destinations)}")
+        return menu_destinations
     
     def _create_menu_containers(self, flow_graph: Dict[str, Any]) -> Tuple[List[VisualizationNode], List[VisualizationConnection]]:
         """
