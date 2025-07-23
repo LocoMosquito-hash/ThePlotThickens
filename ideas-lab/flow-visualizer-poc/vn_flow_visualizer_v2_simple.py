@@ -1071,20 +1071,20 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                     final_positions[community_list[0]] = center
                 
                 elif len(community_list) <= 4:
-                    # Small community - simple circular arrangement
+                    # Small community - simple circular arrangement with better spacing
                     positions = self._arrange_nodes_in_small_circle(community_list, center)
                     final_positions.update(positions)
                 
                 else:
-                    # Larger community - use force-directed spring layout
+                    # Larger community - use force-directed spring layout with optimal parameters
                     try:
                         community_subgraph = scc_subgraph.subgraph(community_list)
                         spring_positions = nx.spring_layout(
                             community_subgraph, 
                             center=center, 
-                            k=60,  # Spring constant - controls node spacing
-                            iterations=50,
-                            scale=80,  # Scale factor for layout
+                            k=250,  # Much higher spring constant for better node separation
+                            iterations=80,  # More iterations for better convergence
+                            scale=300,  # Much larger scale factor for readable spacing
                             seed=42
                         )
                         
@@ -1105,7 +1105,7 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             return self._fallback_grid_layout(scc_nodes, x_offset, y_base)
 
     def _arrange_communities_circularly(self, communities: list, x_offset: float, y_base: float) -> list:
-        """Arrange community centers in a circular or linear pattern."""
+        """Arrange community centers in a circular or linear pattern with generous spacing."""
         import math
         
         num_communities = len(communities)
@@ -1113,12 +1113,12 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         
         if num_communities == 1:
             # Single community - center it
-            community_centers.append((x_offset + 300, y_base))
+            community_centers.append((x_offset + 400, y_base))
         
         elif num_communities <= 6:
-            # Small number of communities - arrange in circle
-            radius = 200
-            center_x = x_offset + 300
+            # Small number of communities - arrange in circle with larger radius
+            radius = 350  # Increased from 200 for better separation
+            center_x = x_offset + 400  # More offset
             center_y = y_base
             
             for i in range(num_communities):
@@ -1128,9 +1128,9 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                 community_centers.append((x, y))
         
         else:
-            # Many communities - arrange in loose grid pattern
+            # Many communities - arrange in loose grid pattern with more spacing
             cols = math.ceil(math.sqrt(num_communities))
-            community_spacing = 250
+            community_spacing = 400  # Increased from 250 for better separation
             
             for i, community in enumerate(communities):
                 row = i // cols
@@ -1142,12 +1142,12 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         return community_centers
 
     def _arrange_nodes_in_small_circle(self, nodes: list, center: tuple) -> dict:
-        """Arrange nodes in a small circle around the center point."""
+        """Arrange nodes in a small circle around the center point with better spacing."""
         import math
         
         positions = {}
         num_nodes = len(nodes)
-        radius = 40  # Small radius for tight communities
+        radius = 80  # Increased from 40 for better node separation
         
         for i, node_id in enumerate(nodes):
             if num_nodes == 1:
