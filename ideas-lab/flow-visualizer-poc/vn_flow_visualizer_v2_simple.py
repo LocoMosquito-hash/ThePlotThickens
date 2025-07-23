@@ -996,24 +996,186 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                     x_offset += len(scc_nodes) * NODE_WIDTH + SCC_SPACING
                 
                 else:
-                    # Large SCC - arrange in compact grid within the SCC
-                    rows = (len(scc_nodes) + MAX_NODES_PER_ROW - 1) // MAX_NODES_PER_ROW
+                    # Large SCC - use clustered force-directed layout instead of grid
+                    cluster_positions = self._apply_clustered_force_layout(scc_nodes, original_graph, x_offset, y_base)
                     
-                    for i, node_id in enumerate(scc_nodes):
+                    # Apply positions to nodes
+                    for node_id, (x_pos, y_pos) in cluster_positions.items():
                         if node_id in node_lookup:
-                            row = i // MAX_NODES_PER_ROW
-                            col = i % MAX_NODES_PER_ROW
-                            
-                            x_pos = x_offset + col * NODE_WIDTH
-                            y_pos = y_base + row * 80  # Compact vertical spacing within SCC
-                            
                             node_lookup[node_id].setPos(x_pos, y_pos)
                     
-                    # Update offset for next SCC
-                    scc_width = min(len(scc_nodes), MAX_NODES_PER_ROW) * NODE_WIDTH
-                    x_offset += scc_width + SCC_SPACING
+                    # Update offset for next SCC - use actual width of clustered layout
+                    if cluster_positions:
+                        cluster_x_coords = [x for x, y in cluster_positions.values()]
+                        cluster_width = max(cluster_x_coords) - min(cluster_x_coords) + NODE_WIDTH
+                        x_offset += cluster_width + SCC_SPACING
+                    else:
+                        # Fallback in case clustering fails
+                        x_offset += MAX_NODES_PER_ROW * NODE_WIDTH + SCC_SPACING
         
         print(f"✅ Positioned {len(nodes)} nodes across {len(scc_layers)} SCC layers")
+
+    def _apply_clustered_force_layout(self, scc_nodes: list, original_graph, x_offset: float, y_base: float) -> dict:
+        """
+        Apply clustered force-directed layout for large SCCs.
+        
+        This replaces the problematic grid layout with:
+        1. Community detection to find sub-clusters within the SCC
+        2. Force-directed positioning within each sub-cluster  
+        3. Meta-positioning of sub-clusters with proper spacing
+        
+        Args:
+            scc_nodes: List of node IDs in this large SCC
+            original_graph: NetworkX graph for edge information
+            x_offset: Starting X position for this SCC
+            y_base: Base Y position for this SCC layer
+            
+        Returns:
+            Dictionary mapping node_id -> (x, y) positions
+        """
+        import networkx as nx
+        import math
+        
+        print(f"🌐 Applying clustered force layout to {len(scc_nodes)} nodes")
+        
+        try:
+            # Step 1: Create subgraph for this SCC
+            scc_subgraph = original_graph.subgraph(scc_nodes).copy()
+            
+            # Step 2: Detect communities within this large SCC using Louvain algorithm
+            try:
+                import networkx.algorithms.community as nx_comm
+                communities = list(nx_comm.louvain_communities(scc_subgraph, seed=42))
+                print(f"🎯 Detected {len(communities)} sub-communities: {[len(c) for c in communities]}")
+            except:
+                # Fallback: Use greedy modularity if Louvain fails
+                try:
+                    communities = list(nx_comm.greedy_modularity_communities(scc_subgraph))
+                    print(f"🎯 Fallback: Detected {len(communities)} communities via greedy modularity")
+                except:
+                    # Last resort: treat as single community
+                    communities = [set(scc_nodes)]
+                    print(f"⚠️ Community detection failed, treating as single cluster")
+            
+            # Step 3: Position communities in a circular arrangement (meta-layout)
+            community_centers = self._arrange_communities_circularly(communities, x_offset, y_base)
+            
+            # Step 4: Apply force-directed layout within each community
+            final_positions = {}
+            
+            for community, center in zip(communities, community_centers):
+                community_list = list(community)
+                
+                if len(community_list) == 1:
+                    # Single node community - place at center
+                    final_positions[community_list[0]] = center
+                
+                elif len(community_list) <= 4:
+                    # Small community - simple circular arrangement
+                    positions = self._arrange_nodes_in_small_circle(community_list, center)
+                    final_positions.update(positions)
+                
+                else:
+                    # Larger community - use force-directed spring layout
+                    try:
+                        community_subgraph = scc_subgraph.subgraph(community_list)
+                        spring_positions = nx.spring_layout(
+                            community_subgraph, 
+                            center=center, 
+                            k=60,  # Spring constant - controls node spacing
+                            iterations=50,
+                            scale=80,  # Scale factor for layout
+                            seed=42
+                        )
+                        
+                        # Convert NetworkX positions to our coordinate system
+                        for node_id, (nx_x, nx_y) in spring_positions.items():
+                            final_positions[node_id] = (center[0] + nx_x, center[1] + nx_y)
+                            
+                    except Exception as e:
+                        print(f"⚠️ Spring layout failed for community: {e}, using circular fallback")
+                        positions = self._arrange_nodes_in_small_circle(community_list, center)
+                        final_positions.update(positions)
+            
+            print(f"✅ Clustered force layout complete: {len(final_positions)} nodes positioned")
+            return final_positions
+            
+        except Exception as e:
+            print(f"⚠️ Clustered force layout failed: {e}, using grid fallback")
+            return self._fallback_grid_layout(scc_nodes, x_offset, y_base)
+
+    def _arrange_communities_circularly(self, communities: list, x_offset: float, y_base: float) -> list:
+        """Arrange community centers in a circular or linear pattern."""
+        import math
+        
+        num_communities = len(communities)
+        community_centers = []
+        
+        if num_communities == 1:
+            # Single community - center it
+            community_centers.append((x_offset + 300, y_base))
+        
+        elif num_communities <= 6:
+            # Small number of communities - arrange in circle
+            radius = 200
+            center_x = x_offset + 300
+            center_y = y_base
+            
+            for i in range(num_communities):
+                angle = (2 * math.pi * i) / num_communities
+                x = center_x + radius * math.cos(angle)
+                y = center_y + radius * math.sin(angle)
+                community_centers.append((x, y))
+        
+        else:
+            # Many communities - arrange in loose grid pattern
+            cols = math.ceil(math.sqrt(num_communities))
+            community_spacing = 250
+            
+            for i, community in enumerate(communities):
+                row = i // cols
+                col = i % cols
+                x = x_offset + col * community_spacing
+                y = y_base + row * community_spacing
+                community_centers.append((x, y))
+        
+        return community_centers
+
+    def _arrange_nodes_in_small_circle(self, nodes: list, center: tuple) -> dict:
+        """Arrange nodes in a small circle around the center point."""
+        import math
+        
+        positions = {}
+        num_nodes = len(nodes)
+        radius = 40  # Small radius for tight communities
+        
+        for i, node_id in enumerate(nodes):
+            if num_nodes == 1:
+                positions[node_id] = center
+            else:
+                angle = (2 * math.pi * i) / num_nodes
+                x = center[0] + radius * math.cos(angle)
+                y = center[1] + radius * math.sin(angle)
+                positions[node_id] = (x, y)
+        
+        return positions
+
+    def _fallback_grid_layout(self, scc_nodes: list, x_offset: float, y_base: float) -> dict:
+        """Fallback grid layout in case clustered layout fails."""
+        positions = {}
+        MAX_NODES_PER_ROW = 12
+        NODE_WIDTH = 200
+        
+        for i, node_id in enumerate(scc_nodes):
+            row = i // MAX_NODES_PER_ROW
+            col = i % MAX_NODES_PER_ROW
+            
+            x_pos = x_offset + col * NODE_WIDTH
+            y_pos = y_base + row * 80  # Compact vertical spacing
+            
+            positions[node_id] = (x_pos, y_pos)
+        
+        return positions
     
     def _simple_layer_assignment(self, G, start_nodes):
         """Simple fallback layer assignment by node type (DEPRECATED - only for emergencies)."""
