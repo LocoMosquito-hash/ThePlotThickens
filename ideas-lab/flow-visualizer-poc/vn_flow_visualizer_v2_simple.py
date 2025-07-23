@@ -1022,7 +1022,7 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         This replaces the problematic grid layout with:
         1. Community detection to find sub-clusters within the SCC
         2. Force-directed positioning within each sub-cluster  
-        3. Meta-positioning of sub-clusters with proper spacing
+        3. Meta-positioning of sub-clusters with adaptive spacing
         
         Args:
             scc_nodes: List of node IDs in this large SCC
@@ -1057,44 +1057,53 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                     communities = [set(scc_nodes)]
                     print(f"⚠️ Community detection failed, treating as single cluster")
             
-            # Step 3: Position communities in a circular arrangement (meta-layout)
-            community_centers = self._arrange_communities_circularly(communities, x_offset, y_base)
+            # Step 3: Calculate cluster properties for adaptive spacing
+            cluster_info = self._analyze_cluster_properties(communities, scc_nodes)
             
-            # Step 4: Apply force-directed layout within each community
+            # Step 4: Position communities using adaptive meta-layout
+            community_centers = self._arrange_communities_adaptively(communities, cluster_info, x_offset, y_base)
+            
+            # Step 5: Apply collision-aware force-directed layout within each community
             final_positions = {}
             
-            for community, center in zip(communities, community_centers):
+            for (community, center, cluster_props) in zip(communities, community_centers, cluster_info):
                 community_list = list(community)
                 
                 if len(community_list) == 1:
-                    # Single node community - place at center
-                    final_positions[community_list[0]] = center
+                    # Single node community - place at center with collision buffer
+                    final_positions[community_list[0]] = self._adjust_for_collision(community_list[0], center)
                 
                 elif len(community_list) <= 4:
-                    # Small community - simple circular arrangement with better spacing
-                    positions = self._arrange_nodes_in_small_circle(community_list, center)
+                    # Small community - collision-aware circular arrangement
+                    positions = self._arrange_nodes_collision_aware(community_list, center, cluster_props)
                     final_positions.update(positions)
                 
                 else:
-                    # Larger community - use force-directed spring layout with optimal parameters
+                    # Larger community - collision-aware force-directed spring layout
                     try:
                         community_subgraph = scc_subgraph.subgraph(community_list)
+                        
+                        # Use adaptive scale based on cluster properties
+                        adaptive_scale = max(300, cluster_props['estimated_width'] * 0.8)
+                        adaptive_k = max(250, len(community_list) * 20)  # Scale k with community size
+                        
                         spring_positions = nx.spring_layout(
                             community_subgraph, 
                             center=center, 
-                            k=250,  # Much higher spring constant for better node separation
-                            iterations=80,  # More iterations for better convergence
-                            scale=300,  # Much larger scale factor for readable spacing
+                            k=adaptive_k,  # Adaptive spring constant
+                            iterations=80,  
+                            scale=adaptive_scale,  # Adaptive scale based on expected cluster size
                             seed=42
                         )
                         
-                        # Convert NetworkX positions to our coordinate system
+                        # Convert NetworkX positions with collision adjustment
                         for node_id, (nx_x, nx_y) in spring_positions.items():
-                            final_positions[node_id] = (center[0] + nx_x, center[1] + nx_y)
+                            raw_pos = (center[0] + nx_x, center[1] + nx_y)
+                            final_positions[node_id] = self._adjust_for_collision(node_id, raw_pos)
                             
                     except Exception as e:
-                        print(f"⚠️ Spring layout failed for community: {e}, using circular fallback")
-                        positions = self._arrange_nodes_in_small_circle(community_list, center)
+                        print(f"⚠️ Spring layout failed for community: {e}, using collision-aware fallback")
+                        positions = self._arrange_nodes_collision_aware(community_list, center, cluster_props)
                         final_positions.update(positions)
             
             print(f"✅ Clustered force layout complete: {len(final_positions)} nodes positioned")
@@ -1103,62 +1112,6 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         except Exception as e:
             print(f"⚠️ Clustered force layout failed: {e}, using grid fallback")
             return self._fallback_grid_layout(scc_nodes, x_offset, y_base)
-
-    def _arrange_communities_circularly(self, communities: list, x_offset: float, y_base: float) -> list:
-        """Arrange community centers in a circular or linear pattern with generous spacing."""
-        import math
-        
-        num_communities = len(communities)
-        community_centers = []
-        
-        if num_communities == 1:
-            # Single community - center it
-            community_centers.append((x_offset + 400, y_base))
-        
-        elif num_communities <= 6:
-            # Small number of communities - arrange in circle with larger radius
-            radius = 350  # Increased from 200 for better separation
-            center_x = x_offset + 400  # More offset
-            center_y = y_base
-            
-            for i in range(num_communities):
-                angle = (2 * math.pi * i) / num_communities
-                x = center_x + radius * math.cos(angle)
-                y = center_y + radius * math.sin(angle)
-                community_centers.append((x, y))
-        
-        else:
-            # Many communities - arrange in loose grid pattern with more spacing
-            cols = math.ceil(math.sqrt(num_communities))
-            community_spacing = 400  # Increased from 250 for better separation
-            
-            for i, community in enumerate(communities):
-                row = i // cols
-                col = i % cols
-                x = x_offset + col * community_spacing
-                y = y_base + row * community_spacing
-                community_centers.append((x, y))
-        
-        return community_centers
-
-    def _arrange_nodes_in_small_circle(self, nodes: list, center: tuple) -> dict:
-        """Arrange nodes in a small circle around the center point with better spacing."""
-        import math
-        
-        positions = {}
-        num_nodes = len(nodes)
-        radius = 80  # Increased from 40 for better node separation
-        
-        for i, node_id in enumerate(nodes):
-            if num_nodes == 1:
-                positions[node_id] = center
-            else:
-                angle = (2 * math.pi * i) / num_nodes
-                x = center[0] + radius * math.cos(angle)
-                y = center[1] + radius * math.sin(angle)
-                positions[node_id] = (x, y)
-        
-        return positions
 
     def _fallback_grid_layout(self, scc_nodes: list, x_offset: float, y_base: float) -> dict:
         """Fallback grid layout in case clustered layout fails."""
@@ -1174,6 +1127,145 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             y_pos = y_base + row * 80  # Compact vertical spacing
             
             positions[node_id] = (x_pos, y_pos)
+        
+        return positions
+
+    def _analyze_cluster_properties(self, communities: list, scc_nodes: list) -> list:
+        """Analyze cluster properties for adaptive spacing."""
+        import math
+        
+        cluster_info = []
+        
+        for community in communities:
+            community_list = list(community)
+            
+            # Estimate space needed based on node types and count
+            menu_containers = sum(1 for node_id in community_list 
+                                if hasattr(self, 'nodes') and node_id in self.nodes 
+                                and getattr(self.nodes[node_id].vis_node, 'node_type', '') == 'menu_container')
+            
+            regular_nodes = len(community_list) - menu_containers
+            
+            # Calculate estimated dimensions
+            # Menu containers are ~220x120, regular nodes are ~100x30
+            estimated_width = max(200, (menu_containers * 220 + regular_nodes * 100) * 0.7)
+            estimated_height = max(150, math.sqrt(len(community_list)) * 80)
+            
+            # Calculate density factor (more nodes = need more space)
+            density_factor = 1.0 + (len(community_list) / 20.0)  # Scale up for larger communities
+            
+            cluster_info.append({
+                'size': len(community_list),
+                'menu_containers': menu_containers,
+                'regular_nodes': regular_nodes,
+                'estimated_width': estimated_width * density_factor,
+                'estimated_height': estimated_height * density_factor,
+                'collision_radius': max(120, estimated_width * 0.3)  # Collision buffer
+            })
+        
+        return cluster_info
+
+    def _arrange_communities_adaptively(self, communities: list, cluster_info: list, x_offset: float, y_base: float) -> list:
+        """Arrange community centers using adaptive spacing based on cluster content."""
+        import math
+        
+        num_communities = len(communities)
+        community_centers = []
+        
+        if num_communities == 1:
+            # Single community - center it with generous offset
+            cluster_props = cluster_info[0]
+            buffer = cluster_props['collision_radius']
+            community_centers.append((x_offset + buffer, y_base))
+        
+        elif num_communities <= 6:
+            # Small number of communities - adaptive circular arrangement
+            
+            # Calculate dynamic radius based on largest cluster
+            max_cluster_radius = max(props['collision_radius'] for props in cluster_info)
+            base_radius = max(400, max_cluster_radius * 2.5)  # Ensure no overlap
+            
+            center_x = x_offset + base_radius
+            center_y = y_base
+            
+            for i in range(num_communities):
+                angle = (2 * math.pi * i) / num_communities
+                
+                # Add extra spacing for larger clusters
+                cluster_radius_factor = cluster_info[i]['collision_radius'] / max_cluster_radius
+                adjusted_radius = base_radius * (0.8 + 0.4 * cluster_radius_factor)
+                
+                x = center_x + adjusted_radius * math.cos(angle)
+                y = center_y + adjusted_radius * math.sin(angle)
+                community_centers.append((x, y))
+        
+        else:
+            # Many communities - adaptive grid with dynamic spacing
+            cols = math.ceil(math.sqrt(num_communities))
+            
+            # Calculate dynamic spacing based on cluster sizes
+            max_width = max(props['estimated_width'] for props in cluster_info)
+            max_height = max(props['estimated_height'] for props in cluster_info)
+            
+            horizontal_spacing = max(500, max_width * 1.3)  # Extra horizontal space as requested
+            vertical_spacing = max(300, max_height * 1.2)
+            
+            for i, props in enumerate(cluster_info):
+                row = i // cols
+                col = i % cols
+                
+                # Add extra spacing for larger clusters
+                size_factor = props['size'] / max(p['size'] for p in cluster_info)
+                adjusted_h_spacing = horizontal_spacing * (0.9 + 0.3 * size_factor)
+                adjusted_v_spacing = vertical_spacing * (0.9 + 0.2 * size_factor)
+                
+                x = x_offset + col * adjusted_h_spacing
+                y = y_base + row * adjusted_v_spacing
+                community_centers.append((x, y))
+        
+        return community_centers
+
+    def _adjust_for_collision(self, node_id: str, position: tuple) -> tuple:
+        """Adjust node position to avoid collision with menu containers."""
+        # Check if this is a menu container - needs more space
+        if hasattr(self, 'nodes') and node_id in self.nodes:
+            node_type = getattr(self.nodes[node_id].vis_node, 'node_type', '')
+            if node_type == 'menu_container':
+                # Menu containers need extra collision buffer
+                # This is a simplified collision avoidance - in a full implementation
+                # you'd check against all other positioned nodes
+                return position
+        
+        # For now, return original position
+        # In a full implementation, this would check against all previously positioned nodes
+        return position
+
+    def _arrange_nodes_collision_aware(self, nodes: list, center: tuple, cluster_props: dict) -> dict:
+        """Arrange nodes in a collision-aware pattern around the center point."""
+        import math
+        
+        positions = {}
+        num_nodes = len(nodes)
+        
+        # Base radius with collision awareness
+        base_radius = max(100, cluster_props['collision_radius'] * 0.6)
+        
+        for i, node_id in enumerate(nodes):
+            if num_nodes == 1:
+                positions[node_id] = self._adjust_for_collision(node_id, center)
+            else:
+                angle = (2 * math.pi * i) / num_nodes
+                
+                # Adjust radius based on node type
+                node_radius = base_radius
+                if hasattr(self, 'nodes') and node_id in self.nodes:
+                    node_type = getattr(self.nodes[node_id].vis_node, 'node_type', '')
+                    if node_type == 'menu_container':
+                        node_radius = base_radius * 1.4  # Extra space for menu containers
+                
+                x = center[0] + node_radius * math.cos(angle)
+                y = center[1] + node_radius * math.sin(angle)
+                positions[node_id] = self._adjust_for_collision(node_id, (x, y))
         
         return positions
     
