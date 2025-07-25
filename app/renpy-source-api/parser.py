@@ -19,9 +19,11 @@ from datetime import datetime
 try:
     # Try relative imports (when used as package)
     from .exceptions import RenpyParseError, RenpyProjectError
+    from .control_flow.analyze_vn_menus import MenuStructure, MenuChoice as MenuAnalysisChoice, MenuAnalyzer
 except ImportError:
     # Fall back to direct imports (when run standalone)
     from exceptions import RenpyParseError, RenpyProjectError
+    from control_flow.analyze_vn_menus import MenuStructure, MenuChoice as MenuAnalysisChoice, MenuAnalyzer
 
 
 @dataclass
@@ -180,15 +182,7 @@ class MenuNode:
         return dict(Counter(self.asset_categories))
 
 
-@dataclass
-class MenuStructure:
-    """Represents a complete menu structure."""
-    name: Optional[str] = None
-    file_path: str = ""
-    line_number: int = 0
-    label_context: Optional[str] = None
-    choices: List[MenuChoice] = field(default_factory=list)
-    total_choices: int = 0
+# MenuStructure is now imported from control_flow.analyze_vn_menus
 
 
 @dataclass
@@ -658,7 +652,7 @@ class RenpyParser:
         menu_line = lines[start_line - 1].strip()
         menu_with_name_match = self.patterns['menu_with_name'].match(menu_line)
         if menu_with_name_match:
-            menu.name = menu_with_name_match.group(1)
+            menu.label_name = menu_with_name_match.group(1)
         
         # Parse choices and their actions
         current_line = start_line
@@ -747,25 +741,32 @@ class RenpyParser:
         if current_choice:
             menu.choices.append(current_choice)
         
-        menu.total_choices = len(menu.choices)
         return menu
     
-    def _create_menu_node_from_structure(self, menu_structure: MenuStructure, menu_index: int = 0) -> MenuNode:
+    def _create_menu_node_from_structure(self, menu_structure: MenuStructure, menu_index: int = 0, parent_choice_index: int = None) -> MenuNode:
         """
         Create a MenuNode with rich metadata from a MenuStructure.
         
         Args:
             menu_structure: The original MenuStructure to convert
             menu_index: Index of this menu within its parent label (0-based)
+            parent_choice_index: Index of parent choice if this is a nested menu
             
         Returns:
             MenuNode with comprehensive metadata
         """
         parent_label = menu_structure.label_context or "unknown"
-        node_id = f"{parent_label}_menu_{menu_index + 1}"
+        
+        # Generate hierarchical node ID for nested menus
+        if parent_choice_index is not None:
+            node_id = f"{parent_label}_menu_{menu_index + 1}_choice_{parent_choice_index}_menu_1"
+        else:
+            node_id = f"{parent_label}_menu_{menu_index + 1}"
         
         # Create enhanced MenuChoice objects
         enhanced_choices = []
+        nested_menu_nodes = []  # Track nested MenuNodes created from this menu
+        
         for i, choice in enumerate(menu_structure.choices):
             enhanced_choice = MenuChoice(
                 text=choice.text,
@@ -782,11 +783,28 @@ class RenpyParser:
             # Analyze choice for metadata
             self._enhance_choice_metadata(enhanced_choice)
             enhanced_choices.append(enhanced_choice)
+            
+            # Recursively create MenuNodes for nested menus
+            for nested_menu_structure in choice.nested_menu_structures:
+                nested_menu_node = self._create_menu_node_from_structure(
+                    nested_menu_structure, 
+                    0,  # Nested menus start at index 0 within their choice
+                    i   # Parent choice index
+                )
+                
+                # Set up hierarchical relationships
+                nested_menu_node.parent_menu_id = node_id
+                nested_menu_node.is_nested = True
+                nested_menu_node.nesting_level = menu_structure.nesting_level + 1
+                
+                nested_menu_nodes.append(nested_menu_node)
         
         # Determine menu type
         menu_type = "standard"
         if any(choice.condition for choice in enhanced_choices):
             menu_type = "conditional"
+        if nested_menu_nodes:
+            menu_type = "nested"
         # Additional type determination can be added here
         
         # Create the MenuNode
@@ -798,12 +816,17 @@ class RenpyParser:
             file_path=menu_structure.file_path,
             line_number=menu_structure.line_number,
             choices=enhanced_choices,
-            menu_type=menu_type
+            menu_type=menu_type,
+            is_nested=menu_structure.nesting_level > 0,
+            nesting_level=menu_structure.nesting_level,
+            nested_menu_ids=[nested.node_id for nested in nested_menu_nodes]
         )
         
         # Extract prompt from menu structure if available
         # Look for dialogue lines right before choices in the original structure
-        if menu_structure.choices:
+        if menu_structure.prompt:
+            menu_node.prompt = menu_structure.prompt
+        elif menu_structure.choices:
             # Try to find a prompt by looking at the first few lines before the menu
             try:
                 with open(menu_structure.file_path, 'r', encoding='utf-8') as file:
@@ -823,7 +846,33 @@ class RenpyParser:
         # Analyze for asset references and other metadata
         self._enhance_menu_metadata(menu_node)
         
+        # Return the main menu node and store nested nodes for later collection
+        menu_node._nested_menu_nodes = nested_menu_nodes  # Temporary storage
         return menu_node
+    
+    def _collect_all_menu_nodes(self, main_menu_node: MenuNode) -> List[MenuNode]:
+        """
+        Collect all MenuNodes from a hierarchical structure including nested ones.
+        
+        Args:
+            main_menu_node: The main MenuNode that may contain nested menus
+            
+        Returns:
+            List of all MenuNodes (main + all nested ones flattened)
+        """
+        all_nodes = [main_menu_node]
+        
+        # Get nested nodes if they exist
+        if hasattr(main_menu_node, '_nested_menu_nodes'):
+            nested_nodes = main_menu_node._nested_menu_nodes
+            for nested_node in nested_nodes:
+                # Recursively collect nested nodes from each nested menu
+                all_nodes.extend(self._collect_all_menu_nodes(nested_node))
+            
+            # Clean up temporary storage
+            delattr(main_menu_node, '_nested_menu_nodes')
+        
+        return all_nodes
     
     def _enhance_choice_metadata(self, choice: MenuChoice) -> None:
         """
@@ -1524,8 +1573,10 @@ class RenpyParser:
                 if flow.target_label == 'v14beforecourt':
                     print(f"[GRAPH DEBUG] Added incoming flow: {flow.source_label} → {flow.target_label} (context: {flow.context})")
         
-        # Analyze label properties and create menu nodes
-        menus = self.find_all_menus(project_path)
+        # Analyze label properties and create menu nodes using MenuAnalyzer for nested support
+        menu_analyzer = MenuAnalyzer()
+        menu_analysis = menu_analyzer.analyze_vn_menus(project_path)
+        menus = menu_analysis.get('menu_structures', [])
         
         # Group menus by their label context for processing
         menus_by_label = {}
@@ -1543,10 +1594,21 @@ class RenpyParser:
                 # Store original MenuStructure objects
                 node.menu_structures = label_menus
                 
-                # Create enhanced MenuNode objects
+                # Create enhanced MenuNode objects with hierarchical support
+                all_menu_nodes = []  # Collect all MenuNodes including nested ones
+                
                 for i, menu_structure in enumerate(label_menus):
-                    menu_node = self._create_menu_node_from_structure(menu_structure, i)
-                    node.menu_nodes.append(menu_node)
+                    # Create the main MenuNode (which may contain nested ones)
+                    main_menu_node = self._create_menu_node_from_structure(menu_structure, i)
+                    
+                    # Collect all MenuNodes from the hierarchy (main + nested)
+                    hierarchy_nodes = self._collect_all_menu_nodes(main_menu_node)
+                    all_menu_nodes.extend(hierarchy_nodes)
+                    
+                    print(f"Created menu hierarchy for {label_name}: {len(hierarchy_nodes)} total MenuNodes (main + nested)")
+                
+                # Add all MenuNodes (top-level and nested) to the label
+                node.menu_nodes.extend(all_menu_nodes)
                 
                 # Update computed fields after adding menu data
                 node.has_menu = len(node.menu_structures) > 0 or len(node.menu_nodes) > 0

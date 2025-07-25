@@ -22,12 +22,12 @@ from dataclasses import dataclass, field
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-try:
-    from parser import RenpyParser
-    from control_flow.flow_tracer import FlowTracer
-except ImportError as e:
-    print(f"Import error: {e}")
-    sys.exit(1)
+# FlowTracer import temporarily removed to avoid circular dependency
+# try:
+#     from control_flow.flow_tracer import FlowTracer
+# except ImportError as e:
+#     print(f"Warning: Could not import control flow components: {e}")
+#     # Continue without flow tracer if not available
 
 
 @dataclass
@@ -36,12 +36,16 @@ class MenuChoice:
     text: str
     condition: Optional[str] = None  # if clause condition
     destination: Optional[str] = None  # jump/call target
+    action_type: Optional[str] = None  # 'jump', 'call', 'return', 'pass', 'continue'
+    file_path: str = ""
     line_number: int = 0
     has_variables: bool = False  # Contains $ statements
     has_jumps: bool = False
     has_calls: bool = False
     nested_menu: bool = False  # Contains another menu
     nested_labels: List[str] = field(default_factory=list)  # Labels defined within this choice
+    nested_menu_structures: List['MenuStructure'] = field(default_factory=list)  # Actual nested menu structures
+    subsequent_lines: List[str] = field(default_factory=list)  # Lines that follow this choice
 
 
 @dataclass 
@@ -56,6 +60,9 @@ class MenuStructure:
     has_menu_set: bool = False
     menu_set_variable: Optional[str] = None
     nesting_level: int = 0  # How deep this menu is nested
+    parent_choice: Optional[MenuChoice] = None  # Parent choice that contains this menu (for nested menus)
+    parent_menu: Optional['MenuStructure'] = None  # Parent menu structure (for nested menus)
+    label_context: Optional[str] = None  # Label that contains this menu hierarchy
 
 
 class MenuAnalyzer:
@@ -158,13 +165,22 @@ class MenuAnalyzer:
             result['line_count'] = len(lines)
             
             i = 0
+            current_label = None
+            
             while i < len(lines):
                 line = lines[i].strip()
+                
+                # Track current label for context
+                label_match = self.menu_patterns['label'].match(line)
+                if label_match:
+                    current_label = label_match.group(1)
+                    i += 1
+                    continue
                 
                 # Look for menu statements
                 menu_match = self.menu_patterns['menu_start'].match(line)
                 if menu_match:
-                    menu, lines_consumed = self._parse_menu_structure(lines, i, str(rpy_file.name))
+                    menu, lines_consumed = self._parse_menu_structure(lines, i, str(rpy_file.name), 0, current_label)
                     if menu:
                         result['menus'].append(menu)
                     i += lines_consumed
@@ -176,7 +192,7 @@ class MenuAnalyzer:
             
         return result
     
-    def _parse_menu_structure(self, lines: List[str], start_idx: int, file_name: str) -> Tuple[Optional[MenuStructure], int]:
+    def _parse_menu_structure(self, lines: List[str], start_idx: int, file_name: str, nesting_level: int = 0, label_context: str = None) -> Tuple[Optional[MenuStructure], int]:
         """Parse a complete menu structure starting from a menu line."""
         menu_line = lines[start_idx].strip()
         menu_match = self.menu_patterns['menu_start'].match(menu_line)
@@ -187,7 +203,9 @@ class MenuAnalyzer:
         menu = MenuStructure(
             file_path=file_name,
             line_number=start_idx + 1,
-            label_name=menu_match.group(1) if menu_match.group(1) else None
+            label_name=menu_match.group(1) if menu_match.group(1) else None,
+            nesting_level=nesting_level,
+            label_context=label_context
         )
         
         i = start_idx + 1
@@ -236,7 +254,7 @@ class MenuAnalyzer:
                     menu.has_conditions = True
                 
                 # Parse choice block
-                choice_lines_consumed = self._parse_choice_block(lines, i + 1, choice, current_indent)
+                choice_lines_consumed = self._parse_choice_block(lines, i + 1, choice, current_indent, menu.nesting_level + 1, file_name, menu)
                 menu.choices.append(choice)
                 i += choice_lines_consumed + 1
                 continue
@@ -246,7 +264,7 @@ class MenuAnalyzer:
         lines_consumed = i - start_idx
         return menu, lines_consumed
     
-    def _parse_choice_block(self, lines: List[str], start_idx: int, choice: MenuChoice, base_indent: int) -> int:
+    def _parse_choice_block(self, lines: List[str], start_idx: int, choice: MenuChoice, base_indent: int, nesting_level: int, file_name: str, parent_menu: 'MenuStructure') -> int:
         """Parse the block of code following a menu choice."""
         i = start_idx
         
@@ -297,8 +315,22 @@ class MenuAnalyzer:
             # Check for nested menus
             if self.menu_patterns['menu_start'].match(line_stripped):
                 choice.nested_menu = True
-                # Skip the nested menu for now (could recursively parse if needed)
-                i += 1
+                
+                # Recursively parse the nested menu instead of skipping
+                nested_menu, nested_lines_consumed = self._parse_menu_structure(lines, i, file_name, nesting_level, parent_menu.label_context)
+                
+                if nested_menu:
+                    # Set up parent-child relationships
+                    nested_menu.parent_choice = choice
+                    nested_menu.parent_menu = parent_menu
+                    
+                    # Store the nested menu in the choice
+                    choice.nested_menu_structures.append(nested_menu)
+                    
+                    print(f"NESTED MENU: Found nested menu at line {i + 1} in choice '{choice.text}', nesting level {nested_menu.nesting_level}, label context: {nested_menu.label_context}")
+                
+                # Advance past the nested menu
+                i += nested_lines_consumed
                 continue
             
             i += 1

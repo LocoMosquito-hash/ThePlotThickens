@@ -325,6 +325,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
     def _create_menu_containers(self, flow_graph: Dict[str, Any]) -> Tuple[List[VisualizationNode], List[VisualizationConnection]]:
         """
         Create menu container nodes and choice button nodes with their connections.
+        Now supports hierarchical nested menus while preserving flat menu behavior.
         
         Args:
             flow_graph: Dictionary mapping label names to LabelNode objects
@@ -338,9 +339,13 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         for label_name, label_node in flow_graph.items():
             if not label_node.has_menu:
                 continue
-                
-            for menu_idx, menu_node in enumerate(label_node.menu_nodes):
-                # Create menu container
+            
+            # Separate top-level and nested MenuNodes
+            top_level_menus = [menu for menu in label_node.menu_nodes if not menu.is_nested]
+            nested_menus = [menu for menu in label_node.menu_nodes if menu.is_nested]
+            
+            # Process top-level menus exactly as before (no changes to existing behavior)
+            for menu_idx, menu_node in enumerate(top_level_menus):
                 container_id = f"{label_name}_menu_{menu_idx}"
                 # Prioritize menu prompt for display name, fallback to generic name
                 if menu_node.prompt:
@@ -362,97 +367,204 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                         'prompt': menu_node.prompt,
                         'menu_type': menu_node.menu_type,
                         'has_conditions': menu_node.has_conditions,
-                        'story_significance': menu_node.story_significance
+                        'story_significance': menu_node.story_significance,
+                        'is_nested': False,  # Mark as top-level
+                        'nesting_level': 0
                     }
                 )
                 container_nodes.append(container)
                 
-                # Create choice buttons
+                # Process choices for top-level menu (existing logic)
+                self._create_choice_buttons_and_connections(
+                    menu_node, container_id, label_name, container_nodes, choice_connections
+                )
+            
+            # Process nested menus with hierarchical positioning
+            for nested_menu in nested_menus:
+                # Create unique container ID that reflects the hierarchy
+                nested_container_id = nested_menu.node_id.replace(label_name + "_", f"{label_name}_nested_")
+                
+                # Create display name that indicates it's nested
+                if nested_menu.prompt:
+                    nested_container_name = f"↳ {nested_menu.prompt}"
+                else:
+                    nested_container_name = f"↳ Nested Menu (Level {nested_menu.nesting_level})"
+                
+                nested_container = VisualizationNode(
+                    node_id=nested_container_id,
+                    node_type='menu_container',
+                    display_name=nested_container_name,
+                    color_hint='lightyellow',  # Slightly different color for nested
+                    size_hint=(180, 130),  # Slightly smaller for nested menus
+                    metadata={
+                        'parent_label': label_name,
+                        'menu_index': -1,  # Not a top-level menu
+                        'complexity_level': nested_menu.complexity_level,
+                        'total_choices': nested_menu.total_choices,
+                        'prompt': nested_menu.prompt,
+                        'menu_type': nested_menu.menu_type,
+                        'has_conditions': nested_menu.has_conditions,
+                        'story_significance': nested_menu.story_significance,
+                        'is_nested': True,  # Mark as nested
+                        'nesting_level': nested_menu.nesting_level,
+                        'parent_menu_id': nested_menu.parent_menu_id,
+                        'original_node_id': nested_menu.node_id  # Keep original for reference
+                    }
+                )
+                container_nodes.append(nested_container)
+                
+                # Process choices for nested menu
+                self._create_choice_buttons_and_connections(
+                    nested_menu, nested_container_id, label_name, container_nodes, choice_connections
+                )
+        
+        # PHASE 2: Create hierarchy connections after all containers exist
+        self._create_hierarchy_connections(flow_graph, container_nodes, choice_connections)
+        
+        return container_nodes, choice_connections
+    
+    def _create_hierarchy_connections(self, flow_graph: Dict[str, Any], container_nodes: List, choice_connections: List):
+        """
+        Create hierarchy connections between parent choices and their nested menu containers.
+        This runs after all containers are created to ensure nested containers exist.
+        """
+        # Create lookup for quick container access
+        container_lookup = {node.node_id: node for node in container_nodes if node.node_type == 'menu_container'}
+        choice_lookup = {node.node_id: node for node in container_nodes if node.node_type == 'choice_button'}
+        
+        for label_name, label_node in flow_graph.items():
+            if not label_node.has_menu:
+                continue
+            
+            # Find top-level menus and their choices
+            top_level_menus = [menu for menu in label_node.menu_nodes if not menu.is_nested]
+            
+            for menu_idx, menu_node in enumerate(top_level_menus):
+                container_id = f"{label_name}_menu_{menu_idx}"
+                
                 for choice_idx, choice in enumerate(menu_node.choices):
                     choice_id = f"{container_id}_choice_{choice_idx}"
                     
-                    # Truncate long choice text for display
-                    display_text = choice.text
-                    if len(display_text) > 30:
-                        display_text = display_text[:27] + "..."
-                    
-                    choice_node = VisualizationNode(
-                        node_id=choice_id,
-                        node_type='choice_button',
-                        display_name=display_text,
-                        color_hint='lightblue' if not choice.condition else 'orange',
-                        size_hint=(150, 40),  # Button size
-                        metadata={
-                            'parent_container': container_id,
-                            'choice_index': choice_idx,
-                            'full_text': choice.text,
-                            'condition': choice.condition,
-                            'destination': choice.destination,
-                            'action_type': choice.action_type,
-                            'has_condition': choice.has_condition,
-                            'estimated_story_impact': choice.estimated_story_impact,
-                            'contains_media_references': choice.contains_media_references,
-                            'contains_variable_changes': choice.contains_variable_changes
-                        }
-                    )
-                    container_nodes.append(choice_node)
-                    
-                    # Create connection from choice to destination
-                    if choice.destination and choice.destination != '<return>':
-                        connection_id = f"{choice_id}_to_{choice.destination}"
+                    # Check if this choice should connect to a nested menu
+                    if not choice.destination or choice.destination == '<return>':
+                        # Look for corresponding nested menu container
+                        expected_nested_id = f"{menu_node.node_id}_choice_{choice_idx}_menu_1"
+                        nested_container_id = expected_nested_id.replace(label_name + "_", f"{label_name}_nested_")
                         
-                        # Determine connection style based on action type and condition
-                        line_style = 'dashed' if choice.condition else 'solid'
-                        color_hint = 'orange' if choice.condition else 'gray'
-                        if choice.action_type == 'call':
-                            color_hint = 'blue'
-                        elif choice.action_type == 'return':
-                            color_hint = 'red'
-                        
-                        connection = VisualizationConnection(
-                            connection_id=connection_id,
-                            source_node_id=choice_id,
-                            target_node_id=choice.destination,
-                            connection_type='menu_choice',
-                            line_style=line_style,
-                            color_hint=color_hint,
-                            weight_hint=1.5,  # Slightly thicker for menu choices
-                            label=display_text,
-                            condition=choice.condition,
-                            metadata={
-                                'choice_index': choice_idx,
-                                'action_type': choice.action_type,
-                                'parent_menu': container_id,
-                                'estimated_impact': choice.estimated_story_impact
-                            }
-                        )
-                        choice_connections.append(connection)
-                    
-                    # Create connections from choice to nested labels
-                    for nested_label in choice.nested_labels:
-                        connection_id = f"{choice_id}_to_{nested_label}"
-                        
-                        connection = VisualizationConnection(
-                            connection_id=connection_id,
-                            source_node_id=choice_id,
-                            target_node_id=nested_label,
-                            connection_type='choice_to_nested_label',
-                            line_style='solid',
-                            color_hint='purple',  # Distinct color for nested label connections
-                            weight_hint=1.5,
-                            label=f"Contains: {nested_label}",
-                            condition=choice.condition,
-                            metadata={
-                                'choice_index': choice_idx,
-                                'action_type': 'nested_label',
-                                'parent_menu': container_id,
-                                'nested_label': nested_label
-                            }
-                        )
-                        choice_connections.append(connection)
-                        print(f"[CHOICE CONNECTION] Created choice -> nested label: {choice_id} -> {nested_label}")
-        
-        return container_nodes, choice_connections
+                        # Check if both choice and nested container exist
+                        if choice_id in choice_lookup and nested_container_id in container_lookup:
+                            # Create hierarchy connection: parent choice -> nested menu container
+                            connection_id = f"{choice_id}_to_nested_menu"
+                            
+                            connection = VisualizationConnection(
+                                connection_id=connection_id,
+                                source_node_id=choice_id,
+                                target_node_id=nested_container_id,
+                                connection_type='choice_to_nested_menu',
+                                line_style='solid',
+                                color_hint='green',  # Distinct color for hierarchy connections
+                                weight_hint=2.0,     # Thicker for hierarchy emphasis
+                                label=f"→ Nested Menu",
+                                condition=choice.condition,
+                                metadata={
+                                    'choice_index': choice_idx,
+                                    'action_type': 'hierarchy',
+                                    'parent_menu': container_id,
+                                    'nested_menu': nested_container_id,
+                                    'connection_nature': 'parent_to_child_menu'
+                                }
+                            )
+                            choice_connections.append(connection)
+                            print(f"[HIERARCHY] Created connection: {choice_id} -> {nested_container_id}")
+    
+    def _create_choice_buttons_and_connections(self, menu_node, container_id: str, label_name: str, 
+                                             container_nodes: List, choice_connections: List):
+        """
+        Helper method to create choice buttons and connections for a menu container.
+        Extracted to avoid code duplication between top-level and nested menu processing.
+        """
+        for choice_idx, choice in enumerate(menu_node.choices):
+            choice_id = f"{container_id}_choice_{choice_idx}"
+            
+            # Truncate long choice text for display
+            display_text = choice.text
+            if len(display_text) > 30:
+                display_text = display_text[:27] + "..."
+            
+            choice_node = VisualizationNode(
+                node_id=choice_id,
+                node_type='choice_button',
+                display_name=display_text,
+                color_hint='lightblue' if not choice.condition else 'orange',
+                size_hint=(150, 40),  # Button size
+                metadata={
+                    'parent_container': container_id,
+                    'choice_index': choice_idx,
+                    'full_text': choice.text,
+                    'condition': choice.condition,
+                    'destination': choice.destination,
+                    'action_type': choice.action_type,
+                    'has_condition': choice.has_condition,
+                    'estimated_story_impact': choice.estimated_story_impact,
+                    'contains_media_references': choice.contains_media_references,
+                    'contains_variable_changes': choice.contains_variable_changes
+                }
+            )
+            container_nodes.append(choice_node)
+            
+            # Create connection from choice to destination
+            if choice.destination and choice.destination != '<return>':
+                connection_id = f"{choice_id}_to_{choice.destination}"
+                
+                # Determine connection style based on action type and condition
+                line_style = 'dashed' if choice.condition else 'solid'
+                color_hint = 'orange' if choice.condition else 'gray'
+                if choice.action_type == 'call':
+                    color_hint = 'blue'
+                elif choice.action_type == 'return':
+                    color_hint = 'red'
+                
+                connection = VisualizationConnection(
+                    connection_id=connection_id,
+                    source_node_id=choice_id,
+                    target_node_id=choice.destination,
+                    connection_type='menu_choice',
+                    line_style=line_style,
+                    color_hint=color_hint,
+                    weight_hint=1.5,  # Slightly thicker for menu choices
+                    label=display_text,
+                    condition=choice.condition,
+                    metadata={
+                        'choice_index': choice_idx,
+                        'action_type': choice.action_type,
+                        'parent_menu': container_id,
+                        'estimated_impact': choice.estimated_story_impact
+                    }
+                )
+                choice_connections.append(connection)
+            
+            # Create connections from choice to nested labels
+            for nested_label in choice.nested_labels:
+                connection_id = f"{choice_id}_to_{nested_label}"
+                
+                connection = VisualizationConnection(
+                    connection_id=connection_id,
+                    source_node_id=choice_id,
+                    target_node_id=nested_label,
+                    connection_type='choice_to_nested_label',
+                    line_style='solid',
+                    color_hint='purple',  # Distinct color for nested label connections
+                    weight_hint=1.5,
+                    label=f"Contains: {nested_label}",
+                    condition=choice.condition,
+                    metadata={
+                        'choice_index': choice_idx,
+                        'action_type': 'nested_label',
+                        'parent_menu': container_id,
+                        'nested_label': nested_label
+                    }
+                )
+                choice_connections.append(connection)
     
     def _create_label_to_menu_connections(self, flow_graph: Dict[str, Any]) -> List[VisualizationConnection]:
         """
