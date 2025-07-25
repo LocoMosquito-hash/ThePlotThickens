@@ -376,19 +376,19 @@ class RenpySDKAnalyzer:
                 
                 if self.python_exe.exists() and self.analyzer_script.exists():
                     self.is_available = True
-                    print(f"✅ SDK Analyzer available:")
+                    print(f"OK: SDK Analyzer available:")
                     print(f"   SDK: {self.sdk_path}")
                     print(f"   Python: {self.python_exe}")
                     print(f"   Analyzer: {self.analyzer_script}")
                 else:
-                    print(f"❌ SDK components missing:")
+                    print(f"ERROR: SDK components missing:")
                     print(f"   Python exe exists: {self.python_exe.exists() if self.python_exe else 'No path'}")
                     print(f"   Analyzer exists: {self.analyzer_script.exists() if self.analyzer_script else 'No path'}")
             else:
-                print(f"❌ SDK directory not found: {self.sdk_path}")
+                print(f"ERROR: SDK directory not found: {self.sdk_path}")
                 
         except Exception as e:
-            print(f"❌ Error setting up SDK paths: {e}")
+            print(f"ERROR: Error setting up SDK paths: {e}")
             self.is_available = False
     
     def analyze_project(self, project_path: str, use_cache: bool = True, verbose: bool = False) -> SDKAnalysisResult:
@@ -464,7 +464,7 @@ class RenpySDKAnalyzer:
                 analysis_time = (datetime.now() - start_time).total_seconds()
                 
                 if verbose:
-                    print(f"✅ SDK analysis complete in {analysis_time:.2f}s")
+                    print(f"OK: SDK analysis complete in {analysis_time:.2f}s")
                     project_info = analysis_data.get('project_info', {})
                     print(f"   Found: {project_info.get('total_labels', 0)} labels, "
                           f"{project_info.get('total_characters', 0)} characters, "
@@ -477,7 +477,7 @@ class RenpySDKAnalyzer:
                 )
             else:
                 error_msg = f"SDK analysis failed (code {result.returncode}): {result.stderr}"
-                print(f"❌ {error_msg}")
+                print(f"ERROR: {error_msg}")
                 
                 return SDKAnalysisResult(
                     success=False,
@@ -487,7 +487,7 @@ class RenpySDKAnalyzer:
         
         except subprocess.TimeoutExpired:
             error_msg = "SDK analysis timed out after 2 minutes"
-            print(f"❌ {error_msg}")
+            print(f"ERROR: {error_msg}")
             
             return SDKAnalysisResult(
                 success=False,
@@ -497,7 +497,7 @@ class RenpySDKAnalyzer:
         
         except Exception as e:
             error_msg = f"SDK analysis error: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"ERROR: {error_msg}")
             
             return SDKAnalysisResult(
                 success=False,
@@ -649,7 +649,7 @@ class HybridRenpyParser:
                     merged_results = self._merge_results(regex_results, sdk_result.data, project_path)
                     
                     if verbose:
-                        print("✅ Using merged regex + SDK results")
+                        print("OK: Using merged regex + SDK results")
                     
                     return merged_results
                 else:
@@ -659,7 +659,7 @@ class HybridRenpyParser:
             # Use regex results
             self.stats['regex_only'] += 1
             if verbose:
-                print("✅ Using regex-only results")
+                print("OK: Using regex-only results")
             
             return regex_results
         
@@ -667,7 +667,7 @@ class HybridRenpyParser:
             # If regex fails, try SDK as fallback
             if self.sdk_analyzer.is_available:
                 if verbose:
-                    print(f"❌ Regex analysis failed, trying SDK fallback: {str(e)}")
+                    print(f"ERROR: Regex analysis failed, trying SDK fallback: {str(e)}")
                 
                 sdk_result = self.sdk_analyzer.analyze_project(project_path, verbose=verbose)
                 if sdk_result.success and sdk_result.data:

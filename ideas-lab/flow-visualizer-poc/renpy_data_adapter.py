@@ -8,7 +8,7 @@ This is Phase 1 of the flow visualizer refactoring to achieve clean separation
 of concerns between parsing and visualization.
 """
 
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Set
 import sys
 from pathlib import Path
 
@@ -240,42 +240,43 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         for label_name, label_node in flow_graph.items():
             # Process all flows from all labels (including those with menus)
             for flow in label_node.outgoing_flows:
+                source_label = flow.source_label
                 target_label = flow.target_label
                 
                 # Skip return flows and flows to non-existent labels
                 if not target_label or target_label == '<return>' or target_label not in flow_graph:
                     continue
                 
-                # SMART FILTERING: Only skip menu_choice flows (handled by menu containers)
+                # SMART FILTERING: Filter flows strategically
                 if flow.flow_type == 'menu_choice':
-                    continue  # Menu choices are handled by menu containers
-                
-                # SMART FILTERING: Skip flows that compete with menu choice destinations
-                # BUT allow flows from labels that don't have menus (like afternikkidate → v14beforecourt)
-                if (target_label in menu_choice_destinations and 
-                    label_node.has_menu and 
-                    flow.flow_type in ['jump', 'call']):
-                    # This is a competing flow - a direct jump from a menu label to a choice destination
-                    print(f"[FLOW FILTER] Skipping competing flow: {label_name} → {target_label} (menu choice handles this)")
+                    # Skip menu_choice flows - handled by menu containers
+                    print(f"[FLOW FILTER] Skipping menu_choice flow: {source_label} → {target_label}")
                     continue
+                elif target_label in menu_choice_destinations:
+                    # Filter out any direct flows to menu choice destinations from labels that have menus
+                    # This prevents competing flows: label → destination vs choice → destination
+                    if hasattr(flow_graph.get(source_label, {}), 'menu_nodes') and flow_graph[source_label].menu_nodes:
+                        print(f"[FLOW FILTER] Skipping competing flow from menu label: {source_label} → {target_label}")
+                        continue
+                    else:
+                        print(f"[FLOW FILTER] Keeping flow from non-menu label: {source_label} → {target_label}")
                 
-                # Allow all other flows (conditional jumps, story progression, etc.)
-                
+                # Create the connection if it passes all filters
                 # DEDUPLICATION: Check if we already created this connection
-                connection_key = (label_name, target_label)
+                connection_key = (source_label, target_label)
                 if connection_key in created_connections:
                     continue
                 
                 # Mark this connection as created
                 created_connections.add(connection_key)
                 
-                connection_id = f"{label_name}_to_{target_label}_{flow.flow_type}"
+                connection_id = f"{source_label}_to_{target_label}_{flow.flow_type}"
                 line_style = self._get_line_style_for_flow_type(flow.flow_type)
                 color_hint = self._get_color_for_flow_type(flow.flow_type)
                 
                 connection = VisualizationConnection(
                     connection_id=connection_id,
-                    source_node_id=label_name,
+                    source_node_id=source_label,
                     target_node_id=target_label,
                     connection_type=flow.flow_type,
                     line_style=line_style,
@@ -293,25 +294,32 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         
         return connections
     
-    def _get_menu_choice_destinations(self, flow_graph: Dict[str, Any]) -> set:
+    def _get_menu_choice_destinations(self, flow_graph: Dict[str, Any]) -> Set[str]:
         """
-        Get all destinations that are targeted by menu choices.
+        Build set of all destinations that are claimed by menu choices.
+        These should not have competing direct flows from labels.
         
-        Args:
-            flow_graph: Dictionary mapping label names to LabelNode objects
-            
         Returns:
             Set of label names that are destinations of menu choices
         """
         menu_destinations = set()
         
         for label_name, label_node in flow_graph.items():
-            if label_node.has_menu:
-                # Get all destinations from this label's menu choices
+            # Check if label has menus
+            if hasattr(label_node, 'menu_nodes') and label_node.menu_nodes:
                 for menu_node in label_node.menu_nodes:
-                    menu_destinations.update(menu_node.choice_destinations)
+                    for choice in menu_node.choices:
+                        # Add regular choice destinations (jumps/calls)
+                        if choice.destination:
+                            menu_destinations.add(choice.destination)
+                            print(f"[DESTINATION FILTER] Added choice destination: {choice.destination}")
+                        
+                        # Add nested labels within choices  
+                        for nested_label in choice.nested_labels:
+                            menu_destinations.add(nested_label)
+                            print(f"[DESTINATION FILTER] Added nested label destination: {nested_label}")
         
-        print(f"[FLOW FILTER] Found {len(menu_destinations)} menu choice destinations: {sorted(menu_destinations)}")
+        print(f"[DESTINATION FILTER] Total menu choice destinations: {len(menu_destinations)}")
         return menu_destinations
     
     def _create_menu_containers(self, flow_graph: Dict[str, Any]) -> Tuple[List[VisualizationNode], List[VisualizationConnection]]:
@@ -419,6 +427,30 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                             }
                         )
                         choice_connections.append(connection)
+                    
+                    # Create connections from choice to nested labels
+                    for nested_label in choice.nested_labels:
+                        connection_id = f"{choice_id}_to_{nested_label}"
+                        
+                        connection = VisualizationConnection(
+                            connection_id=connection_id,
+                            source_node_id=choice_id,
+                            target_node_id=nested_label,
+                            connection_type='choice_to_nested_label',
+                            line_style='solid',
+                            color_hint='purple',  # Distinct color for nested label connections
+                            weight_hint=1.5,
+                            label=f"Contains: {nested_label}",
+                            condition=choice.condition,
+                            metadata={
+                                'choice_index': choice_idx,
+                                'action_type': 'nested_label',
+                                'parent_menu': container_id,
+                                'nested_label': nested_label
+                            }
+                        )
+                        choice_connections.append(connection)
+                        print(f"[CHOICE CONNECTION] Created choice -> nested label: {choice_id} -> {nested_label}")
         
         return container_nodes, choice_connections
     
@@ -584,22 +616,36 @@ class RenpyFlowDataAdapter(FlowDataProvider):
     
     def _get_line_style_for_flow_type(self, flow_type: str) -> str:
         """Get line style for flow type."""
-        style_map = {
+        # Line styles by flow type
+        line_styles = {
             'jump': 'solid',
-            'call': 'solid', 
+            'call': 'dashed',
             'return': 'dotted',
-            'implicit': 'dashed',
-            'menu_choice': 'solid'
+            'menu_choice': 'solid',
+            'menu_choice_nested_label': 'solid',
+            'conditional': 'solid'
         }
-        return style_map.get(flow_type, 'solid')
+        
+        # Color hints by flow type
+        color_hints = {
+            'jump': 'blue',
+            'call': 'green',
+            'return': 'gray',
+            'menu_choice': 'orange',
+            'menu_choice_nested_label': 'purple',
+            'conditional': 'red'
+        }
+        return line_styles.get(flow_type, 'solid')
     
     def _get_color_for_flow_type(self, flow_type: str) -> str:
         """Get color hint for flow type."""
-        color_map = {
-            'jump': 'gray',
-            'call': 'blue',
-            'return': 'red', 
-            'implicit': 'lightgray',
-            'menu_choice': 'orange'
+        # Color hints by flow type
+        color_hints = {
+            'jump': 'blue',
+            'call': 'green',
+            'return': 'gray',
+            'menu_choice': 'orange',
+            'menu_choice_nested_label': 'purple',
+            'conditional': 'red'
         }
-        return color_map.get(flow_type, 'gray') 
+        return color_hints.get(flow_type, 'gray') 

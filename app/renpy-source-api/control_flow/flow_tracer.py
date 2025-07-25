@@ -243,18 +243,32 @@ class FlowTracer:
         """
         choice_pattern = re.compile(r'^\s*"([^"]+)"\s*:', re.IGNORECASE)
         jump_pattern = re.compile(r'^\s*jump\s+(\w+)', re.IGNORECASE)
+        label_pattern = re.compile(r'^\s*label\s+(\w+):', re.IGNORECASE)
         
         choices = []
         i = menu_line_idx + 1
+        
+        # Get the base indentation level of the menu
+        menu_line = current_file_lines[menu_line_idx]
+        menu_indent = len(menu_line.content) - len(menu_line.content.lstrip())
         
         # Process lines after the menu
         while i < len(current_file_lines):
             line = current_file_lines[i]
             content = line.content.strip()
+            line_indent = len(line.content) - len(line.content.lstrip())
             
-            # Stop if we hit a statement that ends the menu (like 'label')
-            if content.startswith('label '):
+            # Stop if we hit a label at the same or lower indentation level than the menu
+            # (but continue for nested labels at higher indentation)
+            label_match = label_pattern.match(line.content)
+            if label_match and line_indent <= menu_indent:
+                print(f"STOP: Stopping menu parsing at label '{label_match.group(1)}' (indent {line_indent} <= menu indent {menu_indent})")
                 break
+            elif label_match and line_indent > menu_indent:
+                print(f"LABEL: Found nested label '{label_match.group(1)}' in menu choice (indent {line_indent} > menu indent {menu_indent})")
+                # Continue parsing - this is a nested label within a choice
+                i += 1
+                continue
                 
             # Check if this is a choice
             choice_match = choice_pattern.match(content)

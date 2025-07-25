@@ -49,6 +49,7 @@ class MenuChoice:
     file_path: str = ""
     line_number: int = 0
     subsequent_lines: List[str] = field(default_factory=list)  # Lines that follow this choice
+    nested_labels: List[str] = field(default_factory=list)  # Labels defined within this choice
     
     # Enhanced metadata for app consumption
     choice_index: int = 0  # Order within the menu (0-based)
@@ -713,8 +714,14 @@ class RenpyParser:
                 if parsed_line:
                     current_choice.subsequent_lines.append(stripped_line)
                     
+                    # Check for nested labels first
+                    if parsed_line.line_type == 'label':
+                        nested_label_name = parsed_line.label_name
+                        current_choice.nested_labels.append(nested_label_name)
+                        print(f"Parser found nested label '{nested_label_name}' in choice '{current_choice.text}'")
+                    
                     # Check for action types
-                    if parsed_line.line_type in ['jump', 'choice_jump']:
+                    elif parsed_line.line_type in ['jump', 'choice_jump']:
                         current_choice.action_type = 'jump'
                         current_choice.destination = parsed_line.target_label
                     elif parsed_line.line_type in ['call', 'choice_call']:
@@ -768,6 +775,7 @@ class RenpyParser:
                 file_path=choice.file_path,
                 line_number=choice.line_number,
                 subsequent_lines=choice.subsequent_lines,
+                nested_labels=choice.nested_labels,  # Preserve nested labels from parsing
                 choice_index=i
             )
             
@@ -1135,6 +1143,7 @@ class RenpyParser:
         menus = self.find_all_menus(project_path)
         for menu in menus:
             for choice in menu.choices:
+                # Add flows for standard choice destinations (jumps/calls)
                 if choice.destination:
                     flows.append(LabelFlow(
                         source_label=menu.label_context,
@@ -1145,6 +1154,20 @@ class RenpyParser:
                         context=choice.text,
                         condition=choice.condition
                     ))
+                
+                # NOTE: Nested labels are now handled by choice button connections in the visualizer
+                # This prevents competing flows: label -> nested_label vs choice -> nested_label
+                # for nested_label in choice.nested_labels:
+                #     flows.append(LabelFlow(
+                #         source_label=menu.label_context,
+                #         target_label=nested_label,
+                #         flow_type='menu_choice_nested_label',
+                #         file_path=choice.file_path,
+                #         line_number=choice.line_number,
+                #         context=f"Choice: {choice.text} -> {nested_label}",
+                #         condition=choice.condition
+                #     ))
+                #     print(f"Added flow: choice '{choice.text}' -> nested label '{nested_label}'")
         
         return flows
 
@@ -1213,12 +1236,12 @@ class RenpyParser:
                                 context="conditional_jump",
                                 condition="conditional_statement"
                             ))
-                            print(f"🔍 CONDITIONAL JUMP DETECTED: {label_name} → {target_label} (simplified detection)")
+                            print(f"CONDITIONAL JUMP DETECTED: {label_name} -> {target_label} (simplified detection)")
                 
                 i += 1
             
         except Exception as e:
-            print(f"⚠️  Error extracting conditional jumps from {label_name}: {e}")
+            print(f"WARNING: Error extracting conditional jumps from {label_name}: {e}")
         
         return conditional_flows
 

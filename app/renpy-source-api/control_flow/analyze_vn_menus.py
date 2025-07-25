@@ -41,6 +41,7 @@ class MenuChoice:
     has_jumps: bool = False
     has_calls: bool = False
     nested_menu: bool = False  # Contains another menu
+    nested_labels: List[str] = field(default_factory=list)  # Labels defined within this choice
 
 
 @dataclass 
@@ -67,6 +68,7 @@ class MenuAnalyzer:
             'choice': re.compile(r'^\s*"([^"]+)"\s*(\([^)]*\))?\s*(if\s+[^:]+)?\s*:', re.IGNORECASE),
             'jump_call': re.compile(r'^\s*(jump|call)\s+([a-zA-Z_][a-zA-Z0-9_\.]*)', re.IGNORECASE),
             'variable': re.compile(r'^\s*\$\s+', re.IGNORECASE),
+            'label': re.compile(r'^\s*label\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:', re.IGNORECASE),
         }
     
     def analyze_vn_menus(self, vn_path: str) -> Dict[str, Any]:
@@ -259,6 +261,15 @@ class MenuAnalyzer:
             
             # Skip empty lines and comments
             if not line_stripped or line_stripped.startswith('#'):
+                i += 1
+                continue
+            
+            # Check for nested labels
+            label_match = self.menu_patterns['label'].match(line_stripped)
+            if label_match:
+                label_name = label_match.group(1)
+                choice.nested_labels.append(label_name)
+                print(f"NESTED: Found nested label '{label_name}' in choice '{choice.text}'")
                 i += 1
                 continue
             
