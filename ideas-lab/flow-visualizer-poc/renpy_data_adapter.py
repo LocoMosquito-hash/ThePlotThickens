@@ -427,6 +427,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         """
         Create hierarchy connections between parent choices and their nested menu containers.
         This runs after all containers are created to ensure nested containers exist.
+        FIXED: Now processes ALL menu levels recursively, not just top-level menus.
         """
         # Create lookup for quick container access
         container_lookup = {node.node_id: node for node in container_nodes if node.node_type == 'menu_container'}
@@ -436,11 +437,15 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             if not label_node.has_menu:
                 continue
             
-            # Find top-level menus and their choices
-            top_level_menus = [menu for menu in label_node.menu_nodes if not menu.is_nested]
-            
-            for menu_idx, menu_node in enumerate(top_level_menus):
-                container_id = f"{label_name}_menu_{menu_idx}"
+            # FIXED: Process ALL menu nodes (top-level AND nested) instead of just top-level
+            for menu_node in label_node.menu_nodes:
+                # Determine the container ID based on whether this is a nested menu or not
+                if menu_node.is_nested:
+                    # For nested menus, use the nested container ID pattern
+                    container_id = menu_node.node_id.replace(label_name + "_", f"{label_name}_nested_")
+                else:
+                    # For top-level menus, use the standard pattern
+                    container_id = f"{label_name}_menu_{menu_node.menu_index}"
                 
                 for choice_idx, choice in enumerate(menu_node.choices):
                     choice_id = f"{container_id}_choice_{choice_idx}"
@@ -471,11 +476,12 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                                     'action_type': 'hierarchy',
                                     'parent_menu': container_id,
                                     'nested_menu': nested_container_id,
-                                    'connection_nature': 'parent_to_child_menu'
+                                    'connection_nature': 'parent_to_child_menu',
+                                    'menu_level': menu_node.nesting_level
                                 }
                             )
                             choice_connections.append(connection)
-                            print(f"[HIERARCHY] Created connection: {choice_id} -> {nested_container_id}")
+                            print(f"[HIERARCHY] Created L{menu_node.nesting_level} connection: {choice_id} -> {nested_container_id}")
     
     def _create_choice_buttons_and_connections(self, menu_node, container_id: str, label_name: str, 
                                              container_nodes: List, choice_connections: List):

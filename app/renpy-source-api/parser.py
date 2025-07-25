@@ -743,7 +743,7 @@ class RenpyParser:
         
         return menu
     
-    def _create_menu_node_from_structure(self, menu_structure: MenuStructure, menu_index: int = 0, parent_choice_index: int = None) -> MenuNode:
+    def _create_menu_node_from_structure(self, menu_structure: MenuStructure, menu_index: int = 0, parent_choice_index: int = None, parent_node_id: str = None) -> MenuNode:
         """
         Create a MenuNode with rich metadata from a MenuStructure.
         
@@ -751,6 +751,7 @@ class RenpyParser:
             menu_structure: The original MenuStructure to convert
             menu_index: Index of this menu within its parent label (0-based)
             parent_choice_index: Index of parent choice if this is a nested menu
+            parent_node_id: Full node ID of parent menu for hierarchical ID generation
             
         Returns:
             MenuNode with comprehensive metadata
@@ -758,9 +759,14 @@ class RenpyParser:
         parent_label = menu_structure.label_context or "unknown"
         
         # Generate hierarchical node ID for nested menus
-        if parent_choice_index is not None:
+        if parent_choice_index is not None and parent_node_id is not None:
+            # Build hierarchical ID by extending parent's ID
+            node_id = f"{parent_node_id}_choice_{parent_choice_index}_menu_1"
+        elif parent_choice_index is not None:
+            # Fallback for backward compatibility (shouldn't happen with new code)
             node_id = f"{parent_label}_menu_{menu_index + 1}_choice_{parent_choice_index}_menu_1"
         else:
+            # Top-level menu
             node_id = f"{parent_label}_menu_{menu_index + 1}"
         
         # Create enhanced MenuChoice objects
@@ -789,7 +795,8 @@ class RenpyParser:
                 nested_menu_node = self._create_menu_node_from_structure(
                     nested_menu_structure, 
                     0,  # Nested menus start at index 0 within their choice
-                    i   # Parent choice index
+                    i,  # Parent choice index
+                    node_id  # Pass current node_id as parent for hierarchical ID generation
                 )
                 
                 # Set up hierarchical relationships

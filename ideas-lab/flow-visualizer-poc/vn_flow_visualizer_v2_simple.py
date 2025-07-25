@@ -1120,13 +1120,13 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         NODE_WIDTH = 200
         
         for i, node_id in enumerate(scc_nodes):
-            row = i // MAX_NODES_PER_ROW
-            col = i % MAX_NODES_PER_ROW
+                            row = i // MAX_NODES_PER_ROW
+                            col = i % MAX_NODES_PER_ROW
+                            
+                            x_pos = x_offset + col * NODE_WIDTH
+                            y_pos = y_base + row * 80  # Compact vertical spacing
             
-            x_pos = x_offset + col * NODE_WIDTH
-            y_pos = y_base + row * 80  # Compact vertical spacing
-            
-            positions[node_id] = (x_pos, y_pos)
+                            positions[node_id] = (x_pos, y_pos)
         
         return positions
 
