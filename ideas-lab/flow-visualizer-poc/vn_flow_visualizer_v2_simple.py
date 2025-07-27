@@ -367,6 +367,14 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         self._pan_active = False
         self._last_pan_point = None
         
+        # Keyboard navigation constants
+        self.MOVEMENT_SPEED_BASE = 50  # pixels
+        self.MOVEMENT_SPEED_2X = self.MOVEMENT_SPEED_BASE * 2
+        self.MOVEMENT_SPEED_4X = self.MOVEMENT_SPEED_BASE * 4
+        
+        # Enable keyboard focus for WASD navigation
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    
     def load_project(self, project_path: str, use_sdk: bool = False) -> bool:
         """
         Load a project using the clean interface.
@@ -622,6 +630,36 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             # Reset edge highlighting when no single node is selected
             if self.edge_highlighting_enabled:
                 self.reset_edge_highlighting()
+    
+    def keyPressEvent(self, event):
+        """Handle keyboard navigation with WASD keys and speed modifiers."""
+        key = event.key()
+        modifiers = event.modifiers()
+        
+        # Determine movement speed based on modifiers
+        if modifiers & Qt.KeyboardModifier.ShiftModifier:
+            speed = self.MOVEMENT_SPEED_4X  # 4x speed
+        elif modifiers & Qt.KeyboardModifier.ControlModifier:
+            speed = self.MOVEMENT_SPEED_2X  # 2x speed
+        else:
+            speed = self.MOVEMENT_SPEED_BASE  # 1x speed
+        
+        # Handle WASD movement
+        if key == Qt.Key.Key_W:  # Move up
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - speed)
+            event.accept()
+        elif key == Qt.Key.Key_S:  # Move down
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() + speed)
+            event.accept()
+        elif key == Qt.Key.Key_A:  # Move left
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - speed)
+            event.accept()
+        elif key == Qt.Key.Key_D:  # Move right
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + speed)
+            event.accept()
+        else:
+            # Pass other keys to parent
+            super().keyPressEvent(event)
     
     def update_all_connections(self):
         """Update all connection paths after nodes have been moved."""
