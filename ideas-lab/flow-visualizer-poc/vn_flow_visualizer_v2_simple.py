@@ -601,20 +601,25 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
     def on_selection_changed(self):
         """Handle selection changes in the scene."""
         selected_items = self.scene.selectedItems()
-        if selected_items:
+        if len(selected_items) == 1:  # Only update for single selection
             item = selected_items[0]
             if hasattr(item, 'vis_node'):
                 node_id = item.vis_node.node_id
-                # Emit signal with node data
-                self.node_selected.emit(node_id, item.vis_node.metadata or {})
+                # Create comprehensive node data including connections
+                node_data = item.vis_node.metadata.copy() if item.vis_node.metadata else {}
+                node_data['incoming_connections'] = item.vis_node.incoming_connections
+                node_data['outgoing_connections'] = item.vis_node.outgoing_connections
+                
+                # Emit signal with full node data
+                self.node_selected.emit(node_id, node_data)
                 
                 # Highlight edges if enabled
                 if self.edge_highlighting_enabled:
                     self.highlight_node_edges(node_id)
         else:
-            # Clear selection - emit empty signal
+            # Clear selection - emit empty signal for no selection or multi-selection
             self.node_selected.emit("", {})
-            # Reset edge highlighting when no node is selected
+            # Reset edge highlighting when no single node is selected
             if self.edge_highlighting_enabled:
                 self.reset_edge_highlighting()
     

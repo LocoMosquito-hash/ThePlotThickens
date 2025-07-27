@@ -5,14 +5,15 @@ Side panel for controlling visualization options, displaying project information
 and showing details about selected nodes.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, 
     QPushButton, QComboBox, QTextEdit, QScrollArea, QFrame,
-    QGridLayout, QSizePolicy, QLineEdit, QCheckBox
+    QGridLayout, QSizePolicy, QLineEdit, QCheckBox, QTreeWidget,
+    QTreeWidgetItem, QMenu
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QAction
 
 
 class VNControlPanel(QWidget):
@@ -31,8 +32,13 @@ class VNControlPanel(QWidget):
         super().__init__(parent)
         self.current_project_info: Optional[Dict[str, Any]] = None
         self.current_node_data: Optional[Dict[str, Any]] = None
+        self.visualizer = None  # Reference to visualizer for accessing connection data
         
         self.setup_ui()
+        
+    def set_visualizer(self, visualizer):
+        """Set reference to the visualizer to access VisualizationData."""
+        self.visualizer = visualizer
         
     def setup_ui(self):
         """Set up the control panel interface."""
@@ -234,6 +240,16 @@ class VNControlPanel(QWidget):
         self.node_info.setFont(small_font)
         layout.addWidget(self.node_info)
         
+        # Node relationships tree widget
+        self.relationships_tree = QTreeWidget()
+        self.relationships_tree.setHeaderHidden(True)
+        self.relationships_tree.setMaximumHeight(150)  # Compact size
+        self.relationships_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.relationships_tree.customContextMenuRequested.connect(self.show_tree_context_menu)
+        # Same small font as the text edit
+        self.relationships_tree.setFont(small_font)
+        layout.addWidget(self.relationships_tree)
+        
         # Action buttons - smaller
         button_layout = QHBoxLayout()
         
@@ -384,6 +400,9 @@ class VNControlPanel(QWidget):
         
         self.node_info.setPlainText(info_text)
         
+        # Populate the relationships tree
+        self.populate_relationships_tree(node_id, node_data)
+        
         # Enable action buttons
         self.highlight_button.setEnabled(True)
         self.show_details_button.setEnabled(True)
@@ -392,5 +411,135 @@ class VNControlPanel(QWidget):
         """Clear the node details display."""
         self.current_node_data = None
         self.node_info.setPlainText("No node selected")
+        self.relationships_tree.clear()
         self.highlight_button.setEnabled(False)
-        self.show_details_button.setEnabled(False) 
+        self.show_details_button.setEnabled(False)
+        
+    def show_tree_context_menu(self, position):
+        """Show context menu for tree items."""
+        item = self.relationships_tree.itemAt(position)
+        if not item:
+            return
+            
+        # Don't show context menu for category items (Parents, Children, Siblings)
+        if not item.parent():
+            return
+            
+        menu = QMenu(self)
+        
+        # Simple placeholder actions
+        go_to_action = QAction("Go to Node", self)
+        go_to_action.triggered.connect(lambda: self.placeholder_action("Go to Node", item))
+        menu.addAction(go_to_action)
+        
+        highlight_action = QAction("Highlight Path", self)
+        highlight_action.triggered.connect(lambda: self.placeholder_action("Highlight Path", item))
+        menu.addAction(highlight_action)
+        
+        details_action = QAction("Show Details", self)
+        details_action.triggered.connect(lambda: self.placeholder_action("Show Details", item))
+        menu.addAction(details_action)
+        
+        menu.exec(self.relationships_tree.mapToGlobal(position))
+        
+    def placeholder_action(self, action_name: str, item: QTreeWidgetItem):
+        """Placeholder for future implementation."""
+        node_id = item.data(0, Qt.ItemDataRole.UserRole)
+        print(f"Future implementation: {action_name} for node {node_id}")
+        
+    def populate_relationships_tree(self, node_id: str, node_data: Dict[str, Any]):
+        """Populate the relationships tree with Parents, Children, and Siblings."""
+        self.relationships_tree.clear()
+        
+        # Add node_id to node_data for the extraction methods
+        enhanced_node_data = node_data.copy()
+        enhanced_node_data['node_id'] = node_id
+        
+        # Extract relationships from VisualizationConnection objects
+        parents = self.extract_parents(enhanced_node_data)
+        children = self.extract_children(enhanced_node_data)
+        siblings = self.extract_siblings(node_id, enhanced_node_data, parents)
+        
+        # Create category items
+        parents_item = QTreeWidgetItem([f"Parents ({len(parents)})"])
+        children_item = QTreeWidgetItem([f"Children ({len(children)})"])
+        siblings_item = QTreeWidgetItem([f"Siblings ({len(siblings)})"])
+        
+        self.relationships_tree.addTopLevelItem(parents_item)
+        self.relationships_tree.addTopLevelItem(children_item)
+        self.relationships_tree.addTopLevelItem(siblings_item)
+        
+        # Populate parents
+        for parent_id in parents:
+            parent_node = QTreeWidgetItem([parent_id])
+            parent_node.setData(0, Qt.ItemDataRole.UserRole, parent_id)
+            parents_item.addChild(parent_node)
+            
+        # Populate children
+        for child_id in children:
+            child_node = QTreeWidgetItem([child_id])
+            child_node.setData(0, Qt.ItemDataRole.UserRole, child_id)
+            children_item.addChild(child_node)
+            
+        # Populate siblings
+        for sibling_id in siblings:
+            sibling_node = QTreeWidgetItem([sibling_id])
+            sibling_node.setData(0, Qt.ItemDataRole.UserRole, sibling_id)
+            siblings_item.addChild(sibling_node)
+        
+        # Expand all categories by default
+        self.relationships_tree.expandAll()
+        
+    def extract_parents(self, node_data: Dict[str, Any]) -> List[str]:
+        """Extract immediate parent node IDs from VisualizationConnection objects."""
+        if not self.visualizer or not hasattr(self.visualizer, 'current_data') or not self.visualizer.current_data:
+            return []
+        
+        current_node_id = node_data.get('node_id', '')
+        if not current_node_id:
+            return []
+        
+        parents = []
+        
+        # Find all connections that target this node
+        for connection in self.visualizer.current_data.connections:
+            if connection.target_node_id == current_node_id:
+                parents.append(connection.source_node_id)
+        
+        return sorted(list(set(parents)))  # Remove duplicates
+        
+    def extract_children(self, node_data: Dict[str, Any]) -> List[str]:
+        """Extract immediate children node IDs from VisualizationConnection objects."""
+        if not self.visualizer or not hasattr(self.visualizer, 'current_data') or not self.visualizer.current_data:
+            return []
+        
+        current_node_id = node_data.get('node_id', '')
+        if not current_node_id:
+            return []
+        
+        children = []
+        
+        # Find all connections that originate from this node
+        for connection in self.visualizer.current_data.connections:
+            if connection.source_node_id == current_node_id:
+                children.append(connection.target_node_id)
+        
+        return sorted(list(set(children)))  # Remove duplicates
+        
+    def extract_siblings(self, node_id: str, node_data: Dict[str, Any], parents: List[str]) -> List[str]:
+        """Extract sibling node IDs (nodes that share the same immediate parents)."""
+        if not self.visualizer or not hasattr(self.visualizer, 'current_data') or not self.visualizer.current_data:
+            return []
+        
+        if not parents:
+            return []
+        
+        siblings = set()
+        
+        # For each parent, find all its children (excluding current node)
+        for parent_id in parents:
+            for connection in self.visualizer.current_data.connections:
+                if connection.source_node_id == parent_id and connection.target_node_id != node_id:
+                    siblings.add(connection.target_node_id)
+        
+        return sorted(list(siblings)) 
