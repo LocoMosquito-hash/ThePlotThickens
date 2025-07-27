@@ -3,6 +3,17 @@ VN Flow Visualizer Widget
 
 Interactive PyQt6 QGraphicsView-based visualization for Renpy narrative flow graphs.
 This widget handles the display, interaction, and manipulation of VN branching structures.
+
+🚨 CRITICAL: Layout and orphan detection rules documented in:
+📖 FLOW_VISUALIZER_ARCHITECTURE.md
+
+Key responsibilities:
+- Hierarchical layout algorithms (dot-like, SCC-aware)
+- Smart orphan detection and filtering (CRITICAL FIX)
+- Node positioning and visual hierarchy
+- Interactive visualization management
+
+❗ Changes to layout logic must preserve node type relationships
 """
 
 import math
@@ -1449,10 +1460,104 @@ class VNFlowVisualizer(QGraphicsView):
             print(f"Using heuristic start nodes: {start_candidates}")
             return start_candidates
             
-        # Priority 3: Fallback to nodes with no incoming edges (current problematic behavior)
-        fallback_candidates = [n for n in subgraph.nodes() if subgraph.in_degree(n) == 0]
-        print(f"Fallback to orphaned start nodes: {fallback_candidates}")
-        return fallback_candidates
+        # Priority 3: IMPROVED - Intelligent orphan detection with safety limits
+        raw_orphans = [n for n in subgraph.nodes() if subgraph.in_degree(n) == 0]
+        
+        # Apply intelligent filtering to remove false orphans
+        true_orphans = self._filter_false_orphans(raw_orphans, subgraph)
+        
+        print(f"Raw orphans found: {len(raw_orphans)}, after filtering: {len(true_orphans)}")
+        
+        # Safety limit: If too many orphans, likely a graph connectivity issue
+        if len(true_orphans) > 10:
+            print(f"⚠️  WARNING: {len(true_orphans)} orphan nodes detected - possible graph connectivity issue!")
+            print(f"   Limiting to first 3 orphans to prevent layout explosion")
+            true_orphans = true_orphans[:3]
+        
+        if true_orphans:
+            print(f"Using filtered orphan nodes: {true_orphans}")
+            return true_orphans
+        else:
+            # Last resort: pick the node with highest out-degree
+            if subgraph.nodes():
+                fallback_node = max(subgraph.nodes(), key=lambda n: subgraph.out_degree(n))
+                print(f"Last resort: using highest out-degree node: {fallback_node}")
+                return [fallback_node]
+            
+        return []
+        
+    def _filter_false_orphans(self, raw_orphans: List[str], subgraph: nx.DiGraph) -> List[str]:
+        """
+        Intelligently filter out nodes that appear orphaned but likely have logical parents.
+        
+        This is a safety net to prevent layout explosion when graph connectivity is broken.
+        
+        Args:
+            raw_orphans: List of nodes with in_degree == 0
+            subgraph: The graph component being analyzed
+            
+        Returns:
+            List of nodes that are likely to be true orphans
+        """
+        true_orphans = []
+        
+        for node in raw_orphans:
+            node_str = str(node).lower()
+            
+            # Filter out obvious false orphans based on naming patterns
+            is_false_orphan = False
+            
+            # 1. Menu choice buttons should never be orphans (they belong to containers)
+            if ('_choice_' in node_str and 
+                ('menu_' in node_str or '_menu' in node_str)):
+                is_false_orphan = True
+                print(f"   Filtered false orphan (menu choice): {node}")
+            
+            # 2. Nested menu containers should have parent choices
+            elif ('nested_menu' in node_str or 
+                  'choice_' in node_str and 'menu_' in node_str):
+                is_false_orphan = True
+                print(f"   Filtered false orphan (nested menu): {node}")
+            
+            # 3. Version/chapter nodes in middle of sequences
+            elif any(pattern in node_str for pattern in ['v1_', 'v2_', 'v3_', 'v4_', 'v5_', 
+                                                         'v6_', 'v7_', 'v8_', 'v9_', 'v10_',
+                                                         'v11_', 'v12_', 'v13_', 'v14_', 'v15_', 'v16_']):
+                # These are usually part of a sequence and shouldn't be orphans
+                # unless they're explicit begin nodes
+                if 'begin' not in node_str and 'start' not in node_str:
+                    is_false_orphan = True
+                    print(f"   Filtered false orphan (sequence node): {node}")
+            
+            # 4. Nodes with high out-degree are likely not true orphans
+            elif subgraph.out_degree(node) > 3:
+                is_false_orphan = True
+                print(f"   Filtered false orphan (high out-degree {subgraph.out_degree(node)}): {node}")
+            
+            # 5. Skip __VISUAL_START__ as it's handled separately
+            elif node == '__VISUAL_START__':
+                is_false_orphan = True
+                print(f"   Filtered false orphan (visual start): {node}")
+            
+            # If it passes all filters, consider it a potential true orphan
+            if not is_false_orphan:
+                true_orphans.append(node)
+        
+        # Additional safety: If we filtered out everything, keep a few representative ones
+        if not true_orphans and raw_orphans:
+            # Keep nodes that look like legitimate story entry points
+            for node in raw_orphans[:5]:  # Limit to first 5
+                node_str = str(node).lower()
+                if any(keyword in node_str for keyword in ['start', 'begin', 'main', 'intro', 'splashscreen']):
+                    true_orphans.append(node)
+                    print(f"   Keeping potential entry point: {node}")
+            
+            # If still nothing, keep the first node as last resort
+            if not true_orphans:
+                true_orphans.append(raw_orphans[0])
+                print(f"   Last resort: keeping first orphan: {raw_orphans[0]}")
+        
+        return true_orphans
         
     def _create_narrative_layers(self, subgraph: nx.DiGraph, start_nodes: List[str]) -> List[List[str]]:
         """Create narrative depth layers using BFS from start nodes."""

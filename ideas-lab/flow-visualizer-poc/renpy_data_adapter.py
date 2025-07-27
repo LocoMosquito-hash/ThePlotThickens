@@ -6,6 +6,17 @@ between the renpy-source-api and the standardized visualization interface.
 
 This is Phase 1 of the flow visualizer refactoring to achieve clean separation
 of concerns between parsing and visualization.
+
+🚨 CRITICAL: This file implements core architectural rules documented in:
+📖 FLOW_VISUALIZER_ARCHITECTURE.md
+   
+Key responsibilities:
+- Container-to-choice connection creation (CRITICAL FIX)
+- Menu system hierarchy management  
+- Flow filtering for menu choices
+- SDK-based parsing integration
+
+❗ Always refer to FLOW_VISUALIZER_ARCHITECTURE.md before making changes
 """
 
 from typing import Dict, List, Any, Optional, Tuple, Set
@@ -428,11 +439,57 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         Create hierarchy connections between parent choices and their nested menu containers.
         This runs after all containers are created to ensure nested containers exist.
         FIXED: Now processes ALL menu levels recursively, not just top-level menus.
+        CRITICAL FIX: Also creates missing connections from menu containers to their choice buttons.
+        
+        🚨 CRITICAL ARCHITECTURE RULE (see FLOW_VISUALIZER_ARCHITECTURE.md):
+        Menu choices MUST be connected to their containers to prevent them from appearing
+        as orphan nodes on the first level. This fix solved the "489 nodes on first level" issue.
+        
+        ❗ DO NOT REMOVE the container-to-choice connection creation logic below!
         """
         # Create lookup for quick container access
         container_lookup = {node.node_id: node for node in container_nodes if node.node_type == 'menu_container'}
         choice_lookup = {node.node_id: node for node in container_nodes if node.node_type == 'choice_button'}
         
+        # CRITICAL FIX: Create missing connections from menu containers to their choice buttons
+        print(f"[CRITICAL FIX] Creating container-to-choice connections...")
+        for container_node in container_nodes:
+            if container_node.node_type != 'menu_container':
+                continue
+                
+            container_id = container_node.node_id
+            
+            # Find all choice buttons that belong to this container
+            container_choices = [choice for choice in container_nodes 
+                               if (choice.node_type == 'choice_button' and 
+                                   choice.metadata.get('parent_container') == container_id)]
+            
+            # Create connections from container to each of its choices
+            for choice_node in container_choices:
+                choice_id = choice_node.node_id
+                connection_id = f"{container_id}_to_{choice_id}"
+                
+                connection = VisualizationConnection(
+                    connection_id=connection_id,
+                    source_node_id=container_id,
+                    target_node_id=choice_id,
+                    connection_type='container_to_choice',
+                    line_style='solid',
+                    color_hint='darkblue',  # Container-to-choice connections
+                    weight_hint=1.0,
+                    label=None,  # No label needed for structural connections
+                    metadata={
+                        'connection_nature': 'container_structure',
+                        'choice_index': choice_node.metadata.get('choice_index'),
+                        'is_structural': True  # Mark as structural connection
+                    }
+                )
+                choice_connections.append(connection)
+                print(f"[CRITICAL FIX] Connected container {container_id} -> choice {choice_id}")
+        
+        print(f"[CRITICAL FIX] Container-to-choice connections complete.")
+        
+        # EXISTING CODE: Create hierarchy connections for nested menus
         for label_name, label_node in flow_graph.items():
             if not label_node.has_menu:
                 continue

@@ -8,6 +8,17 @@ This script analyzes menu structures across VN projects to understand:
 - Nested menus
 - Menu sets and self-pruning
 - Decision tree complexity
+
+🚨 CRITICAL: Menu detection rules documented in:
+📖 ideas-lab/flow-visualizer-poc/FLOW_VISUALIZER_ARCHITECTURE.md
+
+Key responsibilities:
+- Recursive directory search for .rpy files (CRITICAL FIX)
+- Menu structure detection and parsing
+- Nested menu hierarchy support
+- SDK-compatible menu analysis
+
+❗ Changes here affect menu container creation in the flow visualizer
 """
 
 import sys
@@ -118,9 +129,9 @@ class MenuAnalyzer:
             return analysis
         
         try:
-            # Find all .rpy files
+            # Find all .rpy files (search recursively in subdirectories)
             game_dir = Path(vn_path) / 'game' if (Path(vn_path) / 'game').exists() else Path(vn_path)
-            rpy_files = list(game_dir.glob('*.rpy'))
+            rpy_files = list(game_dir.rglob('*.rpy'))
             
             analysis['total_files'] = len(rpy_files)
             
