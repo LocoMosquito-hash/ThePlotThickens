@@ -443,9 +443,19 @@ class VNControlPanel(QWidget):
         menu.exec(self.relationships_tree.mapToGlobal(position))
         
     def placeholder_action(self, action_name: str, item: QTreeWidgetItem):
-        """Placeholder for future implementation."""
+        """Handle context menu actions."""
         node_id = item.data(0, Qt.ItemDataRole.UserRole)
-        print(f"Future implementation: {action_name} for node {node_id}")
+        
+        if action_name == "Go to Node" and node_id:
+            # Navigate to the target node
+            if self.visualizer and hasattr(self.visualizer, 'search_and_select_node'):
+                # Use the existing search and select functionality
+                self.visualizer.search_and_select_node(node_id)
+            else:
+                print(f"Unable to navigate to node: {node_id}")
+        else:
+            # Placeholder for other actions
+            print(f"Future implementation: {action_name} for node {node_id}")
         
     def populate_relationships_tree(self, node_id: str, node_data: Dict[str, Any]):
         """Populate the relationships tree with Parents, Children, and Siblings."""
