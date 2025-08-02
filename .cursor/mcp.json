@@ -50,6 +50,46 @@
       "env": {
         "PYTHONUNBUFFERED": "1"
       }
+    },
+    "code-understanding": {
+      "command": "C:\\Users\\juanc\\.local\\bin\\uvx.exe",
+      "args": [
+        "code-understanding-mcp-server",
+        "--cache-dir",
+        "C:\\Users\\juanc\\.cache\\mcp-code-understanding",
+        "--max-cached-repos",
+        "20"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    "mcp-git-ingest": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/adhikasp/mcp-git-ingest",
+        "mcp-git-ingest"
+      ]
+    },
+    "code-analysis": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\code-analysis-mcp",
+        "run",
+        "code_analysis.py"
+      ]
+    },
+    "mcp-proxy": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\mcp-proxy-server\\build\\index.js"
+      ],
+      "env": {
+        "MCP_CONFIG_PATH": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\mcp-proxy-server\\config.json",
+        "KEEP_SERVER_OPEN": "1"
+      }
     }
   }
 }

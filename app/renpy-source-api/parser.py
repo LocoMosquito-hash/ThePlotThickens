@@ -80,6 +80,7 @@ class MenuNode:
     name: str  # Display name (descriptive, kept short)
     parent_label: str  # Label that contains this menu
     menu_index: int = 0  # Index if label has multiple menus (0-based)
+    label_name: Optional[str] = None  # If this is a label menu (e.g., "menu day02_p_room_choices:")
     
     # Source location
     file_path: str = ""
@@ -766,8 +767,13 @@ class RenpyParser:
             # Fallback for backward compatibility (shouldn't happen with new code)
             node_id = f"{parent_label}_menu_{menu_index + 1}_choice_{parent_choice_index}_menu_1"
         else:
-            # Top-level menu
-            node_id = f"{parent_label}_menu_{menu_index + 1}"
+            # Check if this is a label menu (has its own label name)
+            if menu_structure.label_name:
+                # Use the actual label name for label menus
+                node_id = menu_structure.label_name
+            else:
+                # Top-level menu with generic naming
+                node_id = f"{parent_label}_menu_{menu_index + 1}"
         
         # Create enhanced MenuChoice objects
         enhanced_choices = []
@@ -820,11 +826,12 @@ class RenpyParser:
             name="",  # Will be generated in __post_init__
             parent_label=parent_label,
             menu_index=menu_index,
+            label_name=menu_structure.label_name,  # Transfer label name from MenuStructure
             file_path=menu_structure.file_path,
             line_number=menu_structure.line_number,
             choices=enhanced_choices,
             menu_type=menu_type,
-            is_nested=menu_structure.nesting_level > 0,
+            is_nested=menu_structure.nesting_level > 0 and not menu_structure.label_name,  # Label menus are never nested
             nesting_level=menu_structure.nesting_level,
             nested_menu_ids=[nested.node_id for nested in nested_menu_nodes]
         )
@@ -1584,6 +1591,17 @@ class RenpyParser:
         menu_analyzer = MenuAnalyzer()
         menu_analysis = menu_analyzer.analyze_vn_menus(project_path)
         menus = menu_analysis.get('menu_structures', [])
+        
+        # CRITICAL FIX: Add label menus to flow graph as valid jump targets
+        for menu_structure in menus:
+            if menu_structure.label_name and menu_structure.label_name not in graph:
+                # Create a LabelNode for the label menu
+                graph[menu_structure.label_name] = LabelNode(
+                    name=menu_structure.label_name,
+                    file_path=menu_structure.file_path,
+                    line_number=menu_structure.line_number
+                )
+                print(f"[LABEL MENU FIX] Added label menu '{menu_structure.label_name}' to flow graph")
         
         # Group menus by their label context for processing
         menus_by_label = {}

@@ -7,6 +7,14 @@ This is a proof-of-concept standalone application that visualizes
 the narrative flow and branching structure of Renpy visual novels.
 """
 
+# =============================================================================
+# DEPRECATED: This is the older version of the Flow Visualizer POC
+# =============================================================================
+# This file is no longer being actively maintained or updated.
+# Please use 'renpy_flow_visualizer_v2_main.py' for the current version.
+# This older version is kept for reference purposes only.
+# =============================================================================
+
 import sys
 import os
 import json

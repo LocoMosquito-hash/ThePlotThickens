@@ -80,84 +80,87 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         Returns:
             VisualizationData ready for display
         """
+        print(f"[DEBUG MAIN] Starting analyze_project for: {project_path}")
+        
+        # Write debug to file
+        with open("debug_adapter.log", "a") as f:
+            f.write(f"[DEBUG MAIN] Starting analyze_project for: {project_path}\n")
+            f.flush()
+        
         self.last_project_path = project_path
         
-        try:
-            # Use the enhanced parser if available
-            if self.use_hybrid:
-                overview = self.parser.analyze_project(
-                    project_path, 
-                    force_sdk=use_sdk, 
-                    verbose=True
-                )
+        if self.use_hybrid:
+            overview = self.parser.analyze_project(
+                project_path, 
+                force_sdk=False, 
+                verbose=True
+            )
+            
+            # Get analysis stats if available
+            if hasattr(self.parser, 'get_analysis_stats'):
+                self.last_analysis_metadata = self.parser.get_analysis_stats()
                 
-                # Get analysis stats if available
-                if hasattr(self.parser, 'get_analysis_stats'):
-                    self.last_analysis_metadata = self.parser.get_analysis_stats()
-                    
-                # Add complexity detection info
-                if self.complexity_detector:
-                    needs_sdk, reasons = self.complexity_detector.needs_sdk_analysis(project_path, overview)
-                    self.last_analysis_metadata.update({
-                        'complexity_detected': needs_sdk,
-                        'complexity_reasons': reasons,
-                        'parser_type': 'hybrid'
-                    })
-            else:
-                overview = self.parser.analyze_project(project_path)
-                self.last_analysis_metadata = {
-                    'parser_type': 'regex_only',
-                    'sdk_available': False
-                }
-            
-            # Build flow graph using parser
-            flow_graph = self.parser.build_flow_graph(project_path)
-            
-            # PHASE 1: Detect actual entry point using SDK as source of truth
-            actual_entry_point = self._detect_actual_entry_point(project_path)
-            
-            # Convert to visualization format (entry point detection affects node classification)
-            nodes = self._convert_labels_to_nodes(flow_graph, actual_entry_point)
-            connections = self._convert_flows_to_connections(flow_graph)
-            
-            # Add visual Start node and its connection to actual entry point
-            visual_start_node, start_connection = self._create_visual_start_node(actual_entry_point)
-            nodes.insert(0, visual_start_node)  # Add Start node at beginning
-            if start_connection:
-                connections.insert(0, start_connection)  # Add Start connection first
-            
-            # Add menu container nodes and connections
-            menu_nodes, menu_connections = self._create_menu_containers(flow_graph)
-            nodes.extend(menu_nodes)
-            connections.extend(menu_connections)
-            
-            # Add connections from labels to their menu containers
-            label_to_menu_connections = self._create_label_to_menu_connections(flow_graph)
-            connections.extend(label_to_menu_connections)
-            
-            return VisualizationData(
-                nodes=nodes,
-                connections=connections,
-                project_info={
-                    'total_labels': overview.total_labels,
-                    'total_characters': overview.total_characters,
-                    'total_menus': overview.total_menus,
-                    'total_files': overview.total_rpy_files,
-                    'project_path': project_path,
-                    'file_list': overview.file_list
-                },
-                analysis_metadata=self.last_analysis_metadata
-            )
-            
-        except Exception as e:
-            # Return minimal data on error
-            return VisualizationData(
-                nodes=[],
-                connections=[],
-                project_info={'project_path': project_path, 'error': str(e)},
-                analysis_metadata={'error': str(e), 'parser_type': 'failed'}
-            )
-    
+            # Add complexity detection info
+            if self.complexity_detector:
+                needs_sdk, reasons = self.complexity_detector.needs_sdk_analysis(project_path, overview)
+                self.last_analysis_metadata.update({
+                    'complexity_detected': needs_sdk,
+                    'complexity_reasons': reasons,
+                    'parser_type': 'hybrid'
+                })
+        else:
+            overview = self.parser.analyze_project(project_path)
+            self.last_analysis_metadata = {
+                'parser_type': 'regex_only',
+                'sdk_available': False
+            }
+        
+        # Build flow graph using parser
+        flow_graph = self.parser.build_flow_graph(project_path)
+        
+        # PHASE 1: Detect actual entry point using SDK as source of truth
+        actual_entry_point = self._detect_actual_entry_point(project_path)
+        
+        # Convert to visualization format (entry point detection affects node classification)
+        nodes = self._convert_labels_to_nodes(flow_graph, actual_entry_point)
+        connections = self._convert_flows_to_connections(flow_graph)
+        
+        # Add visual Start node and its connection to actual entry point
+        visual_start_node, start_connection = self._create_visual_start_node(actual_entry_point)
+        nodes.insert(0, visual_start_node)  # Add Start node at beginning
+        if start_connection:
+            connections.insert(0, start_connection)  # Add Start connection first
+        
+        # Add menu container nodes and connections
+        menu_nodes, menu_connections = self._create_menu_containers(flow_graph)
+        nodes.extend(menu_nodes)
+        connections.extend(menu_connections)
+        
+        # Add connections from labels to their menu containers
+        label_to_menu_connections = self._create_label_to_menu_connections(flow_graph)
+        connections.extend(label_to_menu_connections)
+        
+        # Add label-to-label flow connections (CRITICAL: This was missing!)
+        flow_connections = self._convert_flows_to_connections(flow_graph)
+        connections.extend(flow_connections)
+        
+        # Store flow graph for debugging purposes
+        self._last_flow_graph = flow_graph
+        
+        return VisualizationData(
+            nodes=nodes,
+            connections=connections,
+            project_info={
+                'total_labels': overview.total_labels,
+                'total_characters': overview.total_characters,
+                'total_menus': overview.total_menus,
+                'total_files': overview.total_rpy_files,
+                'project_path': project_path,
+                'file_list': overview.file_list
+            },
+            analysis_metadata=self.last_analysis_metadata
+        )
+        
     def get_analysis_metadata(self) -> Dict[str, Any]:
         """
         Get metadata about the last analysis (SDK usage, performance, etc.)
@@ -241,12 +244,24 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         Returns:
             List of VisualizationConnection objects for label-to-label flows
         """
+        print(f"[DEBUG CONVERT] Starting _convert_flows_to_connections with {len(flow_graph)} labels")
+        
+        # Write debug to file as well
+        with open("debug_adapter.log", "a") as f:
+            f.write(f"[DEBUG CONVERT] Starting _convert_flows_to_connections with {len(flow_graph)} labels\n")
+            f.flush()
+        
         connections = []
         # DEDUPLICATION: Track created connections to prevent duplicates
+        # MODIFIED: Allow multiple connections to label menus for Phase 2 implementation
         created_connections = set()  # Track (source, target) pairs
         
         # SMART FILTERING: Build set of destinations claimed by menu choices
+        # MODIFIED: Exclude label menus from this filtering to allow multiple parents
         menu_choice_destinations = self._get_menu_choice_destinations(flow_graph)
+        
+        # Build set of label menus that should allow multiple parents
+        label_menu_names = self._get_label_menu_names(flow_graph)
         
         for label_name, label_node in flow_graph.items():
             # Process all flows from all labels (including those with menus)
@@ -254,32 +269,60 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 source_label = flow.source_label
                 target_label = flow.target_label
                 
+                # DEBUG: Track day02 flows from the beginning
+                if source_label == 'day02_l_conversation' and target_label == 'day02_p_room_choices':
+                    print(f"[DEBUG EARLY] Found day02 flow: {source_label} -> {target_label}")
+                    print(f"[DEBUG EARLY]   Type: {flow.flow_type}")
+                    print(f"[DEBUG EARLY]   Target exists: {target_label in flow_graph}")
+                    
+                    # Write to file as well
+                    with open("debug_adapter.log", "a") as f:
+                        f.write(f"[DEBUG EARLY] Found day02 flow: {source_label} -> {target_label}\n")
+                        f.write(f"[DEBUG EARLY]   Type: {flow.flow_type}\n")
+                        f.write(f"[DEBUG EARLY]   Target exists: {target_label in flow_graph}\n")
+                        f.flush()
+                
                 # Skip return flows and flows to non-existent labels
                 if not target_label or target_label == '<return>' or target_label not in flow_graph:
+                    if source_label == 'day02_l_conversation' and target_label == 'day02_p_room_choices':
+                        print(f"[DEBUG EARLY] SKIPPING day02 flow due to missing target!")
                     continue
                 
                 # SMART FILTERING: Filter flows strategically
                 if flow.flow_type == 'menu_choice':
-                    # Skip menu_choice flows - handled by menu containers
-                    print(f"[FLOW FILTER] Skipping menu_choice flow: {source_label} → {target_label}")
-                    continue
-                elif target_label in menu_choice_destinations:
-                    # Filter out any direct flows to menu choice destinations from labels that have menus
-                    # This prevents competing flows: label → destination vs choice → destination
+                    # Allow menu_choice flows to label menus (for multiple parent support)
+                    if target_label in label_menu_names:
+                        print(f"[FLOW FILTER] Allowing menu_choice flow to label menu: {source_label} → {target_label}")
+                    else:
+                        # Skip other menu_choice flows - handled by menu containers
+                        print(f"[FLOW FILTER] Skipping menu_choice flow: {source_label} → {target_label}")
+                        continue
+                elif target_label in menu_choice_destinations and target_label not in label_menu_names:
+                    # Filter out competing flows EXCEPT for label menus (which can have multiple parents)
                     if hasattr(flow_graph.get(source_label, {}), 'menu_nodes') and flow_graph[source_label].menu_nodes:
                         print(f"[FLOW FILTER] Skipping competing flow from menu label: {source_label} → {target_label}")
                         continue
                     else:
                         print(f"[FLOW FILTER] Keeping flow from non-menu label: {source_label} → {target_label}")
+                        
+                # DEBUG: Special tracking for day02 flows
+                if source_label == 'day02_l_conversation' and target_label == 'day02_p_room_choices':
+                    print(f"[DEBUG DAY02] Processing flow: {source_label} → {target_label}")
+                    print(f"[DEBUG DAY02]   Type: {flow.flow_type}")
+                    print(f"[DEBUG DAY02]   In menu_choice_destinations: {target_label in menu_choice_destinations}")
+                    print(f"[DEBUG DAY02]   In label_menu_names: {target_label in label_menu_names}")
+                    print(f"[DEBUG DAY02]   Source has menu_nodes: {hasattr(flow_graph.get(source_label, {}), 'menu_nodes') and flow_graph[source_label].menu_nodes}")
+                    print(f"[DEBUG DAY02]   Will create connection: TRUE")
                 
-                # Create the connection if it passes all filters
-                # DEDUPLICATION: Check if we already created this connection
+                # MODIFIED DEDUPLICATION: Allow multiple connections to label menus
                 connection_key = (source_label, target_label)
-                if connection_key in created_connections:
+                if connection_key in created_connections and target_label not in label_menu_names:
+                    # Only deduplicate non-label-menu targets
                     continue
                 
-                # Mark this connection as created
-                created_connections.add(connection_key)
+                # Mark this connection as created (but allow duplicates for label menus)
+                if target_label not in label_menu_names:
+                    created_connections.add(connection_key)
                 
                 connection_id = f"{source_label}_to_{target_label}_{flow.flow_type}"
                 line_style = self._get_line_style_for_flow_type(flow.flow_type)
@@ -333,6 +376,34 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         print(f"[DESTINATION FILTER] Total menu choice destinations: {len(menu_destinations)}")
         return menu_destinations
     
+    def _get_label_menu_names(self, flow_graph: Dict[str, Any]) -> Set[str]:
+        """
+        Build set of label menu names that can be jumped to directly.
+        These should be exempt from competing flow filtering to allow multiple parents.
+        
+        Returns:
+            Set of label menu names (e.g., 'day02_p_room_choices')
+        """
+        label_menu_names = set()
+        print(f"[LABEL MENUS] Starting search across {len(flow_graph)} labels")
+        
+        for label_name, label_node in flow_graph.items():
+            print(f"[LABEL MENUS] Checking label: {label_name}")
+            if hasattr(label_node, 'menu_nodes'):
+                print(f"[LABEL MENUS]   Has menu_nodes: {bool(label_node.menu_nodes)}")
+                if label_node.menu_nodes:
+                    for i, menu_node in enumerate(label_node.menu_nodes):
+                        print(f"[LABEL MENUS]   Menu {i}: label_name='{menu_node.label_name}'")
+                        if menu_node.label_name:
+                            # Add the actual label menu name, not the parent label
+                            label_menu_names.add(menu_node.label_name)
+                            print(f"[LABEL MENUS]   Added label menu: {menu_node.label_name}")
+            else:
+                print(f"[LABEL MENUS]   No menu_nodes attribute")
+        
+        print(f"[LABEL MENUS] Found label menus: {label_menu_names}")
+        return label_menu_names
+    
     def _create_menu_containers(self, flow_graph: Dict[str, Any]) -> Tuple[List[VisualizationNode], List[VisualizationConnection]]:
         """
         Create menu container nodes and choice button nodes with their connections.
@@ -357,18 +428,29 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             
             # Process top-level menus exactly as before (no changes to existing behavior)
             for menu_idx, menu_node in enumerate(top_level_menus):
-                container_id = f"{label_name}_menu_{menu_idx}"
-                # Prioritize menu prompt for display name, fallback to generic name
-                if menu_node.prompt:
-                    container_name = menu_node.prompt
+                # Check if this is a label menu (has its own label name)
+                if menu_node.label_name:
+                    # Label menu - use actual label name and goldish color
+                    container_id = menu_node.label_name
+                    container_name = menu_node.label_name
+                    container_color = 'orange'  # Orange color for label menus (goldish appearance)
+                    is_label_menu = True
                 else:
-                    container_name = menu_node.name or f"Menu {menu_idx + 1}"
+                    # Regular menu - use generic naming
+                    container_id = f"{label_name}_menu_{menu_idx}"
+                    # Prioritize menu prompt for display name, fallback to generic name
+                    if menu_node.prompt:
+                        container_name = menu_node.prompt
+                    else:
+                        container_name = menu_node.name or f"Menu {menu_idx + 1}"
+                    container_color = 'yellow'  # Regular yellow for normal menus
+                    is_label_menu = False
                 
                 container = VisualizationNode(
                     node_id=container_id,
                     node_type='menu_container',
                     display_name=container_name,
-                    color_hint='yellow',
+                    color_hint=container_color,
                     size_hint=(200, 150),  # Larger size for containers
                     metadata={
                         'parent_label': label_name,
@@ -380,7 +462,9 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                         'has_conditions': menu_node.has_conditions,
                         'story_significance': menu_node.story_significance,
                         'is_nested': False,  # Mark as top-level
-                        'nesting_level': 0
+                        'nesting_level': 0,
+                        'is_label_menu': is_label_menu,  # Mark label menus
+                        'label_name': menu_node.label_name  # Store original label name
                     }
                 )
                 container_nodes.append(container)
@@ -440,6 +524,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         This runs after all containers are created to ensure nested containers exist.
         FIXED: Now processes ALL menu levels recursively, not just top-level menus.
         CRITICAL FIX: Also creates missing connections from menu containers to their choice buttons.
+        NEW FIX: Creates choice-to-nested-menu connections for proper visualization hierarchy.
         
         🚨 CRITICAL ARCHITECTURE RULE (see FLOW_VISUALIZER_ARCHITECTURE.md):
         Menu choices MUST be connected to their containers to prevent them from appearing
@@ -447,6 +532,9 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         
         ❗ DO NOT REMOVE the container-to-choice connection creation logic below!
         """
+        # METHOD START TEST: This should always appear
+        print("[METHOD START] _create_hierarchy_connections method called")
+        
         # Create lookup for quick container access
         container_lookup = {node.node_id: node for node in container_nodes if node.node_type == 'menu_container'}
         choice_lookup = {node.node_id: node for node in container_nodes if node.node_type == 'choice_button'}
@@ -489,6 +577,211 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         
         print(f"[CRITICAL FIX] Container-to-choice connections complete.")
         
+        # COMPREHENSIVE FIX: Create missing intermediate containers AND choice buttons
+        print(f"[HIERARCHY FIX] Creating complete missing hierarchy (containers + choices)...")
+        
+        # Find orphan containers that need parents
+        container_targets = set()
+        for conn in choice_connections:
+            if hasattr(conn, 'target_node_id'):
+                container_targets.add(conn.target_node_id)
+        
+        orphan_containers = []
+        for container in container_nodes:
+            if (container.node_type == 'menu_container' and 
+                container.node_id not in container_targets and
+                '_nested_menu_' in container.node_id and 
+                container.node_id.endswith('_menu_1')):
+                orphan_containers.append(container)
+        
+        print(f"[HIERARCHY FIX] Found {len(orphan_containers)} orphan containers needing complete hierarchy")
+        
+        created_intermediate_containers = 0
+        created_intermediate_choices = 0
+        
+        for orphan in orphan_containers:
+            orphan_id = orphan.node_id
+            
+            # Extract expected parent choice button name: remove "_menu_1"
+            if orphan_id.endswith('_menu_1'):
+                expected_parent_choice_id = orphan_id[:-7]  # Remove "_menu_1"
+                
+                # Check if this choice button already exists
+                choice_exists = any(node.node_id == expected_parent_choice_id 
+                                  for node in container_nodes if node.node_type == 'choice_button')
+                
+                if not choice_exists and '_choice_' in expected_parent_choice_id:
+                    # Extract the parent container this choice should belong to
+                    # e.g., day01_p_room_action_menu_nested_menu_1_choice_1 → day01_p_room_action_menu_nested_menu_1
+                    parent_container_id = expected_parent_choice_id.rsplit('_choice_', 1)[0]
+                    
+                    # Check if parent container exists
+                    parent_container_exists = any(node.node_id == parent_container_id 
+                                                for node in container_nodes if node.node_type == 'menu_container')
+                    
+                    if not parent_container_exists:
+                        # Create the missing intermediate container first
+                        missing_container = VisualizationNode(
+                            node_id=parent_container_id,
+                            node_type='menu_container',
+                            display_name=f"Nested Menu {parent_container_id.split('_nested_menu_')[-1]}",
+                            color_hint='#FFA500'  # Orange for menu containers
+                        )
+                        container_nodes.append(missing_container)
+                        created_intermediate_containers += 1
+                        
+                        # Try to connect this intermediate container to ITS parent
+                        # Pattern: day01_p_room_action_menu_nested_menu_1 should connect to 
+                        # a choice in day01_p_room_action_menu
+                        if '_nested_menu_' in parent_container_id:
+                            grandparent_label = parent_container_id.split('_nested_menu_')[0]
+                            
+                            # Look for existing choice buttons in the grandparent that could be the parent
+                            potential_parent_choices = [n for n in container_nodes 
+                                                      if (n.node_type == 'choice_button' and 
+                                                          n.node_id.startswith(grandparent_label) and
+                                                          not '_nested_menu_' in n.node_id)]
+                            
+                            if potential_parent_choices:
+                                # Connect to the first suitable parent choice found
+                                parent_choice = potential_parent_choices[0]
+                                grandparent_conn = VisualizationConnection(
+                                    connection_id=f"{parent_choice.node_id}_to_{parent_container_id}",
+                                    source_node_id=parent_choice.node_id,
+                                    target_node_id=parent_container_id,
+                                    connection_type='choice_to_menu',
+                                    color_hint='orange',
+                                    weight_hint=1.5
+                                )
+                                choice_connections.append(grandparent_conn)
+                                print(f"[HIERARCHY FIX] Connected grandparent: {parent_choice.node_id} → {parent_container_id}")
+                    
+                    # Now create the missing intermediate choice button
+                    missing_choice = VisualizationNode(
+                        node_id=expected_parent_choice_id,
+                        node_type='choice_button',
+                        display_name=f"Choice {expected_parent_choice_id.split('_choice_')[-1]}",
+                        color_hint='#87CEEB'  # Sky blue for intermediate choices
+                    )
+                    container_nodes.append(missing_choice)
+                    
+                    # Create connection: parent container → intermediate choice
+                    container_to_choice_conn = VisualizationConnection(
+                        connection_id=f"{parent_container_id}_to_{expected_parent_choice_id}",
+                        source_node_id=parent_container_id,
+                        target_node_id=expected_parent_choice_id,
+                        connection_type='container_to_choice',
+                        color_hint='blue',
+                        weight_hint=1.0
+                    )
+                    choice_connections.append(container_to_choice_conn)
+                    
+                    # Create connection: intermediate choice → orphan container
+                    choice_to_menu_conn = VisualizationConnection(
+                        connection_id=f"{expected_parent_choice_id}_to_{orphan_id}",
+                        source_node_id=expected_parent_choice_id,
+                        target_node_id=orphan_id,
+                        connection_type='choice_to_menu',
+                        color_hint='orange',
+                        weight_hint=1.5
+                    )
+                    choice_connections.append(choice_to_menu_conn)
+                    
+                    created_intermediate_choices += 1
+                    print(f"[HIERARCHY FIX] Created complete hierarchy: {parent_container_id} → {expected_parent_choice_id} → {orphan_id}")
+        
+        print(f"[HIERARCHY FIX] Created {created_intermediate_containers} containers and {created_intermediate_choices} choice buttons")
+        print("[FIX] Successfully completed hierarchy connections.")
+        
+        # Track processed containers to avoid duplicates
+        nested_containers_processed = set()
+        
+        for choice_node in container_nodes:
+            if choice_node.node_type != 'choice_button':
+                continue
+                
+            choice_id = choice_node.node_id
+            
+            # Look for nested menu containers that belong to this choice
+            # CORRECTED Pattern: {choice_id}_menu_{menu_index}
+            # This handles cases like: day01_p_room_action_menu_nested_menu_1_choice_1 -> day01_p_room_action_menu_nested_menu_1_choice_1_menu_1
+            nested_containers = [container for container in container_nodes 
+                               if (container.node_type == 'menu_container' and 
+                                   container.node_id.startswith(choice_id + '_menu_') and
+                                   container.node_id not in nested_containers_processed)]
+            
+            # Create connections from choice to each of its nested menu containers
+            for nested_container in nested_containers:
+                nested_container_id = nested_container.node_id
+                connection_id = f"{choice_id}_to_{nested_container_id}"
+                nested_containers_processed.add(nested_container_id)
+                
+                connection = VisualizationConnection(
+                    connection_id=connection_id,
+                    source_node_id=choice_id,
+                    target_node_id=nested_container_id,
+                    connection_type='choice_to_menu',
+                    line_style='solid',
+                    color_hint='orange',  # Choice-to-menu connections
+                    weight_hint=1.5,
+                    label=None,  # No label needed for structural connections
+                    metadata={
+                        'connection_nature': 'choice_to_nested_menu',
+                        'choice_parent': choice_node.metadata.get('parent_container'),
+                        'is_hierarchical': True  # Mark as hierarchical connection
+                    }
+                )
+                choice_connections.append(connection)
+                print(f"[FIXED] Connected choice {choice_id} -> nested menu {nested_container_id}")
+        
+        # ADDITIONAL FIX: Handle orphan containers with alternative naming patterns
+        print(f"[ADDITIONAL FIX] Connecting remaining orphan containers...")
+        
+        # Find containers that are still orphans after the above logic
+        connected_containers = {conn.target_node_id for conn in choice_connections if conn.connection_type == 'choice_to_menu'}
+        orphan_containers = [container for container in container_nodes 
+                           if (container.node_type == 'menu_container' and 
+                               container.node_id not in connected_containers and
+                               ('nested' in container.node_id or '_menu_1' in container.node_id))]
+        
+        print(f"[ADDITIONAL FIX] Found {len(orphan_containers)} remaining orphan containers")
+        
+        for orphan_container in orphan_containers:
+            container_id = orphan_container.node_id
+            
+            # Try alternative patterns to find the parent choice
+            # Pattern 1: Remove '_menu_1' suffix to get parent choice
+            if container_id.endswith('_menu_1'):
+                potential_parent = container_id[:-7]  # Remove '_menu_1'
+                
+                # Find this choice
+                parent_choice = next((choice for choice in container_nodes 
+                                    if choice.node_type == 'choice_button' and choice.node_id == potential_parent), None)
+                
+                if parent_choice:
+                    connection_id = f"{potential_parent}_to_{container_id}"
+                    connection = VisualizationConnection(
+                        connection_id=connection_id,
+                        source_node_id=potential_parent,
+                        target_node_id=container_id,
+                        connection_type='choice_to_menu',
+                        line_style='solid',
+                        color_hint='orange',
+                        weight_hint=1.5,
+                        label=None,
+                        metadata={
+                            'connection_nature': 'choice_to_nested_menu',
+                            'is_hierarchical': True,
+                            'fix_type': 'alternative_pattern'
+                        }
+                    )
+                    choice_connections.append(connection)
+                    print(f"[ADDITIONAL FIX] Connected {potential_parent} -> {container_id}")
+                else:
+                    print(f"[ADDITIONAL FIX] No parent found for orphan: {container_id}")
+        
+        print(f"[NEW FIX] Choice-to-nested-menu connections complete.")
+        
         # EXISTING CODE: Create hierarchy connections for nested menus
         for label_name, label_node in flow_graph.items():
             if not label_node.has_menu:
@@ -508,37 +801,13 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                     choice_id = f"{container_id}_choice_{choice_idx}"
                     
                     # Check if this choice should connect to a nested menu
-                    if not choice.destination or choice.destination == '<return>':
-                        # Look for corresponding nested menu container
-                        expected_nested_id = f"{menu_node.node_id}_choice_{choice_idx}_menu_1"
-                        nested_container_id = expected_nested_id.replace(label_name + "_", f"{label_name}_nested_")
-                        
-                        # Check if both choice and nested container exist
-                        if choice_id in choice_lookup and nested_container_id in container_lookup:
-                            # Create hierarchy connection: parent choice -> nested menu container
-                            connection_id = f"{choice_id}_to_nested_menu"
-                            
-                            connection = VisualizationConnection(
-                                connection_id=connection_id,
-                                source_node_id=choice_id,
-                                target_node_id=nested_container_id,
-                                connection_type='choice_to_nested_menu',
-                                line_style='solid',
-                                color_hint='green',  # Distinct color for hierarchy connections
-                                weight_hint=2.0,     # Thicker for hierarchy emphasis
-                                label=f"→ Nested Menu",
-                                condition=choice.condition,
-                                metadata={
-                                    'choice_index': choice_idx,
-                                    'action_type': 'hierarchy',
-                                    'parent_menu': container_id,
-                                    'nested_menu': nested_container_id,
-                                    'connection_nature': 'parent_to_child_menu',
-                                    'menu_level': menu_node.nesting_level
-                                }
-                            )
-                            choice_connections.append(connection)
-                            print(f"[HIERARCHY] Created L{menu_node.nesting_level} connection: {choice_id} -> {nested_container_id}")
+                    # REMOVED: Duplicate connection logic - now handled by _create_hierarchy_connections()
+                    # This was creating redundant choice_to_nested_menu connections
+                    # when _create_hierarchy_connections() already creates choice_to_menu connections
+                    # 
+                    # Following industry best practice: "avoid more than one level of hierarchy"
+                    # and "use consistent interaction patterns" - we now use only choice_to_menu
+                    pass
     
     def _create_choice_buttons_and_connections(self, menu_node, container_id: str, label_name: str, 
                                              container_nodes: List, choice_connections: List):
@@ -631,7 +900,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
     
     def _create_label_to_menu_connections(self, flow_graph: Dict[str, Any]) -> List[VisualizationConnection]:
         """
-        Create connections from labels to their menu containers.
+        Create connections from labels to their top-level menu containers.
         
         Args:
             flow_graph: Dictionary mapping label names to LabelNode objects
@@ -639,6 +908,8 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         Returns:
             List of VisualizationConnection objects for label-to-menu flows
         """
+        print(f"[DEBUG LABEL_TO_MENU] Starting _create_label_to_menu_connections")
+        
         connections = []
         
         for label_name, label_node in flow_graph.items():
