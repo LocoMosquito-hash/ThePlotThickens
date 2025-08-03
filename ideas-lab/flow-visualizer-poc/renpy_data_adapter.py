@@ -31,6 +31,7 @@ from flow_visualizer_interface import (
     FlowDataProvider, VisualizationData, VisualizationNode, 
     VisualizationConnection
 )
+from authoritative_hierarchy import AuthoritativeHierarchy
 
 try:
     from sdk_integration import HybridRenpyParser, ComplexityDetector
@@ -118,7 +119,15 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         # Build flow graph using parser
         flow_graph = self.parser.build_flow_graph(project_path)
         
-        # PHASE 1: Detect actual entry point using SDK as source of truth
+        # PHASE 1: Build authoritative hierarchy (NEW!)
+        print(f"[ADAPTER] Building authoritative hierarchy alongside current system...")
+        hierarchy = AuthoritativeHierarchy()
+        hierarchy.build_from_flow_graph(flow_graph)
+        
+        # Store hierarchy for comparison/debugging  
+        self._authoritative_hierarchy = hierarchy
+        
+        # PHASE 2: Detect actual entry point using SDK as source of truth
         actual_entry_point = self._detect_actual_entry_point(project_path)
         
         # Convert to visualization format (entry point detection affects node classification)
@@ -146,6 +155,9 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         
         # Store flow graph for debugging purposes
         self._last_flow_graph = flow_graph
+        
+        # PHASE 3: Compare old vs new system (DEBUG)
+        self._compare_hierarchy_systems(nodes, connections)
         
         return VisualizationData(
             nodes=nodes,
@@ -1094,4 +1106,68 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             'menu_choice_nested_label': 'purple',
             'conditional': 'red'
         }
-        return color_hints.get(flow_type, 'gray') 
+        return color_hints.get(flow_type, 'gray')
+    
+    def _compare_hierarchy_systems(self, old_nodes: List[VisualizationNode], old_connections: List[VisualizationConnection]) -> None:
+        """
+        Compare the old string-based system with the new authoritative hierarchy.
+        
+        This method helps debug and validate the new hierarchy system by showing
+        differences between the two approaches.
+        """
+        if not hasattr(self, '_authoritative_hierarchy'):
+            print("[COMPARE] No authoritative hierarchy available for comparison")
+            return
+            
+        print(f"\n[COMPARE] Comparing old vs new hierarchy systems")
+        print("=" * 60)
+        
+        # Get data from new hierarchy system
+        new_nodes, new_connections = self._authoritative_hierarchy.get_visualization_data()
+        
+        # Compare node counts
+        old_count = len(old_nodes)
+        new_count = len(new_nodes)
+        print(f"📊 Node counts: Old={old_count}, New={new_count}, Diff={new_count - old_count}")
+        
+        # Compare connection counts
+        old_conn_count = len(old_connections)
+        new_conn_count = len(new_connections)
+        print(f"📊 Connection counts: Old={old_conn_count}, New={new_conn_count}, Diff={new_conn_count - old_conn_count}")
+        
+        # Find ep2cont5 specific differences (our test case)
+        old_ep2cont5 = [node for node in old_nodes if 'ep2cont5' in node.node_id]
+        new_ep2cont5 = [node for node in new_nodes if 'ep2cont5' in (node.display_name or '') or 
+                        'ep2cont5' in (node.metadata.get('semantic_id', '') if node.metadata else '')]
+        
+        if old_ep2cont5 or new_ep2cont5:
+            print(f"\n🔍 ep2cont5 comparison:")
+            print(f"   Old system: {len(old_ep2cont5)} nodes")
+            for node in old_ep2cont5:
+                print(f"     - {node.node_id} ({node.node_type})")
+                
+            print(f"   New system: {len(new_ep2cont5)} nodes")
+            for node in new_ep2cont5:
+                semantic_id = node.metadata.get('semantic_id', 'unknown')
+                print(f"     - {semantic_id} ({node.node_type})")
+        
+        # Look for potential rogue nodes in old system
+        rogue_patterns = ['_nested_menu_1', '_nested_menu_1_choice_1']
+        rogue_nodes = []
+        for node in old_nodes:
+            for pattern in rogue_patterns:
+                if pattern in node.node_id and 'ep2cont5' in node.node_id:
+                    rogue_nodes.append(node)
+        
+        if rogue_nodes:
+            print(f"\n🚨 Potential rogue nodes in old system:")
+            for node in rogue_nodes:
+                print(f"     - {node.node_id} ({node.node_type})")
+        else:
+            print(f"\n✅ No rogue nodes detected in old system")
+        
+        # Print hierarchy structure from new system
+        print(f"\n🏗️ New hierarchy structure for ep2cont5:")
+        for root in self._authoritative_hierarchy.root_nodes:
+            if 'ep2cont5' in root.semantic_id:
+                self._authoritative_hierarchy.print_hierarchy(root) 

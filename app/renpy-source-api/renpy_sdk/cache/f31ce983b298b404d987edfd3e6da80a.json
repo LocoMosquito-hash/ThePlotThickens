@@ -1,12 +1,5773 @@
 {
   "project_path": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\app\\renpy-source-api\\renpy_sdk\\renpy-8.4.0-sdk\\tutorial\\game",
-  "cache_timestamp": "2025-07-18T18:06:38.146757",
+  "cache_timestamp": "2025-08-02T15:38:12.098078",
   "project_hash": "f31ce983b298b404d987edfd3e6da80a",
   "analysis_result": {
-    "test": true,
+    "metadata": {
+      "analyzer_version": "2.0",
+      "analysis_timestamp": "2025-08-02T15:38:11.783753",
+      "target_project": "C:\\Users\\juanc\\PycharmProjects\\TPT3\\ThePlotThickens\\app\\renpy-source-api\\renpy_sdk\\renpy-8.4.0-sdk\\tutorial\\game"
+    },
     "project_info": {
-      "total_labels": 10,
-      "total_characters": 5
-    }
+      "rpy_files": 194,
+      "file_list": [
+        "01director_support.rpy",
+        "01example.rpy",
+        "examples.rpy",
+        "gui.rpy",
+        "indepth_character.rpy",
+        "indepth_displayables.rpy",
+        "indepth_minigame.rpy",
+        "indepth_style.rpy",
+        "indepth_text.rpy",
+        "indepth_transitions.rpy",
+        "indepth_translations.rpy",
+        "options.rpy",
+        "screens.rpy",
+        "script.rpy",
+        "testcases.rpy",
+        "tutorial_atl.rpy",
+        "tutorial_director.rpy",
+        "tutorial_distribute.rpy",
+        "tutorial_nvlmode.rpy",
+        "tutorial_playing.rpy",
+        "tutorial_quickstart.rpy",
+        "tutorial_screens.rpy",
+        "tutorial_screen_displayables.rpy",
+        "tutorial_video.rpy",
+        "tl\\french\\01example.rpy",
+        "tl\\french\\common.rpy",
+        "tl\\french\\indepth_character.rpy",
+        "tl\\french\\indepth_displayables.rpy",
+        "tl\\french\\indepth_minigame.rpy",
+        "tl\\french\\indepth_style.rpy",
+        "tl\\french\\indepth_text.rpy",
+        "tl\\french\\indepth_transitions.rpy",
+        "tl\\french\\indepth_translations.rpy",
+        "tl\\french\\options.rpy",
+        "tl\\french\\screens.rpy",
+        "tl\\french\\script.rpy",
+        "tl\\french\\tutorial_atl.rpy",
+        "tl\\french\\tutorial_director.rpy",
+        "tl\\french\\tutorial_distribute.rpy",
+        "tl\\french\\tutorial_nvlmode.rpy",
+        "tl\\french\\tutorial_playing.rpy",
+        "tl\\french\\tutorial_quickstart.rpy",
+        "tl\\french\\tutorial_screens.rpy",
+        "tl\\french\\tutorial_screen_displayables.rpy",
+        "tl\\french\\tutorial_video.rpy",
+        "tl\\japanese\\01example.rpy",
+        "tl\\japanese\\common.rpy",
+        "tl\\japanese\\indepth_character.rpy",
+        "tl\\japanese\\indepth_displayables.rpy",
+        "tl\\japanese\\indepth_minigame.rpy",
+        "tl\\japanese\\indepth_style.rpy",
+        "tl\\japanese\\indepth_text.rpy",
+        "tl\\japanese\\indepth_transitions.rpy",
+        "tl\\japanese\\indepth_translations.rpy",
+        "tl\\japanese\\options.rpy",
+        "tl\\japanese\\screens.rpy",
+        "tl\\japanese\\script.rpy",
+        "tl\\japanese\\style.rpy",
+        "tl\\japanese\\tutorial_atl.rpy",
+        "tl\\japanese\\tutorial_director.rpy",
+        "tl\\japanese\\tutorial_distribute.rpy",
+        "tl\\japanese\\tutorial_nvlmode.rpy",
+        "tl\\japanese\\tutorial_playing.rpy",
+        "tl\\japanese\\tutorial_quickstart.rpy",
+        "tl\\japanese\\tutorial_screens.rpy",
+        "tl\\japanese\\tutorial_screen_displayables.rpy",
+        "tl\\japanese\\tutorial_video.rpy",
+        "tl\\korean\\01example.rpy",
+        "tl\\korean\\common.rpy",
+        "tl\\korean\\indepth_character.rpy",
+        "tl\\korean\\indepth_displayables.rpy",
+        "tl\\korean\\indepth_minigame.rpy",
+        "tl\\korean\\indepth_style.rpy",
+        "tl\\korean\\indepth_text.rpy",
+        "tl\\korean\\indepth_transitions.rpy",
+        "tl\\korean\\indepth_translations.rpy",
+        "tl\\korean\\options.rpy",
+        "tl\\korean\\screens.rpy",
+        "tl\\korean\\script.rpy",
+        "tl\\korean\\tutorial_atl.rpy",
+        "tl\\korean\\tutorial_director.rpy",
+        "tl\\korean\\tutorial_distribute.rpy",
+        "tl\\korean\\tutorial_nvlmode.rpy",
+        "tl\\korean\\tutorial_playing.rpy",
+        "tl\\korean\\tutorial_quickstart.rpy",
+        "tl\\korean\\tutorial_screens.rpy",
+        "tl\\korean\\tutorial_screen_displayables.rpy",
+        "tl\\korean\\tutorial_video.rpy",
+        "tl\\piglatin\\01example.rpy",
+        "tl\\piglatin\\common.rpy",
+        "tl\\piglatin\\indepth_character.rpy",
+        "tl\\piglatin\\indepth_displayables.rpy",
+        "tl\\piglatin\\indepth_minigame.rpy",
+        "tl\\piglatin\\indepth_style.rpy",
+        "tl\\piglatin\\indepth_text.rpy",
+        "tl\\piglatin\\indepth_transitions.rpy",
+        "tl\\piglatin\\indepth_translations.rpy",
+        "tl\\piglatin\\options.rpy",
+        "tl\\piglatin\\screens.rpy",
+        "tl\\piglatin\\script.rpy",
+        "tl\\piglatin\\tutorial_atl.rpy",
+        "tl\\piglatin\\tutorial_director.rpy",
+        "tl\\piglatin\\tutorial_distribute.rpy",
+        "tl\\piglatin\\tutorial_nvlmode.rpy",
+        "tl\\piglatin\\tutorial_playing.rpy",
+        "tl\\piglatin\\tutorial_quickstart.rpy",
+        "tl\\piglatin\\tutorial_screens.rpy",
+        "tl\\piglatin\\tutorial_screen_displayables.rpy",
+        "tl\\piglatin\\tutorial_video.rpy",
+        "tl\\russian\\01example.rpy",
+        "tl\\russian\\common.rpy",
+        "tl\\russian\\indepth_character.rpy",
+        "tl\\russian\\indepth_displayables.rpy",
+        "tl\\russian\\indepth_minigame.rpy",
+        "tl\\russian\\indepth_style.rpy",
+        "tl\\russian\\indepth_text.rpy",
+        "tl\\russian\\indepth_transitions.rpy",
+        "tl\\russian\\indepth_translations.rpy",
+        "tl\\russian\\options.rpy",
+        "tl\\russian\\screens.rpy",
+        "tl\\russian\\script.rpy",
+        "tl\\russian\\tutorial_atl.rpy",
+        "tl\\russian\\tutorial_director.rpy",
+        "tl\\russian\\tutorial_distribute.rpy",
+        "tl\\russian\\tutorial_nvlmode.rpy",
+        "tl\\russian\\tutorial_playing.rpy",
+        "tl\\russian\\tutorial_quickstart.rpy",
+        "tl\\russian\\tutorial_screens.rpy",
+        "tl\\russian\\tutorial_screen_displayables.rpy",
+        "tl\\russian\\tutorial_video.rpy",
+        "tl\\schinese\\01example.rpy",
+        "tl\\schinese\\common.rpy",
+        "tl\\schinese\\indepth_character.rpy",
+        "tl\\schinese\\indepth_displayables.rpy",
+        "tl\\schinese\\indepth_minigame.rpy",
+        "tl\\schinese\\indepth_style.rpy",
+        "tl\\schinese\\indepth_text.rpy",
+        "tl\\schinese\\indepth_transitions.rpy",
+        "tl\\schinese\\indepth_translations.rpy",
+        "tl\\schinese\\options.rpy",
+        "tl\\schinese\\screens.rpy",
+        "tl\\schinese\\script.rpy",
+        "tl\\schinese\\style.rpy",
+        "tl\\schinese\\tutorial_atl.rpy",
+        "tl\\schinese\\tutorial_director.rpy",
+        "tl\\schinese\\tutorial_distribute.rpy",
+        "tl\\schinese\\tutorial_nvlmode.rpy",
+        "tl\\schinese\\tutorial_playing.rpy",
+        "tl\\schinese\\tutorial_quickstart.rpy",
+        "tl\\schinese\\tutorial_screens.rpy",
+        "tl\\schinese\\tutorial_screen_displayables.rpy",
+        "tl\\schinese\\tutorial_video.rpy",
+        "tl\\spanish\\01example.rpy",
+        "tl\\spanish\\common.rpy",
+        "tl\\spanish\\indepth_character.rpy",
+        "tl\\spanish\\indepth_displayables.rpy",
+        "tl\\spanish\\indepth_minigame.rpy",
+        "tl\\spanish\\indepth_style.rpy",
+        "tl\\spanish\\indepth_text.rpy",
+        "tl\\spanish\\indepth_transitions.rpy",
+        "tl\\spanish\\indepth_translations.rpy",
+        "tl\\spanish\\options.rpy",
+        "tl\\spanish\\screens.rpy",
+        "tl\\spanish\\script.rpy",
+        "tl\\spanish\\tutorial_atl.rpy",
+        "tl\\spanish\\tutorial_director.rpy",
+        "tl\\spanish\\tutorial_distribute.rpy",
+        "tl\\spanish\\tutorial_nvlmode.rpy",
+        "tl\\spanish\\tutorial_playing.rpy",
+        "tl\\spanish\\tutorial_quickstart.rpy",
+        "tl\\spanish\\tutorial_screens.rpy",
+        "tl\\spanish\\tutorial_screen_displayables.rpy",
+        "tl\\spanish\\tutorial_video.rpy",
+        "tl\\ukrainian\\01example.rpy",
+        "tl\\ukrainian\\common.rpy",
+        "tl\\ukrainian\\indepth_character.rpy",
+        "tl\\ukrainian\\indepth_displayables.rpy",
+        "tl\\ukrainian\\indepth_minigame.rpy",
+        "tl\\ukrainian\\indepth_style.rpy",
+        "tl\\ukrainian\\indepth_text.rpy",
+        "tl\\ukrainian\\indepth_transitions.rpy",
+        "tl\\ukrainian\\indepth_translations.rpy",
+        "tl\\ukrainian\\options.rpy",
+        "tl\\ukrainian\\screens.rpy",
+        "tl\\ukrainian\\script.rpy",
+        "tl\\ukrainian\\tutorial_atl.rpy",
+        "tl\\ukrainian\\tutorial_director.rpy",
+        "tl\\ukrainian\\tutorial_distribute.rpy",
+        "tl\\ukrainian\\tutorial_nvlmode.rpy",
+        "tl\\ukrainian\\tutorial_playing.rpy",
+        "tl\\ukrainian\\tutorial_quickstart.rpy",
+        "tl\\ukrainian\\tutorial_screens.rpy",
+        "tl\\ukrainian\\tutorial_screen_displayables.rpy",
+        "tl\\ukrainian\\tutorial_video.rpy"
+      ],
+      "total_labels": 78,
+      "total_characters": 20,
+      "total_menus": 11,
+      "total_assets": 531,
+      "total_errors": 0,
+      "menu_statistics": {
+        "complexities": {
+          "simple": 6,
+          "complex": 4,
+          "moderate": 1
+        },
+        "total_choices": 58,
+        "conditional_menus": 0,
+        "average_choices_per_menu": 5.2727272727272725
+      }
+    },
+    "labels": [
+      {
+        "name": "demo_character",
+        "file": "indepth_character.rpy",
+        "line": 7
+      },
+      {
+        "name": "simple_displayables",
+        "file": "indepth_displayables.rpy",
+        "line": 13
+      },
+      {
+        "name": "demo_minigame",
+        "file": "indepth_minigame.rpy",
+        "line": 218
+      },
+      {
+        "name": "play_pong",
+        "file": "indepth_minigame.rpy",
+        "line": 231
+      },
+      {
+        "name": "pong_done",
+        "file": "indepth_minigame.rpy",
+        "line": 251
+      },
+      {
+        "name": "new_gui",
+        "file": "indepth_style.rpy",
+        "line": 38
+      },
+      {
+        "name": "styles",
+        "file": "indepth_style.rpy",
+        "line": 54
+      },
+      {
+        "name": "styles_menu",
+        "file": "indepth_style.rpy",
+        "line": 62
+      },
+      {
+        "name": "style_basics",
+        "file": "indepth_style.rpy",
+        "line": 96
+      },
+      {
+        "name": "style_general",
+        "file": "indepth_style.rpy",
+        "line": 251
+      },
+      {
+        "name": "style_text",
+        "file": "indepth_style.rpy",
+        "line": 333
+      },
+      {
+        "name": "style_button",
+        "file": "indepth_style.rpy",
+        "line": 578
+      },
+      {
+        "name": "style_bar",
+        "file": "indepth_style.rpy",
+        "line": 752
+      },
+      {
+        "name": "style_box",
+        "file": "indepth_style.rpy",
+        "line": 954
+      },
+      {
+        "name": "style_inspector",
+        "file": "indepth_style.rpy",
+        "line": 1080
+      },
+      {
+        "name": "a_label",
+        "file": "indepth_text.rpy",
+        "line": 20
+      },
+      {
+        "name": "text",
+        "file": "indepth_text.rpy",
+        "line": 26
+      },
+      {
+        "name": "after_a_label",
+        "file": "indepth_text.rpy",
+        "line": 45
+      },
+      {
+        "name": "demo_transitions",
+        "file": "indepth_transitions.rpy",
+        "line": 54
+      },
+      {
+        "name": "demo_simple_transitions",
+        "file": "indepth_transitions.rpy",
+        "line": 93
+      },
+      {
+        "name": "demo_imagedissolve_transitions",
+        "file": "indepth_transitions.rpy",
+        "line": 173
+      },
+      {
+        "name": "demo_cropmove_transitions",
+        "file": "indepth_transitions.rpy",
+        "line": 283
+      },
+      {
+        "name": "demo_pushmove_transitions",
+        "file": "indepth_transitions.rpy",
+        "line": 391
+      },
+      {
+        "name": "demo_movetransition",
+        "file": "indepth_transitions.rpy",
+        "line": 431
+      },
+      {
+        "name": "demo_alphadissolve",
+        "file": "indepth_transitions.rpy",
+        "line": 506
+      },
+      {
+        "name": "translations",
+        "file": "indepth_translations.rpy",
+        "line": 10
+      },
+      {
+        "name": "h.who",
+        "file": "screens.rpy",
+        "line": 943
+      },
+      {
+        "name": "_(message)",
+        "file": "screens.rpy",
+        "line": 1194
+      },
+      {
+        "name": "start",
+        "file": "script.rpy",
+        "line": 142
+      },
+      {
+        "name": "tutorials",
+        "file": "script.rpy",
+        "line": 160
+      },
+      {
+        "name": "end",
+        "file": "script.rpy",
+        "line": 195
+      },
+      {
+        "name": "tutorial_positions",
+        "file": "tutorial_atl.rpy",
+        "line": 206
+      },
+      {
+        "name": "tutorial_atl",
+        "file": "tutorial_atl.rpy",
+        "line": 419
+      },
+      {
+        "name": "transform_properties",
+        "file": "tutorial_atl.rpy",
+        "line": 684
+      },
+      {
+        "name": "director",
+        "file": "tutorial_director.rpy",
+        "line": 3
+      },
+      {
+        "name": "tutorial_nvlmode",
+        "file": "tutorial_nvlmode.rpy",
+        "line": 16
+      },
+      {
+        "name": "after_nvl_menu",
+        "file": "tutorial_nvlmode.rpy",
+        "line": 67
+      },
+      {
+        "name": "tutorial_playing",
+        "file": "tutorial_playing.rpy",
+        "line": 9
+      },
+      {
+        "name": "tutorial_rollback",
+        "file": "tutorial_playing.rpy",
+        "line": 82
+      },
+      {
+        "name": "tutorial_rollback_done",
+        "file": "tutorial_playing.rpy",
+        "line": 104
+      },
+      {
+        "name": "tutorial_create",
+        "file": "tutorial_quickstart.rpy",
+        "line": 23
+      },
+      {
+        "name": "tutorial_dialogue",
+        "file": "tutorial_quickstart.rpy",
+        "line": 67
+      },
+      {
+        "name": "tutorial_images",
+        "file": "tutorial_quickstart.rpy",
+        "line": 204
+      },
+      {
+        "name": "tutorial_simple_positions",
+        "file": "tutorial_quickstart.rpy",
+        "line": 280
+      },
+      {
+        "name": "tutorial_transitions",
+        "file": "tutorial_quickstart.rpy",
+        "line": 379
+      },
+      {
+        "name": "tutorial_music",
+        "file": "tutorial_quickstart.rpy",
+        "line": 437
+      },
+      {
+        "name": "tutorial_menus",
+        "file": "tutorial_quickstart.rpy",
+        "line": 490
+      },
+      {
+        "name": "choice1_yes",
+        "file": "tutorial_quickstart.rpy",
+        "line": 505
+      },
+      {
+        "name": "choice1_no",
+        "file": "tutorial_quickstart.rpy",
+        "line": 513
+      },
+      {
+        "name": "choice1_done",
+        "file": "tutorial_quickstart.rpy",
+        "line": 521
+      },
+      {
+        "name": "menu3_done",
+        "file": "tutorial_quickstart.rpy",
+        "line": 570
+      },
+      {
+        "name": "tutorial_input",
+        "file": "tutorial_quickstart.rpy",
+        "line": 583
+      },
+      {
+        "name": "tutorial_screens",
+        "file": "tutorial_screens.rpy",
+        "line": 163
+      },
+      {
+        "name": "screens_menu",
+        "file": "tutorial_screens.rpy",
+        "line": 167
+      },
+      {
+        "name": "screens_demo",
+        "file": "tutorial_screens.rpy",
+        "line": 199
+      },
+      {
+        "name": "screens_showing",
+        "file": "tutorial_screens.rpy",
+        "line": 253
+      },
+      {
+        "name": "screens_parameters",
+        "file": "tutorial_screens.rpy",
+        "line": 317
+      },
+      {
+        "name": "screens_properties",
+        "file": "tutorial_screens.rpy",
+        "line": 367
+      },
+      {
+        "name": "warp_screen_displayables",
+        "file": "tutorial_screens.rpy",
+        "line": 485
+      },
+      {
+        "name": "screens_control",
+        "file": "tutorial_screens.rpy",
+        "line": 489
+      },
+      {
+        "name": "screen_use",
+        "file": "tutorial_screens.rpy",
+        "line": 598
+      },
+      {
+        "name": "screen_displayables_menu",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 5
+      },
+      {
+        "name": "screen_displayable_properties",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 47
+      },
+      {
+        "name": "add_displayable",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 154
+      },
+      {
+        "name": "text_displayable",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 213
+      },
+      {
+        "name": "layout_displayables",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 253
+      },
+      {
+        "name": "window_displayables",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 393
+      },
+      {
+        "name": "button_displayables",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 431
+      },
+      {
+        "name": "bar_displayables",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 566
+      },
+      {
+        "name": "imagemap_displayables",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 633
+      },
+      {
+        "name": "imagemap_example",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 650
+      },
+      {
+        "name": "swimming",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 655
+      },
+      {
+        "name": "science",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 663
+      },
+      {
+        "name": "art",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 671
+      },
+      {
+        "name": "home",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 678
+      },
+      {
+        "name": "imagemap_done",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 684
+      },
+      {
+        "name": "viewport_displayables",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 785
+      },
+      {
+        "name": "tutorial_video",
+        "file": "tutorial_video.rpy",
+        "line": 8
+      }
+    ],
+    "characters": [
+      {
+        "name": "e_shout",
+        "file": "indepth_character.rpy",
+        "line": 14,
+        "definition": "define e_shout = Character(\"Eileen\", who_color=\"#c8ffc8\", what_size=34)"
+      },
+      {
+        "name": "e_whisper",
+        "file": "indepth_character.rpy",
+        "line": 15,
+        "definition": "define e_whisper = Character(\"Eileen\", who_color=\"#c8ffc8\", what_size=18)"
+      },
+      {
+        "name": "e1",
+        "file": "indepth_character.rpy",
+        "line": 46,
+        "definition": "define e1 = Character(\"Eileen\", window_background=\"gui/startextbox.png\")"
+      },
+      {
+        "name": "e1a",
+        "file": "indepth_character.rpy",
+        "line": 52,
+        "definition": "define e1a = Character(\"Eileen\", window_background=None)"
+      },
+      {
+        "name": "e2",
+        "file": "indepth_character.rpy",
+        "line": 57,
+        "definition": "define e2 = Character(\"Eileen\", who_color=\"#c8ffc8\", what_color=\"#ffc8c8\")"
+      },
+      {
+        "name": "e3",
+        "file": "indepth_character.rpy",
+        "line": 65,
+        "definition": "define e3 = Character(\"Eileen\", who_font=\"Roboto-Regular.ttf\", what_font=\"Roboto-Light.ttf\")"
+      },
+      {
+        "name": "e4",
+        "file": "indepth_character.rpy",
+        "line": 72,
+        "definition": "define e4 = Character(\"Eileen\", who_bold=True, what_italic=True, what_size=20)"
+      },
+      {
+        "name": "e5",
+        "file": "indepth_character.rpy",
+        "line": 81,
+        "definition": "define e5 = Character(\"Eileen\", what_outlines=[( 1, \"#008000\", 0, 0 )] )"
+      },
+      {
+        "name": "e6",
+        "file": "indepth_character.rpy",
+        "line": 91,
+        "definition": "define e6 = Character(\"Eileen\", what_outlines=[( 0, \"#808080\", 2, 2 )] )"
+      },
+      {
+        "name": "e7",
+        "file": "indepth_character.rpy",
+        "line": 97,
+        "definition": "define e7 = Character(\"Eileen\", what_xalign=0.5, what_textalign=0.5, what_layout='subtitle')"
+      },
+      {
+        "name": "e8",
+        "file": "indepth_character.rpy",
+        "line": 114,
+        "definition": "define e8 = Character("
+      },
+      {
+        "name": "e9",
+        "file": "indepth_character.rpy",
+        "line": 131,
+        "definition": "define e9 = Character(\"Eileen\", what_prefix='\"', what_suffix='\"')"
+      },
+      {
+        "name": "l8",
+        "file": "indepth_character.rpy",
+        "line": 137,
+        "definition": "define l8 = Character(kind=e8, what_outlines=[( 1, \"#c00000\", 0, 0 )] )"
+      },
+      {
+        "name": "narrator",
+        "file": "indepth_character.rpy",
+        "line": 155,
+        "definition": "define narrator = Character(what_italic=True)"
+      },
+      {
+        "name": "egreen",
+        "file": "indepth_style.rpy",
+        "line": 157,
+        "definition": "define egreen = Character(\"Eileen\", who_color=\"#c8ffc8\", who_bold=True, what_color=\"#c8ffc8\")"
+      },
+      {
+        "name": "eslow",
+        "file": "indepth_text.rpy",
+        "line": 6,
+        "definition": "define eslow = Character(kind=e, what_slow_cps=20)"
+      },
+      {
+        "name": "e",
+        "file": "script.rpy",
+        "line": 11,
+        "definition": "define e = Character(_('Eileen'), color=\"#c8ffc8\")"
+      },
+      {
+        "name": "nvle",
+        "file": "tutorial_nvlmode.rpy",
+        "line": 4,
+        "definition": "define nvle = Character(_(\"Eileen\"), color=\"#c8ffc8\", kind=nvl)"
+      },
+      {
+        "name": "l",
+        "file": "tutorial_quickstart.rpy",
+        "line": 2,
+        "definition": "define l = Character(_(\"Lucy\"), color=\"#ffcccc\")"
+      },
+      {
+        "name": "g",
+        "file": "tutorial_quickstart.rpy",
+        "line": 581,
+        "definition": "define g = Character(\"[name]\")"
+      }
+    ],
+    "menus": [
+      {
+        "file": "indepth_minigame.rpy",
+        "line": 255,
+        "type": "menu_structure",
+        "prompt": null,
+        "choices": [
+          {
+            "text": "Sure.",
+            "line": 258,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "play_pong"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 260,
+                "destination": "play_pong"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump play_pong"
+            ]
+          },
+          {
+            "text": "No thanks.",
+            "line": 262,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [
+              {
+                "type": "pass",
+                "line": 264
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "pass"
+            ]
+          },
+          {
+            "text": "No thanks.",
+            "line": 262,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [
+              {
+                "type": "pass",
+                "line": 264
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "pass"
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": null,
+        "menu_set": null,
+        "complexity": "simple"
+      },
+      {
+        "file": "indepth_style.rpy",
+        "line": 66,
+        "type": "menu_structure",
+        "prompt": null,
+        "choices": [
+          {
+            "text": "Style basics.",
+            "line": 70,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "style_basics"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 71,
+                "destination": "style_basics"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call style_basics from _call_style_basics"
+            ]
+          },
+          {
+            "text": "General style properties.",
+            "line": 73,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "style_general"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 74,
+                "destination": "style_general"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call style_general from _call_style_general"
+            ]
+          },
+          {
+            "text": "Text style properties.",
+            "line": 76,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "style_text"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 77,
+                "destination": "style_text"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call style_text from _call_style_text"
+            ]
+          },
+          {
+            "text": "Window and Button style properties.",
+            "line": 79,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "style_button"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 80,
+                "destination": "style_button"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call style_button from _call_style_button"
+            ]
+          },
+          {
+            "text": "Bar style properties.",
+            "line": 82,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "style_bar"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 83,
+                "destination": "style_bar"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call style_bar from _call_style_bar"
+            ]
+          },
+          {
+            "text": "Box, Grid, and Fixed style properties.",
+            "line": 85,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "style_box"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 86,
+                "destination": "style_box"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call style_box from _call_style_box"
+            ]
+          },
+          {
+            "text": "The Displayable Inspector.",
+            "line": 88,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "style_inspector"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 89,
+                "destination": "style_inspector"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call style_inspector from _call_style_inspector"
+            ]
+          },
+          {
+            "text": "That's all I want to know.",
+            "line": 91,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "<return>"
+            ],
+            "actions": [
+              {
+                "type": "return",
+                "line": 92
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": true,
+            "subsequent_lines": [
+              "return"
+            ]
+          },
+          {
+            "text": "That's all I want to know.",
+            "line": 91,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "<return>"
+            ],
+            "actions": [
+              {
+                "type": "return",
+                "line": 92
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": true,
+            "subsequent_lines": [
+              "return"
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": null,
+        "menu_set": null,
+        "complexity": "complex"
+      },
+      {
+        "file": "indepth_transitions.rpy",
+        "line": 58,
+        "type": "menu_structure",
+        "prompt": null,
+        "choices": [
+          {
+            "text": "Simple Transitions",
+            "line": 62,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "demo_simple_transitions"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 64,
+                "destination": "demo_simple_transitions"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call demo_simple_transitions from _call_demo_simple_transitions_1"
+            ]
+          },
+          {
+            "text": "ImageDissolve Transitions",
+            "line": 66,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "demo_imagedissolve_transitions"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 68,
+                "destination": "demo_imagedissolve_transitions"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call demo_imagedissolve_transitions from _call_demo_imagedissolve_transitions_1"
+            ]
+          },
+          {
+            "text": "MoveTransition Transitions",
+            "line": 70,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "demo_movetransition"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 72,
+                "destination": "demo_movetransition"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call demo_movetransition from _call_demo_movetransition_1"
+            ]
+          },
+          {
+            "text": "CropMove Transitions",
+            "line": 74,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "demo_cropmove_transitions"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 76,
+                "destination": "demo_cropmove_transitions"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call demo_cropmove_transitions from _call_demo_cropmove_transitions_1"
+            ]
+          },
+          {
+            "text": "PushMove Transitions",
+            "line": 78,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "demo_pushmove_transitions"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 80,
+                "destination": "demo_pushmove_transitions"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call demo_pushmove_transitions from _call_demo_pushmove_transitions_1"
+            ]
+          },
+          {
+            "text": "AlphaDissolve Transitions",
+            "line": 82,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "demo_alphadissolve"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 84,
+                "destination": "demo_alphadissolve"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call demo_alphadissolve from _call_demo_alphadissolve"
+            ]
+          },
+          {
+            "text": "How about something else?",
+            "line": 86,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "<return>"
+            ],
+            "actions": [
+              {
+                "type": "return",
+                "line": 88
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": true,
+            "subsequent_lines": [
+              "return"
+            ]
+          },
+          {
+            "text": "How about something else?",
+            "line": 86,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "<return>"
+            ],
+            "actions": [
+              {
+                "type": "return",
+                "line": 88
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": true,
+            "subsequent_lines": [
+              "return"
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": "demo_transitions_menu",
+        "menu_set": null,
+        "complexity": "complex"
+      },
+      {
+        "file": "tutorial_atl.rpy",
+        "line": 270,
+        "type": "menu_structure",
+        "prompt": null,
+        "choices": [
+          {
+            "text": "xpos 1.0 ypos .5",
+            "line": 274,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "e \"Sorry, that's wrong. The xpos is .75, and the ypos is .25.\"",
+              "e \"In other words, it's 75%% of the way from the left side, and 25%% of the way from the top.\""
+            ]
+          },
+          {
+            "text": "xpos .75 ypos .25",
+            "line": 280,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "e \"Good job! You got that position right.\""
+            ]
+          },
+          {
+            "text": "xpos .25 ypos .33",
+            "line": 284,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "e \"Sorry, that's wrong. The xpos is .75, and the ypos is .25.\"",
+              "e \"In other words, it's 75%% of the way from the left side, and 25%% of the way from the top.\""
+            ]
+          },
+          {
+            "text": "xpos .25 ypos .33",
+            "line": 284,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "e \"Sorry, that's wrong. The xpos is .75, and the ypos is .25.\"",
+              "e \"In other words, it's 75%% of the way from the left side, and 25%% of the way from the top.\""
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": null,
+        "menu_set": null,
+        "complexity": "moderate"
+      },
+      {
+        "file": "tutorial_nvlmode.rpy",
+        "line": 50,
+        "type": "menu_structure",
+        "prompt": null,
+        "choices": [
+          {
+            "text": "Yes.",
+            "line": 54,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "nvl clear",
+              "nvle \"Good!\""
+            ]
+          },
+          {
+            "text": "No.",
+            "line": 60,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "nvl clear",
+              "nvle \"Well, hopefully the code below makes it a little more clear.\""
+            ]
+          },
+          {
+            "text": "No.",
+            "line": 60,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "nvl clear",
+              "nvle \"Well, hopefully the code below makes it a little more clear.\""
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": null,
+        "menu_set": null,
+        "complexity": "simple"
+      },
+      {
+        "file": "tutorial_playing.rpy",
+        "line": 69,
+        "type": "menu_structure",
+        "prompt": null,
+        "choices": [
+          {
+            "text": "Yes.",
+            "line": 73,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "tutorial_rollback"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 75,
+                "destination": "tutorial_rollback"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump tutorial_rollback"
+            ]
+          },
+          {
+            "text": "No.",
+            "line": 77,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "tutorial_rollback_done"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 79,
+                "destination": "tutorial_rollback_done"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump tutorial_rollback_done"
+            ]
+          },
+          {
+            "text": "No.",
+            "line": 77,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "tutorial_rollback_done"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 79,
+                "destination": "tutorial_rollback_done"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump tutorial_rollback_done"
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": null,
+        "menu_set": null,
+        "complexity": "simple"
+      },
+      {
+        "file": "tutorial_quickstart.rpy",
+        "line": 497,
+        "type": "menu_structure",
+        "prompt": null,
+        "choices": [
+          {
+            "text": "Yes, I do.",
+            "line": 499,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "choice1_yes"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 500,
+                "destination": "choice1_yes"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump choice1_yes"
+            ]
+          },
+          {
+            "text": "No, I don't.",
+            "line": 502,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "choice1_no"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 503,
+                "destination": "choice1_no"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump choice1_no"
+            ]
+          },
+          {
+            "text": "No, I don't.",
+            "line": 502,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "choice1_no"
+            ],
+            "actions": [
+              {
+                "type": "jump",
+                "line": 503,
+                "destination": "choice1_no"
+              }
+            ],
+            "has_jumps": true,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "jump choice1_no"
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": null,
+        "menu_set": null,
+        "complexity": "simple"
+      },
+      {
+        "file": "tutorial_quickstart.rpy",
+        "line": 559,
+        "type": "menu_structure",
+        "prompt": null,
+        "choices": [
+          {
+            "text": "Yes.",
+            "line": 562,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "e \"Great.\""
+            ]
+          },
+          {
+            "text": "No.",
+            "line": 566,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "e \"If you look at the example, before the first choice, there's an indented say statement.\""
+            ]
+          },
+          {
+            "text": "No.",
+            "line": 566,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "e \"If you look at the example, before the first choice, there's an indented say statement.\""
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": null,
+        "menu_set": null,
+        "complexity": "simple"
+      },
+      {
+        "file": "tutorial_screens.rpy",
+        "line": 171,
+        "type": "menu_structure",
+        "prompt": null,
+        "choices": [
+          {
+            "text": "What screens can do.",
+            "line": 175,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "screens_demo"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 176,
+                "destination": "screens_demo"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call screens_demo from _call_screens_demo"
+            ]
+          },
+          {
+            "text": "How to show screens.",
+            "line": 178,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "screens_showing"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 179,
+                "destination": "screens_showing"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call screens_showing from _call_screens_showing"
+            ]
+          },
+          {
+            "text": "Passing parameters to screens.",
+            "line": 181,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "screens_parameters"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 182,
+                "destination": "screens_parameters"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call screens_parameters from _call_screens_parameters"
+            ]
+          },
+          {
+            "text": "Screen properties.",
+            "line": 184,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "screens_properties"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 185,
+                "destination": "screens_properties"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call screens_properties from _call_screens_properties"
+            ]
+          },
+          {
+            "text": "Special screen statements.",
+            "line": 187,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "screens_control"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 188,
+                "destination": "screens_control"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call screens_control from _call_screens_control"
+            ]
+          },
+          {
+            "text": "Using other screens.",
+            "line": 190,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "screen_use"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 191,
+                "destination": "screen_use"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call screen_use from _call_screen_use"
+            ]
+          },
+          {
+            "text": "That's it.",
+            "line": 193,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "<return>"
+            ],
+            "actions": [
+              {
+                "type": "return",
+                "line": 194
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": true,
+            "subsequent_lines": [
+              "return"
+            ]
+          },
+          {
+            "text": "That's it.",
+            "line": 193,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "<return>"
+            ],
+            "actions": [
+              {
+                "type": "return",
+                "line": 194
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": true,
+            "subsequent_lines": [
+              "return"
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": null,
+        "menu_set": null,
+        "complexity": "complex"
+      },
+      {
+        "file": "tutorial_screens.rpy",
+        "line": 205,
+        "type": "menu_structure",
+        "prompt": null,
+        "choices": [
+          {
+            "text": "Yes.",
+            "line": 209,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [
+              {
+                "type": "pass",
+                "line": 210
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "pass"
+            ]
+          },
+          {
+            "text": "I do.",
+            "line": 212,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [
+              {
+                "type": "pass",
+                "line": 213
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "pass"
+            ]
+          },
+          {
+            "text": "I do.",
+            "line": 212,
+            "type": "basic",
+            "condition": null,
+            "destinations": [],
+            "actions": [
+              {
+                "type": "pass",
+                "line": 213
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": false,
+            "subsequent_lines": [
+              "pass"
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": null,
+        "menu_set": null,
+        "complexity": "simple"
+      },
+      {
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 9,
+        "type": "menu_structure",
+        "prompt": null,
+        "choices": [
+          {
+            "text": "Common properties all displayables share.",
+            "line": 13,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "screen_displayable_properties"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 14,
+                "destination": "screen_displayable_properties"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call screen_displayable_properties from _call_screen_displayable_properties"
+            ]
+          },
+          {
+            "text": "Adding images and other displayables.",
+            "line": 16,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "add_displayable"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 17,
+                "destination": "add_displayable"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call add_displayable from _call_add_displayable"
+            ]
+          },
+          {
+            "text": "Text.",
+            "line": 19,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "text_displayable"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 20,
+                "destination": "text_displayable"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call text_displayable from _call_text_displayable"
+            ]
+          },
+          {
+            "text": "Boxes and other layouts.",
+            "line": 22,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "layout_displayables"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 23,
+                "destination": "layout_displayables"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call layout_displayables from _call_layout_displayables"
+            ]
+          },
+          {
+            "text": "Windows and frames.",
+            "line": 25,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "window_displayables"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 26,
+                "destination": "window_displayables"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call window_displayables from _call_window_displayables"
+            ]
+          },
+          {
+            "text": "Buttons.",
+            "line": 28,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "button_displayables"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 29,
+                "destination": "button_displayables"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call button_displayables from _call_button_displayables"
+            ]
+          },
+          {
+            "text": "Bars.",
+            "line": 31,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "bar_displayables"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 32,
+                "destination": "bar_displayables"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call bar_displayables from _call_bar_displayables"
+            ]
+          },
+          {
+            "text": "Viewports.",
+            "line": 34,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "viewport_displayables"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 35,
+                "destination": "viewport_displayables"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call viewport_displayables from _call_viewport_displayables"
+            ]
+          },
+          {
+            "text": "Imagemaps.",
+            "line": 37,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "imagemap_displayables"
+            ],
+            "actions": [
+              {
+                "type": "call",
+                "line": 38,
+                "destination": "imagemap_displayables"
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": true,
+            "has_returns": false,
+            "subsequent_lines": [
+              "call imagemap_displayables from _call_imagemap_displayables"
+            ]
+          },
+          {
+            "text": "That's all for now.",
+            "line": 40,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "<return>"
+            ],
+            "actions": [
+              {
+                "type": "return",
+                "line": 41
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": true,
+            "subsequent_lines": [
+              "return"
+            ]
+          },
+          {
+            "text": "That's all for now.",
+            "line": 40,
+            "type": "basic",
+            "condition": null,
+            "destinations": [
+              "<return>"
+            ],
+            "actions": [
+              {
+                "type": "return",
+                "line": 41
+              }
+            ],
+            "has_jumps": false,
+            "has_calls": false,
+            "has_returns": true,
+            "subsequent_lines": [
+              "return"
+            ]
+          }
+        ],
+        "has_conditions": false,
+        "menu_name": null,
+        "menu_set": null,
+        "complexity": "complex"
+      }
+    ],
+    "assets": [
+      {
+        "name": "example\",",
+        "type": "sprite",
+        "file": "01example.rpy",
+        "line": 318,
+        "context": "renpy.register_statement(\"show example\", parse=parse_show_example, execute=execute_example)"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "indepth_character.rpy",
+        "line": 9,
+        "context": "show example characters"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_character.rpy",
+        "line": 144,
+        "context": "scene bg cave"
+      },
+      {
+        "name": "lucy",
+        "type": "sprite",
+        "file": "indepth_character.rpy",
+        "line": 145,
+        "context": "show lucy happy"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_character.rpy",
+        "line": 150,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_character.rpy",
+        "line": 151,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 20,
+        "context": "show logo base at logopos"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 27,
+        "context": "show logo alias at logopos"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 39,
+        "context": "show bg blue with dissolve"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 45,
+        "context": "show bg washington with dissolve"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 50,
+        "context": "show logo rotated at logopos"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 60,
+        "context": "show logo solidexample at logopos"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 69,
+        "context": "show logo text at logopos"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 77,
+        "context": "show logo text rotate at logopos"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 88,
+        "context": "show logo composite at logopos"
+      },
+      {
+        "name": "ninepatch",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 98,
+        "context": "show ninepatch frame at logopos:"
+      },
+      {
+        "name": "ninepatch",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 103,
+        "context": "show ninepatch frame at logopos:"
+      },
+      {
+        "name": "ninepatch",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 116,
+        "context": "show ninepatch frame tiled"
+      },
+      {
+        "name": "ninepatch",
+        "type": "sprite",
+        "file": "indepth_displayables.rpy",
+        "line": 123,
+        "context": "show ninepatch paper tiled"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_minigame.rpy",
+        "line": 241,
+        "context": "show eileen vhappy"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_minigame.rpy",
+        "line": 253,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "indepth_minigame.rpy",
+        "line": 266,
+        "context": "show example minigame large"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_minigame.rpy",
+        "line": 280,
+        "context": "show eileen vhappy"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_minigame.rpy",
+        "line": 284,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 56,
+        "context": "show eileen happy at left"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 100,
+        "context": "show screen style0"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 118,
+        "context": "show screen style1"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 135,
+        "context": "show screen textstyle"
+      },
+      {
+        "name": "style2",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 145,
+        "context": "show style2 at examplepos"
+      },
+      {
+        "name": "style3",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 172,
+        "context": "show style3 at examplepos"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 230,
+        "context": "show screen style4"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 261,
+        "context": "show screen general(\"general\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 272,
+        "context": "show screen general(\"minmax_general\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 287,
+        "context": "show screen general(\"xysize_general\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 297,
+        "context": "show screen general(\"area_general\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 305,
+        "context": "show screen general(\"alt_general\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 345,
+        "context": "show screen text(\"bold_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 353,
+        "context": "show screen text(\"color_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 361,
+        "context": "show screen text(\"first_indent_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 369,
+        "context": "show screen text(\"font_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 377,
+        "context": "show screen text(\"size_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 386,
+        "context": "show screen text(\"italic_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 395,
+        "context": "show screen text(\"justify_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 403,
+        "context": "show screen text(\"kerning_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 413,
+        "context": "show screen text(\"leading_spacing_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 422,
+        "context": "show screen text(\"outlines_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 432,
+        "context": "show screen text(\"rest_indent_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 441,
+        "context": "show screen text(\"center_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 453,
+        "context": "show screen text(\"right_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 462,
+        "context": "show screen text(\"underline_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 477,
+        "context": "show screen text(\"antialias_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 485,
+        "context": "show screen text(\"adjust_true_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 494,
+        "context": "show screen text(\"adjust_false_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 503,
+        "context": "show screen text(\"layout_nobreak_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 514,
+        "context": "show screen text(\"layout_subtitle_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 522,
+        "context": "show screen text(\"strikethrough_text\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 532,
+        "context": "show screen text(\"vertical_text\", True)"
+      },
+      {
+        "name": "examples",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 580,
+        "context": "e \"Next up, we have the window and button style properties. These apply to windows like the text window at the bottom of this screen and frames like the ones we show examples in.\""
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 590,
+        "context": "show screen button('example_button')"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 599,
+        "context": "show example example_button_text"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 610,
+        "context": "show screen button('oddly_padded_button')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 619,
+        "context": "show screen button('padded_button')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 627,
+        "context": "show screen button('margin_button')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 636,
+        "context": "show screen button('sized_button')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 645,
+        "context": "show screen button('xfill_button')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 655,
+        "context": "show screen button('foreground_button')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 666,
+        "context": "show screen button('beep_button')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 675,
+        "context": "show screen button('focus_mask_button')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 754,
+        "context": "show screen bar(\"empty_only\")"
+      },
+      {
+        "name": "two",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 757,
+        "context": "e \"To demonstrate styles, let me first show two of the images we'll be using. This is the image we're using for parts of the bar that are empty.\""
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 759,
+        "context": "show screen bar(\"full_only\")"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 771,
+        "context": "show screen bar('example_bar')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 788,
+        "context": "show screen bar('invert_bar')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 802,
+        "context": "show screen bar('resizing_bar')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 815,
+        "context": "show screen bar('thumb_bar')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 832,
+        "context": "show screen bar('gutter_bar')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 846,
+        "context": "show screen vbar('vertical_bar')"
+      },
+      {
+        "name": "here,",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 854,
+        "context": "e \"Finally, there's one style we can't show here, and it's unscrollable. It controls what happens when a scrollbar can't be moved at all.\""
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 956,
+        "context": "show screen hbox('hbox', False, None)"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 962,
+        "context": "show screen vbox('vbox', None)"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 967,
+        "context": "show screen vbox('vbox')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 976,
+        "context": "show screen vbox('fill_vbox')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 986,
+        "context": "show screen vbox('spacing_vbox')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 996,
+        "context": "show screen vbox('first_spacing_vbox')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 1006,
+        "context": "show screen vbox('reverse_vbox')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 1018,
+        "context": "show screen hbox(\"spacing_hbox\", False)"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 1029,
+        "context": "show screen hbox(\"wrap_hbox\", True)"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 1034,
+        "context": "show screen grid('spacing_grid')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 1048,
+        "context": "show screen fixed('fixed')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 1060,
+        "context": "show screen fixed('fit_fixed')"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "indepth_style.rpy",
+        "line": 1068,
+        "context": "show screen fixed('reverse_fixed')"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "indepth_text.rpy",
+        "line": 35,
+        "context": "show example tags1"
+      },
+      {
+        "name": "you",
+        "type": "sprite",
+        "file": "indepth_text.rpy",
+        "line": 39,
+        "context": "e \"We've already seen the b, i, s, and u tags, but there are lot more than those. I'll show you the rest of them.\""
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 100,
+        "context": "show bg whitehouse"
+      },
+      {
+        "name": "into",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 103,
+        "context": "e \"The 'dissolve' transition is probably the most useful, blending one scene into another.\""
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 106,
+        "context": "show bg washington"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 113,
+        "context": "show bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 126,
+        "context": "show bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 159,
+        "context": "show eileen happy at right"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 161,
+        "context": "show eileen happy at center"
+      },
+      {
+        "name": "you",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 177,
+        "context": "e \"This lets us specify very complex transitions, fairly simply. Let's try some, and then I'll show you how they work.\""
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 183,
+        "context": "scene black"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 186,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 187,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 194,
+        "context": "scene black"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 197,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 198,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "things.",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 201,
+        "context": "e \"The 'squares' transition uses these squares to show things.\""
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 212,
+        "context": "scene black"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 218,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "them",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 221,
+        "context": "e \"... and show them again with a 'circleirisout'.\""
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 224,
+        "context": "show bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 230,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 236,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "one",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 239,
+        "context": "e \"The 'teleport' transition reveals the new scene one line at a time.\""
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 241,
+        "context": "show example circleirisout small"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 243,
+        "context": "scene bg circleiris"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 250,
+        "context": "show bg washington"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 253,
+        "context": "show example circleirisout small"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 257,
+        "context": "show bg circleiris"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 262,
+        "context": "show example teleport small"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 264,
+        "context": "show bg teleport"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 269,
+        "context": "show bg washington"
+      },
+      {
+        "name": "that",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 272,
+        "context": "e \"A dissolve only seems to affect parts of the scene that have changed...\""
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 274,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 287,
+        "context": "show eileen happy at offscreenleft"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 293,
+        "context": "scene bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 299,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 305,
+        "context": "scene bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 311,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 319,
+        "context": "scene bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 325,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 331,
+        "context": "scene bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 337,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 346,
+        "context": "scene bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 352,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 358,
+        "context": "scene bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 364,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 373,
+        "context": "scene bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 379,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 380,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "to",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 393,
+        "context": "e \"The PushMove transitions use the new scene to push the old one out. Let's take a look.\""
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 397,
+        "context": "show bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 405,
+        "context": "show bg washington"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 413,
+        "context": "show bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 420,
+        "context": "show bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 421,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 438,
+        "context": "show eileen happy at left"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 444,
+        "context": "show example moveinout"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 461,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 467,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 473,
+        "context": "show eileen happy:"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 484,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "and",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 489,
+        "context": "e \"Finally, there are the zoomin and zoomout transitions, which show and hide things using a zoom.\""
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 496,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "you",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 508,
+        "context": "e \"The AlphaDissolve transition lets you use one displayable to combine two others. Click, and I'll show you an example.\""
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 510,
+        "context": "scene black"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 514,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 515,
+        "context": "show eileen happy at center"
+      },
+      {
+        "name": "alpha_control",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 521,
+        "context": "show alpha_control"
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 527,
+        "context": "scene black"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 531,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 532,
+        "context": "show eileen happy at center"
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 536,
+        "context": "scene black"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "indepth_transitions.rpy",
+        "line": 538,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "indepth_transitions.rpy",
+        "line": 539,
+        "context": "show eileen happy at center"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "indepth_translations.rpy",
+        "line": 18,
+        "context": "show example characters"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "indepth_translations.rpy",
+        "line": 22,
+        "context": "show example characters showtrans"
+      },
+      {
+        "name": "launcher",
+        "type": "sprite",
+        "file": "indepth_translations.rpy",
+        "line": 30,
+        "context": "show launcher translate at launcher_place"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "indepth_translations.rpy",
+        "line": 46,
+        "context": "show example translate_font large"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "indepth_translations.rpy",
+        "line": 56,
+        "context": "show example language_picker large"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "script.rpy",
+        "line": 145,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 146,
+        "context": "show eileen vhappy"
+      },
+      {
+        "name": "sunflower-slow-drag.ogg",
+        "type": "music",
+        "file": "script.rpy",
+        "line": 150,
+        "context": "play music \"sunflower-slow-drag.ogg\""
+      },
+      {
+        "name": "sunflower-slow-drag.ogg",
+        "type": "reference",
+        "file": "script.rpy",
+        "line": 150,
+        "context": "play music \"sunflower-slow-drag.ogg\""
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 156,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 162,
+        "context": "show eileen happy at left"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 181,
+        "context": "show eileen happy at center"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 190,
+        "context": "show eileen happy at left"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 197,
+        "context": "show eileen happy at center"
+      },
+      {
+        "name": "_finale",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 200,
+        "context": "show _finale behind eileen"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "script.rpy",
+        "line": 213,
+        "context": "show eileen vhappy"
+      },
+      {
+        "name": "screens.",
+        "type": "sprite",
+        "file": "testcases.rpy",
+        "line": 167,
+        "context": "click until \"How to show screens.\""
+      },
+      {
+        "name": "you",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 218,
+        "context": "e \"Let me get out of the way, and I'll show you where some positions are.\""
+      },
+      {
+        "name": "pos:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 223,
+        "context": "show pos:"
+      },
+      {
+        "name": "pos:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 229,
+        "context": "show pos:"
+      },
+      {
+        "name": "pos:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 234,
+        "context": "show pos:"
+      },
+      {
+        "name": "pos:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 240,
+        "context": "show pos:"
+      },
+      {
+        "name": "pos:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 245,
+        "context": "show pos:"
+      },
+      {
+        "name": "pos:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 253,
+        "context": "show pos:"
+      },
+      {
+        "name": "pos:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 259,
+        "context": "show pos:"
+      },
+      {
+        "name": "pos:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 266,
+        "context": "show pos:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 292,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "anchor:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 295,
+        "context": "show anchor:"
+      },
+      {
+        "name": "anchor:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 306,
+        "context": "show anchor:"
+      },
+      {
+        "name": "anchor:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 311,
+        "context": "show anchor:"
+      },
+      {
+        "name": "pos:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 316,
+        "context": "show pos:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 323,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "anchor:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 326,
+        "context": "show anchor:"
+      },
+      {
+        "name": "anchor:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 332,
+        "context": "show anchor:"
+      },
+      {
+        "name": "pos:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 334,
+        "context": "show pos:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 336,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "anchor:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 341,
+        "context": "show anchor:"
+      },
+      {
+        "name": "pos:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 343,
+        "context": "show pos:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 345,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 350,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 362,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 367,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 372,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 381,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 386,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 391,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 399,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 404,
+        "context": "show logo solid:"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 411,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 424,
+        "context": "show eileen happy at right"
+      },
+      {
+        "name": "concert",
+        "type": "background",
+        "file": "tutorial_atl.rpy",
+        "line": 435,
+        "context": "scene concert"
+      },
+      {
+        "name": "renpyallstars.ogg",
+        "type": "music",
+        "file": "tutorial_atl.rpy",
+        "line": 438,
+        "context": "play music \"renpyallstars.ogg\" noloop"
+      },
+      {
+        "name": "renpyallstars.ogg",
+        "type": "reference",
+        "file": "tutorial_atl.rpy",
+        "line": 438,
+        "context": "play music \"renpyallstars.ogg\" noloop"
+      },
+      {
+        "name": "sunflower-slow-drag.ogg",
+        "type": "music",
+        "file": "tutorial_atl.rpy",
+        "line": 442,
+        "context": "play music \"sunflower-slow-drag.ogg\" fadeout 1.0"
+      },
+      {
+        "name": "sunflower-slow-drag.ogg",
+        "type": "reference",
+        "file": "tutorial_atl.rpy",
+        "line": 442,
+        "context": "play music \"sunflower-slow-drag.ogg\" fadeout 1.0"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_atl.rpy",
+        "line": 444,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 445,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 454,
+        "context": "show example atl_image"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 455,
+        "context": "show eileen animated"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 461,
+        "context": "show example atl_transform"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 462,
+        "context": "show eileen happy at right"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 468,
+        "context": "show logo base:"
+      },
+      {
+        "name": "statement,",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 476,
+        "context": "e \"Finally, an ATL block can be used as part of a show statement, instead of the at clause.\" id tutorial_atl_da7a7759"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 480,
+        "context": "show logo base:"
+      },
+      {
+        "name": "statement,",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 483,
+        "context": "e \"When ATL is used as part of a show statement, values of properties exist even when the transform is changed. So even though your click stopped the motion, the image remains in the same place.\" id tutorial_atl_1dd345c6"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 486,
+        "context": "show eileen happy at center"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 495,
+        "context": "show eileen animated:"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 500,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "magic:",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 502,
+        "context": "show magic:"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 530,
+        "context": "show example atl_image"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 531,
+        "context": "show eileen animated"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 543,
+        "context": "show example atl_image1"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 544,
+        "context": "show eileen animated twice"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 548,
+        "context": "show example atl_image2"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 549,
+        "context": "show eileen animated once"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 553,
+        "context": "show example atl_with"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 554,
+        "context": "show bg atl transitions"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 558,
+        "context": "show bg washington"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 565,
+        "context": "show logo base behind eileen"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 567,
+        "context": "show logo base at topright"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 570,
+        "context": "show example atl_transform"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 574,
+        "context": "show example atl_transform1"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 575,
+        "context": "show logo base at move_jump"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 583,
+        "context": "show example atl_transform2"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 584,
+        "context": "show logo base at move_slide"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 598,
+        "context": "show eileen happy at right"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 601,
+        "context": "show logo base:"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 612,
+        "context": "show eileen happy:"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 623,
+        "context": "show eileen happy at center"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 624,
+        "context": "show logo base behind eileen"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 628,
+        "context": "show logo base:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 645,
+        "context": "show logo base:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 659,
+        "context": "show logo base:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 664,
+        "context": "show logo base:"
+      },
+      {
+        "name": "them",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 687,
+        "context": "e \"Here, we'll show them off so you can see them in action and get used to what each does.\""
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 690,
+        "context": "show eileen happy at right"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 695,
+        "context": "show logo base:"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 709,
+        "context": "show bg band:"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 716,
+        "context": "show bg band:"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 727,
+        "context": "show bg band:"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 734,
+        "context": "show bg band:"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 742,
+        "context": "show bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 744,
+        "context": "show eileen happy at right"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 749,
+        "context": "show logo small:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 760,
+        "context": "show logo small:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 769,
+        "context": "show logo small:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 778,
+        "context": "show logo base at reset"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 782,
+        "context": "show logo base:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 790,
+        "context": "show logo base at reset"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 793,
+        "context": "show logo base:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 803,
+        "context": "show logo base at reset"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 806,
+        "context": "show logo base:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 813,
+        "context": "show logo base at reset"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 816,
+        "context": "show logo base:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 823,
+        "context": "show logo base at reset"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 826,
+        "context": "show logo base:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 838,
+        "context": "show logo base at reset"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 841,
+        "context": "show logo base:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 852,
+        "context": "show logo base:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 863,
+        "context": "show logo base:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 874,
+        "context": "show logo base at reset"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 877,
+        "context": "show logo base:"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 885,
+        "context": "show logo base at reset"
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 888,
+        "context": "show logo base:"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 899,
+        "context": "show bg washington:"
+      },
+      {
+        "name": "bg",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 912,
+        "context": "show bg panorama:"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_atl.rpy",
+        "line": 922,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 923,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_atl.rpy",
+        "line": 928,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_director.rpy",
+        "line": 19,
+        "context": "show eileen concerned"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_director.rpy",
+        "line": 25,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "the",
+        "type": "sprite",
+        "file": "tutorial_director.rpy",
+        "line": 44,
+        "context": "e \"You can show the director at any time by pressing the 'D' key on your keyboard. Ren'Py will reload, and you'll come back here. Try it now.\""
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_director.rpy",
+        "line": 50,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "statement,",
+        "type": "sprite",
+        "file": "tutorial_director.rpy",
+        "line": 52,
+        "context": "e \"You can edit or remove statements with the pencil icon. You can move me to the right by editing the show statement, then clicking '(transform)', 'right', and 'Change'.\""
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_director.rpy",
+        "line": 65,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_director.rpy",
+        "line": 66,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "launcher",
+        "type": "sprite",
+        "file": "tutorial_distribute.rpy",
+        "line": 9,
+        "context": "show launcher distribute at launcher_place"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_distribute.rpy",
+        "line": 31,
+        "context": "show eileen vhappy"
+      },
+      {
+        "name": "dissolve",
+        "type": "sprite",
+        "file": "tutorial_nvlmode.rpy",
+        "line": 20,
+        "context": "nvl show dissolve"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_nvlmode.rpy",
+        "line": 24,
+        "context": "show example nvl1 bottom"
+      },
+      {
+        "name": "dissolve",
+        "type": "sprite",
+        "file": "tutorial_nvlmode.rpy",
+        "line": 37,
+        "context": "nvl show dissolve"
+      },
+      {
+        "name": "and",
+        "type": "sprite",
+        "file": "tutorial_nvlmode.rpy",
+        "line": 39,
+        "context": "nvle \"The 'nvl show' and 'nvl hide' statements use transitions to show and hide the NVL window.\""
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_nvlmode.rpy",
+        "line": 46,
+        "context": "show example nvl3a nvl3 large bottom"
+      },
+      {
+        "name": "dissolve",
+        "type": "sprite",
+        "file": "tutorial_nvlmode.rpy",
+        "line": 87,
+        "context": "window show dissolve"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_playing.rpy",
+        "line": 21,
+        "context": "show eileen happy at right"
+      },
+      {
+        "name": "popup",
+        "type": "sprite",
+        "file": "tutorial_playing.rpy",
+        "line": 22,
+        "context": "show popup save at popup_place"
+      },
+      {
+        "name": "popup",
+        "type": "sprite",
+        "file": "tutorial_playing.rpy",
+        "line": 35,
+        "context": "show popup prefs at popup_place"
+      },
+      {
+        "name": "popup",
+        "type": "sprite",
+        "file": "tutorial_playing.rpy",
+        "line": 44,
+        "context": "show popup hrpprefs at popup_place"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_playing.rpy",
+        "line": 50,
+        "context": "show eileen happy at center"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_playing.rpy",
+        "line": 94,
+        "context": "show eileen concerned"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_playing.rpy",
+        "line": 102,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "launcher",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 25,
+        "context": "show launcher step1 at launcher_place"
+      },
+      {
+        "name": "launcher",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 34,
+        "context": "show launcher step2"
+      },
+      {
+        "name": "launcher",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 38,
+        "context": "show launcher step3"
+      },
+      {
+        "name": "launcher",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 42,
+        "context": "show launcher step4"
+      },
+      {
+        "name": "launcher",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 46,
+        "context": "show launcher step5"
+      },
+      {
+        "name": "you",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 71,
+        "context": "e \"But before I can show you how to write dialogue, let me show you how we present script examples.\""
+      },
+      {
+        "name": "up",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 74,
+        "context": "\"Eileen\" \"Examples will show up in a window like the one above. You'll need to click outside of the example window in order to advance the tutorial.\""
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 84,
+        "context": "scene black"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 93,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 94,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 97,
+        "context": "show example start dialogue1"
+      },
+      {
+        "name": "you",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 99,
+        "context": "e \"I'll show you the script of that example.\""
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 113,
+        "context": "scene black"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 118,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 119,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 123,
+        "context": "show example start dialogue1"
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 128,
+        "context": "scene black"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 133,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 134,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 137,
+        "context": "show example start dialogue1"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 157,
+        "context": "show example characters"
+      },
+      {
+        "name": "black",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 173,
+        "context": "scene black"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 182,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 183,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 186,
+        "context": "show example characters start dialogue1 dialogue2"
+      },
+      {
+        "name": "the",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 192,
+        "context": "e \"When this say statement is run, Ren'Py will look up the short name, which is really a Python variable. It will then use the associated Character to show the dialogue.\""
+      },
+      {
+        "name": "images,",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 208,
+        "context": "e \"Before we can show images, we must first choose image names, then place the image files into the images directory.\""
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 227,
+        "context": "scene bg cave"
+      },
+      {
+        "name": "lucy",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 228,
+        "context": "show lucy happy"
+      },
+      {
+        "name": "lucy",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 232,
+        "context": "show lucy mad at right"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 236,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 237,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 240,
+        "context": "show example start images1 large"
+      },
+      {
+        "name": "and",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 242,
+        "context": "e \"Here's the script for that scene. Notice how it includes two new statements, the scene and show statement.\""
+      },
+      {
+        "name": "statement",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 244,
+        "context": "e \"The scene statement clears the screen, and then adds a background image.\""
+      },
+      {
+        "name": "statement",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 246,
+        "context": "e \"The show statement adds a new image on top of all the other images on the screen.\""
+      },
+      {
+        "name": "statement",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 252,
+        "context": "e \"The second show statement has an at clause, which gives a location on the screen. Common locations are left, right, and center, but you can define many more.\""
+      },
+      {
+        "name": "logo",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 255,
+        "context": "show logo base at rightish behind eileen"
+      },
+      {
+        "name": "an",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 257,
+        "context": "e \"In this example, we show an image named logo base, and we show it at a creator-defined position, rightish.\""
+      },
+      {
+        "name": "statement",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 266,
+        "context": "e \"Since the show statement replaces an image, and the scene statement clears the scene, it's pretty rare to hide an image.\""
+      },
+      {
+        "name": "is",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 268,
+        "context": "e \"The main use is for when a character or prop leaves before the scene is over.\""
+      },
+      {
+        "name": "you",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 282,
+        "context": "e \"When the standard positions that come with Ren'Py aren't enough for you, you can create your own. Here, I'll show you the easy way to do it.\""
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 285,
+        "context": "show eileen happy:"
+      },
+      {
+        "name": "an",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 291,
+        "context": "e \"The first way to do it is to show an image followed by a colon. Then indented on the next couple of lines are the xalign and yalign transform properties.\""
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 299,
+        "context": "show eileen happy:"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 309,
+        "context": "show eileen happy:"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 318,
+        "context": "show eileen happy:"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 327,
+        "context": "show eileen happy:"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 338,
+        "context": "show eileen happy at center"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 343,
+        "context": "show example slightleft"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 350,
+        "context": "show eileen vhappy at slightleft"
+      },
+      {
+        "name": "statement.",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 355,
+        "context": "e \"Once a transform has been defined, you can use it in the at clause of the show statement.\""
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 358,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 383,
+        "context": "scene bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 385,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 386,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "change",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 388,
+        "context": "e \"To help take some of edge off a change in scene, Ren'Py supports the use of transitions. Let's try that scene change again, but this time we'll use transitions.\""
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 391,
+        "context": "scene bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 396,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 397,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 400,
+        "context": "show example trans1 large"
+      },
+      {
+        "name": "to",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 404,
+        "context": "e \"It uses the with statement. The with statement causes the scene to transition from the last things shown to the things currently being shown.\""
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 410,
+        "context": "show example slowdissolve"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 418,
+        "context": "scene bg whitehouse"
+      },
+      {
+        "name": "bg",
+        "type": "background",
+        "file": "tutorial_quickstart.rpy",
+        "line": 421,
+        "context": "scene bg washington"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 422,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 425,
+        "context": "show example trans2"
+      },
+      {
+        "name": "sunflower-slow-drag.ogg",
+        "type": "music",
+        "file": "tutorial_quickstart.rpy",
+        "line": 452,
+        "context": "play music \"sunflower-slow-drag.ogg\" fadeout 1"
+      },
+      {
+        "name": "sunflower-slow-drag.ogg",
+        "type": "reference",
+        "file": "tutorial_quickstart.rpy",
+        "line": 452,
+        "context": "play music \"sunflower-slow-drag.ogg\" fadeout 1"
+      },
+      {
+        "name": "tower_clock.ogg",
+        "type": "sound",
+        "file": "tutorial_quickstart.rpy",
+        "line": 471,
+        "context": "play sound \"tower_clock.ogg\""
+      },
+      {
+        "name": "tower_clock.ogg",
+        "type": "reference",
+        "file": "tutorial_quickstart.rpy",
+        "line": 471,
+        "context": "play sound \"tower_clock.ogg\""
+      },
+      {
+        "name": "sunflower-slow-drag.ogg",
+        "type": "music",
+        "file": "tutorial_quickstart.rpy",
+        "line": 482,
+        "context": "play music \"sunflower-slow-drag.ogg\""
+      },
+      {
+        "name": "sunflower-slow-drag.ogg",
+        "type": "reference",
+        "file": "tutorial_quickstart.rpy",
+        "line": 482,
+        "context": "play music \"sunflower-slow-drag.ogg\""
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 526,
+        "context": "show example menu1 large"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 597,
+        "context": "show example input"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_quickstart.rpy",
+        "line": 607,
+        "context": "show example guy"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 227,
+        "context": "show screen stats"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 237,
+        "context": "show screen day_planner"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 269,
+        "context": "show screen simple_screen"
+      },
+      {
+        "name": "the",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 272,
+        "context": "e \"I'll work from the inside out to describe the statements. But first, I'll show the screen so you can see it in action.\""
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 289,
+        "context": "show screen simple_screen"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 291,
+        "context": "e \"The first is the show screen statement, which displays a screen and lets Ren'Py keep going.\""
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 299,
+        "context": "show example call_screen"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 312,
+        "context": "e \"Generally, you use show screen to show overlays that are up all the time, and call screen to show screens the player interacts with for a little while.\""
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 331,
+        "context": "show screen parameter_screen(_(\"Hello, world.\"), cancel=Notify(_(\"You can't cancel this.\")))"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 341,
+        "context": "show example show_parameter_screen"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 346,
+        "context": "show screen parameter_screen(_(\"Shiro was here.\"))"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 355,
+        "context": "show example call_parameter_screen"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 357,
+        "context": "e \"The call screen statement can also take arguments, much like show screen does.\""
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 400,
+        "context": "show screen b_tag_screen"
+      },
+      {
+        "name": "b_tag_screen,",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 402,
+        "context": "e \"When I show b_tag_screen, it replaces a_tag_screen.\""
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 406,
+        "context": "show eileen concerned"
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 410,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 427,
+        "context": "show screen zorder_100_screen"
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 428,
+        "context": "show screen zorder_0_screen"
+      },
+      {
+        "name": "displayables.",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 491,
+        "context": "e \"The screen language has a few statements that do things other than show displayables. If you haven't seen the section on {a=jump:warp_screen_displayables}Screen Displayables{/a} yet, you might want to check it out, then come back here.\""
+      },
+      {
+        "name": "the",
+        "type": "sprite",
+        "file": "tutorial_screens.rpy",
+        "line": 633,
+        "context": "e \"Here, we moved the statements that show the text and bar into a second screen, and the use statement includes that screen in the first one.\""
+      },
+      {
+        "name": "statement",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 69,
+        "context": "e \"The at property applies a transform to the displayable, the same way the at clause in the show statement does.\""
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 104,
+        "context": "show example say_screen"
+      },
+      {
+        "name": "dialogue.",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 106,
+        "context": "e \"The id property is mostly used with the say screen, which is used to show dialogue. Outside of the say screen, it isn't used much.\""
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 421,
+        "context": "show example say_screen"
+      },
+      {
+        "name": "bars",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 577,
+        "context": "e \"The bar and vbar displayables are flexible displayables that show bars representing a value. The value can be static, animated, or adjustable by the player.\""
+      },
+      {
+        "name": "buttons",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 635,
+        "context": "e \"Imagemaps use two or more images to show buttons and bars. Let me start by showing you an example of an imagemap in action.\""
+      },
+      {
+        "name": "None",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 688,
+        "context": "window show None"
+      },
+      {
+        "name": "you",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 691,
+        "context": "e \"To demonstrate how imagemaps are put together, I'll show you the five images that make up a smaller imagemap.\""
+      },
+      {
+        "name": "imagemap",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 693,
+        "context": "show imagemap volume idle:"
+      },
+      {
+        "name": "imagemap",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 699,
+        "context": "show imagemap volume hover:"
+      },
+      {
+        "name": "up",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 705,
+        "context": "e \"Notice how both the bar and button are highlighted in this image. When we display them as part of a screen, only one of them will show up as focused.\""
+      },
+      {
+        "name": "imagemap",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 707,
+        "context": "show imagemap volume selected_idle:"
+      },
+      {
+        "name": "imagemap",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 713,
+        "context": "show imagemap volume selected_hover:"
+      },
+      {
+        "name": "imagemap",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 719,
+        "context": "show imagemap volume insensitive:"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_screen_displayables.rpy",
+        "line": 769,
+        "context": "show example imagemap"
+      },
+      {
+        "name": "a",
+        "type": "sprite",
+        "file": "tutorial_video.rpy",
+        "line": 12,
+        "context": "e \"The first way allows you to show a movie as an image, along with every other image that's displayed on the screen.\""
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_video.rpy",
+        "line": 14,
+        "context": "show example movie_image"
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_video.rpy",
+        "line": 19,
+        "context": "show example movie_play"
+      },
+      {
+        "name": "launch",
+        "type": "sprite",
+        "file": "tutorial_video.rpy",
+        "line": 23,
+        "context": "show launch behind eileen"
+      },
+      {
+        "name": "the",
+        "type": "sprite",
+        "file": "tutorial_video.rpy",
+        "line": 25,
+        "context": "e \"Then, we can show the movie displayable, which starts the movie playing.\""
+      },
+      {
+        "name": "example",
+        "type": "sprite",
+        "file": "tutorial_video.rpy",
+        "line": 32,
+        "context": "show example movie_cutscene"
+      },
+      {
+        "name": "python",
+        "type": "background",
+        "file": "tutorial_video.rpy",
+        "line": 34,
+        "context": "e \"The other way to show a movie is with the renpy.movie_cutscene python function. This shows the movie fullscreen, either until it ends or until the user clicks.\""
+      },
+      {
+        "name": "hide:",
+        "type": "background",
+        "file": "tutorial_video.rpy",
+        "line": 38,
+        "context": "example movie_cutscene hide:"
+      },
+      {
+        "name": "sunflower-slow-drag.ogg",
+        "type": "music",
+        "file": "tutorial_video.rpy",
+        "line": 43,
+        "context": "play music \"sunflower-slow-drag.ogg\""
+      },
+      {
+        "name": "sunflower-slow-drag.ogg",
+        "type": "reference",
+        "file": "tutorial_video.rpy",
+        "line": 43,
+        "context": "play music \"sunflower-slow-drag.ogg\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\french\\common.rpy",
+        "line": 421,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\french\\common.rpy",
+        "line": 604,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\french\\common.rpy",
+        "line": 911,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\french\\common.rpy",
+        "line": 915,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "et",
+        "type": "sprite",
+        "file": "tl\\french\\tutorial_director.rpy",
+        "line": 96,
+        "context": "e \"Vous pouvez éditer ou retirer des déclarations avec l’icone pinceau. Vous pouvez me déplacer sur la droite en éditant la déclaration show et en cliquant '(transformation)', 'right' et 'Changer'.\""
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tl\\french\\tutorial_screens.rpy",
+        "line": 138,
+        "context": "e \"La première est la déclaration 'show screen' qui affiche un écran et laisse Ren’Py poursuivre.\""
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tl\\french\\tutorial_screens.rpy",
+        "line": 174,
+        "context": "e \"Généralement, vous utilisez 'show screen' pour montrer ce qui est tout le temps affiché et 'call screen' pour montrer les écrans qui interagissent durant un instant avec le joueur.\""
+      },
+      {
+        "name": "screen'.",
+        "type": "sprite",
+        "file": "tl\\french\\tutorial_screens.rpy",
+        "line": 210,
+        "context": "e \"La déclaration 'call screen' peut aussi recevoir des arguments, exactement comme le fait la déclaration 'show screen'.\""
+      },
+      {
+        "name": "screens.",
+        "type": "sprite",
+        "file": "tl\\french\\tutorial_screens.rpy",
+        "line": 479,
+        "context": "old \"How to show screens.\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\japanese\\common.rpy",
+        "line": 473,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\japanese\\common.rpy",
+        "line": 669,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "deleted",
+        "type": "sprite",
+        "file": "tl\\japanese\\common.rpy",
+        "line": 697,
+        "context": "old \"Show deleted\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\japanese\\common.rpy",
+        "line": 997,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\japanese\\common.rpy",
+        "line": 1001,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "と",
+        "type": "background",
+        "file": "tl\\japanese\\tutorial_quickstart.rpy",
+        "line": 372,
+        "context": "e \"この場面のスクリプトを示します。2つの新しいステートメント scene と show がどのように使われているか注意して見て下さい。\""
+      },
+      {
+        "name": "screenステートメントで、これはスクリーンを表示したままRen'Pyを継続させます。",
+        "type": "sprite",
+        "file": "tl\\japanese\\tutorial_screens.rpy",
+        "line": 138,
+        "context": "e \"１つ目はshow screenステートメントで、これはスクリーンを表示したままRen'Pyを継続させます。\""
+      },
+      {
+        "name": "screenを使用し、プレイヤーにちょっとした操作を求める際にはcall",
+        "type": "sprite",
+        "file": "tl\\japanese\\tutorial_screens.rpy",
+        "line": 174,
+        "context": "e \"一般に、常に見せたいものを表示する際にはshow screenを使用し、プレイヤーにちょっとした操作を求める際にはcall screenを使用します。\""
+      },
+      {
+        "name": "screenと同様に引数を取ります。",
+        "type": "sprite",
+        "file": "tl\\japanese\\tutorial_screens.rpy",
+        "line": 210,
+        "context": "e \"call screenステートメントも、show screenと同様に引数を取ります。\""
+      },
+      {
+        "name": "screens.",
+        "type": "sprite",
+        "file": "tl\\japanese\\tutorial_screens.rpy",
+        "line": 479,
+        "context": "old \"How to show screens.\""
+      },
+      {
+        "name": "関数を使うことです。これは動画が終了するか、ユーザーがクリックするまで全画面で表示します。",
+        "type": "background",
+        "file": "tl\\japanese\\tutorial_video.rpy",
+        "line": 36,
+        "context": "e \"動画を表示させる別の方法は、Pythonの renpy.movie_cutscene 関数を使うことです。これは動画が終了するか、ユーザーがクリックするまで全画面で表示します。\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\korean\\common.rpy",
+        "line": 420,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\korean\\common.rpy",
+        "line": 604,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\korean\\common.rpy",
+        "line": 924,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\korean\\common.rpy",
+        "line": 928,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "명령문의",
+        "type": "sprite",
+        "file": "tl\\korean\\tutorial_atl.rpy",
+        "line": 306,
+        "context": "e \"마지막으로, ATL 블록은 at 절을 대신해 show 명령문의 부품으로 사용될 수 있어.\""
+      },
+      {
+        "name": "명령문의",
+        "type": "sprite",
+        "file": "tl\\korean\\tutorial_atl.rpy",
+        "line": 312,
+        "context": "e \"ATL이 show 명령문의 부품으로 사용될 때, 변형이 변경되더라도 특성의 값은 존재해. 따라서 클릭으로 동작이 중단되더라도 이미지는 같은 위치에 유지되지.\""
+      },
+      {
+        "name": "문을",
+        "type": "sprite",
+        "file": "tl\\korean\\tutorial_director.rpy",
+        "line": 96,
+        "context": "e \"연필 아이콘으로 명령문을 편집하거나 제거할 수 있어. show 문을 편집하고 '(transform)', 'right' 및 'change'를 클릭하여 나를 오른쪽으로 이동할 수 있어.\""
+      },
+      {
+        "name": "문이",
+        "type": "sprite",
+        "file": "tl\\korean\\tutorial_quickstart.rpy",
+        "line": 372,
+        "context": "e \"이건 예제 장면의 스크립트야. 두 개의 새로운 명령문인 scene과 show 문이 어떻게 포함되어 있는지 확인해둬.\""
+      },
+      {
+        "name": "문은",
+        "type": "sprite",
+        "file": "tl\\korean\\tutorial_quickstart.rpy",
+        "line": 384,
+        "context": "e \"show 문은 화면의 다른 모든 이미지 위에 이미지를 추가하고.\""
+      },
+      {
+        "name": "문은",
+        "type": "sprite",
+        "file": "tl\\korean\\tutorial_quickstart.rpy",
+        "line": 402,
+        "context": "e \"두 번째 show 문은 위치를 부여하는 절을 가지고 있어. 기본 정의된 위치에는 왼쪽(left)과 오른쪽(right), 가운데(center)가 있지만 더 많은 것을 직접 정의할 수도 있어.\""
+      },
+      {
+        "name": "문은",
+        "type": "background",
+        "file": "tl\\korean\\tutorial_quickstart.rpy",
+        "line": 426,
+        "context": "e \"show 문이 이미지를 대체하고 scene 문은 장면을 지우니까 이미지를 숨기는 일은 거의 없어.\""
+      },
+      {
+        "name": "문의",
+        "type": "sprite",
+        "file": "tl\\korean\\tutorial_quickstart.rpy",
+        "line": 510,
+        "context": "e \"정의된 변형은 show 문의 at 절에서 사용할 수 있어.\""
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tl\\korean\\tutorial_screens.rpy",
+        "line": 138,
+        "context": "e \"첫 번째 show screen 명령문은 렌파이가 표시하는 스크린을 유지해.\""
+      },
+      {
+        "name": "screen으로,",
+        "type": "sprite",
+        "file": "tl\\korean\\tutorial_screens.rpy",
+        "line": 174,
+        "context": "e \"일반적으로, 항상 오버레이로 보여지는 것들을 show screen으로, 플레이어의 상호작용에 따라 잠시 화면에 표시될 것들을 call screen으로 사용해.\""
+      },
+      {
+        "name": "screen처럼",
+        "type": "sprite",
+        "file": "tl\\korean\\tutorial_screens.rpy",
+        "line": 210,
+        "context": "e \"call screen 명령문 역시 show screen처럼 인수를 사용할 수 있어.\""
+      },
+      {
+        "name": "screens.",
+        "type": "sprite",
+        "file": "tl\\korean\\tutorial_screens.rpy",
+        "line": 479,
+        "context": "old \"How to show screens.\""
+      },
+      {
+        "name": "문에서",
+        "type": "sprite",
+        "file": "tl\\korean\\tutorial_screen_displayables.rpy",
+        "line": 30,
+        "context": "e \"at 속성은 show 문에서 at 절이 수행하는 것과 같은 방법으로 표시 가능한 객체에 변형을 적용해.\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\piglatin\\common.rpy",
+        "line": 561,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\piglatin\\common.rpy",
+        "line": 1117,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\piglatin\\common.rpy",
+        "line": 1121,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "screens.",
+        "type": "sprite",
+        "file": "tl\\piglatin\\tutorial_screens.rpy",
+        "line": 479,
+        "context": "old \"How to show screens.\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 421,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 425,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 569,
+        "context": "old \"Show Image Load Log\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 570,
+        "context": "new \"Show Image Load Log\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 665,
+        "context": "old \"help: show this help\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 897,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\russian\\common.rpy",
+        "line": 1065,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "и",
+        "type": "background",
+        "file": "tl\\russian\\tutorial_quickstart.rpy",
+        "line": 372,
+        "context": "e \"Вот код этой сцены. Заметьте, что он включает в себя два новых оператора — scene и show.\""
+      },
+      {
+        "name": "очищает",
+        "type": "background",
+        "file": "tl\\russian\\tutorial_quickstart.rpy",
+        "line": 378,
+        "context": "e \"Оператор scene очищает экран и добавляет изображение на фон.\""
+      },
+      {
+        "name": "добавляет",
+        "type": "sprite",
+        "file": "tl\\russian\\tutorial_quickstart.rpy",
+        "line": 384,
+        "context": "e \"Оператор show добавляет изображение поверх других.\""
+      },
+      {
+        "name": "очищает",
+        "type": "background",
+        "file": "tl\\russian\\tutorial_quickstart.rpy",
+        "line": 426,
+        "context": "e \"Так как оператор show заменяет изображение, а оператор scene очищает экран, скрывать изображения приходится редко.\""
+      },
+      {
+        "name": "screen,",
+        "type": "sprite",
+        "file": "tl\\russian\\tutorial_screens.rpy",
+        "line": 138,
+        "context": "e \"Первый — show screen, который показывает экран, а Ren'Py идёт дальше.\""
+      },
+      {
+        "name": "screen,",
+        "type": "sprite",
+        "file": "tl\\russian\\tutorial_screens.rpy",
+        "line": 174,
+        "context": "e \"В основном, вам пригодится show screen, чтобы показывать элементы, которые видны всё время, а call screen — чтобы показывать короткие интерактивные экраны.\""
+      },
+      {
+        "name": "screens.",
+        "type": "sprite",
+        "file": "tl\\russian\\tutorial_screens.rpy",
+        "line": 479,
+        "context": "old \"How to show screens.\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\schinese\\common.rpy",
+        "line": 473,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\schinese\\common.rpy",
+        "line": 669,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "deleted",
+        "type": "sprite",
+        "file": "tl\\schinese\\common.rpy",
+        "line": 697,
+        "context": "old \"Show deleted\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\schinese\\common.rpy",
+        "line": 997,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\schinese\\common.rpy",
+        "line": 1001,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "screen语句，它显示一个界面并让Ren'Py继续运行。",
+        "type": "sprite",
+        "file": "tl\\schinese\\tutorial_screens.rpy",
+        "line": 138,
+        "context": "e \"第一个是show screen语句，它显示一个界面并让Ren'Py继续运行。\""
+      },
+      {
+        "name": "screen来显示一直处于开启状态的覆盖，而用call",
+        "type": "sprite",
+        "file": "tl\\schinese\\tutorial_screens.rpy",
+        "line": 174,
+        "context": "e \"通常，您使用show screen来显示一直处于开启状态的覆盖，而用call screen来显示与玩家短暂交互的界面。\""
+      },
+      {
+        "name": "screen一样。",
+        "type": "sprite",
+        "file": "tl\\schinese\\tutorial_screens.rpy",
+        "line": 210,
+        "context": "e \"call screen语句也可以接受参数，就像show screen一样。\""
+      },
+      {
+        "name": "screens.",
+        "type": "sprite",
+        "file": "tl\\schinese\\tutorial_screens.rpy",
+        "line": 479,
+        "context": "old \"How to show screens.\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\spanish\\common.rpy",
+        "line": 421,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\spanish\\common.rpy",
+        "line": 605,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "deleted",
+        "type": "sprite",
+        "file": "tl\\spanish\\common.rpy",
+        "line": 633,
+        "context": "old \"Show deleted\""
+      },
+      {
+        "name": "deleted",
+        "type": "sprite",
+        "file": "tl\\spanish\\common.rpy",
+        "line": 634,
+        "context": "new \"Show deleted\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\spanish\\common.rpy",
+        "line": 933,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\spanish\\common.rpy",
+        "line": 937,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "eileen",
+        "type": "sprite",
+        "file": "tl\\spanish\\tutorial_director.rpy",
+        "line": 90,
+        "context": "show eileen happy"
+      },
+      {
+        "name": "sunflower-slow-drag.ogg",
+        "type": "reference",
+        "file": "tl\\spanish\\tutorial_director.rpy",
+        "line": 103,
+        "context": "play music 'sunflower-slow-drag.ogg'"
+      },
+      {
+        "name": "y",
+        "type": "background",
+        "file": "tl\\spanish\\tutorial_quickstart.rpy",
+        "line": 372,
+        "context": "e \"Aquí está el script para esa escena. Observa cómo incluye dos sentencis nuevas, scene y show.\""
+      },
+      {
+        "name": "screen',",
+        "type": "sprite",
+        "file": "tl\\spanish\\tutorial_screens.rpy",
+        "line": 138,
+        "context": "e \"La primera es la sentencia 'show screen', que muestra una pantalla y le permite a Ren'Py seguir adelante.\""
+      },
+      {
+        "name": "screen",
+        "type": "sprite",
+        "file": "tl\\spanish\\tutorial_screens.rpy",
+        "line": 174,
+        "context": "e \"Por lo general, usas 'show screen' para mostrar capas que están arriba todo el tiempo, y 'call screen' para mostrar las pantallas con las que el jugador interactúa por un tiempo.\""
+      },
+      {
+        "name": "screen'.",
+        "type": "sprite",
+        "file": "tl\\spanish\\tutorial_screens.rpy",
+        "line": 210,
+        "context": "e \"La sentencia 'call screen' también puede tomar argumentos, como lo hace 'show screen'.\""
+      },
+      {
+        "name": "screens.",
+        "type": "sprite",
+        "file": "tl\\spanish\\tutorial_screens.rpy",
+        "line": 479,
+        "context": "old \"How to show screens.\""
+      },
+      {
+        "name": "empty",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\common.rpy",
+        "line": 493,
+        "context": "old \"show empty window\""
+      },
+      {
+        "name": "Image",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\common.rpy",
+        "line": 721,
+        "context": "old \"Show Image Load Log (F4)\""
+      },
+      {
+        "name": "deleted",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\common.rpy",
+        "line": 749,
+        "context": "old \"Show deleted\""
+      },
+      {
+        "name": "this",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\common.rpy",
+        "line": 1049,
+        "context": "old \"Continue, Show this warning again\""
+      },
+      {
+        "name": "warning",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\common.rpy",
+        "line": 1053,
+        "context": "old \"Continue, Don't show warning again\""
+      },
+      {
+        "name": "замість",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\tutorial_atl.rpy",
+        "line": 306,
+        "context": "e \"І нарешті, блок ATL можна використовувати як частину оператора show замість пропозиції at.\" id tutorial_atl_da7a7759"
+      },
+      {
+        "name": "та",
+        "type": "background",
+        "file": "tl\\ukrainian\\tutorial_quickstart.rpy",
+        "line": 372,
+        "context": "e \"Ось скрипт цієї сцени. Зверніть увагу, що він містить два нових оператори, оператор scene та show.\""
+      },
+      {
+        "name": "очищає",
+        "type": "background",
+        "file": "tl\\ukrainian\\tutorial_quickstart.rpy",
+        "line": 378,
+        "context": "e \"Оператор scene очищає екран, а потім додає фонове зображення.\""
+      },
+      {
+        "name": "додає",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\tutorial_quickstart.rpy",
+        "line": 384,
+        "context": "e \"Оператор show додає нове зображення поверх усіх інших зображень на екрані.\""
+      },
+      {
+        "name": "має",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\tutorial_quickstart.rpy",
+        "line": 402,
+        "context": "e \"Другий оператор show має властивість at, яка вказує розташування на екрані. Типовими розташуваннями є left, right і center, але ви можете визначити багато інших.\""
+      },
+      {
+        "name": "очищає",
+        "type": "background",
+        "file": "tl\\ukrainian\\tutorial_quickstart.rpy",
+        "line": 426,
+        "context": "e \"Оскільки оператор show замінює зображення, а оператор scene очищає сцену, досить рідко можна приховати зображення.\""
+      },
+      {
+        "name": "screen,",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\tutorial_screens.rpy",
+        "line": 138,
+        "context": "e \"Перший — оператор show screen, який відображає екран і дозволяє Ren'Py продовжувати роботу.\""
+      },
+      {
+        "name": "screen,",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\tutorial_screens.rpy",
+        "line": 174,
+        "context": "e \"Як правило, ви використовуєте show screen, щоб показувати елементи, які постійно активні, і call screen, щоб показувати екрани, з якими гравець взаємодіє деякий час.\""
+      },
+      {
+        "name": "screen.",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\tutorial_screens.rpy",
+        "line": 210,
+        "context": "e \"Оператор call screen також може приймати аргументи, подібно до show screen.\""
+      },
+      {
+        "name": "screens.",
+        "type": "sprite",
+        "file": "tl\\ukrainian\\tutorial_screens.rpy",
+        "line": 479,
+        "context": "old \"How to show screens.\""
+      }
+    ],
+    "errors": []
   }
 }
