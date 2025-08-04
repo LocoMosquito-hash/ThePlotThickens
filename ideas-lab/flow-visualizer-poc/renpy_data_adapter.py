@@ -140,14 +140,30 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         if start_connection:
             connections.insert(0, start_connection)  # Add Start connection first
         
-        # Add menu container nodes and connections
-        menu_nodes, menu_connections = self._create_menu_containers(flow_graph)
+        # PHASE 2: Use authoritative hierarchy instead of string-based logic
+        if hasattr(self, '_authoritative_hierarchy'):
+            print("[PHASE 2] Using authoritative hierarchy for menu containers...")
+            menu_nodes, menu_connections = self._create_menu_containers_from_hierarchy()
+        else:
+            print("[FALLBACK] Using old string-based menu container logic...")
+            menu_nodes, menu_connections = self._create_menu_containers(flow_graph)
+        
         nodes.extend(menu_nodes)
         connections.extend(menu_connections)
         
         # Add connections from labels to their menu containers
-        label_to_menu_connections = self._create_label_to_menu_connections(flow_graph)
+        if hasattr(self, '_authoritative_hierarchy'):
+            print("[PHASE 2] Creating label-to-menu connections from hierarchy...")
+            label_to_menu_connections = self._create_label_to_menu_connections_from_hierarchy()
+        else:
+            label_to_menu_connections = self._create_label_to_menu_connections(flow_graph)
         connections.extend(label_to_menu_connections)
+        
+        # Add choice-to-destination connections from hierarchy (NEW!)
+        if hasattr(self, '_authoritative_hierarchy'):
+            print("[PHASE 2] Creating choice-to-destination connections from hierarchy...")
+            choice_destination_connections = self._create_choice_destination_connections_from_hierarchy()
+            connections.extend(choice_destination_connections)
         
         # Add label-to-label flow connections (CRITICAL: This was missing!)
         flow_connections = self._convert_flows_to_connections(flow_graph)
@@ -1107,6 +1123,277 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             'conditional': 'red'
         }
         return color_hints.get(flow_type, 'gray')
+    
+    def _create_menu_containers_from_hierarchy(self) -> Tuple[List[VisualizationNode], List[VisualizationConnection]]:
+        """
+        Create menu containers and connections using the authoritative hierarchy.
+        
+        This method replaces the old string-based _create_menu_containers() logic
+        with direct traversal of the semantic hierarchy.
+        
+        Returns:
+            Tuple of (visualization_nodes, visualization_connections)
+        """
+        print("[PHASE 2] Building visualization from authoritative hierarchy...")
+        
+        if not hasattr(self, '_authoritative_hierarchy'):
+            print("[ERROR] No authoritative hierarchy available!")
+            return [], []
+        
+        visualization_nodes = []
+        visualization_connections = []
+        
+        # Get all nodes from the hierarchy (excluding label nodes which are handled separately)
+        for node in self._authoritative_hierarchy.node_index.values():
+            if node.node_type == 'label':
+                continue  # Labels are handled by _convert_labels_to_nodes
+                
+            # Create visualization nodes for both menu containers AND choice buttons
+            # Choices are separate nodes but visually contained within containers
+            viz_node = self._convert_hierarchy_node_to_visualization(node)
+            visualization_nodes.append(viz_node)
+        
+        # Create connections based on hierarchy relationships
+        # CRITICAL: Follow FLOW_VISUALIZER_ARCHITECTURE.md rules:
+        # - Menu containers do NOT have outgoing edges (choices handle the flow)
+        # - Container-to-choice connections exist for LAYOUT but are marked for VISUAL CONTAINMENT
+        # - Choices DO have outgoing edges to their destination labels
+        for node in self._authoritative_hierarchy.node_index.values():
+            for child in node.children:
+                # Create container-to-choice connections for layout algorithm, but mark for visual containment
+                if node.node_type == 'menu_container' and child.node_type == 'choice':
+                    connection = self._create_hierarchy_connection_from_nodes(node, child)
+                    # Mark this connection for visual containment (not rendered as edge)
+                    connection.metadata['visual_containment'] = True
+                    connection.metadata['render_as_edge'] = False
+                    connection.line_style = 'none'  # No visible line
+                    visualization_connections.append(connection)
+                    print(f"[ARCHITECTURE] Created container->choice connection for layout: {node.semantic_id} -> {child.semantic_id} (visual containment)")
+                    continue
+                    
+                # Skip label-to-label connections (handled by flow graph)
+                if node.node_type == 'label' and child.node_type == 'label':
+                    continue
+                    
+                # Create other valid connections
+                connection = self._create_hierarchy_connection_from_nodes(node, child)
+                visualization_connections.append(connection)
+        
+        print(f"[PHASE 2] Generated {len(visualization_nodes)} nodes and {len(visualization_connections)} connections from hierarchy")
+        return visualization_nodes, visualization_connections
+    
+    def _convert_hierarchy_node_to_visualization(self, hierarchy_node) -> VisualizationNode:
+        """
+        Convert a hierarchy node to a visualization node.
+        
+        This method creates visualization nodes with proper metadata without
+        relying on string-based ID patterns.
+        
+        CRITICAL: Only menu containers are converted to visualization nodes.
+        Choices are embedded within container metadata for visual containment.
+        """
+        # Handle both menu containers and choice buttons
+        if hierarchy_node.node_type == 'menu_container':
+            # Determine color and size based on nesting
+            if hierarchy_node.content.get('is_nested', False):
+                color_hint = 'lightyellow'
+                size_hint = (180, 130)
+            else:
+                color_hint = 'yellow'
+                size_hint = (200, 150)
+            
+            viz_node = VisualizationNode(
+                node_id=hierarchy_node.content_hash,
+                node_type='menu_container',
+                display_name=hierarchy_node.display_name,
+                color_hint=color_hint,
+                size_hint=size_hint,
+                metadata={
+                    'semantic_id': hierarchy_node.semantic_id,
+                    'parent_id': hierarchy_node.parent.content_hash if hierarchy_node.parent else None,
+                    'children_count': len(hierarchy_node.children),
+                    'content': hierarchy_node.content,
+                    'source_file': hierarchy_node.source_file,
+                    'source_line': hierarchy_node.source_line,
+                    'menu_index': hierarchy_node.content.get('menu_index', -1),
+                    'is_nested': hierarchy_node.content.get('is_nested', False),
+                    'nesting_level': hierarchy_node.content.get('nesting_level', 0),
+                    'prompt': hierarchy_node.content.get('prompt', ''),
+                    'generated_by': 'authoritative_hierarchy',
+                    'hierarchy_valid': True
+                }
+            )
+            
+        elif hierarchy_node.node_type == 'choice':
+            # Map hierarchy node types to visualization node types for compatibility
+            viz_node = VisualizationNode(
+                node_id=hierarchy_node.content_hash,
+                node_type='choice_button',  # Standard type for choice visualization
+                display_name=hierarchy_node.display_name,
+                color_hint='lightgreen',
+                size_hint=(150, 30),
+                metadata={
+                    'semantic_id': hierarchy_node.semantic_id,
+                    'parent_container': hierarchy_node.parent.content_hash if hierarchy_node.parent else None,
+                    'content': hierarchy_node.content,
+                    'source_file': hierarchy_node.source_file,
+                    'source_line': hierarchy_node.source_line,
+                    
+                    # Choice-specific metadata  
+                    'choice_index': hierarchy_node.content.get('choice_index', -1),
+                    'full_text': hierarchy_node.content.get('full_text', ''),
+                    'destination': hierarchy_node.content.get('destination', ''),
+                    'has_condition': hierarchy_node.content.get('has_condition', False),
+                    'condition': hierarchy_node.content.get('condition', ''),
+                    
+                    # Mark as hierarchy-generated
+                    'generated_by': 'authoritative_hierarchy',
+                    'hierarchy_valid': True
+                }
+            )
+        
+        else:
+            raise ValueError(f"Unsupported node type for visualization: {hierarchy_node.node_type}")
+        
+        return viz_node
+    
+    def _create_hierarchy_connection_from_nodes(self, parent_node, child_node) -> VisualizationConnection:
+        """
+        Create a visualization connection between hierarchy nodes.
+        
+        This method creates connections based on semantic relationships
+        instead of string pattern matching.
+        """
+        # Determine connection type based on node types
+        connection_type_map = {
+            ('label', 'menu_container'): 'label_to_menu',
+            ('menu_container', 'choice'): 'container_to_choice', 
+            ('choice', 'menu_container'): 'choice_to_nested_menu',
+            ('choice', 'label'): 'choice_to_label'
+        }
+        
+        connection_type = connection_type_map.get(
+            (parent_node.node_type, child_node.node_type),
+            'hierarchy'
+        )
+        
+        # Determine connection styling
+        if connection_type == 'container_to_choice':
+            color_hint = 'darkblue'
+            line_style = 'solid'
+        elif connection_type == 'choice_to_nested_menu':
+            color_hint = 'purple'
+            line_style = 'dashed'
+        elif connection_type == 'label_to_menu':
+            color_hint = 'orange'
+            line_style = 'solid'
+        else:
+            color_hint = 'gray'
+            line_style = 'solid'
+        
+        connection = VisualizationConnection(
+            connection_id=f"{parent_node.content_hash}_to_{child_node.content_hash}",
+            source_node_id=parent_node.content_hash,
+            target_node_id=child_node.content_hash,
+            connection_type=connection_type,
+            line_style=line_style,
+            color_hint=color_hint,
+            weight_hint=1.0,
+            label=None,
+            metadata={
+                'parent_semantic_id': parent_node.semantic_id,
+                'child_semantic_id': child_node.semantic_id,
+                'connection_nature': 'semantic_hierarchy',
+                'is_structural': True,
+                'generated_by': 'authoritative_hierarchy'
+            }
+        )
+        
+        return connection
+    
+    def _create_label_to_menu_connections_from_hierarchy(self) -> List[VisualizationConnection]:
+        """
+        Create connections from labels to their menu containers using the authoritative hierarchy.
+        
+        This method replaces string-based label-to-menu connection logic.
+        """
+        connections = []
+        
+        # Find all label nodes that have menu container children
+        for label_node in self._authoritative_hierarchy.root_nodes:
+            if label_node.node_type != 'label':
+                continue
+                
+            # Find menu container children
+            menu_containers = [child for child in label_node.children if child.node_type == 'menu_container']
+            
+            for menu_container in menu_containers:
+                # Use the correct label node ID format (simple label name, not content hash)
+                label_name = label_node.semantic_id.replace('label_', '')
+                connection = VisualizationConnection(
+                    connection_id=f"label_{label_name}_to_menu_{menu_container.content_hash}",
+                    source_node_id=label_name,  # Use simple label name to match visualization nodes
+                    target_node_id=menu_container.content_hash,
+                    connection_type='label_to_menu',
+                    line_style='solid',
+                    color_hint='orange',
+                    weight_hint=1.0,
+                    label=None,
+                    metadata={
+                        'connection_nature': 'label_to_menu_semantic',
+                        'label_name': label_node.semantic_id.replace('label_', ''),
+                        'menu_semantic_id': menu_container.semantic_id,
+                        'generated_by': 'authoritative_hierarchy'
+                    }
+                )
+                connections.append(connection)
+        
+        print(f"[PHASE 2] Created {len(connections)} label-to-menu connections from hierarchy")
+        return connections
+    
+    def _create_choice_destination_connections_from_hierarchy(self) -> List[VisualizationConnection]:
+        """
+        Create connections from choice buttons to their destination labels using the authoritative hierarchy.
+        
+        CRITICAL: Choice buttons handle the outgoing flow, NOT menu containers.
+        This creates connections directly from choice nodes to their destinations.
+        """
+        connections = []
+        
+        # Find all choice nodes and their destinations
+        for choice_node in self._authoritative_hierarchy.node_index.values():
+            if choice_node.node_type != 'choice':
+                continue
+                
+            # Get destination from choice content
+            destination = choice_node.content.get('destination', '')
+            if not destination:
+                print(f"[CHOICE DESTINATION] Warning: Choice {choice_node.semantic_id} has no destination")
+                continue
+                
+            # Create connection from choice button to destination label
+            connection = VisualizationConnection(
+                connection_id=f"choice_{choice_node.content_hash}_to_label_{destination}",
+                source_node_id=choice_node.content_hash,  # Source is the choice button
+                target_node_id=destination,  # Target is the destination label
+                connection_type='choice_to_label',
+                line_style='solid',
+                color_hint='green',  # Green for choice connections
+                weight_hint=1.0,
+                label=None,  # No label needed on edge
+                metadata={
+                    'connection_nature': 'choice_destination',
+                    'choice_semantic_id': choice_node.semantic_id,
+                    'choice_text': choice_node.content.get('full_text', choice_node.display_name),
+                    'destination_label': destination,
+                    'generated_by': 'authoritative_hierarchy'
+                }
+            )
+            connections.append(connection)
+            print(f"[CHOICE DESTINATION] Connected choice {choice_node.semantic_id} -> {destination}")
+        
+        print(f"[PHASE 2] Created {len(connections)} choice-to-destination connections from hierarchy")
+        return connections
     
     def _compare_hierarchy_systems(self, old_nodes: List[VisualizationNode], old_connections: List[VisualizationConnection]) -> None:
         """

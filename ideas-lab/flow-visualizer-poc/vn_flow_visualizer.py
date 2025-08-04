@@ -729,7 +729,7 @@ class VNFlowVisualizer(QGraphicsView):
                     self.connections.append(connection)
                 
         # Apply initial layout and ensure proper scaling
-        self.apply_layout('narrative')
+        self.apply_layout('dot_like')
         
         # Force fit view to content with proper margins
         self.fitInView(self.scene.itemsBoundingRect().adjusted(-50, -50, 50, 50), 
@@ -743,38 +743,16 @@ class VNFlowVisualizer(QGraphicsView):
             margined_rect = bounding_rect.adjusted(-100, -100, 100, 100)
             self.fitInView(margined_rect, Qt.AspectRatioMode.KeepAspectRatio)
             
-    def apply_layout(self, layout_type: str = 'narrative'):
-        """Apply layout algorithm to position nodes with narrative awareness."""
+    def apply_layout(self, layout_type: str = 'dot_like'):
+        """Apply DOT-like layout algorithm to position nodes hierarchically."""
         if not self.graph or not self.nodes:
             return
         
         # Debug output
         self._debug_graph_analysis(layout_type)
             
-        # Handle different layout types
-        if layout_type == 'narrative':
-            pos = self._narrative_hierarchical_layout()
-        elif layout_type == 'narrative_flow':
-            pos = self._narrative_flow_layout()
-        elif layout_type == 'topological':
-            pos = self._topological_layout()
-        elif layout_type == 'spring':
-            pos = nx.spring_layout(self.graph, k=3, iterations=100)
-        elif layout_type == 'circular':
-            pos = nx.circular_layout(self.graph)
-        elif layout_type == 'hierarchical':
-            try:
-                pos = nx.nx_agraph.graphviz_layout(self.graph, prog='dot')
-            except:
-                pos = self._narrative_hierarchical_layout()  # Fallback to narrative
-        elif layout_type == 'dot_like':
-            pos = self._dot_like_layout()
-        elif layout_type == 'random':
-            pos = nx.random_layout(self.graph)
-        elif layout_type == 'flow_aware':
-            pos = self._flow_aware_layout()
-        else:
-            pos = self._narrative_hierarchical_layout()  # Default to narrative
+        # Use DOT-like layout only (all other algorithms removed for simplicity)
+        pos = self._dot_like_layout()
         
         # Scale positions for better visibility
         scale = 400
@@ -830,65 +808,52 @@ class VNFlowVisualizer(QGraphicsView):
                     
                     print(f"Positioned {node_id} at ({menu_pos_x:.1f}, {menu_pos_y:.1f}) - separation: {separation:.1f}px")
         
-    def _narrative_hierarchical_layout(self) -> Dict[str, Tuple[float, float]]:
-        """
-        Create a narrative-aware hierarchical layout that respects story progression.
-        
-        Handles:
-        - Story progression from start to endings
-        - Disconnected components separately  
-        - Branching paths with vertical separation
-        - Decision points kept central
-        """
-        pos = {}
-        
-        # Find disconnected components
-        if self.graph.is_directed():
-            components = list(nx.weakly_connected_components(self.graph))
-        else:
-            components = list(nx.connected_components(self.graph))
-        
-        component_width = 8  # Space between components
-        current_x_offset = 0
-        
-        for component_nodes in components:
-            # Create subgraph for this component
-            subgraph = self.graph.subgraph(component_nodes).copy()
-            
-            # Get component layout
-            component_pos = self._layout_narrative_component(subgraph)
-            
-            # Offset this component horizontally
-            for node, (x, y) in component_pos.items():
-                pos[node] = (x + current_x_offset, y)
-            
-            # Calculate component width for next offset
-            if component_pos:
-                min_x = min(x for x, y in component_pos.values())
-                max_x = max(x for x, y in component_pos.values())
-                current_x_offset += (max_x - min_x) + component_width
-        
-        return pos
-        
+    # ============================================================================
+    # REMOVED LAYOUT ALGORITHMS - All methods below were removed for simplicity  
+    # Only DOT-like layout algorithm is now supported
+    # ============================================================================
+    
+    # The following methods have been commented out to remove clutter:
+    # - _narrative_hierarchical_layout()
+    # - _layout_narrative_component() 
+    # - _narrative_flow_layout()
+    # - _layout_narrative_flow_component()
+    # - _topological_layout()
+    # - _flow_aware_layout()
+    # - _create_narrative_layers()
+    # - _position_narrative_layers()
+    # - Various helper methods for the removed algorithms
+    #
+    # If needed in the future, these can be restored from git history
+    
+    # 
+    # ===== REMOVED LAYOUT ALGORITHMS SECTION =====
+    # 
+    # The following methods were removed to simplify the code and focus on dot_like only:
+    # - _narrative_hierarchical_layout() 
+    # - _layout_narrative_component()
+    # - _narrative_flow_layout()  
+    # - _layout_narrative_flow_component()
+    # - _topological_layout()
+    # - _flow_aware_layout()
+    # - _create_narrative_layers()
+    # - _position_narrative_layers()
+    # - _create_narrative_threads()
+    # - _position_narrative_flow_nodes()
+    # - _layout_flow_aware_component()
+    # - _create_flow_aware_layers()
+    # - _sort_nodes_by_narrative_importance()
+    # - _analyze_narrative_flow_patterns()
+    # - Various other helper methods for removed algorithms
+    #
+    # If these methods are needed in the future, they can be restored from git history.
+    # The only layout algorithm now supported is _dot_like_layout() below.
+    #
+    
+    # Placeholder method to handle any legacy calls (should not happen)  
     def _layout_narrative_component(self, subgraph: nx.DiGraph) -> Dict[str, Tuple[float, float]]:
-        """Layout a single connected component with narrative awareness."""
-        
-        # Find potential start nodes using semantic detection
-        start_candidates = self._find_start_nodes(subgraph, self.semantic_start_node)
-        
-        if not start_candidates:
-            # If no clear start, use nodes with no incoming edges
-            start_candidates = [n for n in subgraph.nodes() if subgraph.in_degree(n) == 0]
-            
-        if not start_candidates:
-            # If still no start, pick node with highest out-degree
-            start_candidates = [max(subgraph.nodes(), key=lambda n: subgraph.out_degree(n))]
-        
-        # Create narrative layers using BFS from start nodes
-        layers = self._create_narrative_layers(subgraph, start_candidates)
-        
-        # Position nodes in layers
-        return self._position_narrative_layers(layers, subgraph)
+        """Placeholder - redirects to dot_like layout."""
+        return self._dot_like_component(subgraph)
         
     def _find_semantic_start_node(self, project_path: Optional[str]) -> Optional[str]:
         """
@@ -1201,7 +1166,8 @@ class VNFlowVisualizer(QGraphicsView):
         
         return flow_analysis
 
-    def _flow_aware_layout(self) -> Dict[str, Tuple[float, float]]:
+    # REMOVED: _flow_aware_layout() - use dot_like only
+    # def _flow_aware_layout(self) -> Dict[str, Tuple[float, float]]:
         """
         Phase 3: Create flow-aware layout based on actual narrative patterns.
         
@@ -1905,6 +1871,9 @@ class VNFlowVisualizer(QGraphicsView):
                 f.write(f"  Nodes with no incoming edges: {no_incoming}\n\n")
         
         print(f"Debug analysis saved to {debug_file}")
+    #
+    # REMOVED METHODS END HERE - All above methods commented out  
+    #
     
     def _dot_like_layout(self) -> Dict[str, Tuple[float, float]]:
         """

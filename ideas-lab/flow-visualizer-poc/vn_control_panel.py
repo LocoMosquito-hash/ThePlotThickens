@@ -121,7 +121,7 @@ class VNControlPanel(QWidget):
         
         self.layout_combo = QComboBox()
         self.layout_combo.addItems([
-            "narrative", "narrative_flow", "flow_aware", "dot_like", "topological", "spring", "circular", "hierarchical", "random"
+            "dot_like"
         ])
         self.layout_combo.setCurrentText("dot_like")
         alg_layout.addWidget(self.layout_combo)
@@ -142,7 +142,7 @@ class VNControlPanel(QWidget):
         layout.addLayout(button_layout)
         
         # Add layout help text
-        help_text = QLabel("• Narrative: Story-aware flow\n• Narrative Flow: True story progression\n• Flow Aware: Phase 3 - JumpAnalyzer+FlowTracer intelligence\n• DOT-like: Sugiyama framework\n• Topological: DAG layers")
+        help_text = QLabel("• DOT-like: Hierarchical layout using Sugiyama framework\n  (Only layout algorithm - others removed for simplicity)")
         help_text.setFont(QFont("", 7))
         help_text.setWordWrap(True)
         help_text.setStyleSheet("color: gray;")

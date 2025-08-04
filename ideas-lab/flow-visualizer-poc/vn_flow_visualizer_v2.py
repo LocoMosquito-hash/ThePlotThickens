@@ -364,7 +364,7 @@ class VNFlowVisualizerV2(QGraphicsView):
         self._create_networkx_graph_for_layout()
         
         # Apply default layout
-        self.apply_layout('narrative_hierarchical')
+        self.apply_layout('dot_like')
     
     def _create_visual_node(self, node_data: VisualizationNode) -> Optional[QGraphicsObject]:
         """Create appropriate visual node based on type."""
