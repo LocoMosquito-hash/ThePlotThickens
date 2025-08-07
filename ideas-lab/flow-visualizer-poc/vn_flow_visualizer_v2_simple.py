@@ -1,8 +1,25 @@
 """
-VN Flow Visualizer V2 - Simple Working Version
+VN Flow Visualizer V2 - Simple Working Version (DEMO/TESTING ONLY)
 
-A simplified but working demonstration of the clean interface approach.
+⚠️ **THIS IS NOT THE PRODUCTION VISUALIZER** - Use vn_flow_visualizer.py for all fixes!
+
+🧪 PURPOSE: Clean architecture demonstration and isolated testing only
+🚫 DO NOT EDIT: Unless specifically testing clean interface approach
+📖 See: VISUALIZER_ARCHITECTURE_GUIDE.md for architecture details
+
+This is a simplified but working demonstration of the clean interface approach.
 This shows how the visualizer can use VisualizationData without direct renpy-source-api dependencies.
+
+🎯 PRODUCTION VISUALIZER: vn_flow_visualizer.py
+- All bug fixes and features go there
+- Used by control panel and main POC application
+- Has latest fixes: authoritative hierarchy, layout cleanup, narrative flow
+
+⚠️ THIS FILE STATUS:
+- May not have latest fixes from production version
+- Used only by renpy_flow_visualizer_v2_main.py
+- Kept for clean architecture reference and testing
+- Intentionally simplified and may lag behind production features
 """
 
 from typing import Dict, Any, Optional, List

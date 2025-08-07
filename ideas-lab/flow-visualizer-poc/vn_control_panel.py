@@ -3,6 +3,11 @@ VN Control Panel Widget
 
 Side panel for controlling visualization options, displaying project information,
 and showing details about selected nodes.
+
+🎯 ARCHITECTURE NOTE: This control panel works with the PRODUCTION visualizer
+- Uses: vn_flow_visualizer.py (production version)
+- NOT: vn_flow_visualizer_v2_simple.py (demo/testing version)
+- See: VISUALIZER_ARCHITECTURE_GUIDE.md for details
 """
 
 from typing import Dict, Any, Optional, List

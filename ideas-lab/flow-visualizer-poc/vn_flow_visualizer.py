@@ -1,17 +1,30 @@
 """
-VN Flow Visualizer Widget
+VN Flow Visualizer Widget - PRODUCTION VERSION
+
+🎯 **THIS IS THE MAIN PRODUCTION VISUALIZER** - Edit this file for all fixes and features!
 
 Interactive PyQt6 QGraphicsView-based visualization for Renpy narrative flow graphs.
 This widget handles the display, interaction, and manipulation of VN branching structures.
+
+🚨 CRITICAL ARCHITECTURE NOTE:
+- THIS FILE: Production visualizer used by control panel and main POC
+- vn_flow_visualizer_v2_simple.py: Demo/testing version (DON'T EDIT unless testing)
+- See VISUALIZER_ARCHITECTURE_GUIDE.md for details
 
 🚨 CRITICAL: Layout and orphan detection rules documented in:
 📖 FLOW_VISUALIZER_ARCHITECTURE.md
 
 Key responsibilities:
-- Hierarchical layout algorithms (dot-like, SCC-aware)
-- Smart orphan detection and filtering (CRITICAL FIX)
-- Node positioning and visual hierarchy
+- Hierarchical layout algorithms (dot-like only - others removed Jan 2025)
+- Smart orphan detection and filtering (FIXED with authoritative hierarchy)
+- Node positioning and visual hierarchy (FIXED for narrative flow)
 - Interactive visualization management
+
+✅ Recent Major Fixes Applied:
+- Authoritative hierarchy system (replaces string-based node relationships)
+- Layout algorithm cleanup (dot-like only)
+- Visual containment fixes (menu containers properly contain choices)
+- Narrative flow fixes (labels properly positioned in hierarchy)
 
 ❗ Changes to layout logic must preserve node type relationships
 """
