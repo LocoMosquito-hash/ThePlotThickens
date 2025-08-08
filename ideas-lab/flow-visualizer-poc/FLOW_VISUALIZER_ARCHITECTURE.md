@@ -95,6 +95,33 @@ def _create_hierarchy_connections(self, flow_graph, container_nodes, choice_conn
 - **Container naming**: `{label_name}_menu_{index}`
 - **Choice naming**: `{container_id}_choice_{index}`
 
+### **Nested Menu Architecture**
+
+This section formalizes how nested menus are modeled and rendered.
+
+- **Definition**: A nested menu occurs when the block of a choice contains a `menu`. Nesting depth is theoretically unbounded in Ren'Py; we do not impose a depth limit.
+- **Authoritative hierarchy**:
+  - `menu_container` → parents only `choice_button` nodes (visual containment; no visible edges)
+  - `choice_button` → may parent a `menu_container` (nested menu) and/or connect to labels
+  - A nested menu is simply another `menu_container` node whose parent is a `choice_button`
+- **Visual rules**:
+  - Menu containers have **no visible outgoing edges** to their choices; choices are visually contained (“glued”) inside
+  - When a choice contains a nested menu, we draw a **visible edge** from the `choice_button` to the nested `menu_container`
+  - Choices continue to handle narrative flow from there (to labels and deeper menus)
+- **Edge visibility policy**:
+  - Container → Choice: internal layout aid only (invisible, `visual_containment=True`, `line_style='none'`)
+  - Choice → Nested menu container: visible
+  - Choice → Label (or other destination): visible
+- **Layout (dot-like only)**:
+  - Place nested menu containers on a deeper tier than their parent choice, slightly offset to avoid overlaps
+  - Preserve strict parent-before-child ordering where possible; nested menus must never appear at the top tier
+- **Example (Haley’s Story, `ep2cont5`)**:
+  - Label `ep2cont5` → Menu container `ep2cont5_menu_1`
+  - Choice "Kiss her[…]": edge to nested menu container `ep2cont5_nested_menu_1`
+  - Nested container holds its own choices, which then connect to destinations (e.g., `ep2cont6`)
+
+Note: Current behavior in some views may still show nested menus as direct children of the label. The **target design** is strictly: `label → menu_container → choice_button → menu_container → …` with edges from choices to their nested menus.
+
 ### **Flow Filtering Rules**
 
 ```python
@@ -142,6 +169,7 @@ if flow.context == "menu_choice":
 - **Top Level**: Start node + orphan labels
 - **Subsequent Levels**: Positioned based on narrative progression
 - **Algorithm**: Dot-like layout with SCC-aware hierarchy
+- **High-Connectivity Clusters**: When a layer contains a highly interconnected set of nodes (e.g., a large SCC or dense decision cluster), the dot-like layout may temporarily arrange that subset in a compact circular/clustered formation to reduce overlap and improve readability. Once outside the cluster, standard dot-like tiering resumes.
 
 ### **Visual Hierarchy Rules**
 

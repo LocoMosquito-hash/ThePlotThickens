@@ -374,8 +374,22 @@ database_record = RenpyAPIMenu(
 ### **Structure Metadata**
 
 - **Purpose**: Hierarchical relationships and organization
-- **Examples**: `menu_index`, `choice_index`, `nesting_level`, `parent_container`
+- **Examples**: `menu_index`, `choice_index`, `nesting_level`, `parent_container`, `parent_choice`
 - **Usage**: Layout algorithms, hierarchy visualization
+
+### **Nested Menu Fields**
+
+When a `menu_container` is nested under a choice, the following metadata MUST be present on that container’s `VisualizationNode.metadata`:
+
+- `parent_choice`: str — node_id of the parent `choice_button`
+- `parent_container`: str — node_id of the enclosing container of that parent choice (already present for choices; duplicated here for clarity)
+- `nesting_level`: int — 0 for top-level menus (children of labels), >0 for nested levels
+
+These fields enable:
+
+- Visible edges from `choice_button` → nested `menu_container`
+- Correct tier placement in the dot-like layout
+- Accurate traversal of `label → container → choice → container → …`
 
 ### **Content Metadata**
 
