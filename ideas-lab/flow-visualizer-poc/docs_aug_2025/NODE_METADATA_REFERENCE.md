@@ -398,6 +398,20 @@ When a `menu_container` is nested under a choice, the following metadata MUST be
   - **Source**: Derived from `nesting_level > 0` and hierarchy structure
   - **Usage**: Quick nested menu identification
 
+#### **Implementation Status (August 2025)**
+
+✅ **FIXED**: Nested menu connections now work correctly thanks to parser data preservation improvements.
+
+**Previous Issue**: Nested menus were appearing as separate top-level menus without proper parent-child connections.
+
+**Current Status**:
+
+- Nested menus are properly detected during parsing
+- `nested_menu_structures` data is preserved through MenuNode creation
+- Authoritative hierarchy correctly processes nested relationships
+- Visible `choice_to_nested_menu` connections are created automatically
+- Hierarchical positioning works as expected
+
 #### **Legacy Fields (Transitional)**
 
 - `parent_choice_id`: str — Same as `parent_choice` but maintains old field name

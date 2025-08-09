@@ -199,8 +199,12 @@ if flow.context == "menu_choice":
 ### **Hybrid Parser Approach**
 
 - **HybridRenpyParser**: Wraps RenpyParser for compatibility
-- **MenuAnalyzer**: Handles complex menu detection
+- **MenuAnalyzer**: Handles complex menu detection with improved nested menu preservation
 - **SDK Integration**: Authoritative entry point detection
+
+#### **Recent Improvements (August 2025)**
+
+✅ **Enhanced Nested Menu Parsing**: The parser now correctly preserves `nested_menu_structures` data when converting from MenuStructure to MenuNode, ensuring nested menus maintain their hierarchical relationships instead of being flattened into separate top-level menus.
 
 ---
 

@@ -292,6 +292,21 @@ if parent_node.node_type == 'menu_container' and child_node.node_type == 'choice
 
 Nested menus were the primary source of rogue nodes in the old string-based system. The authoritative hierarchy solves this by using direct semantic relationships from the parser.
 
+### **⚡ Recent Fix (August 2025): Parser Data Preservation**
+
+**Issue Fixed**: Nested menus were being detected by the parser but lost during MenuNode creation, causing nested menus to appear as separate top-level menus instead of being properly connected to their parent choices.
+
+**Root Cause**: The parser's `_create_menu_node_from_structure()` method was not preserving the `nested_menu_structures` attribute when converting from MenuStructure to MenuNode.
+
+**Solution Implemented**:
+
+1. **Added `nested_menu_structures` field** to parser's MenuChoice class
+2. **Modified MenuNode creation** to preserve nested menu data during conversion
+3. **Eliminated duplicate MenuNode creation** for nested menus to prevent flattening
+4. **Ensured authoritative hierarchy** receives correct nested structure data
+
+**Result**: Nested menus now properly connect to their parent choices with visible `choice_to_nested_menu` connections and correct hierarchical positioning.
+
 ### **How Nested Menus Work Now**
 
 #### **1. Semantic Detection**
