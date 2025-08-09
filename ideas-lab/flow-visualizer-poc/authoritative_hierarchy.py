@@ -312,6 +312,17 @@ class AuthoritativeHierarchy:
                         choice_count += self._process_menu_choices(
                             nested_menu, nested_container
                         )
+                
+                # NEW: Process nested labels using semantic data
+                nested_labels = getattr(choice, 'nested_labels', [])
+                for nested_label_name in nested_labels:
+                    nested_label_node = self._create_nested_label_node(
+                        nested_label_name, choice_node
+                    )
+                    
+                    if nested_label_node:
+                        choice_node.add_child(nested_label_node)
+                        choice_count += 1
         
         return choice_count
     
@@ -399,6 +410,69 @@ class AuthoritativeHierarchy:
         
         self._register_node(nested_container)
         return nested_container
+    
+    def _create_nested_label_node(self, label_name: str, parent_choice: HierarchyNode) -> Optional[HierarchyNode]:
+        """
+        Create a nested label node using semantic parent relationship.
+        
+        Nested labels are labels defined within menu choice blocks, making them
+        conceptually owned by that specific choice rather than the parent label.
+        
+        Args:
+            label_name: Name of the nested label
+            parent_choice: Parent choice node that contains this label
+        """
+        # Generate content-based ID
+        content_hash = self._generate_content_hash({
+            'type': 'nested_label',
+            'parent_choice': parent_choice.content_hash,
+            'label_name': label_name,
+            'is_nested': True
+        })
+        
+        # Create semantic ID that clearly shows hierarchy
+        semantic_id = f"{parent_choice.semantic_id}_nested_label_{label_name}#{content_hash[:8]}"
+        
+        # Create hierarchy node
+        nested_label_node = HierarchyNode(
+            content_hash=content_hash,
+            semantic_id=semantic_id,
+            node_type='label',
+            display_name=f"↳ {label_name}",  # Arrow indicates it's nested
+            content={
+                'label_name': label_name,
+                'is_nested': True,
+                'label_type': 'nested_within_choice',
+                'parent_choice_id': parent_choice.content_hash
+            },
+            source_file=None,  # Could be enhanced to track source file
+            source_line=None   # Could be enhanced to track source line
+        )
+        
+        print(f"[HIERARCHY] Created nested label node: {semantic_id}")
+        self._register_node(nested_label_node)
+        return nested_label_node
+    
+    def get_nested_label_names(self) -> Set[str]:
+        """
+        Get all label names that are handled as nested labels by the AHS.
+        
+        This is used to prevent duplicate node creation by the regular label processing.
+        
+        Returns:
+            Set of label names that are nested labels
+        """
+        nested_label_names = set()
+        
+        for node in self.node_index.values():
+            if (node.node_type == 'label' and 
+                node.content.get('is_nested', False)):
+                label_name = node.content.get('label_name')
+                if label_name:
+                    nested_label_names.add(label_name)
+                    
+        print(f"[HIERARCHY] Found {len(nested_label_names)} nested labels: {nested_label_names}")
+        return nested_label_names
     
     def _create_flow_connections(self, flow_graph: Dict[str, Any]) -> None:
         """Create flow connections between labels based on jumps/calls."""

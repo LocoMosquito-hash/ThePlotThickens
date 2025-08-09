@@ -61,8 +61,19 @@
   - ✅ **NO incoming edges** (parent is the container, not an edge)
   - ✅ **ALWAYS "glued"** to their menu container
   - ✅ **NEVER presented alone** - always with container
-  - ✅ Can have children: labels, nested menu containers
+  - ✅ Can have children: labels, nested menu containers, **nested labels**
   - ❌ **NEVER** treated as orphans (even if `in_degree == 0`)
+
+### **Nested Labels**
+
+- **Type**: `nested_label`
+- **Purpose**: Labels defined within menu choice blocks
+- **Rules**:
+  - ✅ **EXACTLY ONE incoming edge** from parent choice
+  - ✅ **Visually distinct** with `↳` prefix and light cyan color
+  - ✅ **Purple connections** from choice to nested label
+  - ✅ **Semantic ownership** by specific choice (not parent label)
+  - ❌ **NEVER** appear as regular labels in flow graph
 
 ---
 

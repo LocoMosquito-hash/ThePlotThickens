@@ -296,6 +296,20 @@ Nested menus were the primary source of rogue nodes in the old string-based syst
 
 **Issue Fixed**: Nested menus were being detected by the parser but lost during MenuNode creation, causing nested menus to appear as separate top-level menus instead of being properly connected to their parent choices.
 
+### **🏷️ Latest Enhancement (August 2025): Nested Labels Support**
+
+**Feature Added**: Complete nested label support in the Authoritative Hierarchy System.
+
+**Implementation**:
+
+- ✅ Added `_create_nested_label_node()` method for semantic label ownership
+- ✅ Enhanced `_process_menu_choices()` to handle `choice.nested_labels`
+- ✅ Implemented duplicate prevention via `get_nested_label_names()`
+- ✅ Extended visualization pipeline for `nested_label` node type
+- ✅ Purple connection styling for choice→nested_label relationships
+
+**Result**: Nested labels now correctly appear as children of choices (not parent labels) with proper visual distinction and no duplicate nodes.
+
 **Root Cause**: The parser's `_create_menu_node_from_structure()` method was not preserving the `nested_menu_structures` attribute when converting from MenuStructure to MenuNode.
 
 **Solution Implemented**:
@@ -656,5 +670,5 @@ parent.add_child(child)  # Sets both parent and children automatically
 
 ---
 
-_Last Updated: January 2025_  
+_Last Updated: August 2025_  
 _Implementation: Phase 2 Complete - Dual System Integration_

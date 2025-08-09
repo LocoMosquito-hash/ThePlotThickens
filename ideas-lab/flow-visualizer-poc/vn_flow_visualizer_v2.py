@@ -397,6 +397,19 @@ class VNFlowVisualizerV2(QGraphicsView):
             }
             return ChoiceButtonGraphicsItem(choice_data)
         
+        elif node_data.node_type == 'nested_label':
+            # CRITICAL FIX: Handle nested labels with special visual styling
+            # Create a modified label node with nested styling
+            nested_node_data = VisualizationNode(
+                node_id=node_data.node_id,
+                node_type='label',  # Use label type for VNLabelNodeV2
+                display_name=node_data.display_name,  # Already has ↳ prefix
+                color_hint='lightcyan',  # Distinct color
+                size_hint=node_data.size_hint,
+                metadata=node_data.metadata
+            )
+            return VNLabelNodeV2(nested_node_data)
+        
         else:
             # Fallback to label node
             return VNLabelNodeV2(node_data)

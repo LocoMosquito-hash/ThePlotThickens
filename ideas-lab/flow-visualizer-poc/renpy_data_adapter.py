@@ -222,7 +222,16 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         """
         nodes = []
         
+        # CRITICAL FIX: Get nested label names from AHS to prevent duplicates
+        nested_label_names = set()
+        if hasattr(self, '_authoritative_hierarchy'):
+            nested_label_names = self._authoritative_hierarchy.get_nested_label_names()
+        
         for label_name, label_node in flow_graph.items():
+            # CRITICAL FIX: Skip labels that are handled as nested labels by AHS
+            if label_name in nested_label_names:
+                print(f"[LABEL PROCESSING] Skipping '{label_name}' - handled as nested label by AHS")
+                continue
             # Always include labels, even if they have menus
             # Labels represent entry points and any content before the menu
                 
@@ -1143,15 +1152,19 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         visualization_nodes = []
         visualization_connections = []
         
-        # Get all nodes from the hierarchy (excluding label nodes which are handled separately)
+        # Get all nodes from the hierarchy (excluding regular label nodes which are handled separately)
         for node in self._authoritative_hierarchy.node_index.values():
             if node.node_type == 'label':
-                continue  # Labels are handled by _convert_labels_to_nodes
+                # CRITICAL FIX: Include nested labels but skip regular labels
+                is_nested = node.content.get('is_nested', False)
+                if not is_nested:
+                    continue  # Regular labels are handled by _convert_labels_to_nodes
+                # Nested labels will be processed below
                 
-            # Create visualization nodes for both menu containers AND choice buttons
-            # Choices are separate nodes but visually contained within containers
+            # Create visualization nodes for menu containers, choice buttons, AND nested labels
             viz_node = self._convert_hierarchy_node_to_visualization(node)
-            visualization_nodes.append(viz_node)
+            if viz_node:  # Check for None (regular labels return None)
+                visualization_nodes.append(viz_node)
         
         # Create connections based on hierarchy relationships
         # CRITICAL: Follow FLOW_VISUALIZER_ARCHITECTURE.md rules:
@@ -1252,6 +1265,40 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 }
             )
         
+        elif hierarchy_node.node_type == 'label':
+            # CRITICAL FIX: Support nested label nodes from AHS
+            # Check if this is a nested label (created by AHS nested label processing)
+            is_nested = hierarchy_node.content.get('is_nested', False)
+            
+            if is_nested:
+                # This is a nested label - create a special visualization node
+                viz_node = VisualizationNode(
+                    node_id=hierarchy_node.content_hash,
+                    node_type='nested_label',  # Special type for nested labels
+                    display_name=hierarchy_node.display_name,  # Already has ↳ prefix from AHS
+                    color_hint='lightcyan',  # Distinct color for nested labels
+                    size_hint=(120, 40),
+                    metadata={
+                        'semantic_id': hierarchy_node.semantic_id,
+                        'parent_choice': hierarchy_node.content.get('parent_choice_id'),
+                        'content': hierarchy_node.content,
+                        'source_file': hierarchy_node.source_file,
+                        'source_line': hierarchy_node.source_line,
+                        
+                        # Nested label specific metadata
+                        'label_name': hierarchy_node.content.get('label_name', ''),
+                        'label_type': hierarchy_node.content.get('label_type', 'nested_within_choice'),
+                        'is_nested': True,
+                        
+                        # Mark as hierarchy-generated
+                        'generated_by': 'authoritative_hierarchy',
+                        'hierarchy_valid': True
+                    }
+                )
+            else:
+                # This is a regular label node from AHS - skip it (handled by _convert_labels_to_nodes)
+                return None
+        
         else:
             raise ValueError(f"Unsupported node type for visualization: {hierarchy_node.node_type}")
         
@@ -1272,6 +1319,11 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             ('choice', 'label'): 'choice_to_label'
         }
         
+        # Special handling for nested labels
+        if parent_node.node_type == 'choice' and child_node.node_type == 'label':
+            if child_node.content.get('is_nested', False):
+                connection_type_map[('choice', 'label')] = 'choice_to_nested_label'
+        
         connection_type = connection_type_map.get(
             (parent_node.node_type, child_node.node_type),
             'hierarchy'
@@ -1284,6 +1336,9 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         elif connection_type == 'choice_to_nested_menu':
             color_hint = 'purple'
             line_style = 'dashed'
+        elif connection_type == 'choice_to_nested_label':
+            color_hint = 'purple'  # Purple for nested labels (matching documentation)
+            line_style = 'solid'
         elif connection_type == 'label_to_menu':
             color_hint = 'orange'
             line_style = 'solid'

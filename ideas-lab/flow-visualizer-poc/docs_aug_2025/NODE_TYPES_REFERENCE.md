@@ -74,11 +74,59 @@ VisualizationNode(
 - **Color**: Based on choice properties and conditions
 - **Connectivity Rules**:
   - ✅ **NO incoming edges** (they're "glued" to containers via hierarchy)
-  - ✅ Can have outgoing connections to other labels/containers
+  - ✅ Can have outgoing connections to other labels/containers/nested labels
   - ✅ **ALWAYS** belong to a menu container parent
   - ❌ **NEVER** treated as orphans (even if `in_degree == 0`)
 
+### 4. **`'nested_label'`** - Labels Within Choice Blocks
+
+- **Purpose**: Labels defined within menu choice blocks (semantic ownership)
+- **Naming Pattern**: `{choice_id}_nested_label_{label_name}#{hash}` (content-based)
+- **Color**: **Light Cyan** (`lightcyan`) for visual distinction
+- **Display**: `↳ {label_name}` (arrow prefix indicates nesting)
+- **Connectivity Rules**:
+  - ✅ **EXACTLY ONE** incoming edge from parent choice (purple connection)
+  - ✅ Can have outgoing connections to other labels
+  - ✅ **Semantic ownership** by specific choice (not parent label)
+  - ❌ **NEVER** appear as regular labels in flow graph
+
 **Code Creation Example**:
+
+```python
+# Created by AHS when choice.nested_labels detected
+nested_label_node = HierarchyNode(
+    content_hash=content_hash,
+    semantic_id=f"{parent_choice.semantic_id}_nested_label_{label_name}#{hash[:8]}",
+    node_type='label',  # Internal type (converted to 'nested_label' for visualization)
+    display_name=f"↳ {label_name}",
+    content={
+        'label_name': label_name,
+        'is_nested': True,
+        'label_type': 'nested_within_choice',
+        'parent_choice_id': parent_choice.content_hash
+    }
+)
+```
+
+**Visualization Conversion**:
+
+```python
+# Converted to nested_label for visual rendering
+VisualizationNode(
+    node_id=hierarchy_node.content_hash,
+    node_type='nested_label',
+    display_name=hierarchy_node.display_name,  # Already has ↳ prefix
+    color_hint='lightcyan',
+    size_hint=(120, 40),
+    metadata={
+        'label_name': label_name,
+        'is_nested': True,
+        'parent_choice': parent_choice_id
+    }
+)
+```
+
+### 5. **`'__VISUAL_START__'`** - Visual Entry Point
 
 ```python
 VisualizationNode(
@@ -201,13 +249,15 @@ Final:   ending labels (red, terminal nodes)
 
 ### Connection Types
 
-| Connection Type       | Source → Target                  | Line Style | Color  |
-| --------------------- | -------------------------------- | ---------- | ------ |
-| `visual_start`        | `__VISUAL_START__` → entry_point | Solid      | Green  |
-| `jump`                | label → label                    | Solid      | Blue   |
-| `call`                | label → label                    | Dashed     | Green  |
-| `menu_choice`         | choice_button → label            | Solid      | Orange |
-| `container_to_choice` | menu_container → choice_button   | Internal   | Yellow |
+| Connection Type          | Source → Target                       | Line Style | Color  |
+| ------------------------ | ------------------------------------- | ---------- | ------ |
+| `visual_start`           | `__VISUAL_START__` → entry_point      | Solid      | Green  |
+| `jump`                   | label → label                         | Solid      | Blue   |
+| `call`                   | label → label                         | Dashed     | Green  |
+| `menu_choice`            | choice_button → label                 | Solid      | Orange |
+| `container_to_choice`    | menu_container → choice_button        | Internal   | Yellow |
+| `choice_to_nested_label` | choice_button → nested_label          | Solid      | Purple |
+| `choice_to_nested_menu`  | choice_button → nested_menu_container | Dashed     | Purple |
 
 ---
 
