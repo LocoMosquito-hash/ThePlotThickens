@@ -97,30 +97,72 @@ def _create_hierarchy_connections(self, flow_graph, container_nodes, choice_conn
 
 ### **Nested Menu Architecture**
 
-This section formalizes how nested menus are modeled and rendered.
+This section formalizes how nested menus are modeled and rendered using the **Authoritative Hierarchy System**.
 
 - **Definition**: A nested menu occurs when the block of a choice contains a `menu`. Nesting depth is theoretically unbounded in Ren'Py; we do not impose a depth limit.
-- **Authoritative hierarchy**:
-  - `menu_container` → parents only `choice_button` nodes (visual containment; no visible edges)
-  - `choice_button` → may parent a `menu_container` (nested menu) and/or connect to labels
-  - A nested menu is simply another `menu_container` node whose parent is a `choice_button`
-- **Visual rules**:
-  - Menu containers have **no visible outgoing edges** to their choices; choices are visually contained (“glued”) inside
-  - When a choice contains a nested menu, we draw a **visible edge** from the `choice_button` to the nested `menu_container`
-  - Choices continue to handle narrative flow from there (to labels and deeper menus)
-- **Edge visibility policy**:
-  - Container → Choice: internal layout aid only (invisible, `visual_containment=True`, `line_style='none'`)
-  - Choice → Nested menu container: visible
-  - Choice → Label (or other destination): visible
-- **Layout (dot-like only)**:
-  - Place nested menu containers on a deeper tier than their parent choice, slightly offset to avoid overlaps
-  - Preserve strict parent-before-child ordering where possible; nested menus must never appear at the top tier
-- **Example (Haley’s Story, `ep2cont5`)**:
-  - Label `ep2cont5` → Menu container `ep2cont5_menu_1`
-  - Choice "Kiss her[…]": edge to nested menu container `ep2cont5_nested_menu_1`
-  - Nested container holds its own choices, which then connect to destinations (e.g., `ep2cont6`)
 
-Note: Current behavior in some views may still show nested menus as direct children of the label. The **target design** is strictly: `label → menu_container → choice_button → menu_container → …` with edges from choices to their nested menus.
+- **Authoritative Hierarchy Implementation**:
+
+  - Uses `MenuStructure.nested_menu_structures` and `MenuChoice.nested_menu_structures` for semantic relationships
+  - `HierarchyNode` with `node_type='menu_container'` → parents only `choice` nodes (visual containment)
+  - `HierarchyNode` with `node_type='choice'` → may parent nested `menu_container` nodes and/or connect to labels
+  - Nested menus use **content-based IDs** (e.g., `a1b2c3d4e5f6`) instead of fragile string patterns
+  - Direct parent/child object references eliminate string parsing: `choice_node.children` contains nested containers
+
+- **Visual rules**:
+
+  - Menu containers have **no visible outgoing edges** to their choices; choices are visually contained ("glued") inside
+  - When a choice contains a nested menu, we draw a **visible edge** from the `choice` to the nested `menu_container`
+  - Choices continue to handle narrative flow from there (to labels and deeper menus)
+
+- **Edge visibility policy**:
+
+  - Container → Choice: internal layout aid only (invisible, `visual_containment=True`, `line_style='none'`)
+  - Choice → Nested menu container: **visible** (shows narrative hierarchy)
+  - Choice → Label (or other destination): **visible** (shows narrative flow)
+
+- **Content-Based Node Creation**:
+
+  ```python
+  # Nested container ID generation using content hashing
+  content_hash = self._generate_content_hash({
+      'type': 'nested_menu_container',
+      'parent_choice': parent_choice.content_hash,
+      'nested_index': nested_idx,
+      'prompt': getattr(nested_menu, 'prompt', ''),
+      'choices': [choice.text for choice in nested_menu.choices]
+  })
+
+  # Semantic ID for human readability
+  semantic_id = f"{parent_choice.semantic_id}_nested_{prompt_suffix}#{content_hash[:8]}"
+  ```
+
+- **Layout (dot-like only)**:
+
+  - Place nested menu containers on a deeper tier than their parent choice
+  - Use `hierarchy.find_children_by_type('menu_container')` for positioning
+  - Preserve strict parent-before-child ordering using object relationships
+  - **No orphan detection needed** - hierarchy provides authoritative parent information
+
+- **Example (Haley's Story, `ep2cont5`) - Before vs After**:
+
+  **OLD (String-based, created rogue nodes)**:
+
+  ```
+  ep2cont5 → ep2cont5_menu_0 → choices
+  ep2cont5_menu_0_choice_0 → ep2cont5_nested_menu_1 (ROGUE!)
+  ep2cont5_nested_menu_1 → ep2cont5_nested_menu_1_choice_1 (ROGUE!)
+  ```
+
+  **NEW (Authoritative hierarchy)**:
+
+  ```
+  HierarchyNode(label) → HierarchyNode(menu_container) → HierarchyNode(choice) → HierarchyNode(nested_menu_container)
+  Direct object relationships: choice_node.children[0] = nested_container_node
+  Content IDs: a1b2c3d4 → f6e5d4c3 → 9x8y7z6w → 3m2n1o0p
+  ```
+
+**🔑 Key Improvement**: The authoritative hierarchy **eliminates rogue nodes** by using semantic relationships from `MenuStructure` instead of reconstructing hierarchy from string patterns. Nested menus are detected via `choice.nested_menu_structures` and created with stable content-based IDs.
 
 ### **Flow Filtering Rules**
 

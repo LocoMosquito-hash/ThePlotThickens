@@ -379,13 +379,36 @@ database_record = RenpyAPIMenu(
 
 ### **Nested Menu Fields**
 
-When a `menu_container` is nested under a choice, the following metadata MUST be present on that container’s `VisualizationNode.metadata`:
+When a `menu_container` is nested under a choice, the following metadata MUST be present on that container's `VisualizationNode.metadata`:
 
-- `parent_choice`: str — node_id of the parent `choice_button`
-- `parent_container`: str — node_id of the enclosing container of that parent choice (already present for choices; duplicated here for clarity)
+#### **Authoritative Hierarchy Fields (Current System)**
+
+- `parent_choice`: str — **Content hash** of the parent `choice` node (e.g., `"9x8y7z6w"`)
+
+  - **Source**: `parent_choice.content_hash` from `HierarchyNode.parent` relationship
+  - **Usage**: `parent_choice = hierarchy.get_node(metadata['parent_choice'])` (O(1) lookup)
+  - **Stability**: Content-based, immune to index changes
+
 - `nesting_level`: int — 0 for top-level menus (children of labels), >0 for nested levels
 
-These fields enable:
+  - **Source**: Direct from `MenuStructure.nesting_level` via authoritative hierarchy
+  - **Usage**: Layout algorithms use this for positioning and visual hierarchy
+
+- `is_nested`: bool — `True` for nested menu containers
+  - **Source**: Derived from `nesting_level > 0` and hierarchy structure
+  - **Usage**: Quick nested menu identification
+
+#### **Legacy Fields (Transitional)**
+
+- `parent_choice_id`: str — Same as `parent_choice` but maintains old field name
+
+  - **Status**: ⚠️ **Transitional** - Use `parent_choice` or direct hierarchy relationships instead
+
+- `parent_container`: str — String-based parent container ID
+  - **Status**: ⚠️ **Legacy** - Authoritative hierarchy provides direct object relationships instead
+  - **Note**: May still be present during dual-system transition
+
+#### **Capabilities Enabled**
 
 - Visible edges from `choice_button` → nested `menu_container`
 - Correct tier placement in the dot-like layout
