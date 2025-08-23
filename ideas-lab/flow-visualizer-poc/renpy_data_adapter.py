@@ -31,7 +31,7 @@ from flow_visualizer_interface import (
     FlowDataProvider, VisualizationData, VisualizationNode, 
     VisualizationConnection
 )
-from authoritative_hierarchy import AuthoritativeHierarchy
+from authoritative_hierarchy import AuthoritativeHierarchy, HierarchyNode
 
 try:
     from sdk_integration import HybridRenpyParser, ComplexityDetector
@@ -130,9 +130,9 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         # PHASE 2: Detect actual entry point using SDK as source of truth
         actual_entry_point = self._detect_actual_entry_point(project_path)
         
-        # Convert to visualization format (entry point detection affects node classification)
-        nodes = self._convert_labels_to_nodes(flow_graph, actual_entry_point)
-        connections = self._convert_flows_to_connections(flow_graph)
+        # Initialize nodes and connections lists (will be populated by AHS or fallback)
+        nodes = []
+        connections = []
         
         # Add visual Start node and its connection to actual entry point
         visual_start_node, start_connection = self._create_visual_start_node(actual_entry_point)
@@ -140,40 +140,40 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         if start_connection:
             connections.insert(0, start_connection)  # Add Start connection first
         
-        # PHASE 2: Use authoritative hierarchy instead of string-based logic
-        if hasattr(self, '_authoritative_hierarchy'):
-            print("[PHASE 2] Using authoritative hierarchy for menu containers...")
-            menu_nodes, menu_connections = self._create_menu_containers_from_hierarchy()
-        else:
-            print("[FALLBACK] Using old string-based menu container logic...")
-            menu_nodes, menu_connections = self._create_menu_containers(flow_graph)
+        # UNIFIED SYSTEM: Use authoritative hierarchy for ALL nodes and connections
+        # AHS is now mandatory - no more fallback to old string-based system
+        print("[AHS] Using authoritative hierarchy for ALL nodes and connections...")
         
+        # Create label nodes from AHS
+        print("[AHS] Creating label nodes from hierarchy...")
+        label_nodes = self._create_label_nodes_from_hierarchy(actual_entry_point)
+        nodes.extend(label_nodes)
+        
+        # Create menu containers from AHS
+        print("[AHS] Creating menu containers from hierarchy...")
+        menu_nodes, menu_connections = self._create_menu_containers_from_hierarchy()
         nodes.extend(menu_nodes)
         connections.extend(menu_connections)
         
-        # Add connections from labels to their menu containers
-        if hasattr(self, '_authoritative_hierarchy'):
-            print("[PHASE 2] Creating label-to-menu connections from hierarchy...")
-            label_to_menu_connections = self._create_label_to_menu_connections_from_hierarchy()
-        else:
-            label_to_menu_connections = self._create_label_to_menu_connections(flow_graph)
+        # Create label-to-menu connections from AHS
+        print("[AHS] Creating label-to-menu connections from hierarchy...")
+        label_to_menu_connections = self._create_label_to_menu_connections_from_hierarchy()
         connections.extend(label_to_menu_connections)
         
-        # Add choice-to-destination connections from hierarchy (NEW!)
-        if hasattr(self, '_authoritative_hierarchy'):
-            print("[PHASE 2] Creating choice-to-destination connections from hierarchy...")
-            choice_destination_connections = self._create_choice_destination_connections_from_hierarchy()
-            connections.extend(choice_destination_connections)
+        # Create choice-to-destination connections from AHS
+        print("[AHS] Creating choice-to-destination connections from hierarchy...")
+        choice_destination_connections = self._create_choice_destination_connections_from_hierarchy()
+        connections.extend(choice_destination_connections)
         
-        # Add label-to-label flow connections (CRITICAL: This was missing!)
-        flow_connections = self._convert_flows_to_connections(flow_graph)
+        # Create label-to-label flow connections from AHS (REPLACES OLD SYSTEM!)
+        print("[AHS] Creating label-to-label flow connections from hierarchy...")
+        flow_connections = self._authoritative_hierarchy.create_all_flow_connections_for_visualization()
         connections.extend(flow_connections)
         
         # Store flow graph for debugging purposes
         self._last_flow_graph = flow_graph
         
-        # PHASE 3: Compare old vs new system (DEBUG)
-        self._compare_hierarchy_systems(nodes, connections)
+        print(f"[AHS] Successfully created {len(nodes)} nodes and {len(connections)} connections")
         
         return VisualizationData(
             nodes=nodes,
@@ -270,6 +270,63 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             nodes.append(node)
         
         return nodes
+    
+    def _create_label_nodes_from_hierarchy(self, actual_entry_point: Optional[str] = None) -> List[VisualizationNode]:
+        """
+        Create label nodes from AHS hierarchy instead of flow graph.
+        This replaces _convert_labels_to_nodes for the AHS system.
+        """
+        print("[HIERARCHY] Creating label nodes from authoritative hierarchy...")
+        nodes = []
+        
+        for node in self._authoritative_hierarchy.node_index.values():
+            if node.node_type == 'label':
+                # Skip nested labels (they're handled as nested_label type in menu processing)
+                is_nested = node.content.get('is_nested', False)
+                if is_nested:
+                    continue
+                    
+                label_name = node.content.get('label_name', node.display_name)
+                
+                # Determine node type
+                node_type = self._determine_node_type_from_hierarchy_node(node, actual_entry_point)
+                color_hint = self._get_color_for_type(node_type)
+                
+                viz_node = VisualizationNode(
+                    node_id=node.content_hash,  # Use stable content hash instead of label name
+                    node_type='label',
+                    display_name=label_name,
+                    color_hint=color_hint,
+                    metadata={
+                        'semantic_id': node.semantic_id,
+                        'file_path': node.source_file,
+                        'line_number': node.source_line,
+                        'semantic_type': node_type,
+                        'label_name': label_name,
+                        'content_hash': node.content_hash,
+                        'generated_by': 'authoritative_hierarchy',
+                        'flow_count': len(node.outgoing_flows),
+                        'hierarchy_valid': True
+                    }
+                )
+                nodes.append(viz_node)
+                print(f"[HIERARCHY] Created label node: {label_name} (hash: {node.content_hash[:8]})")
+        
+        print(f"[HIERARCHY] Created {len(nodes)} label nodes from hierarchy")
+        return nodes
+    
+    def _determine_node_type_from_hierarchy_node(self, hierarchy_node: HierarchyNode, actual_entry_point: Optional[str]) -> str:
+        """Determine node type for a hierarchy node."""
+        label_name = hierarchy_node.content.get('label_name')
+        
+        if label_name == actual_entry_point:
+            return 'entry_point'
+        elif len(hierarchy_node.outgoing_flows) == 0:
+            return 'ending'
+        elif len(hierarchy_node.children) > 0:  # Has menu children
+            return 'choice_point'
+        else:
+            return 'story_node'
     
     def _convert_flows_to_connections(self, flow_graph: Dict[str, Any]) -> List[VisualizationConnection]:
         """
@@ -1184,9 +1241,8 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                     print(f"[ARCHITECTURE] Created container->choice connection for layout: {node.semantic_id} -> {child.semantic_id} (visual containment)")
                     continue
                     
-                # Skip label-to-label connections (handled by flow graph)
-                if node.node_type == 'label' and child.node_type == 'label':
-                    continue
+                # NEW: AHS now handles label-to-label connections through flow relationships
+                # No longer skipping label-to-label connections
                     
                 # Create other valid connections
                 connection = self._create_hierarchy_connection_from_nodes(node, child)

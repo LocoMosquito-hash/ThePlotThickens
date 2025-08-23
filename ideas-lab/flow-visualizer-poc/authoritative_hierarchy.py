@@ -48,6 +48,19 @@ except ImportError:
 
 
 @dataclass
+class FlowRelationship:
+    """
+    Represents a narrative flow connection between nodes.
+    
+    This is separate from hierarchical parent-child relationships and represents
+    the actual narrative flow (jumps, calls, returns) between labels.
+    """
+    target_node: 'HierarchyNode'
+    flow_type: str                              # 'jump', 'call', 'menu_choice', etc.
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class HierarchyNode:
     """
     A node in the authoritative hierarchy with semantic relationships.
@@ -69,6 +82,10 @@ class HierarchyNode:
     parent: Optional['HierarchyNode'] = None
     children: List['HierarchyNode'] = field(default_factory=list)
     
+    # NEW: Flow relationships (narrative connections)
+    outgoing_flows: List[FlowRelationship] = field(default_factory=list)
+    incoming_flows: List[FlowRelationship] = field(default_factory=list)
+    
     # Additional metadata
     source_file: Optional[str] = None
     source_line: Optional[int] = None
@@ -85,6 +102,34 @@ class HierarchyNode:
         if child in self.children:
             self.children.remove(child)
             child.parent = None
+    
+    def add_flow_to(self, target_node: 'HierarchyNode', flow_type: str, metadata: Dict[str, Any] = None) -> None:
+        """Add an outgoing flow relationship to another node."""
+        if metadata is None:
+            metadata = {}
+            
+        flow = FlowRelationship(
+            target_node=target_node,
+            flow_type=flow_type,
+            metadata=metadata
+        )
+        
+        # Add to outgoing flows (avoid duplicates)
+        if not any(f.target_node == target_node and f.flow_type == flow_type for f in self.outgoing_flows):
+            self.outgoing_flows.append(flow)
+            target_node.incoming_flows.append(flow)
+    
+    def remove_flow_to(self, target_node: 'HierarchyNode', flow_type: str = None) -> None:
+        """Remove flow relationships to a target node."""
+        self.outgoing_flows = [
+            f for f in self.outgoing_flows 
+            if not (f.target_node == target_node and (flow_type is None or f.flow_type == flow_type))
+        ]
+        
+        target_node.incoming_flows = [
+            f for f in target_node.incoming_flows 
+            if not (f.target_node == self and (flow_type is None or f.flow_type == flow_type))
+        ]
     
     def get_ancestors(self) -> List['HierarchyNode']:
         """Get all ancestor nodes (parent, grandparent, etc.)."""
@@ -476,9 +521,35 @@ class AuthoritativeHierarchy:
     
     def _create_flow_connections(self, flow_graph: Dict[str, Any]) -> None:
         """Create flow connections between labels based on jumps/calls."""
-        # This method handles label-to-label flow connections
-        # Menu-to-choice connections are handled by the hierarchy structure
-        pass  # Implementation depends on flow_graph structure
+        print("[HIERARCHY] Creating flow connections between labels...")
+        
+        for label_name, label_node in flow_graph.items():
+            source_node = self.get_node_by_label_name(label_name)
+            if not source_node:
+                continue  # Skip if label node doesn't exist in hierarchy
+                
+            # Process outgoing flows from this label
+            outgoing_flows = getattr(label_node, 'outgoing_flows', [])
+            for flow in outgoing_flows:
+                target_label = getattr(flow, 'target_label', None)
+                flow_type = getattr(flow, 'flow_type', 'jump')
+                
+                if target_label and target_label != '<return>':
+                    target_node = self.get_node_by_label_name(target_label)
+                    if target_node:
+                        # Create flow relationship
+                        flow_metadata = {
+                            'source_label': label_name,
+                            'target_label': target_label,
+                            'original_flow_type': flow_type,
+                            'source_file': getattr(flow, 'source_file', None),
+                            'source_line': getattr(flow, 'source_line', None)
+                        }
+                        
+                        source_node.add_flow_to(target_node, flow_type, flow_metadata)
+                        print(f"[FLOW] Created {flow_type} connection: {label_name} -> {target_label}")
+        
+        print(f"[HIERARCHY] Flow connections created successfully")
     
     def _generate_content_hash(self, content: Dict[str, Any]) -> str:
         """
@@ -515,6 +586,20 @@ class AuthoritativeHierarchy:
     def get_node(self, node_id: str) -> Optional[HierarchyNode]:
         """Get node by content hash or semantic ID. O(1) lookup."""
         return self.node_index.get(node_id) or self.semantic_index.get(node_id)
+    
+    def get_node_by_label_name(self, label_name: str) -> Optional[HierarchyNode]:
+        """Get a label node by its label name. O(1) lookup."""
+        # Label nodes have semantic IDs like "label_{label_name}#hash"
+        label_semantic_id = f"label_{label_name}"
+        
+        # Check if exact match exists in semantic index
+        for semantic_id, node in self.semantic_index.items():
+            if (node.node_type == 'label' and 
+                semantic_id.startswith(label_semantic_id) and 
+                node.content.get('label_name') == label_name):
+                return node
+        
+        return None
     
     def find_parent(self, node_id: str) -> Optional[HierarchyNode]:
         """Find parent of a node. O(1) lookup using object reference."""
@@ -608,24 +693,48 @@ class AuthoritativeHierarchy:
         )
     
     def _create_flow_connections_for_visualization(self) -> List[VisualizationConnection]:
-        """Create flow connections for jumps between labels."""
+        """Create flow connections for jumps between labels using flow relationships."""
         flow_connections = []
         
         for node in self.node_index.values():
-            if node.jump_targets:
-                for target_label in node.jump_targets:
-                    target_node = self.semantic_index.get(f"label_{target_label}")
-                    if target_node:
-                        connection = VisualizationConnection(
-                            connection_id=f"flow_{node.content_hash}_to_{target_node.content_hash}",
-                            source_node_id=node.content_hash,
-                            target_node_id=target_node.content_hash,
-                            connection_type='flow',
-                            color_hint='gray',
-                            weight_hint=1.5
-                        )
-                        flow_connections.append(connection)
+            # Use the new flow relationships instead of jump_targets
+            for flow in node.outgoing_flows:
+                target_node = flow.target_node
+                
+                # Determine connection type based on flow type
+                if flow.flow_type == 'menu_choice':
+                    connection_type = 'choice_to_label'
+                    color_hint = 'orange'
+                elif flow.flow_type == 'call':
+                    connection_type = 'label_to_call'
+                    color_hint = 'blue'
+                else:  # jump or other
+                    connection_type = 'label_to_label'
+                    color_hint = 'orange'
+                
+                connection = VisualizationConnection(
+                    connection_id=f"flow_{node.content_hash}_to_{target_node.content_hash}",
+                    source_node_id=node.content_hash,
+                    target_node_id=target_node.content_hash,
+                    connection_type=connection_type,
+                    color_hint=color_hint,
+                    weight_hint=1.5,
+                    metadata={
+                        'flow_type': flow.flow_type,
+                        'source_label': flow.metadata.get('source_label'),
+                        'target_label': flow.metadata.get('target_label'),
+                        'generated_by': 'authoritative_hierarchy_flows'
+                    }
+                )
+                flow_connections.append(connection)
         
+        return flow_connections
+    
+    def create_all_flow_connections_for_visualization(self) -> List[VisualizationConnection]:
+        """Create all flow connections (label-to-label) for visualization - REPLACES OLD SYSTEM."""
+        print("[HIERARCHY] Creating all flow connections for visualization...")
+        flow_connections = self._create_flow_connections_for_visualization()
+        print(f"[HIERARCHY] Created {len(flow_connections)} flow connections")
         return flow_connections
     
     def print_hierarchy(self, node: Optional[HierarchyNode] = None, depth: int = 0) -> None:
