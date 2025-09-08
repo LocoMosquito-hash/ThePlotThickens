@@ -523,6 +523,9 @@ class AuthoritativeHierarchy:
         """Create flow connections between labels based on jumps/calls."""
         print("[HIERARCHY] Creating flow connections between labels...")
         
+        # CRITICAL: Build set of destinations handled by menu choices to avoid duplicates
+        menu_choice_destinations = self._get_menu_choice_destinations_from_hierarchy(flow_graph)
+        
         for label_name, label_node in flow_graph.items():
             source_node = self.get_node_by_label_name(label_name)
             if not source_node:
@@ -535,6 +538,11 @@ class AuthoritativeHierarchy:
                 flow_type = getattr(flow, 'flow_type', 'jump')
                 
                 if target_label and target_label != '<return>':
+                    # CRITICAL FIX: Skip flows that are handled by menu choices
+                    if target_label in menu_choice_destinations:
+                        print(f"[FLOW FILTER] Skipping label-to-label flow {label_name} -> {target_label} (handled by menu choice)")
+                        continue
+                        
                     target_node = self.get_node_by_label_name(target_label)
                     if target_node:
                         # Create flow relationship
@@ -550,6 +558,28 @@ class AuthoritativeHierarchy:
                         print(f"[FLOW] Created {flow_type} connection: {label_name} -> {target_label}")
         
         print(f"[HIERARCHY] Flow connections created successfully")
+    
+    def _get_menu_choice_destinations_from_hierarchy(self, flow_graph: Dict[str, Any]) -> Set[str]:
+        """
+        Get all destinations that are handled by menu choices in the hierarchy.
+        These should not have competing label-to-label flows.
+        """
+        menu_destinations = set()
+        
+        # Scan through all choice nodes in the hierarchy
+        for node in self.node_index.values():
+            if node.node_type == 'choice':
+                destination = node.content.get('destination', '')
+                if destination:
+                    menu_destinations.add(destination)
+                    
+                # Also add nested labels within choices
+                nested_labels = node.content.get('nested_labels', [])
+                for nested_label in nested_labels:
+                    menu_destinations.add(nested_label)
+        
+        print(f"[FLOW FILTER] Found {len(menu_destinations)} menu choice destinations: {menu_destinations}")
+        return menu_destinations
     
     def _generate_content_hash(self, content: Dict[str, Any]) -> str:
         """

@@ -1097,10 +1097,22 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         # Create connection from visual Start to actual entry point
         start_connection = None
         if actual_entry_point:
+            # CRITICAL FIX: Look up the actual entry point node and use its content hash
+            entry_point_node = None
+            if hasattr(self, '_authoritative_hierarchy') and self._authoritative_hierarchy:
+                entry_point_node = self._authoritative_hierarchy.get_node_by_label_name(actual_entry_point)
+            
+            if entry_point_node:
+                target_node_id = entry_point_node.content_hash  # Use content hash for AHS
+                print(f"[VISUAL START] Connecting to entry point '{actual_entry_point}' with hash {target_node_id[:8]}")
+            else:
+                target_node_id = actual_entry_point  # Fallback to label name
+                print(f"[VISUAL START] Warning: Entry point node not found in hierarchy, using label name")
+            
             start_connection = VisualizationConnection(
                 connection_id="__START_TO_ENTRY__",
                 source_node_id="__VISUAL_START__",
-                target_node_id=actual_entry_point,
+                target_node_id=target_node_id,  # FIXED: Use content hash instead of label name
                 connection_type='visual_start',
                 line_style='solid',
                 color_hint='green',
@@ -1477,16 +1489,22 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 continue
                 
             # Get destination from choice content
-            destination = choice_node.content.get('destination', '')
-            if not destination:
+            destination_label_name = choice_node.content.get('destination', '')
+            if not destination_label_name:
                 print(f"[CHOICE DESTINATION] Warning: Choice {choice_node.semantic_id} has no destination")
+                continue
+                
+            # CRITICAL FIX: Find the destination label node and use its content hash
+            destination_node = self._authoritative_hierarchy.get_node_by_label_name(destination_label_name)
+            if not destination_node:
+                print(f"[CHOICE DESTINATION] ERROR: Destination label '{destination_label_name}' not found in hierarchy")
                 continue
                 
             # Create connection from choice button to destination label
             connection = VisualizationConnection(
-                connection_id=f"choice_{choice_node.content_hash}_to_label_{destination}",
+                connection_id=f"choice_{choice_node.content_hash}_to_label_{destination_node.content_hash}",
                 source_node_id=choice_node.content_hash,  # Source is the choice button
-                target_node_id=destination,  # Target is the destination label
+                target_node_id=destination_node.content_hash,  # FIXED: Use destination node's content hash
                 connection_type='choice_to_label',
                 line_style='solid',
                 color_hint='green',  # Green for choice connections
@@ -1496,12 +1514,13 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                     'connection_nature': 'choice_destination',
                     'choice_semantic_id': choice_node.semantic_id,
                     'choice_text': choice_node.content.get('full_text', choice_node.display_name),
-                    'destination_label': destination,
+                    'destination_label': destination_label_name,
+                    'destination_node_hash': destination_node.content_hash,
                     'generated_by': 'authoritative_hierarchy'
                 }
             )
             connections.append(connection)
-            print(f"[CHOICE DESTINATION] Connected choice {choice_node.semantic_id} -> {destination}")
+            print(f"[CHOICE DESTINATION] Connected choice {choice_node.semantic_id} -> {destination_label_name} (hash: {destination_node.content_hash[:8]})")
         
         print(f"[PHASE 2] Created {len(connections)} choice-to-destination connections from hierarchy")
         return connections

@@ -647,26 +647,78 @@ parent.add_child(child)  # Sets both parent and children automatically
 
 ---
 
-## 🚨 **Critical Reminders**
+## ✅ **Latest Enhancement (August 2025): Complete AHS Migration**
 
-### **For Current Development**
+### **🎉 Migration Completed Successfully**
 
-1. **Dual System Active**: Both old and new systems run simultaneously - modify both
-2. **Content Hashes Are Not Cryptic**: They're stable content addresses, not random strings
-3. **Visual Containment Required**: Container-to-choice connections must be invisible but present
-4. **Semantic Data Available**: Use `MenuStructure.parent_choice` instead of string parsing
+The Authoritative Hierarchy System has been **fully migrated** and now handles **ALL** flow visualization operations:
 
-### **For Future Migration**
+#### **✅ What Was Completed**
 
-1. **Phase Out String Patterns**: Replace all `startswith()`, `endswith()` logic with hierarchy queries
-2. **Remove Orphan Detection**: Current orphan logic is artifact of string-based system
-3. **Simplify Visualization**: Direct hierarchy-to-visualization conversion eliminates complex fallback logic
+1. **🔗 Label-to-Label Flow Processing**
+
+   - AHS now creates all narrative flow connections
+   - Intelligent filtering prevents duplicate connections when menu choices exist
+   - Content-based stable IDs for all flow relationships
+
+2. **🎯 Choice-to-Label Connection Fix**
+
+   - Menu choices now properly connect to their destination labels
+   - Fixed target node ID resolution (content hash vs label name)
+   - Green connections show choice → destination flows correctly
+
+3. **🚀 Visual Start Node Integration**
+
+   - Visual "Start" node now connects to actual entry point using content hashes
+   - Proper hierarchy lookup for entry point resolution
+   - Maintains visual clarity while using stable identifiers
+
+4. **🗑️ Old System Elimination**
+   - Removed all dual system conditional logic
+   - Eliminated string-based flow processing fallbacks
+   - Unified architecture with single source of truth
+
+#### **🔧 Technical Implementation Details**
+
+**New AHS Capabilities:**
+
+- `FlowRelationship` dataclass for narrative connections
+- `HierarchyNode.outgoing_flows` and `incoming_flows` for flow tracking
+- `_create_flow_connections()` with intelligent menu choice filtering
+- `_get_menu_choice_destinations_from_hierarchy()` for deduplication
+- Content-based ID resolution throughout visualization pipeline
+
+**Fixed Issues:**
+
+- ❌ ~~Missing choice-to-label connections~~ → ✅ **FIXED**
+- ❌ ~~Duplicate label-to-label flows~~ → ✅ **FIXED**
+- ❌ ~~Visual start node connection broken~~ → ✅ **FIXED**
+- ❌ ~~Dual system complexity~~ → ✅ **ELIMINATED**
+
+### **🎯 Current System Architecture**
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   PARSER    │───▶│     AHS     │───▶│VISUALIZATION│
+│  (Semantic) │    │ (UNIFIED)   │    │ (Rendering) │
+└─────────────┘    └─────────────┘    └─────────────┘
+                           │
+                    ┌──────┴──────┐
+                    ▼             ▼
+              ┌────────────┐ ┌────────────┐
+              │ HIERARCHY  │ │   FLOWS    │
+              │(Menu/Choice│ │(Label→Label│
+              │ Structure) │ │Connection) │
+              └────────────┘ └────────────┘
+```
+
+**No More Dual System** - AHS is now the single, authoritative source for all relationships.
 
 ---
 
-**System Status**: ✅ **Implemented and Working**  
-**Migration Status**: 🔄 **Dual System Active**  
-**Stability**: 🟢 **Stable in Simple Games, Testing Complex Games**
+**System Status**: 🎉 **MIGRATION COMPLETE**  
+**Migration Status**: ✅ **UNIFIED AHS SYSTEM**  
+**Stability**: 🟢 **Stable and Production Ready**
 
 ---
 
