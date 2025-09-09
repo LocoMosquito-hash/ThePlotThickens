@@ -559,15 +559,78 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         self.resetTransform()
         self.fit_view_to_content()
     
-    def search_and_select_node(self, node_id: str):
-        """Search for and select a node by ID."""
-        if node_id in self.nodes:
-            node = self.nodes[node_id]
+    def search_and_select_node(self, search_text: str):
+        """
+        Search for and select a node by name.
+        
+        Now works with the AHS (Authoritative Hierarchical System) to provide
+        intelligent search across label names, display names, and semantic IDs.
+        """
+        search_text = search_text.strip()
+        if not search_text:
+            return False
+        
+        # Try to use AHS search if available
+        if hasattr(self.data_provider, '_authoritative_hierarchy'):
+            hierarchy = self.data_provider._authoritative_hierarchy
+            if hierarchy:
+                matching_hierarchy_nodes = hierarchy.search_nodes(search_text)
+                
+                if matching_hierarchy_nodes:
+                    # Find the graphics item corresponding to the first matching hierarchy node
+                    target_hierarchy_node = matching_hierarchy_nodes[0]
+                    target_node_id = target_hierarchy_node.content_hash
+                    
+                    # Find the corresponding graphics item
+                    if target_node_id in self.nodes:
+                        target_node = self.nodes[target_node_id]
+                        
+                        # Clear current selection and select the found node
+                        self.scene.clearSelection()
+                        target_node.setSelected(True)
+                        self.centerOn(target_node)
+                        
+                        # Emit selection signal
+                        self.node_selected.emit(target_node_id, target_node.vis_node.metadata or {})
+                        
+                        print(f"Found and selected node: {target_hierarchy_node.display_name} (ID: {target_node_id[:8]}...)")
+                        if len(matching_hierarchy_nodes) > 1:
+                            other_matches = [f"{node.display_name}" for node in matching_hierarchy_nodes[1:5]]
+                            print(f"Other matches: {other_matches}")
+                        
+                        return True
+                    else:
+                        print(f"Found hierarchy node '{target_hierarchy_node.display_name}' but corresponding graphics item not found")
+                        return False
+                else:
+                    print(f"No nodes found matching '{search_text}' in hierarchy")
+                    return False
+        
+        # Fallback: try direct node ID lookup (legacy behavior)
+        if search_text in self.nodes:
+            node = self.nodes[search_text]
             self.scene.clearSelection()
             node.setSelected(True)
             self.centerOn(node)
             # Emit selection signal
-            self.node_selected.emit(node_id, node.vis_node.metadata or {})
+            self.node_selected.emit(search_text, node.vis_node.metadata or {})
+            print(f"Found node by direct ID lookup: {search_text}")
+            return True
+        
+        # Fallback: search through display names
+        search_text_lower = search_text.lower()
+        for node_id, node in self.nodes.items():
+            if hasattr(node, 'vis_node') and node.vis_node.display_name:
+                if search_text_lower in node.vis_node.display_name.lower():
+                    self.scene.clearSelection()
+                    node.setSelected(True)
+                    self.centerOn(node)
+                    self.node_selected.emit(node_id, node.vis_node.metadata or {})
+                    print(f"Found node by display name: {node.vis_node.display_name}")
+                    return True
+        
+        print(f"No nodes found matching '{search_text}'")
+        return False
     
     def set_edge_highlighting_enabled(self, enabled: bool):
         """Enable or disable edge highlighting for selected nodes."""

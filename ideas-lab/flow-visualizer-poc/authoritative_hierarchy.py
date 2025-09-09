@@ -631,6 +631,72 @@ class AuthoritativeHierarchy:
         
         return None
     
+    def search_nodes(self, query: str) -> List[HierarchyNode]:
+        """
+        Search for nodes matching a query string.
+        
+        Searches through:
+        - Label names (for label nodes)
+        - Display names
+        - Semantic IDs
+        - Content hash (partial match)
+        
+        Args:
+            query: Search query string (case insensitive)
+            
+        Returns:
+            List of matching nodes, with exact matches first
+        """
+        query = query.lower().strip()
+        if not query:
+            return []
+        
+        exact_matches = []
+        partial_matches = []
+        
+        for node in self.node_index.values():
+            # For label nodes, check the actual label name
+            if node.node_type == 'label':
+                label_name = node.content.get('label_name', '').lower()
+                if query == label_name:
+                    exact_matches.append(node)
+                    continue
+                elif query in label_name:
+                    partial_matches.append(node)
+                    continue
+            
+            # Check display name (with null check)
+            if node.display_name:
+                display_name = node.display_name.lower()
+                if query == display_name:
+                    exact_matches.append(node)
+                    continue
+                elif query in display_name:
+                    partial_matches.append(node)
+                    continue
+            
+            # Check semantic ID (without hash part for cleaner matching)
+            if node.semantic_id:
+                semantic_id = node.semantic_id.lower()
+                if '#' in semantic_id:
+                    clean_semantic_id = semantic_id.split('#')[0]
+                else:
+                    clean_semantic_id = semantic_id
+                    
+                if query == clean_semantic_id:
+                    exact_matches.append(node)
+                    continue
+                elif query in clean_semantic_id:
+                    partial_matches.append(node)
+                    continue
+            
+            # Check content hash (partial match)
+            if node.content_hash and query in node.content_hash.lower():
+                partial_matches.append(node)
+        
+        # Return exact matches first, then partial matches
+        return exact_matches + partial_matches
+    
     def find_parent(self, node_id: str) -> Optional[HierarchyNode]:
         """Find parent of a node. O(1) lookup using object reference."""
         node = self.get_node(node_id)

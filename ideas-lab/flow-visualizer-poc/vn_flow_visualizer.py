@@ -493,6 +493,9 @@ class VNFlowVisualizer(QGraphicsView):
         self.graph: Optional[nx.DiGraph] = None
         self.current_flow_graph: Optional[Dict[str, Any]] = None
         
+        # Data provider for AHS search functionality
+        self.data_provider = None  # Set by the application when available
+        
         # Semantic analysis data
         self.project_path: Optional[str] = None
         self.semantic_start_node: Optional[str] = None
@@ -2131,20 +2134,69 @@ class VNFlowVisualizer(QGraphicsView):
         """
         Search for a node by name and select it if found.
         
+        Now works with the AHS (Authoritative Hierarchical System) to provide
+        intelligent search across label names, display names, and semantic IDs.
+        
         Args:
             search_text: Partial or full node name to search for
             
         Returns:
             True if node was found and selected, False otherwise
         """
-        search_text = search_text.lower().strip()
+        search_text = search_text.strip()
+        if not search_text:
+            return False
+        
+        # First try to use AHS search if available (for AHS-based visualizations)
+        if hasattr(self, 'data_provider') and hasattr(self.data_provider, '_authoritative_hierarchy'):
+            hierarchy = self.data_provider._authoritative_hierarchy
+            if hierarchy:
+                matching_hierarchy_nodes = hierarchy.search_nodes(search_text)
+                
+                if matching_hierarchy_nodes:
+                    # Find the graphics item corresponding to the first matching hierarchy node
+                    target_hierarchy_node = matching_hierarchy_nodes[0]
+                    target_node_id = target_hierarchy_node.content_hash
+                    
+                    # Find the corresponding graphics item
+                    if target_node_id in self.nodes:
+                        target_node = self.nodes[target_node_id]
+                        
+                        # Clear current selection
+                        self.scene.clearSelection()
+                        
+                        # Select and center on the found node
+                        target_node.setSelected(True)
+                        
+                        # Center the view on the selected node
+                        node_pos = target_node.scenePos()
+                        self.centerOn(node_pos)
+                        
+                        # Optionally highlight with a brief animation effect
+                        if hasattr(target_node, '_highlighted'):
+                            target_node._highlighted = True
+                            target_node.update()
+                        
+                        print(f"Found and selected node: {target_hierarchy_node.display_name} (ID: {target_node_id[:8]}...)")
+                        if len(matching_hierarchy_nodes) > 1:
+                            other_matches = [f"{node.display_name}" for node in matching_hierarchy_nodes[1:5]]
+                            print(f"Other matches: {other_matches}")
+                        
+                        return True
+                    else:
+                        print(f"Found hierarchy node '{target_hierarchy_node.display_name}' but corresponding graphics item not found")
+                else:
+                    print(f"No nodes found matching '{search_text}' in hierarchy")
+        
+        # Fallback to legacy search method (for non-AHS visualizations)
+        search_text_lower = search_text.lower()
         found_nodes = []
         
-        # Search through all nodes
+        # Search through all graphics nodes
         for node_id, node_item in self.nodes.items():
             # Handle both VNLabelNode and MenuContainerGraphicsItem
             if hasattr(node_item, 'node_name'):
-                # VNLabelNode
+                # VNLabelNode or similar
                 node_name = node_item.node_name.lower()
             elif hasattr(node_item, 'menu_id'):
                 # MenuContainerGraphicsItem
@@ -2153,7 +2205,7 @@ class VNFlowVisualizer(QGraphicsView):
                 # Fallback to node_id
                 node_name = node_id.lower()
                 
-            if search_text in node_name or search_text in node_id.lower():
+            if search_text_lower in node_name or search_text_lower in node_id.lower():
                 found_nodes.append((node_id, node_item))
         
         if not found_nodes:
@@ -2171,7 +2223,7 @@ class VNFlowVisualizer(QGraphicsView):
             else:
                 node_name = nid.lower()
                 
-            if nid.lower() == search_text or node_name == search_text:
+            if nid.lower() == search_text_lower or node_name == search_text_lower:
                 exact_matches.append((nid, ni))
         
         if exact_matches:
@@ -2193,8 +2245,9 @@ class VNFlowVisualizer(QGraphicsView):
         self.centerOn(node_pos)
         
         # Optionally highlight with a brief animation effect
-        target_node._highlighted = True
-        target_node.update()
+        if hasattr(target_node, '_highlighted'):
+            target_node._highlighted = True
+            target_node.update()
         
         print(f"Found and selected node: {target_node_id}")
         return True

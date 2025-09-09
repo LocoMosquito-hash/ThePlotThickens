@@ -85,7 +85,7 @@ class VNControlPanel(QWidget):
         search_layout.addWidget(QLabel("Search:"))
         
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Enter node name (e.g., ch4ashbagdone)")
+        self.search_input.setPlaceholderText("Enter label name (e.g., label_rightaway)")
         self.search_input.returnPressed.connect(self.perform_search)
         search_layout.addWidget(self.search_input)
         
@@ -327,7 +327,15 @@ class VNControlPanel(QWidget):
         # Add the proper node name if available from AHS metadata
         if 'semantic_id' in node_data:
             semantic_id = node_data['semantic_id']
-            info_text += f"Name: {semantic_id}\n"
+            # Clean up label names by removing the "label_" prefix for better readability
+            if semantic_id.startswith('label_'):
+                # Extract just the label name part (before any hash)
+                clean_name = semantic_id[6:]  # Remove "label_" prefix
+                if '#' in clean_name:
+                    clean_name = clean_name.split('#')[0]  # Remove hash suffix if present
+                info_text += f"Name: {clean_name}\n"
+            else:
+                info_text += f"Name: {semantic_id}\n"
         elif 'display_name' in node_data:
             display_name = node_data['display_name'] 
             info_text += f"Name: {display_name}\n"
