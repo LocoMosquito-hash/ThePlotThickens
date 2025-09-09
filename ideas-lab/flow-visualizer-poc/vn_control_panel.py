@@ -321,8 +321,16 @@ class VNControlPanel(QWidget):
             
         self.current_node_data = node_data
         
-        # Format node information
+        # Format node information with both hash ID and proper name
         info_text = f"Label: {node_id}\n"
+        
+        # Add the proper node name if available from AHS metadata
+        if 'semantic_id' in node_data:
+            semantic_id = node_data['semantic_id']
+            info_text += f"Name: {semantic_id}\n"
+        elif 'display_name' in node_data:
+            display_name = node_data['display_name'] 
+            info_text += f"Name: {display_name}\n"
         
         # Special handling for menu choice nodes - show the choice text
         if '_choice_' in node_id and 'full_text' in node_data:
