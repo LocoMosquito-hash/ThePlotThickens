@@ -674,9 +674,15 @@ The Authoritative Hierarchy System has been **fully migrated** and now handles *
    - Maintains visual clarity while using stable identifiers
 
 4. **🗑️ Old System Elimination**
+
    - Removed all dual system conditional logic
    - Eliminated string-based flow processing fallbacks
    - Unified architecture with single source of truth
+
+5. **🧠 Intelligent Flow Filtering (August 2025)**
+   - Fixed over-aggressive filtering that blocked legitimate implicit flows
+   - Implemented context-aware filtering to distinguish true duplicates from legitimate flows
+   - Preserved Ren'Py fall-through behavior for complex visual novels
 
 #### **🔧 Technical Implementation Details**
 
@@ -694,6 +700,7 @@ The Authoritative Hierarchy System has been **fully migrated** and now handles *
 - ❌ ~~Duplicate label-to-label flows~~ → ✅ **FIXED**
 - ❌ ~~Visual start node connection broken~~ → ✅ **FIXED**
 - ❌ ~~Dual system complexity~~ → ✅ **ELIMINATED**
+- ❌ ~~Implicit flows incorrectly filtered~~ → ✅ **FIXED (August 2025)**
 
 ### **🎯 Current System Architecture**
 

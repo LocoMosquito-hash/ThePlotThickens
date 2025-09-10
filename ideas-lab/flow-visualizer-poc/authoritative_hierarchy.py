@@ -538,9 +538,10 @@ class AuthoritativeHierarchy:
                 flow_type = getattr(flow, 'flow_type', 'jump')
                 
                 if target_label and target_label != '<return>':
-                    # CRITICAL FIX: Skip flows that are handled by menu choices
-                    if target_label in menu_choice_destinations:
-                        print(f"[FLOW FILTER] Skipping label-to-label flow {label_name} -> {target_label} (handled by menu choice)")
+                    # INTELLIGENT FILTERING: Only skip flows that would truly duplicate menu choice functionality
+                    should_filter_flow = self._should_filter_flow(label_name, target_label, flow_type, menu_choice_destinations, flow_graph)
+                    if should_filter_flow:
+                        print(f"[FLOW FILTER] Skipping label-to-label flow {label_name} -> {target_label} (truly handled by menu choice from same source)")
                         continue
                         
                     target_node = self.get_node_by_label_name(target_label)
@@ -558,6 +559,60 @@ class AuthoritativeHierarchy:
                         print(f"[FLOW] Created {flow_type} connection: {label_name} -> {target_label}")
         
         print(f"[HIERARCHY] Flow connections created successfully")
+    
+    def _should_filter_flow(self, source_label: str, target_label: str, flow_type: str, 
+                           menu_choice_destinations: Set[str], flow_graph: Dict[str, Any]) -> bool:
+        """
+        Intelligent flow filtering - only filter flows that would truly duplicate menu choice functionality.
+        
+        A flow should be filtered ONLY if:
+        1. The target is a menu choice destination, AND
+        2. The source label has a menu with a choice to the same target, AND
+        3. The flow is not an implicit flow (implicit flows should never be filtered)
+        
+        Args:
+            source_label: Label where the flow originates
+            target_label: Label where the flow goes
+            flow_type: Type of flow ('jump', 'call', 'implicit', etc.)
+            menu_choice_destinations: Set of all destinations handled by menu choices
+            flow_graph: Full flow graph for context
+            
+        Returns:
+            True if the flow should be filtered, False otherwise
+        """
+        # Rule 1: If target is not a menu choice destination, never filter
+        if target_label not in menu_choice_destinations:
+            return False
+            
+        # Rule 2: NEVER filter implicit flows - they represent legitimate fall-through behavior
+        if flow_type == 'implicit':
+            print(f"[FLOW FILTER] Preserving implicit flow: {source_label} -> {target_label}")
+            return False
+            
+        # Rule 3: Only filter if the SAME source label has a menu choice to the SAME target
+        source_label_node = flow_graph.get(source_label)
+        if not source_label_node:
+            return False
+            
+        # Check if the source label has menus
+        menu_nodes = getattr(source_label_node, 'menu_nodes', [])
+        if not menu_nodes:
+            # No menus in source label, so this flow is not duplicating menu functionality
+            return False
+            
+        # Check if any menu in the source label has a choice to the target
+        for menu_node in menu_nodes:
+            choices = getattr(menu_node, 'choices', [])
+            for choice in choices:
+                choice_destination = getattr(choice, 'destination', '')
+                if choice_destination == target_label:
+                    # Found a menu choice from the same source to the same target - this is a true duplicate
+                    print(f"[FLOW FILTER] Found duplicate: {source_label} has menu choice -> {target_label}")
+                    return True
+                    
+        # No menu choice from this source to this target found - preserve the flow
+        print(f"[FLOW FILTER] Preserving flow: {source_label} -> {target_label} (no duplicate menu choice from same source)")
+        return False
     
     def _get_menu_choice_destinations_from_hierarchy(self, flow_graph: Dict[str, Any]) -> Set[str]:
         """

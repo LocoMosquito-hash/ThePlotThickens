@@ -72,11 +72,21 @@ This document summarizes all documentation updates made following the successful
 
 - **Purpose**: Complete AHS migration report with critical fixes documentation
 - **Contents**:
-  - 🎯 **Critical Issues Resolved**: Choice-to-label connections, duplicate flows, visual start connection
+  - 🎯 **Critical Issues Resolved**: Choice-to-label connections, duplicate flows, visual start connection, implicit flow filtering
   - 🏗️ **Architectural Changes**: Elimination of dual system complexity
   - 📊 **Migration Statistics**: Code elimination, performance impact, validation results
   - 🎉 **Benefits Achieved**: Architectural clarity, development experience improvements
   - 🔮 **Future Considerations**: Potential enhancements and maintenance guidelines
+
+#### **[docs_aug_2025/IMPLICIT_FLOW_FILTERING_ENHANCEMENT_AUGUST_2025.md](IMPLICIT_FLOW_FILTERING_ENHANCEMENT_AUGUST_2025.md)** ⭐ **NEW**
+
+- **Purpose**: Detailed documentation of intelligent flow filtering enhancement
+- **Contents**:
+  - 🚨 **Problem Analysis**: Over-aggressive filtering causing orphan nodes in complex VNs
+  - 💡 **Solution Implementation**: Context-aware filtering with implicit flow preservation
+  - 🧠 **Intelligent Rules**: Flow type distinction and source context analysis
+  - 📊 **Test Results**: Validation with both simple and complex visual novels
+  - 🎯 **Benefits Achieved**: Eliminated orphan nodes while preserving duplicate prevention
   - 🔗 **Integration Points**: How it works with existing systems
   - 🚨 **Critical Considerations**: Migration safety, performance, edge cases
   - 🔮 **Future Enhancements**: Local labels and advanced features

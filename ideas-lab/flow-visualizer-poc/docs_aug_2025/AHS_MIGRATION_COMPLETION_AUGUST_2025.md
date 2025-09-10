@@ -88,6 +88,52 @@ if target_label in menu_choice_destinations:
 
 **Result**: ✅ Visual "Start" node now properly connects to entry point with green connection.
 
+### **4. Implicit Flow Filtering Enhancement**
+
+**Problem**: Legitimate implicit flows (Ren'Py fall-through behavior) were being incorrectly filtered out when the destination was also a menu choice target, causing orphan nodes.
+
+**Root Cause**: Flow filtering logic was too aggressive - it blocked ALL flows to menu choice destinations, regardless of source or flow type.
+
+**Solution Applied**:
+
+- **File**: `authoritative_hierarchy.py`, lines 563-615
+- **Fix**: Implemented intelligent context-aware filtering with `_should_filter_flow()` method
+- **Key Rules**:
+  1. **Never filter implicit flows** - they represent legitimate fall-through behavior
+  2. **Only filter when same source has menu choice to same target** - prevents true duplicates
+  3. **Preserve flows from different sources** - even if destination is used by menu choices
+
+**Code Change**:
+
+```python
+# BEFORE (too aggressive)
+if target_label in menu_choice_destinations:
+    continue  # Filtered ALL flows to menu destinations
+
+# AFTER (intelligent)
+should_filter_flow = self._should_filter_flow(label_name, target_label, flow_type, menu_choice_destinations, flow_graph)
+if should_filter_flow:
+    continue  # Only filters true duplicates
+```
+
+**Intelligent Filtering Rules**:
+
+```python
+def _should_filter_flow(self, source_label, target_label, flow_type, menu_choice_destinations, flow_graph):
+    # Rule 1: Never filter if target is not a menu choice destination
+    if target_label not in menu_choice_destinations:
+        return False
+
+    # Rule 2: NEVER filter implicit flows - they represent legitimate fall-through
+    if flow_type == 'implicit':
+        return False
+
+    # Rule 3: Only filter if SAME source has menu choice to SAME target
+    return self._source_has_menu_choice_to_target(source_label, target_label, flow_graph)
+```
+
+**Result**: ✅ Implicit flows preserved, orphan nodes properly connected, complex VNs like "Last Call" now display correctly.
+
 ---
 
 ## 🏗️ **Architectural Changes**
