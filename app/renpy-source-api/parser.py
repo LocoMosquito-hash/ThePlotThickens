@@ -1333,13 +1333,17 @@ class RenpyParser:
         for i, current_label_info in enumerate(all_labels):
             current_label = current_label_info['name']
             
-            # Skip if this label has menus (they handle their own flow)
-            if current_label in labels_with_menus:
-                continue
-            
-            # Check if this label has guaranteed outgoing flow
+            # ENHANCED LOGIC: Don't blanket-skip labels with menus
+            # Instead, check if the label (including its menus) provides guaranteed control transfer
             flow_analysis = label_flow_analysis.get(current_label, {})
             has_guaranteed_outgoing_flow = flow_analysis.get('has_guaranteed_outgoing_flow', False)
+            
+            # For labels with menus, check if menus provide guaranteed control transfer
+            if current_label in labels_with_menus and not has_guaranteed_outgoing_flow:
+                # Analyze if the menu choices provide comprehensive flow coverage
+                menu_provides_guaranteed_flow = self._does_menu_provide_guaranteed_flow(current_label, menus, project_path)
+                if menu_provides_guaranteed_flow:
+                    has_guaranteed_outgoing_flow = True
             
             # Add implicit flow if no guaranteed outgoing flow exists
             if not has_guaranteed_outgoing_flow:
@@ -1359,6 +1363,54 @@ class RenpyParser:
                     ))
         
         return implicit_flows
+    
+    def _does_menu_provide_guaranteed_flow(self, label_name: str, menus: List[MenuStructure], project_path: str) -> bool:
+        """
+        Analyze if menus within a label provide guaranteed control transfer.
+        
+        A menu provides guaranteed flow if ALL choices have destinations that transfer control
+        (jump, call, return) and there are no paths that continue execution within the label.
+        
+        Args:
+            label_name: Name of the label containing menus
+            menus: All menu structures in the project
+            project_path: Path to the project
+            
+        Returns:
+            True if menus guarantee control transfer, False otherwise
+        """
+        label_menus = [menu for menu in menus if menu.label_context == label_name]
+        
+        if not label_menus:
+            return False  # No menus found for this label
+        
+        # For each menu in the label
+        for menu in label_menus:
+            if not hasattr(menu, 'choices') or not menu.choices:
+                continue  # Skip menus without choices
+                
+            # Check if ALL choices provide control transfer
+            all_choices_transfer_control = True
+            
+            for choice in menu.choices:
+                choice_destination = getattr(choice, 'destination', None)
+                
+                # If choice has no destination, it continues in the same label (no control transfer)
+                if not choice_destination:
+                    all_choices_transfer_control = False
+                    break
+                    
+                # If choice destination is the same label, it's a loop (no control transfer out)
+                if choice_destination == label_name:
+                    all_choices_transfer_control = False
+                    break
+            
+            # If any menu doesn't provide guaranteed control transfer, the label can have implicit flow
+            if not all_choices_transfer_control:
+                return False
+        
+        # All menus in the label provide guaranteed control transfer
+        return True
     
     def _analyze_label_flow_completeness(self, project_path: str, explicit_flows: List[LabelFlow]) -> Dict[str, Dict]:
         """
@@ -1409,7 +1461,9 @@ class RenpyParser:
         conditional_flows = []
         
         for flow in flows:
-            if flow.flow_type in ['jump', 'call', 'return']:
+            # CRITICAL FIX: 'call' statements do NOT provide guaranteed control transfer
+            # because they return to continue execution in the same label
+            if flow.flow_type in ['jump', 'return']:
                 # Check if this flow is conditional by examining the source
                 is_conditional = self._is_flow_conditional(flow, project_path)
                 
@@ -1417,6 +1471,10 @@ class RenpyParser:
                     conditional_flows.append(flow)
                 else:
                     unconditional_flows.append(flow)
+            elif flow.flow_type == 'call':
+                # Call statements are always treated as non-guaranteed flow
+                # because they return to continue execution
+                conditional_flows.append(flow)
         
         # If there are unconditional flows, control is guaranteed to transfer
         if unconditional_flows:
