@@ -134,6 +134,41 @@ def _should_filter_flow(self, source_label, target_label, flow_type, menu_choice
 
 **Result**: ✅ Implicit flows preserved, orphan nodes properly connected, complex VNs like "Last Call" now display correctly.
 
+### **4. Menu Choice Flow Attribution Fix**
+
+**Problem**: Menu choice flows were being incorrectly attributed to parent labels instead of choice nodes, causing unwanted direct connections (e.g., `intro` → `d01_intro_comein` in "My Milly" VN).
+
+**Root Cause**: Parser was creating `LabelFlow` objects with `source_label=menu.label_context` (parent label) for menu choice destinations.
+
+**Solution Applied**:
+
+- **File**: `parser.py`, lines 1202-1220
+- **Fix**: Removed incorrect menu choice flow creation from parser - these flows are now handled exclusively by the AHS system
+- **Key Change**: Parser no longer creates flows from parent labels to menu choice destinations
+
+**Code Change**:
+
+```python
+# BEFORE (incorrect)
+flows.append(LabelFlow(
+    source_label=menu.label_context,  # Created intro -> d01_intro_comein
+    target_label=choice.destination,
+    flow_type='menu_choice'
+))
+
+# AFTER (removed from parser)
+# Menu choice flows are now handled by AHS via _create_choice_destination_connections_from_hierarchy()
+# This creates flows from choice nodes to destinations, not from parent labels
+```
+
+**Flow Attribution Rules**:
+
+1. **Parser Level**: No longer creates menu choice flows - focuses on jumps, calls, returns, and implicit flows
+2. **AHS Level**: Creates proper choice-to-destination flows via `_create_choice_destination_connections_from_hierarchy()`
+3. **Visualization Level**: Shows flows from choice buttons to destinations, eliminating incorrect parent label connections
+
+**Result**: ✅ Menu choice flows properly attributed to choice nodes, eliminating unwanted direct connections from parent labels.
+
 ---
 
 ## 🏗️ **Architectural Changes**
@@ -278,6 +313,9 @@ All fixes were validated with targeted tests:
 - [x] Fix visual start node connection resolution
 - [x] Remove dual system conditional logic
 - [x] Eliminate old system fallback methods
+- [x] Fix menu choice flow attribution (remove from parser, handle in AHS)
+- [x] Enhance implicit flow detection for labels with menus
+- [x] Fix call statement handling in implicit flow analysis
 - [x] Validate with comprehensive tests
 - [x] Update documentation
 

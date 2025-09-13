@@ -90,6 +90,18 @@ This document summarizes all documentation updates made following the successful
   - 🔗 **Integration Points**: How it works with existing systems
   - 🚨 **Critical Considerations**: Migration safety, performance, edge cases
   - 🔮 **Future Enhancements**: Local labels and advanced features
+  - 🆕 **Recent Enhancements**: Menu blocking fix and call statement handling
+
+#### **[docs_aug_2025/MENU_CHOICE_FLOW_ATTRIBUTION_FIX_AUGUST_2025.md](MENU_CHOICE_FLOW_ATTRIBUTION_FIX_AUGUST_2025.md)** ⭐ **NEW**
+
+- **Purpose**: Complete documentation of menu choice flow attribution fix
+- **Contents**:
+  - 🔍 **Problem Analysis**: Incorrect parent label to destination flows in "My Milly" VN
+  - 🔧 **Root Cause**: Parser creating flows with wrong source attribution
+  - ✅ **Solution**: Removed incorrect parser flows, delegated to AHS system
+  - 🏗️ **Architecture**: Clear separation of parser vs AHS responsibilities
+  - 🎯 **Results**: Eliminated unwanted direct connections from parent labels
+  - 📋 **Implementation**: Files modified and validation criteria
 
 ---
 

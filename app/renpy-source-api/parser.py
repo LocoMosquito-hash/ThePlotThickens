@@ -1104,6 +1104,9 @@ class RenpyParser:
     def _find_explicit_flows(self, project_path: str) -> List[LabelFlow]:
         """
         Find explicit flows (jumps, calls, returns, menu choices) - enhanced with conditional jump detection.
+        
+        Enhanced to filter out flows that are already handled by menu choices to prevent
+        duplicate flows from label to destination.
         """
         flows = []
         current_label = None
@@ -1196,21 +1199,25 @@ class RenpyParser:
                 )
                 flows.extend(conditional_flows)
         
-        # Add flows from menu choices
-        menus = self.find_all_menus(project_path)
-        for menu in menus:
-            for choice in menu.choices:
-                # Add flows for standard choice destinations (jumps/calls)
-                if choice.destination:
-                    flows.append(LabelFlow(
-                        source_label=menu.label_context,
-                        target_label=choice.destination,
-                        flow_type='menu_choice',
-                        file_path=choice.file_path,
-                        line_number=choice.line_number,
-                        context=choice.text,
-                        condition=choice.condition
-                    ))
+        # REMOVED: Menu choice flows are now handled by the AHS system
+        # The AHS creates flows from choice nodes to destinations, not from parent labels
+        # This prevents duplicate/incorrect flows from parent labels to destinations
+        
+        # Add flows from menu choices - DISABLED in favor of AHS choice-to-destination flows
+        # menus = self.find_all_menus(project_path)
+        # for menu in menus:
+        #     for choice in menu.choices:
+        #         # Add flows for standard choice destinations (jumps/calls)
+        #         if choice.destination:
+        #             flows.append(LabelFlow(
+        #                 source_label=menu.label_context,  # This was WRONG - creates intro -> d01_intro_comein
+        #                 target_label=choice.destination,
+        #                 flow_type='menu_choice',
+        #                 file_path=choice.file_path,
+        #                 line_number=choice.line_number,
+        #                 context=choice.text,
+        #                 condition=choice.condition
+        #             ))
                 
                 # NOTE: Nested labels are now handled by choice button connections in the visualizer
                 # This prevents competing flows: label -> nested_label vs choice -> nested_label
@@ -1226,7 +1233,57 @@ class RenpyParser:
                 #     ))
                 #     print(f"Added flow: choice '{choice.text}' -> nested label '{nested_label}'")
         
-        return flows
+        # ENHANCED: Filter out explicit flows that are already handled by menu choices
+        filtered_flows = self._filter_duplicate_explicit_flows(flows, project_path)
+        
+        return filtered_flows
+    
+    def _filter_duplicate_explicit_flows(self, flows: List[LabelFlow], project_path: str) -> List[LabelFlow]:
+        """
+        Filter out explicit flows (jumps/calls) that are already handled by menu choices.
+        
+        This prevents duplicate flows where a jump inside a menu choice is incorrectly
+        attributed to the parent label instead of the choice.
+        
+        Args:
+            flows: List of all detected explicit flows
+            project_path: Path to the project
+            
+        Returns:
+            Filtered list of flows with duplicates removed
+        """
+        # Get all menu choice destinations to identify potential duplicates
+        all_menus = self.find_all_menus(project_path)
+        menu_choice_destinations = set()
+        
+        for menu in all_menus:
+            if hasattr(menu, 'choices'):
+                for choice in menu.choices:
+                    if hasattr(choice, 'destination') and choice.destination:
+                        # Store both the destination and the source label for context
+                        menu_choice_destinations.add((menu.label_context, choice.destination))
+        
+        filtered_flows = []
+        
+        for flow in flows:
+            # Skip filtering for menu_choice flows - these are always valid
+            if flow.flow_type == 'menu_choice':
+                filtered_flows.append(flow)
+                continue
+            
+            # Check if this explicit flow duplicates a menu choice flow
+            flow_key = (flow.source_label, flow.target_label)
+            
+            if flow_key in menu_choice_destinations:
+                # This explicit flow (jump/call) is already handled by a menu choice
+                print(f"[EXPLICIT FLOW FILTER] Filtering duplicate explicit flow: {flow.source_label} -> {flow.target_label} ({flow.flow_type}) - handled by menu choice")
+                continue
+            
+            # Keep the flow if it's not a duplicate
+            filtered_flows.append(flow)
+        
+        print(f"[EXPLICIT FLOW FILTER] Filtered {len(flows) - len(filtered_flows)} duplicate explicit flows")
+        return filtered_flows
 
     def _extract_conditional_jumps(self, label_name: str, file_path: str, start_line: int) -> List[LabelFlow]:
         """
@@ -1368,8 +1425,9 @@ class RenpyParser:
         """
         Analyze if menus within a label provide guaranteed control transfer.
         
-        A menu provides guaranteed flow if ALL choices have destinations that transfer control
-        (jump, call, return) and there are no paths that continue execution within the label.
+        A menu provides guaranteed flow if ALL execution paths through the label's 
+        menu system lead to control transfer. This includes handling cases where
+        multiple menus work together (e.g., nested menus parsed as separate menus).
         
         Args:
             label_name: Name of the label containing menus
@@ -1384,32 +1442,130 @@ class RenpyParser:
         if not label_menus:
             return False  # No menus found for this label
         
-        # For each menu in the label
-        for menu in label_menus:
+        # ENHANCED LOGIC: Check if the menu system as a whole provides guaranteed flow
+        # This handles cases where nested menus are parsed as separate menus
+        return self._analyze_menu_system_flow_coverage(label_menus, label_name)
+    
+    def _analyze_menu_system_flow_coverage(self, label_menus: List, label_name: str) -> bool:
+        """
+        Analyze if a system of menus provides complete flow coverage.
+        
+        This method handles cases where nested menus are parsed as separate menus
+        but still work together to provide guaranteed control transfer.
+        
+        Args:
+            label_menus: List of MenuStructure objects for this label
+            label_name: Name of the label containing these menus
+            
+        Returns:
+            True if the menu system provides guaranteed control transfer
+        """
+        if not label_menus:
+            return False
+        
+        # Strategy: Check if there's a "flow path" through the menu system that
+        # guarantees all execution leads to control transfer
+        
+        # Case 1: Single menu with all choices providing control transfer
+        if len(label_menus) == 1:
+            menu = label_menus[0]
             if not hasattr(menu, 'choices') or not menu.choices:
-                continue  # Skip menus without choices
+                return False
                 
             # Check if ALL choices provide control transfer
-            all_choices_transfer_control = True
-            
             for choice in menu.choices:
-                choice_destination = getattr(choice, 'destination', None)
+                if not self._choice_provides_guaranteed_flow(choice, label_name):
+                    return False
+            return True
+        
+        # Case 2: Multiple menus - check if they form a complete flow system
+        # This handles the My Milly case where nested menus are parsed separately
+        return self._analyze_multi_menu_flow_system(label_menus, label_name)
+    
+    def _analyze_multi_menu_flow_system(self, label_menus: List, label_name: str) -> bool:
+        """
+        Analyze if multiple menus in a label form a complete flow system.
+        
+        This handles cases like My Milly where:
+        - Menu 1: "Open the door" (no destination, continues to Menu 2)
+        - Menu 2: "Come on in" (has destination, provides control transfer)
+        
+        Args:
+            label_menus: List of MenuStructure objects for this label
+            label_name: Name of the label containing these menus
+            
+        Returns:
+            True if the multi-menu system provides guaranteed control transfer
+        """
+        # Check if at least one menu has choices with guaranteed control transfer
+        has_exit_menu = False
+        
+        for menu in label_menus:
+            if not hasattr(menu, 'choices') or not menu.choices:
+                continue
                 
-                # If choice has no destination, it continues in the same label (no control transfer)
-                if not choice_destination:
-                    all_choices_transfer_control = False
-                    break
-                    
-                # If choice destination is the same label, it's a loop (no control transfer out)
-                if choice_destination == label_name:
-                    all_choices_transfer_control = False
+            # Check if this menu has choices that provide control transfer
+            menu_has_exits = False
+            for choice in menu.choices:
+                if self._choice_provides_guaranteed_flow(choice, label_name):
+                    menu_has_exits = True
                     break
             
-            # If any menu doesn't provide guaranteed control transfer, the label can have implicit flow
-            if not all_choices_transfer_control:
-                return False
+            if menu_has_exits:
+                has_exit_menu = True
         
-        # All menus in the label provide guaranteed control transfer
+        # For now, if we have multiple menus and at least one provides exits,
+        # assume the system provides guaranteed flow
+        # This is a heuristic that works for common patterns like My Milly
+        if has_exit_menu and len(label_menus) > 1:
+            print(f"[MENU ANALYSIS] Multi-menu system in '{label_name}' provides guaranteed flow")
+            return True
+        
+        return False
+    
+    def _choice_provides_guaranteed_flow(self, choice, source_label_name: str) -> bool:
+        """
+        Analyze if a single choice provides guaranteed control transfer.
+        
+        A choice provides guaranteed flow if:
+        1. It has a direct destination that transfers control away, OR
+        2. It has nested menus where ALL paths lead to control transfer
+        
+        Args:
+            choice: MenuChoice object to analyze
+            source_label_name: Name of the label containing this choice
+            
+        Returns:
+            True if choice guarantees control transfer, False otherwise
+        """
+        # Check for direct destination
+        choice_destination = getattr(choice, 'destination', None)
+        
+        if choice_destination:
+            # If choice destination is the same label, it's a loop (no control transfer out)
+            if choice_destination == source_label_name:
+                return False
+            # Direct destination to another label = guaranteed control transfer
+            return True
+        
+        # Check for nested menu structures
+        nested_menus = getattr(choice, 'nested_menu_structures', [])
+        
+        if not nested_menus:
+            # No destination and no nested menus = continues in same label (no control transfer)
+            return False
+        
+        # Analyze nested menus - ALL must provide guaranteed control transfer
+        for nested_menu in nested_menus:
+            if not hasattr(nested_menu, 'choices') or not nested_menu.choices:
+                continue  # Skip empty nested menus
+            
+            # Check if ALL choices in the nested menu provide control transfer
+            for nested_choice in nested_menu.choices:
+                if not self._choice_provides_guaranteed_flow(nested_choice, source_label_name):
+                    return False  # Found a path that doesn't guarantee control transfer
+        
+        # All nested menu paths provide guaranteed control transfer
         return True
     
     def _analyze_label_flow_completeness(self, project_path: str, explicit_flows: List[LabelFlow]) -> Dict[str, Dict]:

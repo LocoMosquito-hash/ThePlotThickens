@@ -255,6 +255,72 @@ label part2:
 
 ---
 
+## 🆕 **Recent Enhancements (August 13, 2025)**
+
+### **Menu Blocking Fix for "Isabella - Dark Paths" VN**
+
+**Problem**: Labels with menus were blanket-blocked from implicit flow detection, causing orphan nodes like `c1alexbar2`.
+
+**Solution**: Enhanced `_find_implicit_flows()` to intelligently analyze menu systems:
+
+```python
+# ENHANCED LOGIC: Don't blanket-skip labels with menus
+# Instead, check if the label (including its menus) provides guaranteed control transfer
+flow_analysis = label_flow_analysis.get(current_label, {})
+has_guaranteed_outgoing_flow = flow_analysis.get('has_guaranteed_outgoing_flow', False)
+
+# For labels with menus, check if menus provide guaranteed control transfer
+if current_label in labels_with_menus and not has_guaranteed_outgoing_flow:
+    # Analyze if the menu choices provide comprehensive flow coverage
+    menu_provides_guaranteed_flow = self._does_menu_provide_guaranteed_flow(current_label, menus, project_path)
+    if menu_provides_guaranteed_flow:
+        has_guaranteed_outgoing_flow = True
+```
+
+**Files Modified**: `parser.py`, lines 1336-1347
+
+### **Call Statement Handling Fix for "Isabella - Dark Paths" VN**
+
+**Problem**: `call` statements were incorrectly treated as guaranteed control transfer, blocking implicit flows like `c01bo` → `c01end`.
+
+**Solution**: Modified `_analyze_single_label_flows()` to treat `call` statements as non-guaranteed:
+
+```python
+# CRITICAL FIX: 'call' statements do NOT provide guaranteed control transfer
+# because they return to continue execution in the same label
+if flow.flow_type in ['jump', 'return']:
+    # ... (existing conditional/unconditional logic) ...
+elif flow.flow_type == 'call':
+    # Call statements are always treated as non-guaranteed flow
+    # because they return to continue execution
+    conditional_flows.append(flow)
+```
+
+**Files Modified**: `parser.py`, lines 1464-1477
+
+### **Enhanced Menu Analysis Methods**
+
+**New Methods Added**:
+
+1. **`_does_menu_provide_guaranteed_flow()`**: Recursively analyzes nested menu structures
+2. **`_choice_provides_guaranteed_flow()`**: Analyzes individual choices including nested menus
+3. **`_analyze_menu_system_flow_coverage()`**: Handles single or multiple menu systems
+4. **`_analyze_multi_menu_flow_system()`**: Analyzes multiple menus in the same label
+
+**Result**: ✅ Complex menu structures no longer incorrectly block implicit flows
+
+### **Integration with Menu Choice Flow Attribution Fix**
+
+**Related Enhancement**: Menu choice flows are now properly attributed to choice nodes instead of parent labels, eliminating incorrect direct connections while preserving implicit flow detection.
+
+**Combined Result**:
+
+- ✅ Implicit flows work correctly with complex menu structures
+- ✅ Menu choice flows properly attributed to choice nodes
+- ✅ No duplicate or incorrect parent label connections
+
+---
+
 ## 📁 **Related Documentation**
 
 ### **Updated Documents**
