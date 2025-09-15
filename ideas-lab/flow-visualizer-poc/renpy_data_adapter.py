@@ -170,6 +170,12 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         flow_connections = self._authoritative_hierarchy.create_all_flow_connections_for_visualization()
         connections.extend(flow_connections)
         
+        # Create screen nodes and connections (NEW!)
+        print("[AHS] Creating screen nodes and connections...")
+        screen_nodes, screen_connections = self._create_screen_nodes_and_connections(flow_graph)
+        nodes.extend(screen_nodes)
+        connections.extend(screen_connections)
+        
         # Store flow graph for debugging purposes
         self._last_flow_graph = flow_graph
         
@@ -1615,4 +1621,103 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         print(f"\n🏗️ New hierarchy structure for ep2cont5:")
         for root in self._authoritative_hierarchy.root_nodes:
             if 'ep2cont5' in root.semantic_id:
-                self._authoritative_hierarchy.print_hierarchy(root) 
+                self._authoritative_hierarchy.print_hierarchy(root)
+    
+    def _create_screen_nodes_and_connections(self, flow_graph: Dict[str, Any]) -> Tuple[List[VisualizationNode], List[VisualizationConnection]]:
+        """
+        Create screen nodes and their connections from the _screen_structures data.
+        
+        This method creates:
+        1. Screen nodes for each screen definition (e.g., "Screen: startgame")
+        2. Connections from labels that call screens to screen nodes
+        3. Connections from screen elements (hotspots, buttons) to their destinations
+        
+        Args:
+            flow_graph: Flow graph containing _screen_structures data
+            
+        Returns:
+            Tuple of (screen_nodes, screen_connections)
+        """
+        screen_nodes = []
+        screen_connections = []
+        
+        # Check if screen structures exist in the flow graph
+        screen_structures = flow_graph.get('_screen_structures', {})
+        if not screen_structures:
+            print("[SCREEN NODES] No screen structures found")
+            return screen_nodes, screen_connections
+        
+        print(f"[SCREEN NODES] Creating nodes for {len(screen_structures)} screens")
+        
+        # Create screen nodes
+        for screen_name, screen_structure in screen_structures.items():
+            # Create screen node with "Screen: [name]" format
+            screen_node = VisualizationNode(
+                node_id=f"screen_{screen_name}",
+                node_type='screen',
+                display_name=f"Screen: {screen_name}",
+                color_hint='#E6E6FA',  # Lavender color for screens
+                size_hint=(180, 40),
+                metadata={
+                    'screen_name': screen_name,
+                    'screen_type': getattr(screen_structure, 'screen_type', 'unknown'),
+                    'element_count': len(getattr(screen_structure, 'elements', [])),
+                    'file_path': getattr(screen_structure, 'file_path', ''),
+                    'line_number': getattr(screen_structure, 'line_number', 0),
+                    'generated_by': 'screen_system'
+                }
+            )
+            screen_nodes.append(screen_node)
+            print(f"[SCREEN NODES] Created screen node: {screen_node.display_name}")
+        
+        # Create connections from labels that call screens to screen nodes
+        for label_name, label_node in flow_graph.items():
+            # Skip non-LabelNode entries
+            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+                continue
+                
+            # Check if this label calls any screens
+            screen_calls = getattr(label_node, 'screen_calls', [])
+            for screen_name in screen_calls:
+                if screen_name in screen_structures:
+                    # Create connection from label to screen
+                    connection = VisualizationConnection(
+                        connection_id=f"{label_name}_to_screen_{screen_name}",
+                        source_node_id=label_name,  # Use label name as source
+                        target_node_id=f"screen_{screen_name}",  # Screen node ID
+                        connection_type='screen_call',
+                        color_hint='#9370DB',  # Medium purple for screen calls
+                        metadata={
+                            'flow_type': 'screen_call',
+                            'screen_name': screen_name,
+                            'call_type': 'call'  # Could be 'call' or 'show'
+                        }
+                    )
+                    screen_connections.append(connection)
+                    print(f"[SCREEN CONNECTIONS] Created call: {label_name} -> Screen: {screen_name}")
+        
+        # Create connections from screen elements to their destinations
+        for screen_name, screen_structure in screen_structures.items():
+            screen_elements = getattr(screen_structure, 'elements', [])
+            for element in screen_elements:
+                if hasattr(element, 'destination') and element.destination:
+                    # Create connection from screen to destination label
+                    connection = VisualizationConnection(
+                        connection_id=f"screen_{screen_name}_to_{element.destination}",
+                        source_node_id=f"screen_{screen_name}",  # Screen node as source
+                        target_node_id=element.destination,  # Destination label
+                        connection_type='screen_action',
+                        color_hint='#8A2BE2',  # Blue violet for screen actions
+                        metadata={
+                            'flow_type': 'screen_action',
+                            'element_type': getattr(element, 'element_type', 'unknown'),
+                            'element_text': getattr(element, 'text', ''),
+                            'action_type': getattr(element, 'action_type', 'unknown'),
+                            'screen_name': screen_name
+                        }
+                    )
+                    screen_connections.append(connection)
+                    print(f"[SCREEN CONNECTIONS] Created action: Screen: {screen_name} -> {element.destination}")
+        
+        print(f"[SCREEN NODES] Created {len(screen_nodes)} screen nodes and {len(screen_connections)} screen connections")
+        return screen_nodes, screen_connections 

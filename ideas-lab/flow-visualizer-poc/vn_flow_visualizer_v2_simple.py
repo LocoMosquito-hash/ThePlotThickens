@@ -193,6 +193,8 @@ class SimpleVisualNode(QGraphicsRectItem):
             
         elif vis_node.node_type == 'choice_button':
             width, height = 180, 35  # Slightly wider for choice text
+        elif vis_node.node_type == 'screen':
+            width, height = 180, 50  # Distinctive size for screens
         else:  # label
             width, height = 120, 40
             
@@ -208,7 +210,8 @@ class SimpleVisualNode(QGraphicsRectItem):
             'purple': QColor(200, 100, 250),
             'yellow': QColor(250, 250, 100),
             'orange': QColor(255, 140, 0),
-            'gray': QColor(150, 150, 150)
+            'gray': QColor(150, 150, 150),
+            '#E6E6FA': QColor(230, 230, 250)  # Lavender for screen nodes
         }
         
         color = color_map.get(vis_node.color_hint, QColor(100, 150, 250))
@@ -459,6 +462,17 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             elif node_data.node_type == 'choice_button':
                 # Store choice button data for second pass
                 choice_buttons_data.append(node_data)
+                
+            elif node_data.node_type == 'screen':
+                # Screen nodes - special handling with distinct appearance
+                visual_node = SimpleVisualNode(node_data)
+                # Position screens in a separate area to avoid overlap
+                screen_count = len([n for n in data.nodes[:i+1] if n.node_type == 'screen'])
+                x = (screen_count % 4) * 200  # 4 screens per row
+                y = -150 - ((screen_count // 4) * 80)  # Above regular nodes
+                visual_node.setPos(x, y)
+                self.scene.addItem(visual_node)
+                self.nodes[node_data.node_id] = visual_node
                 
             else:
                 # Regular label nodes
