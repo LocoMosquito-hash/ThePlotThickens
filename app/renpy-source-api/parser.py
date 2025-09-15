@@ -241,11 +241,12 @@ class LabelFlow:
     """Represents navigation flow between labels."""
     source_label: Optional[str] = None
     target_label: str = ""
-    flow_type: str = ""  # 'jump', 'call', 'return', 'menu_choice', 'implicit'
+    flow_type: str = ""  # 'jump', 'call', 'return', 'menu_choice', 'implicit', 'screen_call', 'screen_action'
     file_path: str = ""
     line_number: int = 0
-    context: Optional[str] = None  # Additional context (e.g., choice text for menu flows)
+    context: Optional[str] = None  # Additional context (e.g., choice text, screen element info)
     condition: Optional[str] = None  # Condition if it's a conditional flow
+    screen_info: Optional[Dict[str, str]] = None  # For screen-related flows (screen name, element type, etc.)
 
 
 @dataclass
@@ -1132,6 +1133,96 @@ class RenpyParser:
         
         return screens
     
+    def find_screen_calls(self, project_path: str) -> Dict[str, List[str]]:
+        """
+        Find all 'call screen' and 'show screen' statements in the project.
+        
+        Args:
+            project_path: Path to the Ren'Py project
+            
+        Returns:
+            Dictionary mapping label names to lists of called screen names
+        """
+        screen_calls = {}
+        current_label = None
+        
+        try:
+            rpy_files = self.find_rpy_files(project_path)
+            
+            for rpy_file in rpy_files:
+                file_path = os.path.join(project_path, rpy_file)
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                
+                for i, line in enumerate(lines):
+                    line_number = i + 1
+                    
+                    # Track current label context
+                    label_match = self.patterns['label'].match(line)
+                    if label_match:
+                        current_label = label_match.group(1)
+                        continue
+                    
+                    # Find call screen statements
+                    call_screen_match = self.patterns['call_screen'].match(line)
+                    if call_screen_match and current_label:
+                        screen_name = call_screen_match.group(1)
+                        if current_label not in screen_calls:
+                            screen_calls[current_label] = []
+                        screen_calls[current_label].append(screen_name)
+                        print(f"[SCREEN CALL] Found 'call screen {screen_name}' in label '{current_label}' at {rpy_file}:{line_number}")
+                        continue
+                    
+                    # Find show screen statements
+                    show_screen_match = self.patterns['show_screen'].match(line)
+                    if show_screen_match and current_label:
+                        screen_name = show_screen_match.group(1)
+                        if current_label not in screen_calls:
+                            screen_calls[current_label] = []
+                        screen_calls[current_label].append(screen_name)
+                        print(f"[SCREEN CALL] Found 'show screen {screen_name}' in label '{current_label}' at {rpy_file}:{line_number}")
+                        continue
+        
+        except Exception as e:
+            raise RenpyParseError(f"Failed to find screen calls: {str(e)}")
+        
+        return screen_calls
+    
+    def _generate_screen_element_flows(self, project_path: str) -> List[LabelFlow]:
+        """
+        Generate flows from screen elements (hotspots, buttons) to their destinations.
+        
+        Args:
+            project_path: Path to the Ren'Py project
+            
+        Returns:
+            List of LabelFlow objects representing screen element interactions
+        """
+        flows = []
+        screens = self.find_all_screens(project_path)
+        
+        for screen in screens:
+            for element in screen.elements:
+                if element.destination and element.action_type:
+                    flows.append(LabelFlow(
+                        source_label=f"screen_{screen.screen_name}",  # Screen as source
+                        target_label=element.destination,
+                        flow_type='screen_action',
+                        file_path=element.file_path,
+                        line_number=element.line_number,
+                        context=f"{element.element_type}: {element.text or element.coordinates}",
+                        screen_info={
+                            'screen_name': screen.screen_name,
+                            'element_type': element.element_type,
+                            'element_text': element.text or '',
+                            'action_type': element.action_type,
+                            'coordinates': str(element.coordinates) if element.coordinates else ''
+                        }
+                    ))
+                    print(f"[SCREEN ELEMENT FLOW] {screen.screen_name} -> {element.destination} via {element.element_type}")
+        
+        return flows
+    
     def parse_screen_structure(self, file_path: str, start_line: int, lines: List[str], screen_name: str) -> ScreenStructure:
         """
         Parse a complete screen structure starting from a screen definition line.
@@ -1334,6 +1425,12 @@ class RenpyParser:
             implicit_flows = self._find_implicit_flows(project_path, all_labels_with_positions, explicit_flows)
             flows.extend(implicit_flows)
             
+            # PHASE 4: Generate screen element flows (NEW)
+            screen_element_flows = self._generate_screen_element_flows(project_path)
+            flows.extend(screen_element_flows)
+            
+            print(f"[SCREEN FLOWS] Added {len(screen_element_flows)} screen element flows")
+            
         except Exception as e:
             raise RenpyParseError(f"Failed to find label flows: {str(e)}")
         
@@ -1469,6 +1566,34 @@ class RenpyParser:
                         flow_type='return',
                         file_path=file_path,
                         line_number=line_num
+                    ))
+                
+                # Find screen calls
+                call_screen_match = self.patterns['call_screen'].match(line)
+                if call_screen_match and current_label:
+                    screen_name = call_screen_match.group(1)
+                    flows.append(LabelFlow(
+                        source_label=current_label,
+                        target_label=screen_name,
+                        flow_type='screen_call',
+                        file_path=file_path,
+                        line_number=line_num,
+                        context=f"call screen {screen_name}",
+                        screen_info={'screen_name': screen_name, 'call_type': 'call'}
+                    ))
+                
+                # Find show screen statements
+                show_screen_match = self.patterns['show_screen'].match(line)
+                if show_screen_match and current_label:
+                    screen_name = show_screen_match.group(1)
+                    flows.append(LabelFlow(
+                        source_label=current_label,
+                        target_label=screen_name,
+                        flow_type='screen_call',
+                        file_path=file_path,
+                        line_number=line_num,
+                        context=f"show screen {screen_name}",
+                        screen_info={'screen_name': screen_name, 'call_type': 'show'}
                     ))
             
             # Handle the last label in the file
@@ -2090,6 +2215,23 @@ class RenpyParser:
                 )
                 print(f"[LABEL MENU FIX] Added label menu '{menu_structure.label_name}' to flow graph")
         
+        # Process screen structures and screen calls
+        screens = self.find_all_screens(project_path)
+        screen_calls = self.find_screen_calls(project_path)
+        
+        # Add screen calls to label nodes
+        for label_name, called_screens in screen_calls.items():
+            if label_name in graph:
+                graph[label_name].screen_calls = called_screens
+                graph[label_name].has_screen_calls = len(called_screens) > 0
+                print(f"[SCREEN CALLS] Label '{label_name}' calls screens: {called_screens}")
+        
+        # Store screen structures in the graph for AHS access
+        # We'll add them as a special _screen_structures key
+        if screens:
+            graph['_screen_structures'] = {screen.screen_name: screen for screen in screens}
+            print(f"[SCREEN STRUCTURES] Added {len(screens)} screen structures to flow graph")
+        
         # Group menus by their label context for processing
         menus_by_label = {}
         for menu in menus:
@@ -2149,6 +2291,9 @@ class RenpyParser:
         
         # Set label properties
         for label_name, node in graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(node, 'has_dialogue'):
+                continue
             node.has_dialogue = label_name in dialogue_labels
             node.is_dead_end = len(node.outgoing_flows) == 0
             node.flow_complexity = len(node.outgoing_flows)
@@ -2179,11 +2324,17 @@ class RenpyParser:
         
         # Also mark from labels with no incoming flows (potential entry points)
         for label_name, node in graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(node, 'incoming_flows'):
+                continue
             if len(node.incoming_flows) == 0:
                 mark_reachable(label_name)
         
         # Set reachability flags
         for label_name, node in graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(node, 'is_reachable'):
+                continue
             node.is_reachable = label_name in reachable
         
         return graph

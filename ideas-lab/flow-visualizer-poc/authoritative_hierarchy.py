@@ -211,6 +211,9 @@ class AuthoritativeHierarchy:
         
         # flow_graph keys are label names directly, not nested under 'labels'
         for label_name, label_data in flow_graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(label_data, 'has_dialogue'):
+                continue
             # Generate content-based ID for the label
             content_hash = self._generate_content_hash({
                 'type': 'label',
@@ -256,6 +259,10 @@ class AuthoritativeHierarchy:
         
         # flow_graph keys are label names directly
         for label_name, label_data in flow_graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(label_data, 'has_dialogue'):
+                continue
+                
             label_node = label_nodes[label_name]
             
             # Process menu nodes attached to this label
@@ -527,6 +534,10 @@ class AuthoritativeHierarchy:
         menu_choice_destinations = self._get_menu_choice_destinations_from_hierarchy(flow_graph)
         
         for label_name, label_node in flow_graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+                continue
+                
             source_node = self.get_node_by_label_name(label_name)
             if not source_node:
                 continue  # Skip if label node doesn't exist in hierarchy

@@ -228,6 +228,10 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             nested_label_names = self._authoritative_hierarchy.get_nested_label_names()
         
         for label_name, label_node in flow_graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+                continue
+                
             # CRITICAL FIX: Skip labels that are handled as nested labels by AHS
             if label_name in nested_label_names:
                 print(f"[LABEL PROCESSING] Skipping '{label_name}' - handled as nested label by AHS")
@@ -358,6 +362,10 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         label_menu_names = self._get_label_menu_names(flow_graph)
         
         for label_name, label_node in flow_graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+                continue
+                
             # Process all flows from all labels (including those with menus)
             for flow in label_node.outgoing_flows:
                 source_label = flow.source_label
@@ -453,6 +461,10 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         menu_destinations = set()
         
         for label_name, label_node in flow_graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+                continue
+                
             # Check if label has menus
             if hasattr(label_node, 'menu_nodes') and label_node.menu_nodes:
                 for menu_node in label_node.menu_nodes:
@@ -482,6 +494,10 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         print(f"[LABEL MENUS] Starting search across {len(flow_graph)} labels")
         
         for label_name, label_node in flow_graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+                continue
+                
             print(f"[LABEL MENUS] Checking label: {label_name}")
             if hasattr(label_node, 'menu_nodes'):
                 print(f"[LABEL MENUS]   Has menu_nodes: {bool(label_node.menu_nodes)}")
@@ -513,6 +529,10 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         choice_connections = []
         
         for label_name, label_node in flow_graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+                continue
+                
             if not label_node.has_menu:
                 continue
             
@@ -878,6 +898,10 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         
         # EXISTING CODE: Create hierarchy connections for nested menus
         for label_name, label_node in flow_graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+                continue
+                
             if not label_node.has_menu:
                 continue
             
@@ -1007,6 +1031,10 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         connections = []
         
         for label_name, label_node in flow_graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+                continue
+                
             # Only create connections for labels that have menus
             if not label_node.has_menu:
                 continue

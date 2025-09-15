@@ -559,6 +559,12 @@ class VNFlowVisualizer(QGraphicsView):
         
         # Add nodes with their properties
         for label_name, label_data in flow_graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_'):
+                continue
+            # Skip if not a LabelNode-like object
+            if not hasattr(label_data, 'has_dialogue'):
+                continue
             # Determine node type for color coding
             node_type = self._determine_node_type(label_name, label_data)
             
@@ -579,6 +585,13 @@ class VNFlowVisualizer(QGraphicsView):
         
         # Add edges from outgoing flows
         for label_name, label_data in flow_graph.items():
+            # Skip non-LabelNode entries (like _screen_structures)
+            if label_name.startswith('_'):
+                continue
+            # Skip if not a LabelNode-like object
+            if not hasattr(label_data, 'has_dialogue'):
+                continue
+                
             outgoing_flows = label_data.get('outgoing_flows', [])
             
             for flow in outgoing_flows:
