@@ -248,11 +248,11 @@ class SimpleVisualNode(QGraphicsRectItem):
         self.calculated_height = height
         
         # FIXED: Set interactive flags based on node type for proper parent-child behavior
-        if vis_node.node_type == 'choice_button':
-            # Choice buttons should NOT be individually movable - they move with their container
+        if vis_node.node_type in ['choice_button', 'screen_element']:
+            # Choice buttons and screen elements should NOT be individually movable - they move with their container
             self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsMovable, False)
             self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsSelectable, True)
-            # Note: choice buttons get parented to containers later, so they'll move with container
+            # Note: these elements get parented to containers later, so they'll move with container
             
         else:
             # Regular nodes and containers can be moved independently
@@ -266,11 +266,12 @@ class SimpleVisualNode(QGraphicsRectItem):
         tooltip_lines = [f"ID: {vis_node.node_id}", f"Type: {vis_node.node_type}"]
         
         # Add behavior info based on node type
-        if vis_node.node_type == 'choice_button':
+        if vis_node.node_type in ['choice_button', 'screen_element']:
             tooltip_lines.append("[LINKED] Moves with parent container")
             tooltip_lines.append("(Not individually draggable)")
-        elif vis_node.node_type == 'menu_container':
-            tooltip_lines.append("[CONTAINER] Drag to move with all choices")
+        elif vis_node.node_type in ['menu_container', 'screen_container']:
+            container_type = "choices" if vis_node.node_type == 'menu_container' else "elements"
+            tooltip_lines.append(f"[CONTAINER] Drag to move with all {container_type}")
         else:
             tooltip_lines.append("[MOVABLE] Drag to move")
         
