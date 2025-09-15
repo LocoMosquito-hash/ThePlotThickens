@@ -193,7 +193,14 @@ class SimpleVisualNode(QGraphicsRectItem):
             
         elif vis_node.node_type == 'choice_button':
             width, height = 180, 35  # Slightly wider for choice text
-        elif vis_node.node_type == 'screen':
+        elif vis_node.node_type == 'screen_container':
+            # Dynamic size based on element count (similar to menu containers)
+            element_count = vis_node.metadata.get('element_count', 1)
+            width = 200
+            height = max(80, 40 + element_count * 30)  # Dynamic height
+        elif vis_node.node_type == 'screen_element':
+            width, height = 180, 35  # Same as choice buttons
+        elif vis_node.node_type == 'screen':  # Legacy single screen nodes
             width, height = 180, 50  # Distinctive size for screens
         else:  # label
             width, height = 120, 40
@@ -211,7 +218,8 @@ class SimpleVisualNode(QGraphicsRectItem):
             'yellow': QColor(250, 250, 100),
             'orange': QColor(255, 140, 0),
             'gray': QColor(150, 150, 150),
-            '#E6E6FA': QColor(230, 230, 250)  # Lavender for screen nodes
+            '#E6E6FA': QColor(230, 230, 250),  # Lavender for screen containers
+            '#DDA0DD': QColor(221, 160, 221)   # Plum for screen elements
         }
         
         color = color_map.get(vis_node.color_hint, QColor(100, 150, 250))
@@ -463,16 +471,24 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                 # Store choice button data for second pass
                 choice_buttons_data.append(node_data)
                 
-            elif node_data.node_type == 'screen':
+            elif node_data.node_type == 'screen_element':
+                # Store screen element data for second pass (similar to choice buttons)
+                choice_buttons_data.append(node_data)  # Reuse same list for simplicity
+                
+            elif node_data.node_type in ['screen_container', 'screen']:
                 # Screen nodes - special handling with distinct appearance
                 visual_node = SimpleVisualNode(node_data)
                 # Position screens in a separate area to avoid overlap
-                screen_count = len([n for n in data.nodes[:i+1] if n.node_type == 'screen'])
-                x = (screen_count % 4) * 200  # 4 screens per row
-                y = -150 - ((screen_count // 4) * 80)  # Above regular nodes
+                screen_count = len([n for n in data.nodes[:i+1] if n.node_type in ['screen_container', 'screen']])
+                x = (screen_count % 4) * 220  # 4 screens per row, wider spacing
+                y = -150 - ((screen_count // 4) * 100)  # Above regular nodes, more vertical space
                 visual_node.setPos(x, y)
                 self.scene.addItem(visual_node)
                 self.nodes[node_data.node_id] = visual_node
+                
+                # Store screen containers for screen element positioning
+                if node_data.node_type == 'screen_container':
+                    menu_containers[node_data.node_id] = visual_node  # Reuse menu container logic
                 
             else:
                 # Regular label nodes
@@ -483,35 +499,62 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
                 self.scene.addItem(visual_node)
                 self.nodes[node_data.node_id] = visual_node
         
-        # Second pass: Create choice buttons as children of their containers
+        # Second pass: Create choice buttons and screen elements as children of their containers
         for choice_data in choice_buttons_data:
-            parent_container_id = choice_data.metadata.get('parent_container')
-            
-            if parent_container_id and parent_container_id in menu_containers:
-                container = menu_containers[parent_container_id]
-                choice_index = choice_data.metadata.get('choice_index', 0)
+            if choice_data.node_type == 'choice_button':
+                parent_container_id = choice_data.metadata.get('parent_container')
                 
-                # Create choice button
-                choice_visual = SimpleVisualNode(choice_data)
+                if parent_container_id and parent_container_id in menu_containers:
+                    container = menu_containers[parent_container_id]
+                    choice_index = choice_data.metadata.get('choice_index', 0)
+                    
+                    # Create choice button
+                    choice_visual = SimpleVisualNode(choice_data)
+                    
+                    # CRITICAL: Set container as parent BEFORE positioning (this makes them move together)
+                    choice_visual.setParentItem(container)
+                    
+                    # Position relative to container (0,0 is container's top-left)
+                    # Use consistent spacing calculations
+                    spacing = SimpleVisualNode.get_menu_container_spacing()
+                    
+                    x_offset = spacing['padding']  # Left margin
+                    y_offset = spacing['header_height'] + spacing['padding'] + (choice_index * (spacing['choice_height'] + spacing['choice_spacing']))
+                    choice_visual.setPos(x_offset, y_offset)
+                    
+                    # Store in nodes dict for connections
+                    self.nodes[choice_data.node_id] = choice_visual
+                else:
+                    # Fallback: add as regular node if no container found
+                    choice_visual = SimpleVisualNode(choice_data)
+                    self.scene.addItem(choice_visual)
+                    self.nodes[choice_data.node_id] = choice_visual
+                    
+            elif choice_data.node_type == 'screen_element':
+                parent_screen_id = choice_data.metadata.get('parent_screen')
                 
-                # CRITICAL: Set container as parent BEFORE positioning (this makes them move together)
-                choice_visual.setParentItem(container)
-                
-                # Position relative to container (0,0 is container's top-left)
-                # Use consistent spacing calculations
-                spacing = SimpleVisualNode.get_menu_container_spacing()
-                
-                x_offset = spacing['padding']  # Left margin
-                y_offset = spacing['header_height'] + spacing['padding'] + (choice_index * (spacing['choice_height'] + spacing['choice_spacing']))
-                choice_visual.setPos(x_offset, y_offset)
-                
-                # Store in nodes dict for connections
-                self.nodes[choice_data.node_id] = choice_visual
-            else:
-                # Fallback: add as regular node if no container found
-                choice_visual = SimpleVisualNode(choice_data)
-                self.scene.addItem(choice_visual)
-                self.nodes[choice_data.node_id] = choice_visual
+                if parent_screen_id and parent_screen_id in menu_containers:  # Screen containers stored here
+                    container = menu_containers[parent_screen_id]
+                    element_index = choice_data.metadata.get('element_index', 0)
+                    
+                    # Create screen element as child of screen container
+                    element_visual = SimpleVisualNode(choice_data)
+                    
+                    # CRITICAL: Set container as parent BEFORE positioning
+                    element_visual.setParentItem(container)
+                    
+                    # Position relative to container (similar to menu choices but simpler)
+                    x_offset = 10  # Small left margin
+                    y_offset = 40 + (element_index * 35)  # Header space + element spacing
+                    element_visual.setPos(x_offset, y_offset)
+                    
+                    # Store in nodes dict for connections
+                    self.nodes[choice_data.node_id] = element_visual
+                else:
+                    # Fallback: add as regular node if no container found
+                    element_visual = SimpleVisualNode(choice_data)
+                    self.scene.addItem(element_visual)
+                    self.nodes[choice_data.node_id] = element_visual
         
         # Create visual connections with Bezier curves and arrows
         for connection in data.connections:

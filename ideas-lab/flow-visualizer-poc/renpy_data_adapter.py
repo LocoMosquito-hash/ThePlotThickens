@@ -1628,9 +1628,10 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         Create screen nodes and their connections from the _screen_structures data.
         
         This method creates:
-        1. Screen nodes for each screen definition (e.g., "Screen: startgame")
-        2. Connections from labels that call screens to screen nodes
-        3. Connections from screen elements (hotspots, buttons) to their destinations
+        1. Screen container nodes (like menu containers)
+        2. Screen element nodes (like menu choices) as children of screen containers
+        3. Connections from labels that call screens to screen containers
+        4. Connections from screen elements to their destinations
         
         Args:
             flow_graph: Flow graph containing _screen_structures data
@@ -1649,28 +1650,93 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         
         print(f"[SCREEN NODES] Creating nodes for {len(screen_structures)} screens")
         
-        # Create screen nodes
+        # Create screen container nodes and screen element nodes
         for screen_name, screen_structure in screen_structures.items():
-            # Create screen node with "Screen: [name]" format
-            screen_node = VisualizationNode(
+            screen_elements = getattr(screen_structure, 'elements', [])
+            
+            # Create screen container node (like menu container)
+            screen_container_node = VisualizationNode(
                 node_id=f"screen_{screen_name}",
-                node_type='screen',
+                node_type='screen_container',
                 display_name=f"Screen: {screen_name}",
                 color_hint='#E6E6FA',  # Lavender color for screens
-                size_hint=(180, 40),
+                size_hint=(200, max(80, 40 + len(screen_elements) * 30)),  # Dynamic height based on elements
                 metadata={
                     'screen_name': screen_name,
                     'screen_type': getattr(screen_structure, 'screen_type', 'unknown'),
-                    'element_count': len(getattr(screen_structure, 'elements', [])),
+                    'element_count': len(screen_elements),
                     'file_path': getattr(screen_structure, 'file_path', ''),
                     'line_number': getattr(screen_structure, 'line_number', 0),
                     'generated_by': 'screen_system'
                 }
             )
-            screen_nodes.append(screen_node)
-            print(f"[SCREEN NODES] Created screen node: {screen_node.display_name}")
+            screen_nodes.append(screen_container_node)
+            print(f"[SCREEN NODES] Created screen container: {screen_container_node.display_name}")
+            
+            # Create screen element nodes (like choice buttons)
+            for i, element in enumerate(screen_elements):
+                if hasattr(element, 'destination') and element.destination:
+                    # Create element text from available information
+                    element_text = getattr(element, 'text', '')
+                    if not element_text:
+                        # Use coordinates or element type as fallback
+                        coords = getattr(element, 'coordinates', '')
+                        element_text = f"{element.element_type} {coords}" if coords else element.element_type
+                    
+                    screen_element_node = VisualizationNode(
+                        node_id=f"screen_{screen_name}_element_{i}",
+                        node_type='screen_element',
+                        display_name=element_text,
+                        color_hint='#DDA0DD',  # Plum color for screen elements
+                        size_hint=(180, 35),
+                        metadata={
+                            'screen_name': screen_name,
+                            'parent_screen': f"screen_{screen_name}",
+                            'element_type': getattr(element, 'element_type', 'unknown'),
+                            'element_text': element_text,
+                            'action_type': getattr(element, 'action_type', 'unknown'),
+                            'destination': element.destination,
+                            'element_index': i,
+                            'coordinates': str(getattr(element, 'coordinates', '')),
+                            'generated_by': 'screen_system'
+                        }
+                    )
+                    screen_nodes.append(screen_element_node)
+                    print(f"[SCREEN NODES] Created screen element: {element_text}")
+                    
+                    # Create containment connection (screen container -> element)
+                    containment_connection = VisualizationConnection(
+                        connection_id=f"screen_{screen_name}_contains_element_{i}",
+                        source_node_id=f"screen_{screen_name}",
+                        target_node_id=f"screen_{screen_name}_element_{i}",
+                        connection_type='screen_containment',
+                        color_hint='#9370DB',  # Medium purple for containment
+                        metadata={
+                            'relationship_type': 'containment',
+                            'screen_name': screen_name
+                        }
+                    )
+                    screen_connections.append(containment_connection)
+                    
+                    # Create action connection (element -> destination)
+                    action_connection = VisualizationConnection(
+                        connection_id=f"screen_{screen_name}_element_{i}_to_{element.destination}",
+                        source_node_id=f"screen_{screen_name}_element_{i}",
+                        target_node_id=element.destination,
+                        connection_type='screen_action',
+                        color_hint='#8A2BE2',  # Blue violet for screen actions
+                        metadata={
+                            'flow_type': 'screen_action',
+                            'element_type': getattr(element, 'element_type', 'unknown'),
+                            'element_text': element_text,
+                            'action_type': getattr(element, 'action_type', 'unknown'),
+                            'screen_name': screen_name
+                        }
+                    )
+                    screen_connections.append(action_connection)
+                    print(f"[SCREEN CONNECTIONS] Created action: {element_text} -> {element.destination}")
         
-        # Create connections from labels that call screens to screen nodes
+        # Create connections from labels that call screens to screen containers
         for label_name, label_node in flow_graph.items():
             # Skip non-LabelNode entries
             if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
@@ -1680,11 +1746,11 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             screen_calls = getattr(label_node, 'screen_calls', [])
             for screen_name in screen_calls:
                 if screen_name in screen_structures:
-                    # Create connection from label to screen
+                    # Create connection from label to screen container
                     connection = VisualizationConnection(
                         connection_id=f"{label_name}_to_screen_{screen_name}",
                         source_node_id=label_name,  # Use label name as source
-                        target_node_id=f"screen_{screen_name}",  # Screen node ID
+                        target_node_id=f"screen_{screen_name}",  # Screen container ID
                         connection_type='screen_call',
                         color_hint='#9370DB',  # Medium purple for screen calls
                         metadata={
@@ -1695,29 +1761,6 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                     )
                     screen_connections.append(connection)
                     print(f"[SCREEN CONNECTIONS] Created call: {label_name} -> Screen: {screen_name}")
-        
-        # Create connections from screen elements to their destinations
-        for screen_name, screen_structure in screen_structures.items():
-            screen_elements = getattr(screen_structure, 'elements', [])
-            for element in screen_elements:
-                if hasattr(element, 'destination') and element.destination:
-                    # Create connection from screen to destination label
-                    connection = VisualizationConnection(
-                        connection_id=f"screen_{screen_name}_to_{element.destination}",
-                        source_node_id=f"screen_{screen_name}",  # Screen node as source
-                        target_node_id=element.destination,  # Destination label
-                        connection_type='screen_action',
-                        color_hint='#8A2BE2',  # Blue violet for screen actions
-                        metadata={
-                            'flow_type': 'screen_action',
-                            'element_type': getattr(element, 'element_type', 'unknown'),
-                            'element_text': getattr(element, 'text', ''),
-                            'action_type': getattr(element, 'action_type', 'unknown'),
-                            'screen_name': screen_name
-                        }
-                    )
-                    screen_connections.append(connection)
-                    print(f"[SCREEN CONNECTIONS] Created action: Screen: {screen_name} -> {element.destination}")
         
         print(f"[SCREEN NODES] Created {len(screen_nodes)} screen nodes and {len(screen_connections)} screen connections")
         return screen_nodes, screen_connections 
