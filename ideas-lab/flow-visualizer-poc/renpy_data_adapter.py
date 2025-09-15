@@ -1746,21 +1746,33 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             screen_calls = getattr(label_node, 'screen_calls', [])
             for screen_name in screen_calls:
                 if screen_name in screen_structures:
-                    # Create connection from label to screen container
-                    connection = VisualizationConnection(
-                        connection_id=f"{label_name}_to_screen_{screen_name}",
-                        source_node_id=label_name,  # Use label name as source
-                        target_node_id=f"screen_{screen_name}",  # Screen container ID
-                        connection_type='screen_call',
-                        color_hint='#9370DB',  # Medium purple for screen calls
-                        metadata={
-                            'flow_type': 'screen_call',
-                            'screen_name': screen_name,
-                            'call_type': 'call'  # Could be 'call' or 'show'
-                        }
-                    )
-                    screen_connections.append(connection)
-                    print(f"[SCREEN CONNECTIONS] Created call: {label_name} -> Screen: {screen_name}")
+                    # Find the content hash for this label from AHS
+                    label_hash = None
+                    for node in self._authoritative_hierarchy.node_index.values():
+                        if (node.node_type == 'label' and 
+                            node.content.get('label_name') == label_name):
+                            label_hash = node.content_hash
+                            break
+                    
+                    if label_hash:
+                        # Create connection from label to screen container using content hash
+                        connection = VisualizationConnection(
+                            connection_id=f"{label_name}_to_screen_{screen_name}",
+                            source_node_id=label_hash,  # Use content hash from AHS
+                            target_node_id=f"screen_{screen_name}",  # Screen container ID
+                            connection_type='screen_call',
+                            color_hint='#9370DB',  # Medium purple for screen calls
+                            metadata={
+                                'flow_type': 'screen_call',
+                                'screen_name': screen_name,
+                                'call_type': 'call',  # Could be 'call' or 'show'
+                                'source_label_name': label_name  # Keep for debugging
+                            }
+                        )
+                        screen_connections.append(connection)
+                        print(f"[SCREEN CONNECTIONS] Created call: {label_name} ({label_hash}) -> Screen: {screen_name}")
+                    else:
+                        print(f"[SCREEN CONNECTIONS] Warning: Could not find hash for label '{label_name}'")
         
         print(f"[SCREEN NODES] Created {len(screen_nodes)} screen nodes and {len(screen_connections)} screen connections")
         return screen_nodes, screen_connections 
