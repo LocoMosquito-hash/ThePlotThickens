@@ -1718,23 +1718,35 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                     )
                     screen_connections.append(containment_connection)
                     
-                    # Create action connection (element -> destination)
-                    action_connection = VisualizationConnection(
-                        connection_id=f"screen_{screen_name}_element_{i}_to_{element.destination}",
-                        source_node_id=f"screen_{screen_name}_element_{i}",
-                        target_node_id=element.destination,
-                        connection_type='screen_action',
-                        color_hint='#8A2BE2',  # Blue violet for screen actions
-                        metadata={
-                            'flow_type': 'screen_action',
-                            'element_type': getattr(element, 'element_type', 'unknown'),
-                            'element_text': element_text,
-                            'action_type': getattr(element, 'action_type', 'unknown'),
-                            'screen_name': screen_name
-                        }
-                    )
-                    screen_connections.append(action_connection)
-                    print(f"[SCREEN CONNECTIONS] Created action: {element_text} -> {element.destination}")
+                    # Find the content hash for the destination label from AHS
+                    destination_hash = None
+                    for node in self._authoritative_hierarchy.node_index.values():
+                        if (node.node_type == 'label' and 
+                            node.content.get('label_name') == element.destination):
+                            destination_hash = node.content_hash
+                            break
+                    
+                    if destination_hash:
+                        # Create action connection (element -> destination) using content hash
+                        action_connection = VisualizationConnection(
+                            connection_id=f"screen_{screen_name}_element_{i}_to_{element.destination}",
+                            source_node_id=f"screen_{screen_name}_element_{i}",
+                            target_node_id=destination_hash,  # Use content hash from AHS
+                            connection_type='screen_action',
+                            color_hint='#8A2BE2',  # Blue violet for screen actions
+                            metadata={
+                                'flow_type': 'screen_action',
+                                'element_type': getattr(element, 'element_type', 'unknown'),
+                                'element_text': element_text,
+                                'action_type': getattr(element, 'action_type', 'unknown'),
+                                'screen_name': screen_name,
+                                'destination_label_name': element.destination  # Keep for debugging
+                            }
+                        )
+                        screen_connections.append(action_connection)
+                        print(f"[SCREEN CONNECTIONS] Created action: {element_text} -> {element.destination} ({destination_hash})")
+                    else:
+                        print(f"[SCREEN CONNECTIONS] Warning: Could not find hash for destination '{element.destination}'")
         
         # Create connections from labels that call screens to screen containers
         for label_name, label_node in flow_graph.items():
