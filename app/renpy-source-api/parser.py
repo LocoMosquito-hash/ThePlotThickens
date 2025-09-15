@@ -73,6 +73,53 @@ class MenuChoice:
 
 
 @dataclass
+class ScreenElement:
+    """Represents an interactive element within a screen (hotspot, button, etc.)."""
+    element_type: str  # 'hotspot', 'textbutton', 'imagebutton', etc.
+    text: Optional[str] = None  # Display text for buttons
+    coordinates: Optional[Tuple[int, int, int, int]] = None  # (x, y, width, height) for hotspots
+    destination: Optional[str] = None  # jump/call target
+    action_type: Optional[str] = None  # 'jump', 'call', 'return', etc.
+    file_path: str = ""
+    line_number: int = 0
+    
+    # Enhanced metadata
+    element_index: int = 0  # Order within the screen (0-based)
+    has_condition: bool = False  # If element has conditional display
+    condition: Optional[str] = None
+    
+    def __post_init__(self):
+        """Compute derived fields after initialization."""
+        self.has_condition = bool(self.condition)
+
+
+@dataclass
+class ScreenStructure:
+    """Represents a complete screen structure."""
+    screen_name: str
+    file_path: str
+    line_number: int
+    elements: List[ScreenElement] = field(default_factory=list)
+    screen_type: str = "standard"  # 'imagemap', 'standard', 'complex'
+    has_imagemap: bool = False
+    imagemap_ground: Optional[str] = None  # Ground image for imagemap
+    imagemap_hover: Optional[str] = None   # Hover image for imagemap
+    label_context: Optional[str] = None    # Label that contains screen calls
+    
+    # Screen metadata
+    total_elements: int = 0
+    interactive_elements: int = 0  # Elements with actions
+    
+    def __post_init__(self):
+        """Compute derived fields after initialization."""
+        self.total_elements = len(self.elements)
+        self.interactive_elements = sum(1 for elem in self.elements if elem.destination)
+        if any(elem.element_type == 'hotspot' for elem in self.elements):
+            self.has_imagemap = True
+            self.screen_type = 'imagemap'
+
+
+@dataclass
 class MenuNode:
     """
     Represents a menu node in the flow graph with comprehensive metadata.
@@ -220,10 +267,15 @@ class LabelNode:
     menu_nodes: List[MenuNode] = field(default_factory=list)  # Enhanced MenuNode objects
     menu_count: int = 0  # Number of menus in this label
     
+    # Screen tracking
+    screen_calls: List[str] = field(default_factory=list)  # Screen names called from this label
+    has_screen_calls: bool = False
+    
     def __post_init__(self):
         """Compute derived fields after initialization."""
         self.has_menu = len(self.menu_structures) > 0 or len(self.menu_nodes) > 0
         self.menu_count = max(len(self.menu_structures), len(self.menu_nodes))
+        self.has_screen_calls = len(self.screen_calls) > 0
     
     def get_menu_by_index(self, index: int) -> Optional[MenuNode]:
         """Get a menu node by its index within this label."""
@@ -287,6 +339,17 @@ class RenpyParser:
             'scene': re.compile(r'^\s*scene\s+([a-zA-Z_][a-zA-Z0-9_\s\-\.]*)', re.IGNORECASE),
             'show': re.compile(r'^\s*show\s+([a-zA-Z_][a-zA-Z0-9_\s\-\.]*)', re.IGNORECASE),
             'hide': re.compile(r'^\s*hide\s+([a-zA-Z_][a-zA-Z0-9_\s\-\.]*)', re.IGNORECASE),
+            
+            # Screen patterns
+            'screen_definition': re.compile(r'^\s*screen\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)?\s*:', re.IGNORECASE),
+            'call_screen': re.compile(r'^\s*call\s+screen\s+([a-zA-Z_][a-zA-Z0-9_]*)', re.IGNORECASE),
+            'show_screen': re.compile(r'^\s*show\s+screen\s+([a-zA-Z_][a-zA-Z0-9_]*)', re.IGNORECASE),
+            'imagemap': re.compile(r'^\s*imagemap\s*:', re.IGNORECASE),
+            'imagemap_ground': re.compile(r'^\s*ground\s+"([^"]*)"', re.IGNORECASE),
+            'imagemap_hover': re.compile(r'^\s*hover\s+"([^"]*)"', re.IGNORECASE),
+            'hotspot': re.compile(r'^\s*hotspot\s*\(([^)]+)\)\s*clicked\s+Jump\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
+            'textbutton': re.compile(r'^\s*textbutton\s+"([^"]+)"\s*:\s*action\s+Jump\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
+            'imagebutton': re.compile(r'^\s*imagebutton\s*:.*action\s+Jump\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
             
             # Image definitions and references
             'image_def': re.compile(r'^\s*image\s+([a-zA-Z_][a-zA-Z0-9_\s\-\.]*)\s*=\s*"([^"]*)"', re.IGNORECASE),
@@ -1018,6 +1081,222 @@ class RenpyParser:
             raise RenpyParseError(f"Failed to find menus: {str(e)}")
         
         return menus
+    
+    def find_all_screens(self, project_path: str) -> List[ScreenStructure]:
+        """
+        Find and parse all screen structures in the project.
+        
+        Args:
+            project_path: Path to the Ren'Py project
+            
+        Returns:
+            List of all ScreenStructure objects found
+        """
+        screens = []
+        current_label = None
+        
+        try:
+            rpy_files = self.find_rpy_files(project_path)
+            
+            for rpy_file in rpy_files:
+                file_path = os.path.join(project_path, rpy_file)
+                
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as file:
+                        lines = file.readlines()
+                except UnicodeDecodeError:
+                    try:
+                        with open(file_path, 'r', encoding='latin-1') as file:
+                            lines = file.readlines()
+                    except Exception:
+                        continue  # Skip problematic files
+                
+                for line_num, line in enumerate(lines, 1):
+                    stripped_line = line.strip()
+                    
+                    # Track current label for context
+                    label_match = self.patterns['label'].match(line)
+                    if label_match:
+                        current_label = label_match.group(1)
+                    
+                    # Check for screen definition
+                    screen_match = self.patterns['screen_definition'].match(line)
+                    if screen_match:
+                        screen_name = screen_match.group(1)
+                        screen = self.parse_screen_structure(file_path, line_num, lines, screen_name)
+                        screen.label_context = current_label
+                        screens.append(screen)
+        
+        except Exception as e:
+            raise RenpyParseError(f"Failed to find screens: {str(e)}")
+        
+        return screens
+    
+    def parse_screen_structure(self, file_path: str, start_line: int, lines: List[str], screen_name: str) -> ScreenStructure:
+        """
+        Parse a complete screen structure starting from a screen definition line.
+        
+        Args:
+            file_path: Path to the file containing the screen
+            start_line: Line number where the screen starts (1-indexed)
+            lines: List of all lines in the file
+            screen_name: Name of the screen
+            
+        Returns:
+            ScreenStructure object with all interactive elements
+        """
+        screen = ScreenStructure(
+            screen_name=screen_name,
+            file_path=file_path,
+            line_number=start_line
+        )
+        
+        if start_line - 1 >= len(lines):
+            return screen
+        
+        # Parse screen elements
+        current_line = start_line
+        in_imagemap = False
+        element_index = 0
+        
+        while current_line < len(lines):
+            line = lines[current_line - 1]
+            stripped_line = line.strip()
+            
+            # Stop parsing at next screen, label, or top-level statement
+            if (current_line > start_line and 
+                (self.patterns['screen_definition'].match(line) or
+                 self.patterns['label'].match(line) or
+                 (not line.startswith(' ') and not line.startswith('\t') and stripped_line and not stripped_line.startswith('#')))):
+                break
+            
+            # Check for imagemap
+            if self.patterns['imagemap'].match(line):
+                in_imagemap = True
+                screen.has_imagemap = True
+                screen.screen_type = 'imagemap'
+            
+            # Check for imagemap ground and hover images
+            ground_match = self.patterns['imagemap_ground'].match(line)
+            if ground_match:
+                screen.imagemap_ground = ground_match.group(1)
+            
+            hover_match = self.patterns['imagemap_hover'].match(line)
+            if hover_match:
+                screen.imagemap_hover = hover_match.group(1)
+            
+            # Check for interactive elements
+            # Hotspot with Jump action
+            hotspot_match = self.patterns['hotspot'].match(line)
+            if hotspot_match:
+                coords_str = hotspot_match.group(1)
+                destination = hotspot_match.group(2)
+                
+                # Parse coordinates (x, y, width, height)
+                try:
+                    coords = tuple(map(int, coords_str.split(', ')))
+                    if len(coords) == 4:
+                        element = ScreenElement(
+                            element_type='hotspot',
+                            coordinates=coords,
+                            destination=destination,
+                            action_type='jump',
+                            file_path=file_path,
+                            line_number=current_line,
+                            element_index=element_index
+                        )
+                        screen.elements.append(element)
+                        element_index += 1
+                except ValueError:
+                    # Skip malformed coordinates
+                    pass
+            
+            # Textbutton with Jump action
+            textbutton_match = self.patterns['textbutton'].match(line)
+            if textbutton_match:
+                button_text = textbutton_match.group(1)
+                destination = textbutton_match.group(2)
+                
+                element = ScreenElement(
+                    element_type='textbutton',
+                    text=button_text,
+                    destination=destination,
+                    action_type='jump',
+                    file_path=file_path,
+                    line_number=current_line,
+                    element_index=element_index
+                )
+                screen.elements.append(element)
+                element_index += 1
+            
+            # Imagebutton with Jump action (basic detection)
+            imagebutton_match = self.patterns['imagebutton'].match(line)
+            if imagebutton_match:
+                destination = imagebutton_match.group(1)
+                
+                element = ScreenElement(
+                    element_type='imagebutton',
+                    destination=destination,
+                    action_type='jump',
+                    file_path=file_path,
+                    line_number=current_line,
+                    element_index=element_index
+                )
+                screen.elements.append(element)
+                element_index += 1
+            
+            current_line += 1
+        
+        return screen
+    
+    def find_screen_calls(self, project_path: str) -> Dict[str, List[str]]:
+        """
+        Find all screen calls in the project and map them to their containing labels.
+        
+        Args:
+            project_path: Path to the Ren'Py project
+            
+        Returns:
+            Dictionary mapping label names to lists of screen names they call
+        """
+        screen_calls = {}
+        current_label = None
+        
+        try:
+            rpy_files = self.find_rpy_files(project_path)
+            
+            for rpy_file in rpy_files:
+                file_path = os.path.join(project_path, rpy_file)
+                
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as file:
+                        lines = file.readlines()
+                except UnicodeDecodeError:
+                    try:
+                        with open(file_path, 'r', encoding='latin-1') as file:
+                            lines = file.readlines()
+                    except Exception:
+                        continue
+                
+                for line_num, line in enumerate(lines, 1):
+                    # Track current label
+                    label_match = self.patterns['label'].match(line)
+                    if label_match:
+                        current_label = label_match.group(1)
+                        if current_label not in screen_calls:
+                            screen_calls[current_label] = []
+                    
+                    # Check for call screen statements
+                    call_screen_match = self.patterns['call_screen'].match(line)
+                    if call_screen_match and current_label:
+                        screen_name = call_screen_match.group(1)
+                        screen_calls[current_label].append(screen_name)
+                        print(f"[SCREEN DEBUG] Found call screen: {current_label} → {screen_name}")
+        
+        except Exception as e:
+            raise RenpyParseError(f"Failed to find screen calls: {str(e)}")
+        
+        return screen_calls
     
     def find_all_label_flows(self, project_path: str) -> List[LabelFlow]:
         """
