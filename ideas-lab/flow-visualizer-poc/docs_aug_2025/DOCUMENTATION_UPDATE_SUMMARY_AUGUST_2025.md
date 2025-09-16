@@ -103,6 +103,18 @@ This document summarizes all documentation updates made following the successful
   - 🎯 **Results**: Eliminated unwanted direct connections from parent labels
   - 📋 **Implementation**: Files modified and validation criteria
 
+#### **[docs_aug_2025/SCREEN_ELEMENTS_IMPLEMENTATION_AUGUST_2025.md](SCREEN_ELEMENTS_IMPLEMENTATION_AUGUST_2025.md)** ⭐ **NEW**
+
+- **Purpose**: Complete documentation of Ren'Py screen elements support implementation
+- **Contents**:
+  - 🎯 **Overview**: Integration of screen-based navigation into flow visualization
+  - 🔍 **Screen Element Types**: `imagemap`, `hotspot`, `textbutton`, `imagebutton` support
+  - 🏗️ **Implementation Architecture**: Parser extensions, visualization system, visual integration
+  - 🔧 **Technical Solutions**: Content hash ID matching, non-draggable elements, flow graph integration
+  - 📊 **Flow Types**: Screen call flows and screen action flows with proper connections
+  - 🧪 **Testing**: Validation with "A Father's Sins" VN showing complete functionality
+  - 🐛 **Issues Resolved**: Unicode encoding, AttributeError fixes, orphaned containers, missing connections
+
 ---
 
 ## 🔄 **Change Summary by Category**
@@ -143,16 +155,16 @@ This document summarizes all documentation updates made following the successful
 | **Architecture**   | 3             | 1             | 4             |
 | **Issue Tracking** | 1             | 0             | 1             |
 | **Reference**      | 2             | 0             | 2             |
-| **Implementation** | 0             | 1             | 1             |
+| **Implementation** | 0             | 2             | 2             |
 | **Summary**        | 0             | 1             | 1             |
-| **TOTAL**          | **6**         | **3**         | **9**         |
+| **TOTAL**          | **6**         | **4**         | **10**        |
 
 ### **Content Additions**
 
-- **Lines Added**: ~800 lines of new documentation
-- **Code Examples**: 15+ code blocks with implementation details
-- **Visual Diagrams**: 3 architecture diagrams and flow charts
-- **Comparison Tables**: 5 before/after and feature comparison tables
+- **Lines Added**: ~1,200+ lines of new documentation
+- **Code Examples**: 25+ code blocks with implementation details
+- **Visual Diagrams**: 4 architecture diagrams and flow charts
+- **Comparison Tables**: 6 before/after and feature comparison tables
 
 ---
 

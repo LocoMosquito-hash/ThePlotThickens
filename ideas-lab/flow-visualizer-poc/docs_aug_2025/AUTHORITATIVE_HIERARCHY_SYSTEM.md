@@ -680,9 +680,17 @@ The Authoritative Hierarchy System has been **fully migrated** and now handles *
    - Unified architecture with single source of truth
 
 5. **🧠 Intelligent Flow Filtering (August 2025)**
+
    - Fixed over-aggressive filtering that blocked legitimate implicit flows
    - Implemented context-aware filtering to distinguish true duplicates from legitimate flows
    - Preserved Ren'Py fall-through behavior for complex visual novels
+
+6. **🖥️ Screen Elements Integration (August 2025)**
+   - Added comprehensive support for Ren'Py screen-based navigation
+   - Integrated `imagemap`, `hotspot`, `textbutton`, and `imagebutton` elements
+   - Extended AHS with screen containers and screen element nodes
+   - Implemented proper screen call flows and screen action flows
+   - Maintained content-based ID consistency for screen elements
 
 #### **🔧 Technical Implementation Details**
 
@@ -701,6 +709,7 @@ The Authoritative Hierarchy System has been **fully migrated** and now handles *
 - ❌ ~~Visual start node connection broken~~ → ✅ **FIXED**
 - ❌ ~~Dual system complexity~~ → ✅ **ELIMINATED**
 - ❌ ~~Implicit flows incorrectly filtered~~ → ✅ **FIXED (August 2025)**
+- ❌ ~~Screen elements not supported~~ → ✅ **IMPLEMENTED (August 2025)**
 
 ### **🎯 Current System Architecture**
 
