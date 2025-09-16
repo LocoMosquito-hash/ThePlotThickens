@@ -1320,7 +1320,7 @@ class RenpyParser:
                 screen.elements.append(element)
                 element_index += 1
             
-            # Imagebutton with Jump action (basic detection)
+            # Imagebutton with Jump action (basic single-line detection)
             imagebutton_match = self.patterns['imagebutton'].match(line)
             if imagebutton_match:
                 destination = imagebutton_match.group(1)
@@ -1335,6 +1335,51 @@ class RenpyParser:
                 )
                 screen.elements.append(element)
                 element_index += 1
+            
+            # Multi-line imagebutton detection (NEW!)
+            elif line.strip() == 'imagebutton:':
+                # Found imagebutton start, look for action in subsequent lines
+                imagebutton_start_line = current_line
+                action_found = False
+                
+                # Look ahead for action statement (up to 10 lines)
+                for look_ahead in range(1, 11):
+                    if current_line - 1 + look_ahead >= len(lines):
+                        break
+                        
+                    future_line = lines[current_line - 1 + look_ahead].strip()
+                    
+                    # Check for action Jump() or action Call()
+                    action_jump_match = re.match(r'action\s+Jump\s*\(\s*"([^"]+)"\s*\)', future_line, re.IGNORECASE)
+                    action_call_match = re.match(r'action\s+Call\s*\(\s*"([^"]+)"\s*\)', future_line, re.IGNORECASE)
+                    
+                    if action_jump_match:
+                        destination = action_jump_match.group(1)
+                        action_type = 'jump'
+                        action_found = True
+                        break
+                    elif action_call_match:
+                        destination = action_call_match.group(1)
+                        action_type = 'call'
+                        action_found = True
+                        break
+                    
+                    # Stop if we hit another imagebutton or screen element
+                    if any(keyword in future_line for keyword in ['imagebutton:', 'textbutton:', 'hotspot', 'screen ']):
+                        break
+                
+                if action_found:
+                    element = ScreenElement(
+                        element_type='imagebutton',
+                        destination=destination,
+                        action_type=action_type,
+                        file_path=file_path,
+                        line_number=imagebutton_start_line,
+                        element_index=element_index
+                    )
+                    screen.elements.append(element)
+                    element_index += 1
+                    print(f"[MULTI-LINE IMAGEBUTTON] Found: {destination} via {action_type} (line {imagebutton_start_line})")
             
             current_line += 1
         
