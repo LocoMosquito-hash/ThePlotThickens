@@ -349,7 +349,7 @@ class RenpyParser:
             'imagemap_ground': re.compile(r'^\s*ground\s+"([^"]*)"', re.IGNORECASE),
             'imagemap_hover': re.compile(r'^\s*hover\s+"([^"]*)"', re.IGNORECASE),
             'hotspot': re.compile(r'^\s*hotspot\s*\(([^)]+)\)\s*action\s+(Jump|Call)\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
-            'textbutton': re.compile(r'^\s*textbutton\s+"([^"]+)"\s*:\s*action\s+Jump\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
+            'textbutton': re.compile(r'^\s*textbutton\s+"([^"]+)".*?action\s+(Jump|Call)\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
             'imagebutton': re.compile(r'^\s*imagebutton\s*:.*action\s+Jump\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
             
             # Image definitions and references
@@ -1323,23 +1323,25 @@ class RenpyParser:
                     # Skip malformed coordinates
                     pass
             
-            # Textbutton with Jump action
+            # Textbutton with Jump/Call action
             textbutton_match = self.patterns['textbutton'].match(line)
             if textbutton_match:
                 button_text = textbutton_match.group(1)
-                destination = textbutton_match.group(2)
+                action_type = textbutton_match.group(2).lower()  # 'Jump' or 'Call' -> 'jump' or 'call'
+                destination = textbutton_match.group(3)
                 
                 element = ScreenElement(
                     element_type='textbutton',
                     text=button_text,
                     destination=destination,
-                    action_type='jump',
+                    action_type=action_type,
                     file_path=file_path,
                     line_number=current_line,
                     element_index=element_index
                 )
                 screen.elements.append(element)
                 element_index += 1
+                print(f"[TEXTBUTTON PARSED] {screen_name}: '{button_text}' -> {destination} via {action_type}")
             
             # Imagebutton with Jump action (basic single-line detection)
             imagebutton_match = self.patterns['imagebutton'].match(line)
