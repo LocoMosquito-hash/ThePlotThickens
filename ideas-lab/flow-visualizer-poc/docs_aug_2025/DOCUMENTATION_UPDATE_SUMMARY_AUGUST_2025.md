@@ -115,6 +115,18 @@ This document summarizes all documentation updates made following the successful
   - 🧪 **Testing**: Validation with "A Father's Sins" VN showing complete functionality
   - 🐛 **Issues Resolved**: Unicode encoding, AttributeError fixes, orphaned containers, missing connections
 
+#### **[docs_aug_2025/RENPY_IMPLICIT_FLOW_BEHAVIOR.md](RENPY_IMPLICIT_FLOW_BEHAVIOR.md)** ⭐ **NEW**
+
+- **Purpose**: Comprehensive technical reference for Ren'Py implicit flow behavior
+- **Contents**:
+  - 📚 **Concept Definition**: What implicit flows are and when they occur
+  - ⚙️ **Execution Conditions**: Sequential placement, absence of control statements, execution model
+  - 🔄 **Call Stack Behavior**: Direct invocation vs called label differences
+  - 🎯 **Flow Examples**: Basic implicit flow, mixed explicit/implicit patterns
+  - 🛠️ **Implementation Guide**: Detection algorithms, connection types, visualization styling
+  - ✅ **Best Practices**: Explicit vs implicit control recommendations
+  - 🧪 **Testing Guidelines**: Validation checklist and common test cases
+
 ---
 
 ## 🔄 **Change Summary by Category**
@@ -154,17 +166,18 @@ This document summarizes all documentation updates made following the successful
 | ------------------ | ------------- | ------------- | ------------- |
 | **Architecture**   | 3             | 1             | 4             |
 | **Issue Tracking** | 1             | 0             | 1             |
-| **Reference**      | 2             | 0             | 2             |
+| **Reference**      | 2             | 1             | 3             |
 | **Implementation** | 0             | 2             | 2             |
 | **Summary**        | 0             | 1             | 1             |
-| **TOTAL**          | **6**         | **4**         | **10**        |
+| **TOTAL**          | **6**         | **5**         | **11**        |
 
 ### **Content Additions**
 
-- **Lines Added**: ~1,200+ lines of new documentation
-- **Code Examples**: 25+ code blocks with implementation details
+- **Lines Added**: ~1,500+ lines of new documentation
+- **Code Examples**: 30+ code blocks with implementation details
 - **Visual Diagrams**: 4 architecture diagrams and flow charts
 - **Comparison Tables**: 6 before/after and feature comparison tables
+- **Technical References**: 1 comprehensive Ren'Py behavior guide
 
 ---
 
