@@ -321,7 +321,7 @@ class RenpyParser:
         """Initialize the parser with regex patterns."""
         self.patterns = {
             # Existing patterns
-            'label': re.compile(r'^\s*label\s+([a-zA-Z_][a-zA-Z0-9_]*):', re.IGNORECASE),
+            'label': re.compile(r'^\s*label\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:', re.IGNORECASE),
             'character_def': re.compile(r'^\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*Character\s*\(\s*"([^"]*)"', re.IGNORECASE),
             'dialogue': re.compile(r'^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s+"([^"]+)"', re.IGNORECASE),
             'narrator': re.compile(r'^\s*"([^"]+)"'),
@@ -342,13 +342,13 @@ class RenpyParser:
             'hide': re.compile(r'^\s*hide\s+([a-zA-Z_][a-zA-Z0-9_\s\-\.]*)', re.IGNORECASE),
             
             # Screen patterns
-            'screen_definition': re.compile(r'^\s*screen\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)?\s*:', re.IGNORECASE),
+            'screen_definition': re.compile(r'^\s*screen\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\([^)]*\))?\s*:', re.IGNORECASE),
             'call_screen': re.compile(r'^\s*call\s+screen\s+([a-zA-Z_][a-zA-Z0-9_]*)', re.IGNORECASE),
             'show_screen': re.compile(r'^\s*show\s+screen\s+([a-zA-Z_][a-zA-Z0-9_]*)', re.IGNORECASE),
             'imagemap': re.compile(r'^\s*imagemap\s*:', re.IGNORECASE),
             'imagemap_ground': re.compile(r'^\s*ground\s+"([^"]*)"', re.IGNORECASE),
             'imagemap_hover': re.compile(r'^\s*hover\s+"([^"]*)"', re.IGNORECASE),
-            'hotspot': re.compile(r'^\s*hotspot\s*\(([^)]+)\)\s*clicked\s+Jump\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
+            'hotspot': re.compile(r'^\s*hotspot\s*\(([^)]+)\)\s*action\s+(Jump|Call)\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
             'textbutton': re.compile(r'^\s*textbutton\s+"([^"]+)"\s*:\s*action\s+Jump\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
             'imagebutton': re.compile(r'^\s*imagebutton\s*:.*action\s+Jump\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
             
@@ -430,15 +430,34 @@ class RenpyParser:
             raise RenpyProjectError(f"Project directory does not exist: {project_path}")
         
         rpy_files = []
+        rpy_directories_found = []
         
         # Search for .rpy files recursively
-        for rpy_file in project_dir.glob("**/*.rpy"):
-            # Get relative path from project root
-            relative_path = rpy_file.relative_to(project_dir)
-            
-            # Skip excluded system files
-            if relative_path.name not in self.excluded_files:
-                rpy_files.append(str(relative_path))
+        for rpy_path in project_dir.glob("**/*.rpy"):
+            # Check if it's actually a file, not a directory
+            if rpy_path.is_file():
+                # Get relative path from project root
+                relative_path = rpy_path.relative_to(project_dir)
+                
+                # Skip excluded system files
+                if relative_path.name not in self.excluded_files:
+                    rpy_files.append(str(relative_path))
+            elif rpy_path.is_dir():
+                # Log .rpy directories for debugging
+                relative_path = rpy_path.relative_to(project_dir)
+                rpy_directories_found.append(str(relative_path))
+                print(f"[WARNING] Found .rpy directory (skipping): {relative_path}")
+                
+                # Optionally scan inside .rpy directories for actual .rpy files
+                for nested_rpy in rpy_path.glob("**/*.rpy"):
+                    if nested_rpy.is_file():
+                        nested_relative = nested_rpy.relative_to(project_dir)
+                        if nested_relative.name not in self.excluded_files:
+                            rpy_files.append(str(nested_relative))
+                            print(f"[INFO] Found nested .rpy file: {nested_relative}")
+        
+        if rpy_directories_found:
+            print(f"[INFO] Skipped {len(rpy_directories_found)} .rpy directories, found {len(rpy_files)} actual .rpy files")
         
         return sorted(rpy_files)
     
@@ -1277,11 +1296,12 @@ class RenpyParser:
                 screen.imagemap_hover = hover_match.group(1)
             
             # Check for interactive elements
-            # Hotspot with Jump action
+            # Hotspot with Jump/Call action
             hotspot_match = self.patterns['hotspot'].match(line)
             if hotspot_match:
                 coords_str = hotspot_match.group(1)
-                destination = hotspot_match.group(2)
+                action_type = hotspot_match.group(2).lower()  # 'Jump' or 'Call' -> 'jump' or 'call'
+                destination = hotspot_match.group(3)
                 
                 # Parse coordinates (x, y, width, height)
                 try:
@@ -1291,13 +1311,14 @@ class RenpyParser:
                             element_type='hotspot',
                             coordinates=coords,
                             destination=destination,
-                            action_type='jump',
+                            action_type=action_type,
                             file_path=file_path,
                             line_number=current_line,
                             element_index=element_index
                         )
                         screen.elements.append(element)
                         element_index += 1
+                        print(f"[HOTSPOT PARSED] {screen_name}: {coords} -> {destination} via {action_type}")
                 except ValueError:
                     # Skip malformed coordinates
                     pass

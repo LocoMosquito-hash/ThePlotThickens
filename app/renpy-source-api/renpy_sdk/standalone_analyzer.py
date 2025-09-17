@@ -235,11 +235,21 @@ def analyze_rpy_file(rpy_file_path, project_root):
         "errors": []
     }
     
+    # Calculate relative path first (before any potential exceptions)
+    rel_path = os.path.relpath(rpy_file_path, project_root)
+    
+    # Check if it's actually a file, not a directory
+    if not os.path.isfile(rpy_file_path):
+        if os.path.isdir(rpy_file_path):
+            results["errors"].append(f"Skipping .rpy directory: {rel_path}")
+            print(f"[WARNING] Skipping .rpy directory: {rel_path}")
+        else:
+            results["errors"].append(f"Path does not exist or is not a file: {rel_path}")
+        return results
+    
     try:
         with open(rpy_file_path, 'r', encoding='utf-8', errors='replace') as f:
             lines = f.readlines()
-        
-        rel_path = os.path.relpath(rpy_file_path, project_root)
         
         line_num = 0
         while line_num < len(lines):
@@ -381,14 +391,23 @@ def analyze_project(project_path, output_path=None):
         results["errors"].append(f"Project path does not exist: {project_root}")
         return results
     
-    # Find all .rpy files
+    # Find all .rpy files (filter out directories)
     rpy_files = []
-    for rpy_file in project_root.glob("**/*.rpy"):
-        rpy_files.append(rpy_file)
+    rpy_directories = []
+    for rpy_path in project_root.glob("**/*.rpy"):
+        if rpy_path.is_file():
+            rpy_files.append(rpy_path)
+        elif rpy_path.is_dir():
+            rpy_directories.append(rpy_path)
+            print(f"[WARNING] Found .rpy directory (will skip): {rpy_path.relative_to(project_root)}")
     
     results["project_info"]["rpy_files"] = len(rpy_files)
+    results["project_info"]["rpy_directories"] = len(rpy_directories)
     results["project_info"]["file_list"] = [
         str(f.relative_to(project_root)) for f in rpy_files
+    ]
+    results["project_info"]["directory_list"] = [
+        str(d.relative_to(project_root)) for d in rpy_directories
     ]
     
     print(f"Found {len(rpy_files)} .rpy files in {project_root}")

@@ -107,7 +107,7 @@ class ComplexityDetector:
         
         try:
             project_dir = Path(project_path)
-            rpy_files = list(project_dir.glob("**/*.rpy"))
+            rpy_files = [f for f in project_dir.glob("**/*.rpy") if f.is_file()]
             
             for rpy_file in rpy_files[:5]:  # Sample first 5 files for performance
                 try:
@@ -134,7 +134,7 @@ class ComplexityDetector:
         
         try:
             project_dir = Path(project_path)
-            rpy_files = list(project_dir.glob("**/*.rpy"))
+            rpy_files = [f for f in project_dir.glob("**/*.rpy") if f.is_file()]
             
             # Pattern for conditional choices: "choice" if condition:
             conditional_pattern = re.compile(r'^\s*"[^"]+"\s+if\s+.+:', re.MULTILINE | re.IGNORECASE)
@@ -161,7 +161,7 @@ class ComplexityDetector:
         
         try:
             project_dir = Path(project_path)
-            rpy_files = list(project_dir.glob("**/*.rpy"))
+            rpy_files = [f for f in project_dir.glob("**/*.rpy") if f.is_file()]
             
             for rpy_file in rpy_files:
                 try:
@@ -277,7 +277,7 @@ class SDKResultsCache:
         
         try:
             project_dir = Path(project_path)
-            rpy_files = sorted(project_dir.glob("**/*.rpy"))
+            rpy_files = sorted([f for f in project_dir.glob("**/*.rpy") if f.is_file()])
             
             for rpy_file in rpy_files:
                 try:
