@@ -991,6 +991,9 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         
         print(f"✅ Built narrative graph: {len(G.nodes())} nodes, {len(G.edges())} edges ({edges_added}/{len(self.connections)} connections)")
         
+        # Analyze hub nodes (high-degree nodes) right after graph construction
+        self._analyze_hub_nodes(G)
+        
         # If graph is empty or has no edges, fall back to simple positioning
         if len(G.nodes()) == 0:
             return self._apply_grid_layout(nodes)
@@ -1134,6 +1137,96 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             # Fallback if anything goes wrong
             print("⚠️ Fallback: grouping all SCCs in single layer")
             return [list(condensation_graph.nodes())]
+
+    def _analyze_hub_nodes(self, G, top_count: int = 10):
+        """
+        Analyze and report hub nodes (nodes with high incoming/outgoing degree).
+        
+        Args:
+            G: NetworkX graph
+            top_count: Number of top nodes to report for each category
+        """
+        if not G or G.number_of_nodes() == 0:
+            return
+            
+        print(f"📊 Hub Node Analysis:")
+        print(f"📊 ==================")
+        
+        # Calculate degrees
+        in_degrees = dict(G.in_degree())
+        out_degrees = dict(G.out_degree())
+        total_degrees = {node: in_degrees[node] + out_degrees[node] for node in G.nodes()}
+        
+        # Filter out nodes with 0 connections (isolated nodes)
+        connected_nodes = {node: degree for node, degree in total_degrees.items() if degree > 0}
+        
+        if not connected_nodes:
+            print(f"📊 No connected nodes found")
+            return
+            
+        # Sort nodes by different criteria
+        top_incoming = sorted(in_degrees.items(), key=lambda x: x[1], reverse=True)[:top_count]
+        top_outgoing = sorted(out_degrees.items(), key=lambda x: x[1], reverse=True)[:top_count]
+        top_total = sorted(connected_nodes.items(), key=lambda x: x[1], reverse=True)[:top_count]
+        
+        # Report top incoming connections (nodes that are frequently jumped TO)
+        print(f"📊 Top {top_count} nodes by INCOMING connections (most frequently reached):")
+        for i, (node_id, count) in enumerate(top_incoming, 1):
+            if count > 0:  # Only show nodes with actual incoming connections
+                node_name = self._get_display_name_for_node(node_id)
+                print(f"   {i:2d}. {node_name:<40} ({count:2d} incoming)")
+        
+        print()
+        
+        # Report top outgoing connections (nodes that frequently jump to others)  
+        print(f"📊 Top {top_count} nodes by OUTGOING connections (most branching):")
+        for i, (node_id, count) in enumerate(top_outgoing, 1):
+            if count > 0:  # Only show nodes with actual outgoing connections
+                node_name = self._get_display_name_for_node(node_id)
+                print(f"   {i:2d}. {node_name:<40} ({count:2d} outgoing)")
+        
+        print()
+        
+        # Report top total connections (overall hub nodes)
+        print(f"📊 Top {top_count} nodes by TOTAL connections (biggest hubs):")
+        for i, (node_id, count) in enumerate(top_total, 1):
+            if count > 0:
+                node_name = self._get_display_name_for_node(node_id)
+                in_count = in_degrees[node_id]
+                out_count = out_degrees[node_id]
+                print(f"   {i:2d}. {node_name:<40} ({count:2d} total: {in_count:2d} in, {out_count:2d} out)")
+        
+        print(f"📊 ==================")
+        print()
+    
+    def _get_display_name_for_node(self, node_id: str) -> str:
+        """
+        Get a readable display name for a node ID.
+        
+        Args:
+            node_id: The node identifier
+            
+        Returns:
+            Human-readable node name
+        """
+        # Try to find the node in our visual nodes first
+        if node_id in self.nodes:
+            visual_node = self.nodes[node_id]
+            if hasattr(visual_node, 'vis_node') and hasattr(visual_node.vis_node, 'display_name'):
+                return visual_node.vis_node.display_name
+        
+        # Fallback: clean up the node ID for display
+        if node_id.startswith('label_'):
+            return node_id.replace('label_', '')
+        elif node_id.startswith('menu_'):
+            return node_id.replace('menu_', 'Menu: ')
+        elif node_id.startswith('screen_'):
+            return node_id.replace('screen_', 'Screen: ')
+        else:
+            # For content hashes, try to make them more readable
+            if len(node_id) > 20 and all(c in '0123456789abcdef' for c in node_id):
+                return f"Node {node_id[:8]}..."
+            return node_id
 
     def _position_nodes_with_scc_layout(self, scc_layers, scc_to_nodes, nodes, original_graph):
         """Position nodes using SCC-aware hierarchical layout."""
