@@ -1357,9 +1357,12 @@ class RenpyParser:
                 screen.elements.append(element)
                 element_index += 1
             
-            # Multi-line imagebutton detection (NEW!)
-            elif line.strip() == 'imagebutton:':
-                # Found imagebutton start, look for action in subsequent lines
+            # Multi-line imagebutton detection (Enhanced for complex syntax)
+            elif line.strip().startswith('imagebutton') and line.strip().endswith(':'):
+                # Found imagebutton start (handles both simple and complex syntax)
+                # Examples: 
+                # - imagebutton:
+                # - imagebutton anchor (0.5, 0.5):
                 imagebutton_start_line = current_line
                 action_found = False
                 
@@ -1370,9 +1373,9 @@ class RenpyParser:
                         
                     future_line = lines[current_line - 1 + look_ahead].strip()
                     
-                    # Check for action Jump() or action Call()
-                    action_jump_match = re.match(r'action\s+Jump\s*\(\s*"([^"]+)"\s*\)', future_line, re.IGNORECASE)
-                    action_call_match = re.match(r'action\s+Call\s*\(\s*"([^"]+)"\s*\)', future_line, re.IGNORECASE)
+                    # Check for action Jump() or action Call() with both single and double quotes
+                    action_jump_match = re.match(r'action\s+Jump\s*\(\s*["\']([^"\']+)["\']\s*\)', future_line, re.IGNORECASE)
+                    action_call_match = re.match(r'action\s+Call\s*\(\s*["\']([^"\']+)["\']\s*\)', future_line, re.IGNORECASE)
                     
                     if action_jump_match:
                         destination = action_jump_match.group(1)
@@ -1386,7 +1389,7 @@ class RenpyParser:
                         break
                     
                     # Stop if we hit another imagebutton or screen element
-                    if any(keyword in future_line for keyword in ['imagebutton:', 'textbutton:', 'hotspot', 'screen ']):
+                    if any(keyword in future_line for keyword in ['imagebutton', 'textbutton:', 'hotspot', 'screen ']):
                         break
                 
                 if action_found:
