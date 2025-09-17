@@ -350,7 +350,7 @@ class RenpyParser:
             'imagemap_hover': re.compile(r'^\s*hover\s+"([^"]*)"', re.IGNORECASE),
             'hotspot': re.compile(r'^\s*hotspot\s*\(([^)]+)\)\s*action\s+(Jump|Call)\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
             'textbutton': re.compile(r'^\s*textbutton\s+"([^"]+)".*?action\s+(Jump|Call)\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
-            'imagebutton': re.compile(r'^\s*imagebutton\s*:.*action\s+Jump\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
+            'imagebutton': re.compile(r'^\s*imagebutton\s+.*?action\s+(Jump|Call)\s*\(\s*"([^"]+)"\s*\)', re.IGNORECASE),
             
             # Image definitions and references
             'image_def': re.compile(r'^\s*image\s+([a-zA-Z_][a-zA-Z0-9_\s\-\.]*)\s*=\s*"([^"]*)"', re.IGNORECASE),
@@ -1343,15 +1343,16 @@ class RenpyParser:
                 element_index += 1
                 print(f"[TEXTBUTTON PARSED] {screen_name}: '{button_text}' -> {destination} via {action_type}")
             
-            # Imagebutton with Jump action (basic single-line detection)
+            # Imagebutton with Jump/Call action (basic single-line detection)
             imagebutton_match = self.patterns['imagebutton'].match(line)
             if imagebutton_match:
-                destination = imagebutton_match.group(1)
+                action_type = imagebutton_match.group(1).lower()
+                destination = imagebutton_match.group(2)
                 
                 element = ScreenElement(
                     element_type='imagebutton',
                     destination=destination,
-                    action_type='jump',
+                    action_type=action_type,
                     file_path=file_path,
                     line_number=current_line,
                     element_index=element_index
