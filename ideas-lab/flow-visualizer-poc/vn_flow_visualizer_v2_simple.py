@@ -1207,13 +1207,15 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             node_id: The node identifier
             
         Returns:
-            Human-readable node name
+            Human-readable node name (never None)
         """
         # Try to find the node in our visual nodes first
         if node_id in self.nodes:
             visual_node = self.nodes[node_id]
             if hasattr(visual_node, 'vis_node') and hasattr(visual_node.vis_node, 'display_name'):
-                return visual_node.vis_node.display_name
+                display_name = visual_node.vis_node.display_name
+                if display_name:  # Ensure it's not None or empty
+                    return display_name
         
         # Fallback: clean up the node ID for display
         if node_id.startswith('label_'):
@@ -1226,7 +1228,8 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
             # For content hashes, try to make them more readable
             if len(node_id) > 20 and all(c in '0123456789abcdef' for c in node_id):
                 return f"Node {node_id[:8]}..."
-            return node_id
+            # Final fallback - ensure we never return None
+            return str(node_id) if node_id else "Unknown Node"
 
     def _position_nodes_with_scc_layout(self, scc_layers, scc_to_nodes, nodes, original_graph):
         """Position nodes using SCC-aware hierarchical layout."""
