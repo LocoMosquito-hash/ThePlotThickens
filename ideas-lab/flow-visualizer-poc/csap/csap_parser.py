@@ -121,13 +121,18 @@ class CSAPTransformer(Transformer):
         """Transform single-line textbutton with optional properties."""
         line, column = self._get_node_location(items)
         
-        text = self._extract_string_value(items[0])
+        text = items[0]  # Should be processed by STRING token handler
         properties = []
         action = None
         
         for item in items[1:]:
             if isinstance(item, list):  # textbutton_properties
-                properties.extend(item)
+                # Filter to ensure only PropertyNode objects
+                for prop in item:
+                    if isinstance(prop, PropertyNode):
+                        properties.append(prop)
+            elif isinstance(item, PropertyNode):
+                properties.append(item)
             elif isinstance(item, ActionNode):
                 action = item
         
@@ -143,13 +148,18 @@ class CSAPTransformer(Transformer):
         """Transform multi-line textbutton."""
         line, column = self._get_node_location(items)
         
-        text = self._extract_string_value(items[0])
+        text = items[0]  # Should be processed by STRING token handler
         properties = []
         action = None
         
         for item in items[1:]:
             if isinstance(item, list):  # textbutton_properties
-                properties.extend(item)
+                # Filter to ensure only PropertyNode objects
+                for prop in item:
+                    if isinstance(prop, PropertyNode):
+                        properties.append(prop)
+            elif isinstance(item, PropertyNode):
+                properties.append(item)
             elif isinstance(item, ActionNode):
                 action = item
         
@@ -166,28 +176,18 @@ class CSAPTransformer(Transformer):
         return items  # List of PropertyNode objects
     
     def textbutton_property(self, items):
-        """Transform textbutton property (simplified)."""
+        """Transform textbutton property (working version)."""
         line, column = self._get_node_location(items)
-        prop_name = str(items[0])
-        prop_value = ""
+        prop_name = items[0]
+        prop_value = items[1] if len(items) > 1 else ""
         
-        if len(items) > 1:
-            if isinstance(items[1], Token):
-                if items[1].type in ['ESCAPED_STRING', 'SINGLE_QUOTED_STRING']:
-                    prop_value = self._extract_string_value(items[1])
-                elif items[1].type == 'NUMBER':
-                    prop_value = self._extract_number_value(items[1])
-                else:
-                    prop_value = str(items[1])
-            else:
-                prop_value = items[1]  # Could be a list_literal
-        
-        return PropertyNode(
+        result = PropertyNode(
             property_name=prop_name,
             property_value=prop_value,
             line_number=line,
             column=column
         )
+        return result
     
     # Property transformers for textbuttons
     def text_color_property(self, items):
@@ -362,6 +362,17 @@ class CSAPTransformer(Transformer):
         for item in items:
             if isinstance(item, Token):
                 coords.append(self._extract_number_value(item))
+            elif isinstance(item, (int, float)):
+                coords.append(item)  # Already processed by NUMBER handler
+            else:
+                # Try to convert to number
+                try:
+                    coords.append(int(str(item)))
+                except ValueError:
+                    try:
+                        coords.append(float(str(item)))
+                    except ValueError:
+                        pass  # Skip non-numeric items
         return tuple(coords)
     
     # ========================================================================
@@ -470,6 +481,23 @@ class CSAPTransformer(Transformer):
     def list_item(self, items):
         """Transform list item."""
         return items[0]
+    
+    # Terminal token handlers (following Lark best practices)
+    def STRING(self, token):
+        """Handle STRING tokens."""
+        return self._extract_string_value(token)
+    
+    def NUMBER(self, token):
+        """Handle NUMBER tokens."""
+        return self._extract_number_value(token)
+    
+    def BOOLEAN(self, token):
+        """Handle BOOLEAN tokens."""
+        return str(token) == 'True'
+    
+    def IDENTIFIER(self, token):
+        """Handle IDENTIFIER tokens."""
+        return str(token)
 
 
 class CSAPParser:
