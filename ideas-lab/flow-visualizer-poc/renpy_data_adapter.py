@@ -65,10 +65,43 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             self.complexity_detector = ComplexityDetector()
         else:
             self.parser = RenpyParser()
-            self.complexity_detector = None
+        
+        # Try to enhance with CSAP for screen parsing (non-intrusive approach)
+        self.csap_integrated_parser = None
+        try:
+            from csap.csap_integration import CSAPIntegratedParser
+            self.csap_integrated_parser = CSAPIntegratedParser()
+            print("[CSAP DEPLOYMENT] ✅ CSAP integration successful - enhanced screen parsing available")
+        except ImportError as e:
+            print(f"[CSAP DEPLOYMENT] ⚠️ CSAP not available: {e}")
+        except Exception as e:
+            print(f"[CSAP DEPLOYMENT] ⚠️ CSAP initialization failed: {e}")
             
         self.last_analysis_metadata = {}
         self.last_project_path = None
+    
+    def _enhanced_find_all_screens(self, project_path: str):
+        """Enhanced screen finding with CSAP integration."""
+        if self.csap_integrated_parser:
+            try:
+                print("[CSAP ENHANCED] Using CSAP for screen parsing...")
+                screens = self.csap_integrated_parser.find_all_screens(project_path)
+                print(f"[CSAP ENHANCED] ✅ CSAP parsed {len(screens)} screens successfully")
+                
+                # Debug: Check for parlourfuckcum screen specifically
+                for screen in screens:
+                    if 'parlourfuckcum' in screen.screen_name.lower():
+                        print(f"[CSAP DEBUG] Found parlourfuckcum screen with {len(screen.elements)} elements")
+                        for i, element in enumerate(screen.elements):
+                            print(f"[CSAP DEBUG]   Element {i}: {element.element_type} -> {getattr(element, 'destination', 'NO DEST')}")
+                
+                return screens
+            except Exception as e:
+                print(f"[CSAP ENHANCED] ⚠️ CSAP failed, falling back to regex: {e}")
+        
+        # Fallback to original parser
+        print("[CSAP ENHANCED] Using original regex parser for screens...")
+        return self.parser.find_all_screens(project_path)
     
     def analyze_project(self, project_path: str, use_sdk: bool = False) -> VisualizationData:
         """
@@ -118,6 +151,18 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         
         # Build flow graph using parser
         flow_graph = self.parser.build_flow_graph(project_path)
+        
+        # Enhance with CSAP screen parsing if available
+        if self.csap_integrated_parser:
+            try:
+                print("[CSAP ENHANCED] Enhancing flow graph with CSAP screen parsing...")
+                enhanced_screens = self._enhanced_find_all_screens(project_path)
+                if enhanced_screens:
+                    # Replace the screen structures with CSAP-enhanced ones
+                    flow_graph['_screen_structures'] = {screen.screen_name: screen for screen in enhanced_screens}
+                    print(f"[CSAP ENHANCED] ✅ Enhanced flow graph with {len(enhanced_screens)} CSAP-parsed screens")
+            except Exception as e:
+                print(f"[CSAP ENHANCED] ⚠️ Screen enhancement failed: {e}")
         
         # PHASE 1: Build authoritative hierarchy (NEW!)
         print(f"[ADAPTER] Building authoritative hierarchy alongside current system...")
@@ -1675,7 +1720,9 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             
             # Create screen element nodes (like choice buttons)
             for i, element in enumerate(screen_elements):
+                print(f"[SCREEN DEBUG] Processing element {i}: type={getattr(element, 'element_type', 'unknown')}, dest={getattr(element, 'destination', 'none')}")
                 if hasattr(element, 'destination') and element.destination:
+                    print(f"[SCREEN DEBUG] Element {i} passes condition - creating screen element node")
                     # Create element text from available information
                     element_text = getattr(element, 'text', '')
                     if not element_text:

@@ -57,6 +57,7 @@ class CSAPTransformer(Transformer):
         value = str(token)
         try:
             if '.' in value:
+                # Handle both "1.5" and ".5" formats
                 return float(value)
             else:
                 return int(value)
@@ -103,7 +104,22 @@ class CSAPTransformer(Transformer):
     
     def screen_body(self, items):
         """Transform screen body."""
-        return items  # List of screen elements
+        # Filter out None values (from screen properties) and keep only actual elements
+        elements = []
+        for item in items:
+            if item is not None and hasattr(item, 'element_type'):
+                elements.append(item)
+        return elements
+    
+    def screen_property(self, items):
+        """Transform screen property (metadata, not an element)."""
+        # Screen properties are metadata, return None to filter them out
+        return None
+    
+    def modal_property(self, items):
+        """Transform modal property."""
+        # This is metadata, not an element - return None to filter out
+        return None
     
     def screen_element(self, items):
         """Transform screen element."""
@@ -334,6 +350,70 @@ class CSAPTransformer(Transformer):
         return PropertyNode(
             property_name='hover',
             property_value=self._extract_string_value(items[0]),
+            line_number=line,
+            column=column
+        )
+    
+    # ========================================================================
+    # BUTTON TRANSFORMATIONS (Battle of the Bulges style)
+    # ========================================================================
+    
+    def button_element(self, items):
+        """Transform generic button element."""
+        return items[0]  # button body
+    
+    def button_body(self, items):
+        """Transform button body."""
+        line, column = self._get_node_location(items)
+        
+        properties = []
+        action = None
+        
+        for item in items:
+            if isinstance(item, list):  # button_properties
+                properties.extend(item)
+            elif isinstance(item, PropertyNode):
+                properties.append(item)
+            elif isinstance(item, ActionNode):
+                action = item
+        
+        return ButtonNode(
+            properties=properties,
+            action=action,
+            line_number=line,
+            column=column
+        )
+    
+    def button_property(self, items):
+        """Transform button property."""
+        return items[0]  # Delegate to specific property transformers
+    
+    def xysize_property(self, items):
+        """Transform xysize property."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name='xysize',
+            property_value=items[0],  # coordinate_tuple
+            line_number=line,
+            column=column
+        )
+    
+    def xpos_property(self, items):
+        """Transform xpos property."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name='xpos',
+            property_value=self._extract_number_value(items[0]),
+            line_number=line,
+            column=column
+        )
+    
+    def ypos_property(self, items):
+        """Transform ypos property."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name='ypos',
+            property_value=self._extract_number_value(items[0]),
             line_number=line,
             column=column
         )

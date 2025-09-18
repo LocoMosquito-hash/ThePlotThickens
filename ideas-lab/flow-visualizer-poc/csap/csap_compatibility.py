@@ -49,8 +49,14 @@ except ImportError:
         total_elements: int = 0
         interactive_elements: int = 0
 
-from csap_ast import ScreenNode, ScreenElementNode, TextButtonNode, ImageButtonNode, HotspotNode, ImageMapNode, LayoutNode
-from csap_exceptions import CSAPError
+try:
+    from .csap_ast import ScreenNode, ScreenElementNode, TextButtonNode, ImageButtonNode, ButtonNode, HotspotNode, ImageMapNode, LayoutNode
+except ImportError:
+    from csap_ast import ScreenNode, ScreenElementNode, TextButtonNode, ImageButtonNode, ButtonNode, HotspotNode, ImageMapNode, LayoutNode
+try:
+    from .csap_exceptions import CSAPError
+except ImportError:
+    from csap_exceptions import CSAPError
 
 
 class CSAPCompatibilityAdapter:
@@ -142,6 +148,20 @@ class CSAPCompatibilityAdapter:
         elif isinstance(element, ImageButtonNode):
             return ScreenElement(
                 element_type='imagebutton',
+                text=None,
+                coordinates=None,
+                destination=element.action.destination if element.action else None,
+                action_type=element.action.action_type.lower() if element.action else None,
+                file_path=file_path,
+                line_number=element.line_number,
+                element_index=element_index,
+                has_condition=False,
+                condition=None
+            )
+        
+        elif isinstance(element, ButtonNode):
+            return ScreenElement(
+                element_type='button',
                 text=None,
                 coordinates=None,
                 destination=element.action.destination if element.action else None,

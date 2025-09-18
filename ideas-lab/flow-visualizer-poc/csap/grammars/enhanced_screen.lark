@@ -8,10 +8,13 @@ screen_definition: "screen" IDENTIFIER screen_params? ":" screen_body
 screen_params: "(" param_list? ")"
 param_list: IDENTIFIER ("," IDENTIFIER)*
 
-screen_body: screen_element+
+screen_body: (screen_property | screen_element)+
+
+screen_property: modal_property
 
 screen_element: textbutton_element
              | imagebutton_element  
+             | button_element
              | hotspot_element
              | imagemap_element
              | layout_element
@@ -73,6 +76,27 @@ focus_mask_property: "focus_mask" BOOLEAN
 xoffset_property: "xoffset" NUMBER
 yoffset_property: "yoffset" NUMBER
 tooltip_property: "tooltip" ("_(" STRING ")" | STRING)
+
+// ============================================================================
+// BUTTON: Generic button element (Battle of the Bulges style)
+// ============================================================================
+
+button_element: "button" ":" button_body
+
+button_body: (button_property | action_statement)+
+
+button_property: xpos_property 
+               | ypos_property
+               | xysize_property
+               | xsize_property
+               | ysize_property
+               | modal_property
+               | generic_property
+
+xysize_property: "xysize" coordinate_tuple
+xsize_property: "xsize" NUMBER
+ysize_property: "ysize" NUMBER
+modal_property: "modal" BOOLEAN
 
 // ============================================================================
 // HOTSPOT: Coordinate-based clickable areas
@@ -152,7 +176,7 @@ IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
 
 // Numbers: integers and decimals
 NUMBER: /\d+/
-DECIMAL: /\d+\.\d+/
+DECIMAL: /\d+\.\d+/ | /\.\d+/
 
 // String tokens with proper escaping
 ESCAPED_STRING: /"([^"\\]|\\.)*"/

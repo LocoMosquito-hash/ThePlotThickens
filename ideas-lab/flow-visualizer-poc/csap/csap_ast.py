@@ -165,6 +165,22 @@ class ImageButtonNode(ScreenElementNode):
 
 
 @dataclass
+class ButtonNode(ScreenElementNode):
+    """Represents a generic button element (Battle of the Bulges style)."""
+    
+    def __post_init__(self):
+        self.element_type = 'button'
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'type': 'button',
+            'properties': [prop.to_dict() for prop in self.properties],
+            'action': self.action.to_dict() if self.action else None,
+            'line': self.line_number
+        }
+
+
+@dataclass
 class HotspotNode(ScreenElementNode):
     """Represents a hotspot element."""
     coordinates: Tuple[int, int, int, int] = (0, 0, 0, 0)  # (x, y, width, height)

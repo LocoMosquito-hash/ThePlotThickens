@@ -21,17 +21,49 @@ except ImportError:
     from csap_compatibility import convert_csap_to_screen_structure
     from csap_exceptions import CSAPError
 
-# Import existing classes
-import sys
-current_dir = Path(__file__).parent
-app_dir = current_dir.parent.parent.parent / "app" / "renpy-source-api"
-sys.path.insert(0, str(app_dir))
+# Delay imports to avoid circular import issues
+ScreenStructure = None
+ScreenElement = None
 
-try:
-    from parser import ScreenStructure, ScreenElement
-except ImportError:
-    # Fallback for testing
-    from csap_compatibility import ScreenStructure, ScreenElement
+def _get_parser_classes():
+    """Get parser classes with delayed import to avoid circular imports."""
+    global ScreenStructure, ScreenElement
+    
+    if ScreenStructure is None:
+        try:
+            import sys
+            current_dir = Path(__file__).parent
+            app_dir = current_dir.parent.parent.parent / "app" / "renpy-source-api"
+            
+            # Only add to path temporarily
+            if str(app_dir) not in sys.path:
+                sys.path.insert(0, str(app_dir))
+                
+            from parser import ScreenStructure as SS, ScreenElement as SE
+            ScreenStructure = SS
+            ScreenElement = SE
+        except ImportError:
+            # Fallback for testing
+            try:
+                from csap_compatibility import ScreenStructure as SS, ScreenElement as SE
+                ScreenStructure = SS
+                ScreenElement = SE
+            except ImportError:
+                # Create minimal dummy classes
+                class DummyScreenStructure:
+                    def __init__(self, **kwargs):
+                        for k, v in kwargs.items():
+                            setattr(self, k, v)
+                
+                class DummyScreenElement:
+                    def __init__(self, **kwargs):
+                        for k, v in kwargs.items():
+                            setattr(self, k, v)
+                
+                ScreenStructure = DummyScreenStructure
+                ScreenElement = DummyScreenElement
+    
+    return ScreenStructure, ScreenElement
 
 
 class CSAPIntegratedParser:
@@ -74,6 +106,7 @@ class CSAPIntegratedParser:
             
             if not screen_content.strip():
                 # Empty screen - return empty structure
+                ScreenStructure, _ = _get_parser_classes()
                 return ScreenStructure(
                     screen_name=screen_name,
                     file_path=file_path,
@@ -167,6 +200,7 @@ class CSAPIntegratedParser:
         self.fallback_uses += 1
         
         # Create basic screen structure
+        ScreenStructure, _ = _get_parser_classes()
         screen = ScreenStructure(
             screen_name=screen_name,
             file_path=file_path,

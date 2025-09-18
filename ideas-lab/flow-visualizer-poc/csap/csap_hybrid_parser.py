@@ -20,12 +20,23 @@ sys.path.insert(0, str(app_dir))
 
 try:
     from parser import RenpyParser, ScreenStructure, ScreenElement
-    from csap_integration import CSAPIntegratedParser
     ORIGINAL_PARSER_AVAILABLE = True
 except ImportError as e:
     print(f"[CSAP HYBRID] Could not import original parser: {e}")
     ORIGINAL_PARSER_AVAILABLE = False
     RenpyParser = object  # Fallback
+
+# Import CSAP integration separately
+try:
+    from .csap_integration import CSAPIntegratedParser
+    CSAP_INTEGRATION_AVAILABLE = True
+except ImportError:
+    try:
+        from csap_integration import CSAPIntegratedParser
+        CSAP_INTEGRATION_AVAILABLE = True
+    except ImportError as e:
+        print(f"[CSAP HYBRID] Could not import CSAP integration: {e}")
+        CSAP_INTEGRATION_AVAILABLE = False
 
 
 class CSAPHybridParser(RenpyParser):
@@ -43,12 +54,17 @@ class CSAPHybridParser(RenpyParser):
             super().__init__()
         
         # Initialize CSAP for screen parsing
-        try:
-            self.csap_parser = CSAPIntegratedParser()
-            self.csap_enabled = True
-            print("[CSAP HYBRID] Enhanced screen parsing enabled")
-        except Exception as e:
-            print(f"[CSAP HYBRID] CSAP initialization failed: {e}")
+        if CSAP_INTEGRATION_AVAILABLE:
+            try:
+                self.csap_parser = CSAPIntegratedParser()
+                self.csap_enabled = True
+                print("[CSAP HYBRID] Enhanced screen parsing enabled")
+            except Exception as e:
+                print(f"[CSAP HYBRID] CSAP initialization failed: {e}")
+                self.csap_parser = None
+                self.csap_enabled = False
+        else:
+            print("[CSAP HYBRID] CSAP integration not available, using original parser only")
             self.csap_parser = None
             self.csap_enabled = False
         
