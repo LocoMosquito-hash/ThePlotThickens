@@ -1,0 +1,44 @@
+// Simplified CSAP Grammar for Initial Implementation
+// This is a minimal working grammar to get CSAP functional
+
+start: screen_definition
+
+screen_definition: "screen" IDENTIFIER ":" screen_body
+
+screen_body: screen_element+
+
+screen_element: textbutton_element
+             | imagebutton_element  
+             | hotspot_element
+
+// Simple textbutton: textbutton "Text" action Jump("dest")
+textbutton_element: "textbutton" STRING action_statement
+
+// Simple imagebutton: imagebutton idle "image.png" action Jump("dest")  
+imagebutton_element: "imagebutton" imagebutton_properties action_statement
+
+imagebutton_properties: imagebutton_property+
+imagebutton_property: "idle" STRING
+                    | "hover" STRING
+                    | "focus_mask" BOOLEAN
+
+// Simple hotspot: hotspot (x, y, w, h) action Jump("dest")
+hotspot_element: "hotspot" coordinate_tuple action_statement
+
+coordinate_tuple: "(" NUMBER "," NUMBER "," NUMBER "," NUMBER ")"
+
+// Actions: action Jump("dest") or action Call("dest")
+action_statement: "action" (jump_action | call_action)
+
+jump_action: "Jump" "(" STRING ")"
+call_action: "Call" "(" STRING ")"
+
+// Terminals
+IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
+STRING: /"([^"\\]|\\.)*"/ | /'([^'\\]|\\.)*'/
+NUMBER: /\d+/
+BOOLEAN: "True" | "False"
+
+// Ignore whitespace and comments
+%ignore /\s+/
+%ignore /#[^\n]*/

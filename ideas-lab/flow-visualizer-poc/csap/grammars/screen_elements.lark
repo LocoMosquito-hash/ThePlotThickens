@@ -1,0 +1,208 @@
+// Custom Screen AST Parser (CSAP) Grammar Definition
+// 
+// This grammar defines the syntax for Ren'Py screen clickable elements
+// Based on analysis of multiple VN syntax patterns:
+// - Apocalust VN: Complex styled textbuttons
+// - Amnesia VN: Multi-line imagebuttons with anchors and single quotes
+// - AoA Academy VN: Hotspots with Call actions
+// - Come Home VN: Multi-line imagebuttons with focus_mask
+// - Generic patterns: Basic single-line elements
+
+// ============================================================================
+// TOP LEVEL: Screen Definition
+// ============================================================================
+
+start: screen_definition
+
+screen_definition: "screen" screen_name screen_params? ":" NEWLINE screen_body
+
+screen_name: IDENTIFIER
+
+screen_params: "(" param_list? ")"
+param_list: IDENTIFIER ("," IDENTIFIER)*
+
+screen_body: screen_element+
+
+// ============================================================================
+// SCREEN ELEMENTS: The core clickable elements we need to parse
+// ============================================================================
+
+screen_element: textbutton_element
+             | imagebutton_element  
+             | hotspot_element
+             | imagemap_element
+             | layout_element
+             | other_element
+
+// ----------------------------------------------------------------------------
+// TEXTBUTTON: Handles both simple and complex styled textbuttons
+// ----------------------------------------------------------------------------
+
+textbutton_element: textbutton_single_line | textbutton_multi_line
+
+// Single-line: textbutton "Text" [properties...] action Jump("dest")
+textbutton_single_line: "textbutton" string_literal textbutton_properties* action_statement
+
+// Multi-line: textbutton "Text": [newline] [properties...] [newline] action Jump("dest")
+textbutton_multi_line: "textbutton" string_literal ":" NEWLINE textbutton_body
+
+textbutton_body: textbutton_line+
+textbutton_line: textbutton_property | action_statement
+
+textbutton_properties: textbutton_property+
+textbutton_property: text_color_prop
+                   | text_outlines_prop  
+                   | text_hover_color_prop
+                   | text_hover_outlines_prop
+                   | text_size_prop
+                   | hover_sound_prop
+                   | activate_sound_prop
+                   | generic_property
+
+// Textbutton-specific properties (from Apocalust VN analysis)
+text_color_prop: "text_color" string_literal
+text_outlines_prop: "text_outlines" list_literal
+text_hover_color_prop: "text_hover_color" string_literal  
+text_hover_outlines_prop: "text_hover_outlines" list_literal
+text_size_prop: "text_size" NUMBER
+hover_sound_prop: "hover_sound" string_literal
+activate_sound_prop: "activate_sound" string_literal
+
+// ----------------------------------------------------------------------------
+// IMAGEBUTTON: Handles single-line, multi-line, and anchor-based imagebuttons
+// ----------------------------------------------------------------------------
+
+imagebutton_element: imagebutton_single_line | imagebutton_multi_line
+
+// Single-line: imagebutton idle "image.png" action Jump("dest")
+imagebutton_single_line: "imagebutton" imagebutton_properties* action_statement
+
+// Multi-line: imagebutton [anchor (0.5, 0.5)]: [properties...] action Jump("dest")
+imagebutton_multi_line: "imagebutton" imagebutton_anchor? ":" NEWLINE imagebutton_body
+
+imagebutton_body: imagebutton_line+
+imagebutton_line: imagebutton_property | action_statement
+
+imagebutton_properties: imagebutton_property+
+imagebutton_property: idle_prop
+                    | hover_prop
+                    | focus_mask_prop
+                    | xoffset_prop
+                    | yoffset_prop
+                    | tooltip_prop
+                    | generic_property
+
+// Imagebutton-specific properties
+imagebutton_anchor: "anchor" coordinate_tuple
+idle_prop: "idle" string_literal
+hover_prop: "hover" string_literal
+focus_mask_prop: "focus_mask" BOOLEAN
+xoffset_prop: "xoffset" NUMBER
+yoffset_prop: "yoffset" NUMBER
+tooltip_prop: "tooltip" ("_(" string_literal ")" | string_literal)
+
+// ----------------------------------------------------------------------------
+// HOTSPOT: Handles coordinate-based clickable areas
+// ----------------------------------------------------------------------------
+
+hotspot_element: "hotspot" coordinate_tuple action_statement
+
+coordinate_tuple: "(" NUMBER ("," NUMBER)+ ")"
+
+// ----------------------------------------------------------------------------
+// ACTION STATEMENTS: Jump and Call actions with both quote types
+// ----------------------------------------------------------------------------
+
+action_statement: "action" (jump_action | call_action)
+
+jump_action: "Jump" "(" string_literal ")"
+call_action: "Call" "(" string_literal ")"
+
+// ----------------------------------------------------------------------------
+// IMAGEMAP: Container for hotspots
+// ----------------------------------------------------------------------------
+
+imagemap_element: "imagemap" ":" NEWLINE imagemap_body
+
+imagemap_body: (INDENT imagemap_line+ DEDENT) | imagemap_line+
+imagemap_line: ground_prop | hover_prop | hotspot_element | other_element
+
+ground_prop: "ground" string_literal
+// hover_prop already defined above
+
+// ----------------------------------------------------------------------------
+// LAYOUT ELEMENTS: vbox, hbox, etc. (minimal support for now)
+// ----------------------------------------------------------------------------
+
+layout_element: vbox_element | hbox_element
+
+vbox_element: "vbox" layout_params? ":" NEWLINE layout_body
+hbox_element: "hbox" layout_params? ":" NEWLINE layout_body
+
+layout_params: layout_param+
+layout_param: xpos_prop | ypos_prop | generic_property
+
+xpos_prop: "xpos" (NUMBER | DECIMAL)
+ypos_prop: "ypos" (NUMBER | DECIMAL)
+
+layout_body: (INDENT screen_element+ DEDENT) | screen_element+
+
+// ----------------------------------------------------------------------------
+// GENERIC ELEMENTS: Catch-all for unsupported elements
+// ----------------------------------------------------------------------------
+
+other_element: IDENTIFIER generic_properties* (":" NEWLINE other_body)?
+
+other_body: (INDENT other_line+ DEDENT) | other_line+
+other_line: generic_property | other_element
+
+generic_properties: generic_property+
+generic_property: IDENTIFIER (string_literal | NUMBER | DECIMAL | list_literal | BOOLEAN)?
+
+// ============================================================================
+// LITERALS: String, number, list, boolean values
+// ============================================================================
+
+// String literals: Support both single and double quotes
+string_literal: ESCAPED_STRING | SINGLE_QUOTED_STRING
+
+// List literals: [(1, "#808080", 0, 0)] or [1, 2, 3]
+list_literal: "[" list_items? "]"
+list_items: list_item ("," list_item)*
+list_item: string_literal | NUMBER | DECIMAL | coordinate_tuple | list_literal
+
+// Boolean literals
+BOOLEAN: "True" | "False"
+
+// ============================================================================
+// TOKENS: Terminal symbols
+// ============================================================================
+
+// Identifiers: screen names, property names, etc.
+IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
+
+// Numbers: integers and decimals
+NUMBER: /\d+/
+DECIMAL: /\d+\.\d+/
+
+// String tokens with proper escaping
+ESCAPED_STRING: /"([^"\\]|\\.)*"/
+SINGLE_QUOTED_STRING: /'([^'\\]|\\.)*'/
+
+// Whitespace and newlines
+NEWLINE: /\r?\n/
+
+// Comments: ignore Python-style comments
+COMMENT: /#[^\n]*/
+
+// Ignore whitespace (but preserve newlines for structure)
+%ignore /[ \t]+/
+%ignore COMMENT
+
+// ============================================================================
+// GRAMMAR CONFIGURATION
+// ============================================================================
+
+// Use Lark's postlex for proper indentation handling
+%import common.WS
+%ignore WS
