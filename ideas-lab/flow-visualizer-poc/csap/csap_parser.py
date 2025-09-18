@@ -114,15 +114,26 @@ class CSAPTransformer(Transformer):
     # ========================================================================
     
     def textbutton_element(self, items):
-        """Transform textbutton element (simplified)."""
+        """Transform textbutton element (enhanced)."""
+        return items[0]  # Either textbutton_single_line or textbutton_multi_line
+    
+    def textbutton_single_line(self, items):
+        """Transform single-line textbutton with optional properties."""
         line, column = self._get_node_location(items)
         
         text = self._extract_string_value(items[0])
-        action = items[1] if len(items) > 1 else None
+        properties = []
+        action = None
+        
+        for item in items[1:]:
+            if isinstance(item, list):  # textbutton_properties
+                properties.extend(item)
+            elif isinstance(item, ActionNode):
+                action = item
         
         return TextButtonNode(
             text=text,
-            properties=[],
+            properties=properties,
             action=action,
             line_number=line,
             column=column
@@ -136,18 +147,89 @@ class CSAPTransformer(Transformer):
         properties = []
         action = None
         
-        # Items[1] should be textbutton_body
-        if len(items) > 1 and isinstance(items[1], list):
-            for item in items[1]:
-                if isinstance(item, PropertyNode):
-                    properties.append(item)
-                elif isinstance(item, ActionNode):
-                    action = item
+        for item in items[1:]:
+            if isinstance(item, list):  # textbutton_properties
+                properties.extend(item)
+            elif isinstance(item, ActionNode):
+                action = item
         
         return TextButtonNode(
             text=text,
             properties=properties,
             action=action,
+            line_number=line,
+            column=column
+        )
+    
+    def textbutton_properties(self, items):
+        """Transform textbutton properties."""
+        return items  # List of PropertyNode objects
+    
+    def textbutton_property(self, items):
+        """Transform textbutton property (simplified)."""
+        line, column = self._get_node_location(items)
+        prop_name = str(items[0])
+        prop_value = ""
+        
+        if len(items) > 1:
+            if isinstance(items[1], Token):
+                if items[1].type in ['ESCAPED_STRING', 'SINGLE_QUOTED_STRING']:
+                    prop_value = self._extract_string_value(items[1])
+                elif items[1].type == 'NUMBER':
+                    prop_value = self._extract_number_value(items[1])
+                else:
+                    prop_value = str(items[1])
+            else:
+                prop_value = items[1]  # Could be a list_literal
+        
+        return PropertyNode(
+            property_name=prop_name,
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
+    # Property transformers for textbuttons
+    def text_color_property(self, items):
+        """Transform text_color property."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name='text_color',
+            property_value=self._extract_string_value(items[0]),
+            line_number=line,
+            column=column
+        )
+    
+    def text_size_property(self, items):
+        """Transform text_size property."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name='text_size',
+            property_value=self._extract_number_value(items[0]),
+            line_number=line,
+            column=column
+        )
+    
+    def generic_property(self, items):
+        """Transform generic property."""
+        line, column = self._get_node_location(items)
+        prop_name = str(items[0])
+        prop_value = ""
+        
+        if len(items) > 1:
+            if isinstance(items[1], Token):
+                if items[1].type in ['ESCAPED_STRING', 'SINGLE_QUOTED_STRING']:
+                    prop_value = self._extract_string_value(items[1])
+                elif items[1].type == 'NUMBER':
+                    prop_value = self._extract_number_value(items[1])
+                else:
+                    prop_value = str(items[1])
+            else:
+                prop_value = items[1]
+        
+        return PropertyNode(
+            property_name=prop_name,
+            property_value=prop_value,
             line_number=line,
             column=column
         )
@@ -166,7 +248,7 @@ class CSAPTransformer(Transformer):
     
     def imagebutton_element(self, items):
         """Transform imagebutton element."""
-        return items[0]
+        return items[0]  # Either imagebutton_single_line or imagebutton_multi_line
     
     def imagebutton_single_line(self, items):
         """Transform single-line imagebutton."""
@@ -176,8 +258,8 @@ class CSAPTransformer(Transformer):
         action = None
         
         for item in items:
-            if isinstance(item, PropertyNode):
-                properties.append(item)
+            if isinstance(item, list):  # imagebutton_properties
+                properties.extend(item)
             elif isinstance(item, ActionNode):
                 action = item
         
@@ -227,6 +309,34 @@ class CSAPTransformer(Transformer):
         if items and isinstance(items[0], tuple):
             return items[0]
         return None
+    
+    def imagebutton_properties(self, items):
+        """Transform imagebutton properties."""
+        return items  # List of PropertyNode objects
+    
+    def imagebutton_property(self, items):
+        """Transform imagebutton property."""
+        return items[0]
+    
+    def idle_property(self, items):
+        """Transform idle property."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name='idle',
+            property_value=self._extract_string_value(items[0]),
+            line_number=line,
+            column=column
+        )
+    
+    def hover_property(self, items):
+        """Transform hover property."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name='hover',
+            property_value=self._extract_string_value(items[0]),
+            line_number=line,
+            column=column
+        )
     
     # ========================================================================
     # HOTSPOT TRANSFORMATIONS
@@ -356,6 +466,10 @@ class CSAPTransformer(Transformer):
             else:
                 result.append(item)
         return result
+    
+    def list_item(self, items):
+        """Transform list item."""
+        return items[0]
 
 
 class CSAPParser:
@@ -363,7 +477,7 @@ class CSAPParser:
     
     def __init__(self):
         """Initialize the parser with the Lark grammar."""
-        self.grammar_path = Path(__file__).parent / "grammars" / "simple_screen.lark"
+        self.grammar_path = Path(__file__).parent / "grammars" / "enhanced_screen.lark"
         
         if not self.grammar_path.exists():
             raise CSAPGrammarError(f"Grammar file not found: {self.grammar_path}")

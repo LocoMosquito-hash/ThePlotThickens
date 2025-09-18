@@ -1,0 +1,169 @@
+// Enhanced CSAP Grammar for Complex VN Patterns
+// Supports all patterns from regex test cases: Apocalust, Amnesia, AoA Academy, Come Home, etc.
+
+start: screen_definition
+
+screen_definition: "screen" IDENTIFIER screen_params? ":" screen_body
+
+screen_params: "(" param_list? ")"
+param_list: IDENTIFIER ("," IDENTIFIER)*
+
+screen_body: screen_element+
+
+screen_element: textbutton_element
+             | imagebutton_element  
+             | hotspot_element
+             | imagemap_element
+             | layout_element
+             | other_element
+
+// ============================================================================
+// TEXTBUTTON: Supports both simple and complex styled patterns
+// ============================================================================
+
+textbutton_element: textbutton_single_line | textbutton_multi_line
+
+// Single-line with optional properties: textbutton "Text" [properties...] action Jump("dest")
+textbutton_single_line: "textbutton" STRING textbutton_properties? action_statement
+
+// Multi-line: textbutton "Text": [properties...] action Jump("dest")
+textbutton_multi_line: "textbutton" STRING ":" textbutton_properties? action_statement
+
+textbutton_properties: textbutton_property+
+textbutton_property: IDENTIFIER (STRING | NUMBER | DECIMAL | list_literal | BOOLEAN)
+
+// Textbutton-specific properties (from Apocalust VN)
+text_color_property: "text_color" STRING
+text_outlines_property: "text_outlines" list_literal
+text_hover_color_property: "text_hover_color" STRING  
+text_hover_outlines_property: "text_hover_outlines" list_literal
+text_size_property: "text_size" NUMBER
+hover_sound_property: "hover_sound" STRING
+activate_sound_property: "activate_sound" STRING
+
+// ============================================================================
+// IMAGEBUTTON: Supports single-line, multi-line, and anchor-based patterns
+// ============================================================================
+
+imagebutton_element: imagebutton_single_line | imagebutton_multi_line
+
+// Single-line: imagebutton idle "image.png" [properties...] action Jump("dest")
+imagebutton_single_line: "imagebutton" imagebutton_properties action_statement
+
+// Multi-line: imagebutton [anchor (0.5, 0.5)]: [properties...] action Jump("dest")
+imagebutton_multi_line: "imagebutton" imagebutton_anchor? ":" imagebutton_body
+
+imagebutton_anchor: "anchor" coordinate_tuple
+
+imagebutton_body: (imagebutton_property | action_statement)+
+
+imagebutton_properties: imagebutton_property+
+imagebutton_property: idle_property
+                    | hover_property
+                    | focus_mask_property
+                    | xoffset_property
+                    | yoffset_property
+                    | tooltip_property
+                    | generic_property
+
+// Imagebutton-specific properties
+idle_property: "idle" STRING
+hover_property: "hover" STRING
+focus_mask_property: "focus_mask" BOOLEAN
+xoffset_property: "xoffset" NUMBER
+yoffset_property: "yoffset" NUMBER
+tooltip_property: "tooltip" ("_(" STRING ")" | STRING)
+
+// ============================================================================
+// HOTSPOT: Coordinate-based clickable areas
+// ============================================================================
+
+hotspot_element: "hotspot" coordinate_tuple action_statement
+
+coordinate_tuple: "(" NUMBER ("," NUMBER)+ ")"
+
+// ============================================================================
+// ACTION STATEMENTS: Jump and Call with both quote types
+// ============================================================================
+
+action_statement: "action" (jump_action | call_action)
+
+jump_action: "Jump" "(" STRING ")"
+call_action: "Call" "(" STRING ")"
+
+// ============================================================================
+// IMAGEMAP: Container for hotspots (basic support)
+// ============================================================================
+
+imagemap_element: "imagemap" ":" imagemap_body
+
+imagemap_body: (imagemap_property | hotspot_element)+
+
+imagemap_property: ground_property | hover_property
+
+ground_property: "ground" STRING
+
+// ============================================================================
+// LAYOUT ELEMENTS: vbox, hbox (basic support)
+// ============================================================================
+
+layout_element: vbox_element | hbox_element
+
+vbox_element: "vbox" layout_params? ":" layout_body
+hbox_element: "hbox" layout_params? ":" layout_body
+
+layout_params: layout_param+
+layout_param: xpos_property | ypos_property | generic_property
+
+xpos_property: "xpos" (NUMBER | DECIMAL)
+ypos_property: "ypos" (NUMBER | DECIMAL)
+
+layout_body: screen_element+
+
+// ============================================================================
+// GENERIC ELEMENTS: Catch-all for other elements
+// ============================================================================
+
+other_element: IDENTIFIER generic_properties? (":" other_body)?
+
+other_body: (generic_property | other_element)+
+
+generic_properties: generic_property+
+generic_property: IDENTIFIER (STRING | NUMBER | DECIMAL | list_literal | BOOLEAN | coordinate_tuple)?
+
+// ============================================================================
+// LITERALS: String, number, list, boolean values
+// ============================================================================
+
+// String literals: Support both single and double quotes
+STRING: ESCAPED_STRING | SINGLE_QUOTED_STRING
+
+// List literals: [(1, "#808080", 0, 0)] or [1, 2, 3]
+list_literal: "[" list_items? "]"
+list_items: list_item ("," list_item)*
+list_item: STRING | NUMBER | DECIMAL | coordinate_tuple | list_literal | BOOLEAN
+
+// ============================================================================
+// TOKENS: Terminal symbols
+// ============================================================================
+
+// Identifiers: screen names, property names, etc.
+IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
+
+// Numbers: integers and decimals
+NUMBER: /\d+/
+DECIMAL: /\d+\.\d+/
+
+// String tokens with proper escaping
+ESCAPED_STRING: /"([^"\\]|\\.)*"/
+SINGLE_QUOTED_STRING: /'([^'\\]|\\.)*'/
+
+// Boolean literals
+BOOLEAN: "True" | "False"
+
+// Comments: ignore Python-style comments
+COMMENT: /#[^\n]*/
+
+// Ignore whitespace and comments
+%ignore /\s+/
+%ignore COMMENT
