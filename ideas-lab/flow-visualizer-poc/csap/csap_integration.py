@@ -330,7 +330,12 @@ class CSAPIntegratedParser:
                         
                         # Parse the screen
                         screen_structure = self.parse_screen_structure(file_path, start_line, lines, screen_name)
-                        screens.append(screen_structure)
+                        
+                        # Apply system screen filter
+                        if self._should_include_screen(screen_structure, file_path):
+                            screens.append(screen_structure)
+                        else:
+                            print(f"[SYSTEM SCREEN FILTER] Excluded '{screen_name}' from {os.path.basename(file_path)} (system screen with no story flow elements)")
             
             print(f"[CSAP INTEGRATION] Found {len(screens)} screens total")
             self._print_performance_stats()
@@ -339,6 +344,52 @@ class CSAPIntegratedParser:
             print(f"[CSAP INTEGRATION] Error in find_all_screens: {e}")
         
         return screens
+    
+    def _should_include_screen(self, screen_structure: ScreenStructure, file_path: str) -> bool:
+        """
+        Determine if a screen should be included in the flow visualization.
+        
+        Rule: Exclude default system screens from screens.rpy unless they contain
+        story flow elements (Jump/Call actions).
+        
+        Args:
+            screen_structure: The parsed screen structure
+            file_path: Path to the file containing the screen
+            
+        Returns:
+            bool: True if screen should be included, False to filter out
+        """
+        # Only apply filter to screens.rpy files
+        if not file_path.endswith('screens.rpy'):
+            return True  # Include all screens from non-screens.rpy files
+        
+        # List of default system screen names (case-insensitive)
+        default_system_screens = {
+            'say', 'input', 'choice', 'quick_menu', 'navigation', 'main_menu',
+            'game_menu', 'save', 'load', 'file_slots', 'preferences', 'about',
+            'help', 'keyboard_help', 'mouse_help', 'gamepad_help', 'confirm',
+            'skip_indicator', 'notify', 'nvl', 'nvl_dialogue', 'history'
+        }
+        
+        screen_name = screen_structure.screen_name.lower()
+        
+        # If it's not a default system screen, always include it
+        if screen_name not in default_system_screens:
+            return True
+        
+        # For system screens, check if they have story flow elements
+        has_story_flow = any(
+            element.destination and element.action_type in ['jump', 'call']
+            for element in screen_structure.elements
+            if element.destination  # Must have a destination
+        )
+        
+        if has_story_flow:
+            print(f"[SYSTEM SCREEN FILTER] Including system screen '{screen_structure.screen_name}' (has {screen_structure.interactive_elements} story flow elements)")
+            return True
+        else:
+            # System screen with no story flow elements - exclude it
+            return False
     
     def _print_performance_stats(self):
         """Print CSAP performance statistics."""
