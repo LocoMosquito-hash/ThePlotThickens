@@ -50,9 +50,9 @@ except ImportError:
         interactive_elements: int = 0
 
 try:
-    from .csap_ast import ScreenNode, ScreenElementNode, TextButtonNode, ImageButtonNode, ButtonNode, HotspotNode, ImageMapNode, LayoutNode
+    from .csap_ast import ScreenNode, ScreenElementNode, TextButtonNode, ImageButtonNode, ButtonNode, HotspotNode, ImageMapNode, LayoutNode, ConditionalElementNode
 except ImportError:
-    from csap_ast import ScreenNode, ScreenElementNode, TextButtonNode, ImageButtonNode, ButtonNode, HotspotNode, ImageMapNode, LayoutNode
+    from csap_ast import ScreenNode, ScreenElementNode, TextButtonNode, ImageButtonNode, ButtonNode, HotspotNode, ImageMapNode, LayoutNode, ConditionalElementNode
 try:
     from .csap_exceptions import CSAPError
 except ImportError:
@@ -77,15 +77,20 @@ class CSAPCompatibilityAdapter:
         Returns:
             ScreenStructure compatible with existing flow visualizer
         """
-        # Convert all screen elements
+        # Convert all screen elements (including those in conditionals)
         screen_elements = []
         element_index = 0
         
         for element in screen_node.elements:
-            converted_element = self._convert_screen_element(element, file_path, element_index)
-            if converted_element:
-                screen_elements.append(converted_element)
-                element_index += 1
+            converted_elements = self._convert_screen_element(element, file_path, element_index)
+            if converted_elements:
+                # Handle both single elements and lists of elements
+                if isinstance(converted_elements, list):
+                    screen_elements.extend(converted_elements)
+                    element_index += len(converted_elements)
+                else:
+                    screen_elements.append(converted_elements)
+                    element_index += 1
         
         # Determine screen type based on elements
         screen_type = "standard"
@@ -203,6 +208,19 @@ class CSAPCompatibilityAdapter:
                 converted_child = self._convert_screen_element(child, file_path, element_index)
                 if converted_child:
                     return converted_child
+        
+        elif isinstance(element, ConditionalElementNode):
+            # Conditional elements contain body elements - convert all interactive body elements
+            converted_elements = []
+            for i, body_element in enumerate(element.body):
+                converted_element = self._convert_screen_element(body_element, file_path, element_index + i)
+                if converted_element:
+                    # Handle both single elements and lists
+                    if isinstance(converted_element, list):
+                        converted_elements.extend(converted_element)
+                    else:
+                        converted_elements.append(converted_element)
+            return converted_elements if converted_elements else None
         
         # Unknown element type
         return None

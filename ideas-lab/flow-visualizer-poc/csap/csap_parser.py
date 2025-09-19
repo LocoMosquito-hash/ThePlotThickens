@@ -10,6 +10,16 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from lark import Lark, Transformer, Tree, Token
 from lark.exceptions import LarkError, UnexpectedInput, UnexpectedToken
+from lark.indenter import Indenter
+
+class RenpyIndenter(Indenter):
+    """Custom indenter for Ren'Py screen syntax."""
+    NL_type = '_NEWLINE'
+    OPEN_PAREN_types = []
+    CLOSE_PAREN_types = []
+    INDENT_type = '_INDENT'
+    DEDENT_type = '_DEDENT'
+    tab_len = 4
 
 try:
     from .csap_ast import *
@@ -64,6 +74,10 @@ class CSAPTransformer(Transformer):
         except ValueError:
             return 0
     
+    def _extract_identifier_value(self, token: Token) -> str:
+        """Extract identifier/variable name from token."""
+        return str(token)
+    
     # ========================================================================
     # TOP LEVEL TRANSFORMATIONS
     # ========================================================================
@@ -111,6 +125,139 @@ class CSAPTransformer(Transformer):
                 elements.append(item)
         return elements
     
+    # ========================================================================
+    # CONDITIONAL TRANSFORMATIONS
+    # ========================================================================
+    
+    def conditional_element(self, items):
+        """Transform conditional element."""
+        return items[0]  # if_statement
+    
+    def if_statement(self, items):
+        """Transform if statement."""
+        line, column = self._get_node_location(items)
+        
+        condition = items[0]  # conditional_expression
+        body = items[1] if len(items) > 1 else []  # conditional_body
+        
+        return ConditionalElementNode(
+            condition=condition,
+            body=body,
+            line_number=line,
+            column=column
+        )
+    
+    def conditional_expression(self, items):
+        """Transform conditional expression with support for compound conditions."""
+        line, column = self._get_node_location(items)
+        
+        # For now, just take the first simple_condition and ignore compound logic
+        # This handles: variable == value, variable > value, etc.
+        # TODO: Full compound condition support later if needed
+        first_condition = items[0]  # simple_condition
+        
+        return first_condition
+    
+    def simple_condition(self, items):
+        """Transform simple condition (variable operator value)."""
+        line, column = self._get_node_location(items)
+        
+        variable = str(items[0])  # IDENTIFIER
+        operator = str(items[1])  # comparison_operator  
+        value = items[2]         # conditional_value
+        
+        # Extract value based on type
+        if hasattr(value, 'type'):
+            if value.type == 'STRING':
+                value = self._extract_string_value(value)
+            elif value.type in ('NUMBER', 'DECIMAL'):
+                value = self._extract_number_value(value)
+            elif value.type == 'IDENTIFIER':
+                value = self._extract_identifier_value(value)
+        else:
+            value = str(value)
+        
+        return ConditionalExpressionNode(
+            variable=variable,
+            operator=operator,
+            value=value,
+            line_number=line,
+            column=column
+        )
+    
+    def conditional_value(self, items):
+        """Transform conditional value."""
+        return items[0]  # STRING, NUMBER, DECIMAL, or IDENTIFIER token
+    
+    def comparison_operator(self, items):
+        """Transform comparison operator."""
+        if not items:
+            return "=="  # Default fallback
+        return str(items[0])
+    
+    def logical_operator(self, items):
+        """Transform logical operator."""
+        return str(items[0])
+    
+    def conditional_body(self, items):
+        """Transform conditional body."""
+        return items  # List of screen elements or add statements
+    
+    def conditional_body_item(self, items):
+        """Transform conditional body item."""
+        return items[0]  # screen_element or add_statement
+    
+    def add_statement(self, items):
+        """Transform add statement - parse but ignore for flow analysis."""
+        line, column = self._get_node_location(items)
+        
+        # Extract resource (add_content)
+        resource = str(items[0]) if items else ""
+        properties = items[1] if len(items) > 1 and isinstance(items[1], list) else []
+        
+        return AddStatementNode(
+            resource=resource,
+            properties=properties,
+            line_number=line,
+            column=column
+        )
+    
+    def add_content(self, items):
+        """Transform add content."""
+        return str(items[0])  # STRING, IDENTIFIER, or dotted_identifier
+    
+    def dotted_identifier(self, items):
+        """Transform dotted identifier like gui.main_menu_background."""
+        return ".".join(str(item) for item in items)
+    
+    def add_properties(self, items):
+        """Transform add properties."""
+        return items  # List of PropertyNode objects
+    
+    def add_property(self, items):
+        """Transform add property."""
+        line, column = self._get_node_location(items)
+        prop_name = str(items[0])
+        prop_value = items[1] if len(items) > 1 else ""
+        
+        # Handle different value types
+        if hasattr(prop_value, 'type'):
+            if prop_value.type == 'STRING':
+                prop_value = self._extract_string_value(prop_value)
+            elif prop_value.type in ('NUMBER', 'DECIMAL'):
+                prop_value = self._extract_number_value(prop_value)
+            elif prop_value.type == 'IDENTIFIER':
+                prop_value = self._extract_identifier_value(prop_value)
+        else:
+            prop_value = str(prop_value)
+        
+        return PropertyNode(
+            property_name=prop_name,
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
     def screen_property(self, items):
         """Transform screen property (metadata, not an element)."""
         # Screen properties are metadata, return None to filter them out
@@ -134,19 +281,22 @@ class CSAPTransformer(Transformer):
         return items[0]  # Either textbutton_single_line or textbutton_multi_line
     
     def textbutton_single_line(self, items):
-        """Transform single-line textbutton with optional properties."""
+        """Transform single-line textbutton with content (Futagenesis style)."""
         line, column = self._get_node_location(items)
         
         text = items[0]  # Should be processed by STRING token handler
         properties = []
         action = None
         
+        # Process textbutton_content items
         for item in items[1:]:
-            if isinstance(item, list):  # textbutton_properties
-                # Filter to ensure only PropertyNode objects
-                for prop in item:
-                    if isinstance(prop, PropertyNode):
-                        properties.append(prop)
+            if isinstance(item, list):  # textbutton_content list
+                # Handle list of items
+                for sub_item in item:
+                    if isinstance(sub_item, PropertyNode):
+                        properties.append(sub_item)
+                    elif isinstance(sub_item, ActionNode):
+                        action = sub_item
             elif isinstance(item, PropertyNode):
                 properties.append(item)
             elif isinstance(item, ActionNode):
@@ -159,6 +309,14 @@ class CSAPTransformer(Transformer):
             line_number=line,
             column=column
         )
+    
+    def textbutton_content(self, items):
+        """Transform textbutton content."""
+        return items[0]  # Either PropertyNode or ActionNode
+    
+    def textbutton_mixed_content(self, items):
+        """Transform textbutton mixed content (property or action)."""
+        return items[0]  # Either PropertyNode or ActionNode
     
     def textbutton_multi_line(self, items):
         """Transform multi-line textbutton."""
@@ -401,9 +559,16 @@ class CSAPTransformer(Transformer):
     def xpos_property(self, items):
         """Transform xpos property."""
         line, column = self._get_node_location(items)
+        # Handle both numbers and variable references
+        value = items[0]
+        if hasattr(value, 'type') and value.type == 'IDENTIFIER':
+            prop_value = self._extract_identifier_value(value)
+        else:
+            prop_value = self._extract_number_value(value)
+            
         return PropertyNode(
             property_name='xpos',
-            property_value=self._extract_number_value(items[0]),
+            property_value=prop_value,
             line_number=line,
             column=column
         )
@@ -411,9 +576,16 @@ class CSAPTransformer(Transformer):
     def ypos_property(self, items):
         """Transform ypos property."""
         line, column = self._get_node_location(items)
+        # Handle both numbers and variable references
+        value = items[0]
+        if hasattr(value, 'type') and value.type == 'IDENTIFIER':
+            prop_value = self._extract_identifier_value(value)
+        else:
+            prop_value = self._extract_number_value(value)
+            
         return PropertyNode(
             property_name='ypos',
-            property_value=self._extract_number_value(items[0]),
+            property_value=prop_value,
             line_number=line,
             column=column
         )
@@ -437,23 +609,31 @@ class CSAPTransformer(Transformer):
         )
     
     def coordinate_tuple(self, items):
-        """Transform coordinate tuple."""
+        """Transform coordinate tuple with mixed types."""
+        # Extract values from items, handling different types
         coords = []
         for item in items:
-            if isinstance(item, Token):
-                coords.append(self._extract_number_value(item))
-            elif isinstance(item, (int, float)):
-                coords.append(item)  # Already processed by NUMBER handler
+            if hasattr(item, 'type'):
+                if item.type == 'STRING':
+                    coords.append(self._extract_string_value(item))
+                elif item.type in ('NUMBER', 'DECIMAL'):
+                    coords.append(self._extract_number_value(item))
+                elif item.type == 'IDENTIFIER':
+                    coords.append(self._extract_identifier_value(item))
+                elif item.type == 'BOOLEAN':
+                    coords.append(str(item) == 'True')
+                else:
+                    coords.append(str(item))
+            elif isinstance(item, (int, float, str, bool)):
+                coords.append(item)
             else:
-                # Try to convert to number
-                try:
-                    coords.append(int(str(item)))
-                except ValueError:
-                    try:
-                        coords.append(float(str(item)))
-                    except ValueError:
-                        pass  # Skip non-numeric items
+                coords.append(str(item))
+        
         return tuple(coords)
+    
+    def tuple_item(self, items):
+        """Transform tuple item."""
+        return items[0]  # STRING, NUMBER, DECIMAL, IDENTIFIER, or BOOLEAN
     
     # ========================================================================
     # ACTION TRANSFORMATIONS
@@ -461,7 +641,11 @@ class CSAPTransformer(Transformer):
     
     def action_statement(self, items):
         """Transform action statement."""
-        return items[0]  # jump_action or call_action
+        return items[0]  # action_list, jump_action, or call_action
+    
+    def action_list(self, items):
+        """Transform list-wrapped action: [Jump("dest")]"""
+        return items[0]  # The jump_action or call_action inside the list
     
     def jump_action(self, items):
         """Transform jump action."""
@@ -578,6 +762,106 @@ class CSAPTransformer(Transformer):
     def IDENTIFIER(self, token):
         """Handle IDENTIFIER tokens."""
         return str(token)
+    
+    # ========================================================================
+    # MISSING PROPERTY TRANSFORMERS
+    # ========================================================================
+    
+    def textbutton_specific_property(self, items):
+        """Transform textbutton specific property."""
+        return items[0]  # Delegate to specific property transformers
+    
+    def generic_property(self, items):
+        """Transform generic property."""
+        line, column = self._get_node_location(items)
+        prop_name = str(items[0])  # property_name
+        prop_value = items[1] if len(items) > 1 else ""
+        
+        # Handle different value types
+        if hasattr(prop_value, 'type'):
+            if prop_value.type == 'STRING':
+                prop_value = self._extract_string_value(prop_value)
+            elif prop_value.type in ('NUMBER', 'DECIMAL'):
+                prop_value = self._extract_number_value(prop_value)
+            elif prop_value.type == 'IDENTIFIER':
+                prop_value = self._extract_identifier_value(prop_value)
+        else:
+            prop_value = str(prop_value)
+        
+        return PropertyNode(
+            property_name=prop_name,
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
+    def property_name(self, items):
+        """Transform property name."""
+        return str(items[0])
+    
+    def PROPERTY_IDENTIFIER(self, token):
+        """Handle PROPERTY_IDENTIFIER tokens."""
+        return str(token)
+    
+    def xalign_property(self, items):
+        """Transform xalign property."""
+        line, column = self._get_node_location(items)
+        value = items[0]
+        if hasattr(value, 'type') and value.type == 'IDENTIFIER':
+            prop_value = self._extract_identifier_value(value)
+        else:
+            prop_value = self._extract_number_value(value)
+        return PropertyNode(
+            property_name='xalign',
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
+    def yalign_property(self, items):
+        """Transform yalign property."""
+        line, column = self._get_node_location(items)
+        value = items[0]
+        if hasattr(value, 'type') and value.type == 'IDENTIFIER':
+            prop_value = self._extract_identifier_value(value)
+        else:
+            prop_value = self._extract_number_value(value)
+        return PropertyNode(
+            property_name='yalign',
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
+    def xoffset_property(self, items):
+        """Transform xoffset property."""
+        line, column = self._get_node_location(items)
+        value = items[0]
+        if hasattr(value, 'type') and value.type == 'IDENTIFIER':
+            prop_value = self._extract_identifier_value(value)
+        else:
+            prop_value = self._extract_number_value(value)
+        return PropertyNode(
+            property_name='xoffset',
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
+    def yoffset_property(self, items):
+        """Transform yoffset property."""
+        line, column = self._get_node_location(items)
+        value = items[0]
+        if hasattr(value, 'type') and value.type == 'IDENTIFIER':
+            prop_value = self._extract_identifier_value(value)
+        else:
+            prop_value = self._extract_number_value(value)
+        return PropertyNode(
+            property_name='yoffset',
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
 
 
 class CSAPParser:

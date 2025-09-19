@@ -273,11 +273,102 @@ class LayoutNode(CSAPNode):
 
 
 @dataclass
+class ConditionalExpressionNode(CSAPNode):
+    """Represents a conditional expression (e.g., variable == value)."""
+    variable: str = ""
+    operator: str = ""
+    value: Union[str, int, float] = ""
+    
+    def __post_init__(self):
+        self.element_type = 'conditional_expression'
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'type': 'conditional_expression',
+            'variable': self.variable,
+            'operator': self.operator,
+            'value': self.value,
+            'line': self.line_number
+        }
+    
+    def validate(self) -> List[str]:
+        errors = []
+        if not self.variable:
+            errors.append("Conditional expression must have a variable")
+        if not self.operator:
+            errors.append("Conditional expression must have an operator")
+        return errors
+
+
+@dataclass
+class AddStatementNode(CSAPNode):
+    """Represents an add statement (e.g., add "image.png" xpos 100)."""
+    resource: str = ""
+    properties: List[PropertyNode] = field(default_factory=list)
+    
+    def __post_init__(self):
+        self.element_type = 'add_statement'
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'type': 'add_statement',
+            'resource': self.resource,
+            'properties': [prop.to_dict() for prop in self.properties],
+            'line': self.line_number
+        }
+    
+    def validate(self) -> List[str]:
+        errors = []
+        if not self.resource:
+            errors.append("Add statement must have a resource")
+        return errors
+
+
+@dataclass
+class ConditionalElementNode(CSAPNode):
+    """Represents a conditional block (if statement) in a screen."""
+    condition: ConditionalExpressionNode = None
+    body: List[Union[ScreenElementNode, 'AddStatementNode']] = field(default_factory=list)
+    
+    def __post_init__(self):
+        self.element_type = 'conditional_element'
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'type': 'conditional_element',
+            'condition': self.condition.to_dict() if self.condition else None,
+            'body': [item.to_dict() for item in self.body],
+            'line': self.line_number
+        }
+    
+    def get_interactive_elements(self) -> List[ScreenElementNode]:
+        """Get all interactive elements from this conditional block."""
+        interactive = []
+        for item in self.body:
+            if isinstance(item, ScreenElementNode) and hasattr(item, 'action') and item.action:
+                interactive.append(item)
+        return interactive
+    
+    def validate(self) -> List[str]:
+        errors = []
+        if not self.condition:
+            errors.append("Conditional element must have a condition")
+        else:
+            errors.extend(self.condition.validate())
+        
+        for item in self.body:
+            if hasattr(item, 'validate'):
+                errors.extend(item.validate())
+        
+        return errors
+
+
+@dataclass
 class ScreenNode(CSAPNode):
     """Represents a complete screen definition."""
     screen_name: str = ""
     parameters: List[str] = field(default_factory=list)
-    elements: List[Union[ScreenElementNode, ImageMapNode, LayoutNode]] = field(default_factory=list)
+    elements: List[Union[ScreenElementNode, ImageMapNode, LayoutNode, ConditionalElementNode]] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -291,7 +382,7 @@ class ScreenNode(CSAPNode):
         }
     
     def get_interactive_elements(self) -> List[ScreenElementNode]:
-        """Get all elements that have actions (clickable elements)."""
+        """Get all elements that have actions (clickable elements), including those in conditionals."""
         interactive = []
         
         def collect_interactive(elements):
@@ -302,6 +393,9 @@ class ScreenNode(CSAPNode):
                     interactive.extend(element.hotspots)
                 elif isinstance(element, LayoutNode):
                     collect_interactive(element.children)
+                elif isinstance(element, ConditionalElementNode):
+                    # Collect interactive elements from conditional blocks
+                    interactive.extend(element.get_interactive_elements())
         
         collect_interactive(self.elements)
         return interactive
