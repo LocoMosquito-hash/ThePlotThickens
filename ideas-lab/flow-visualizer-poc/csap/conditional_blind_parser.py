@@ -41,7 +41,7 @@ class ConditionalBlindParser:
         )
         
         self.imagebutton_pattern = re.compile(
-            r'imagebutton(?:\s+auto\s+"[^"]+"|:)[^}]*?action\s+\[[^\]]*?(Jump|Call)\("([^"]+)"\)[^\]]*?\]',
+            r'imagebutton(?:\s+auto\s+"[^"]+"|:).*?action\s+(?:\[.*?)?(Jump|Call)\("([^"]+)"\)(?:.*?\])?',
             re.MULTILINE | re.DOTALL
         )
         
