@@ -6,6 +6,7 @@ elements and convert them to a structured AST.
 """
 
 import os
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from lark import Lark, Transformer, Tree, Token
@@ -24,9 +25,11 @@ class RenpyIndenter(Indenter):
 try:
     from .csap_ast import *
     from .csap_exceptions import *
+    from .conditional_blind_parser import ConditionalBlindParser
 except ImportError:
     from csap_ast import *
     from csap_exceptions import *
+    from conditional_blind_parser import ConditionalBlindParser
 
 
 class CSAPTransformer(Transformer):
@@ -870,6 +873,7 @@ class CSAPParser:
     def __init__(self):
         """Initialize the parser with the Lark grammar."""
         self.grammar_path = Path(__file__).parent / "grammars" / "enhanced_screen.lark"
+        self.conditional_blind_parser = ConditionalBlindParser()  # Fallback parser
         
         if not self.grammar_path.exists():
             raise CSAPGrammarError(f"Grammar file not found: {self.grammar_path}")
@@ -895,7 +899,7 @@ class CSAPParser:
             CSAPParseError: If parsing fails
         """
         try:
-            # Parse with Lark
+            # Try full CSAP parsing first
             tree = self.parser.parse(screen_text)
             
             # Transform to AST
@@ -914,29 +918,108 @@ class CSAPParser:
             
             return ast_node
             
-        except LarkError as e:
-            # Convert Lark errors to CSAP errors
-            line = getattr(e, 'line', None)
-            column = getattr(e, 'column', None)
-            
-            if isinstance(e, UnexpectedToken):
-                expected = ', '.join(e.expected) if hasattr(e, 'expected') else None
-                raise CSAPParseError(
-                    f"Unexpected token: {e.token}",
-                    line=line,
-                    column=column,
-                    expected=expected,
-                    context=screen_text.split('\n')[line-1] if line else None
+        except (LarkError, CSAPError) as e:
+            # Try conditional-blind parsing as fallback
+            try:
+                return self._conditional_blind_fallback(screen_text, filename)
+            except Exception:
+                # If fallback also fails, raise original error
+                if isinstance(e, LarkError):
+                    # Convert Lark errors to CSAP errors
+                    line = getattr(e, 'line', None)
+                    column = getattr(e, 'column', None)
+                    
+                    if isinstance(e, UnexpectedToken):
+                        expected = ', '.join(e.expected) if hasattr(e, 'expected') else None
+                        raise CSAPParseError(
+                            f"Unexpected token: {e.token}",
+                            line=line,
+                            column=column,
+                            expected=expected,
+                            context=screen_text.split('\n')[line-1] if line else None
+                        )
+                    elif isinstance(e, UnexpectedInput):
+                        raise CSAPParseError(
+                            f"Unexpected input: {str(e)}",
+                            line=line,
+                            column=column,
+                            context=screen_text.split('\n')[line-1] if line else None
+                        )
+                    else:
+                        raise CSAPParseError(f"Parse error: {str(e)}")
+                else:
+                    # Re-raise CSAP errors
+                    raise
+    
+    def _conditional_blind_fallback(self, screen_text: str, filename: str = "<string>") -> ScreenNode:
+        """
+        Fallback parser that ignores conditionals and extracts all interactive elements.
+        
+        This is used when full CSAP parsing fails due to complex conditionals.
+        It extracts all textbuttons/imagebuttons/hotspots with Jump/Call actions.
+        """
+        # Extract screen name
+        screen_name_match = re.search(r'screen\s+(\w+)', screen_text)
+        screen_name = screen_name_match.group(1) if screen_name_match else "unknown"
+        
+        # Use conditional-blind parser to get elements
+        simple_elements = self.conditional_blind_parser.parse_screen_text(screen_text)
+        
+        # Convert to CSAP AST nodes
+        csap_elements = []
+        for simple_elem in simple_elements:
+            if simple_elem.element_type == 'textbutton':
+                # Create TextButtonNode
+                action = ActionNode(
+                    action_type=simple_elem.action_type,
+                    destination=simple_elem.destination,
+                    line_number=simple_elem.line_number
                 )
-            elif isinstance(e, UnexpectedInput):
-                raise CSAPParseError(
-                    f"Unexpected input: {str(e)}",
-                    line=line,
-                    column=column,
-                    context=screen_text.split('\n')[line-1] if line else None
+                
+                textbutton = TextButtonNode(
+                    text=simple_elem.text,
+                    action=action,
+                    line_number=simple_elem.line_number
                 )
-            else:
-                raise CSAPParseError(f"Parse error: {str(e)}")
+                csap_elements.append(textbutton)
+                
+            elif simple_elem.element_type == 'imagebutton':
+                # Create ImageButtonNode
+                action = ActionNode(
+                    action_type=simple_elem.action_type,
+                    destination=simple_elem.destination,
+                    line_number=simple_elem.line_number
+                )
+                
+                imagebutton = ImageButtonNode(
+                    action=action,
+                    line_number=simple_elem.line_number
+                )
+                csap_elements.append(imagebutton)
+                
+            elif simple_elem.element_type == 'hotspot':
+                # Create HotspotNode
+                action = ActionNode(
+                    action_type=simple_elem.action_type,
+                    destination=simple_elem.destination,
+                    line_number=simple_elem.line_number
+                )
+                
+                hotspot = HotspotNode(
+                    coordinates=(0, 0, 0, 0),  # Dummy coordinates
+                    action=action,
+                    line_number=simple_elem.line_number
+                )
+                csap_elements.append(hotspot)
+        
+        # Create ScreenNode
+        screen_node = ScreenNode(
+            screen_name=screen_name,
+            elements=csap_elements,
+            line_number=1
+        )
+        
+        return screen_node
     
     def parse_screen_file(self, file_path: Union[str, Path]) -> ScreenNode:
         """
