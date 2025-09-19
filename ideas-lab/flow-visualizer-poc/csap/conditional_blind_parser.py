@@ -36,18 +36,18 @@ class ConditionalBlindParser:
     def __init__(self):
         # Regex patterns for different element types
         self.textbutton_pattern = re.compile(
-            r'textbutton\s+"([^"]+)"[^}]*?action\s+\[?(Jump|Call)\("([^"]+)"\)\]?',
+            r'textbutton\s+"([^"]+)"[^}]*?action\s+\[[^\]]*?(Jump|Call)\("([^"]+)"\)[^\]]*?\]',
             re.MULTILINE | re.DOTALL
         )
         
         self.imagebutton_pattern = re.compile(
-            r'imagebutton:[^}]*?action\s+\[?(Jump|Call)\("([^"]+)"\)\]?',
+            r'imagebutton(?:\s+auto\s+"[^"]+"|:)[^}]*?action\s+\[[^\]]*?(Jump|Call)\("([^"]+)"\)[^\]]*?\]',
             re.MULTILINE | re.DOTALL
         )
         
         # Hotspot with coordinates
         self.hotspot_pattern = re.compile(
-            r'hotspot\s+\([^)]+\)[^}]*?action\s+\[?(Jump|Call)\("([^"]+)"\)\]?',
+            r'hotspot\s+\([^)]+\)[^}]*?action\s+\[[^\]]*?(Jump|Call)\("([^"]+)"\)[^\]]*?\]',
             re.MULTILINE | re.DOTALL
         )
     
