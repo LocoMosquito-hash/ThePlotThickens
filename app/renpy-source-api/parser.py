@@ -461,6 +461,81 @@ class RenpyParser:
         
         return sorted(rpy_files)
     
+    def validate_and_normalize_encoding(self, file_path: str) -> Tuple[str, str]:
+        """
+        Validate file encoding and detect/handle BOM issues before parsing.
+        
+        Args:
+            file_path: Path to the .rpy file
+            
+        Returns:
+            Tuple of (detected_encoding, normalized_content)
+            
+        Raises:
+            RenpyParseError: If file cannot be read with any supported encoding
+        """
+        # Common BOMs to detect
+        boms = [
+            (b'\xef\xbb\xbf', 'utf-8-sig'),  # UTF-8 BOM
+            (b'\xff\xfe', 'utf-16-le'),      # UTF-16 LE BOM
+            (b'\xfe\xff', 'utf-16-be'),      # UTF-16 BE BOM
+            (b'\xff\xfe\x00\x00', 'utf-32-le'),  # UTF-32 LE BOM
+            (b'\x00\x00\xfe\xff', 'utf-32-be'),  # UTF-32 BE BOM
+        ]
+        
+        # Encodings to try in order of preference
+        encodings_to_try = [
+            'utf-8',
+            'utf-8-sig',  # UTF-8 with BOM
+            'cp1252',     # Windows-1252 (common for Windows)
+            'latin-1',    # ISO-8859-1 (fallback)
+        ]
+        
+        try:
+            # First, read the raw bytes to detect BOM
+            with open(file_path, 'rb') as file:
+                raw_bytes = file.read()
+            
+            if not raw_bytes:
+                return 'utf-8', ''
+            
+            # Check for BOM
+            detected_encoding = None
+            content_start = 0
+            
+            for bom_bytes, encoding in boms:
+                if raw_bytes.startswith(bom_bytes):
+                    detected_encoding = encoding
+                    content_start = len(bom_bytes)
+                    print(f"[ENCODING] Detected {encoding} BOM in {file_path}")
+                    break
+            
+            # If BOM detected, decode with the appropriate encoding
+            if detected_encoding:
+                try:
+                    # Remove BOM and decode
+                    content_bytes = raw_bytes[content_start:]
+                    content = content_bytes.decode(detected_encoding.replace('-sig', ''))
+                    return detected_encoding, content
+                except UnicodeDecodeError as e:
+                    print(f"[ENCODING] Warning: BOM detected but decoding failed with {detected_encoding}: {e}")
+            
+            # No BOM detected, try different encodings
+            for encoding in encodings_to_try:
+                try:
+                    content = raw_bytes.decode(encoding)
+                    # Successful decode - validate it makes sense
+                    if content and len(content.strip()) > 0:
+                        return encoding, content
+                except (UnicodeDecodeError, UnicodeError):
+                    continue
+            
+            # If all encodings fail, raise error
+            raise RenpyParseError(f"Could not decode file with any supported encoding: {encodings_to_try}", file_path)
+            
+        except IOError as e:
+            raise RenpyParseError(f"Could not read file: {e}", file_path)
+    
     def parse_file(self, file_path: str) -> List[RenpyLine]:
         """
         Parse a single .rpy file and extract structured information.
@@ -474,21 +549,16 @@ class RenpyParser:
         parsed_lines = []
         
         try:
-            with open(file_path, 'r', encoding='utf-8') as file:
-                for line_num, line in enumerate(file, 1):
-                    parsed_line = self._parse_line(file_path, line_num, line)
-                    if parsed_line:
-                        parsed_lines.append(parsed_line)
-        except UnicodeDecodeError:
-            # Try alternative encodings
-            try:
-                with open(file_path, 'r', encoding='latin-1') as file:
-                    for line_num, line in enumerate(file, 1):
-                        parsed_line = self._parse_line(file_path, line_num, line)
-                        if parsed_line:
-                            parsed_lines.append(parsed_line)
-            except Exception as e:
-                raise RenpyParseError(f"Failed to read file with any encoding: {e}", file_path)
+            # Use encoding validation and BOM detection
+            detected_encoding, content = self.validate_and_normalize_encoding(file_path)
+            
+            # Parse the normalized content line by line
+            lines = content.splitlines()
+            for line_num, line in enumerate(lines, 1):
+                parsed_line = self._parse_line(file_path, line_num, line)
+                if parsed_line:
+                    parsed_lines.append(parsed_line)
+                    
         except Exception as e:
             raise RenpyParseError(f"Failed to parse file: {e}", file_path)
         
@@ -2215,22 +2285,21 @@ class RenpyParser:
                 file_path = os.path.join(project_path, rpy_file)
                 
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as file:
-                        lines = file.readlines()
-                except UnicodeDecodeError:
-                    try:
-                        with open(file_path, 'r', encoding='latin-1') as file:
-                            lines = file.readlines()
-                    except Exception:
-                        continue
-                
-                for line_num, line in enumerate(lines, 1):
-                    all_lines.append((file_path, line_num, line))
+                    # Use the new encoding validation and BOM detection
+                    detected_encoding, content = self.validate_and_normalize_encoding(file_path)
+                    lines = content.splitlines()
                     
-                    label_match = self.patterns['label'].match(line)
-                    if label_match:
-                        label_name = label_match.group(1)
-                        label_definitions[label_name] = (file_path, line_num)
+                    for line_num, line in enumerate(lines, 1):
+                        all_lines.append((file_path, line_num, line))
+                        
+                        label_match = self.patterns['label'].match(line)
+                        if label_match:
+                            label_name = label_match.group(1)
+                            label_definitions[label_name] = (file_path, line_num)
+                            
+                except Exception as e:
+                    print(f"[ENCODING] Warning: Could not process {file_path}: {e}")
+                    continue
         
         except Exception as e:
             raise RenpyParseError(f"Failed to collect labels: {str(e)}")
