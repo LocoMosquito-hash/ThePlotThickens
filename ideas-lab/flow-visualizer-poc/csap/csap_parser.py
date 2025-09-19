@@ -611,6 +611,67 @@ class CSAPTransformer(Transformer):
             column=column
         )
     
+    def imagemap_element(self, items):
+        """Transform imagemap element."""
+        line, column = self._get_node_location(items)
+        
+        # imagemap_body contains properties and hotspots
+        imagemap_body = items[0] if items else []
+        
+        # Extract ground and hover images from properties
+        ground_image = None
+        hover_image = None
+        hotspots = []
+        
+        if isinstance(imagemap_body, list):
+            for item in imagemap_body:
+                if isinstance(item, dict) and 'property_name' in item:
+                    # Handle ground/hover properties
+                    if item['property_name'] == 'ground':
+                        ground_image = item['property_value']
+                    elif item['property_name'] == 'hover':
+                        hover_image = item['property_value']
+                elif isinstance(item, HotspotNode):
+                    # Handle hotspot elements
+                    hotspots.append(item)
+        
+        return ImageMapNode(
+            ground_image=ground_image or "",
+            hover_image=hover_image or "",
+            hotspots=hotspots,
+            line_number=line,
+            column=column
+        )
+    
+    def imagemap_body(self, items):
+        """Transform imagemap body."""
+        return items  # Return list of properties and hotspots
+    
+    def imagemap_property(self, items):
+        """Transform imagemap property."""
+        return items[0]  # Return the ground_property or hover_property
+    
+    def ground_property(self, items):
+        """Transform ground property."""
+        return {
+            'property_name': 'ground',
+            'property_value': self._extract_string_value(items[0]) if items else ""
+        }
+    
+    def hover_property(self, items):
+        """Transform hover property."""
+        return {
+            'property_name': 'hover',
+            'property_value': self._extract_string_value(items[0]) if items else ""
+        }
+    
+    def alpha_property(self, items):
+        """Transform alpha property."""
+        return {
+            'property_name': 'alpha',
+            'property_value': str(items[0]) == 'True' if items else False
+        }
+    
     def coordinate_tuple(self, items):
         """Transform coordinate tuple with mixed types."""
         # Extract values from items, handling different types
@@ -915,6 +976,22 @@ class CSAPParser:
                     f"Screen validation failed: {'; '.join(validation_errors)}",
                     validation_type="semantic"
                 )
+            
+            # Check if CSAP found any interactive elements
+            # If not, try conditional-blind fallback for better coverage
+            interactive_elements = ast_node.get_interactive_elements()
+            if len(interactive_elements) == 0:
+                # Try conditional-blind fallback to see if it finds more elements
+                try:
+                    fallback_node = self._conditional_blind_fallback(screen_text, filename)
+                    fallback_interactive = fallback_node.get_interactive_elements()
+                    
+                    if len(fallback_interactive) > 0:
+                        print(f"[CSAP FALLBACK] Full CSAP found 0 elements, fallback found {len(fallback_interactive)} - using fallback")
+                        return fallback_node
+                except Exception:
+                    # Fallback failed, continue with original CSAP result
+                    pass
             
             return ast_node
             

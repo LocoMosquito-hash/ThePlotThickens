@@ -199,9 +199,11 @@ imagemap_element: "imagemap" ":" imagemap_body
 
 imagemap_body: (imagemap_property | hotspot_element)+
 
-imagemap_property: ground_property | hover_property
+imagemap_property: ground_property | hover_property | alpha_property | generic_property
 
 ground_property: "ground" STRING
+
+alpha_property: "alpha" BOOLEAN
 
 // ============================================================================
 // LAYOUT ELEMENTS: vbox, hbox (basic support)
