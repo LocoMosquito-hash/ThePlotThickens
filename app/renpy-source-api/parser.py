@@ -1142,14 +1142,12 @@ class RenpyParser:
                 file_path = os.path.join(project_path, rpy_file)
                 
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as file:
-                        lines = file.readlines()
-                except UnicodeDecodeError:
-                    try:
-                        with open(file_path, 'r', encoding='latin-1') as file:
-                            lines = file.readlines()
-                    except Exception:
-                        continue  # Skip problematic files
+                    # Use the new encoding validation and BOM detection
+                    detected_encoding, content = self.validate_and_normalize_encoding(file_path)
+                    lines = content.splitlines()
+                except Exception as e:
+                    print(f"[ENCODING] Warning: Could not process {file_path} for menu parsing: {e}")
+                    continue
                 
                 for line_num, line in enumerate(lines, 1):
                     stripped_line = line.strip()
