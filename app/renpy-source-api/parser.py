@@ -785,7 +785,7 @@ class RenpyParser:
         except Exception as e:
             raise RenpyProjectError(f"Failed to analyze project: {str(e)}")
     
-    def parse_menu_structure(self, file_path: str, start_line: int, lines: List[str]) -> MenuStructure:
+    def parse_menu_structure(self, file_path: str, start_line: int, lines: List[str], parent_indent: Optional[int] = None) -> MenuStructure:
         """
         Parse a complete menu structure starting from a menu line.
         
@@ -832,6 +832,14 @@ class RenpyParser:
             choice_cond_match = self.patterns['choice_with_condition'].match(line)
             
             if choice_match:
+                # NESTED MENU BOUNDARY: Check if this choice belongs to parent menu before processing
+                if parent_indent is not None and line_indent <= parent_indent:
+                    # This choice belongs to the parent menu, not this nested menu - stop parsing
+                    if current_choice:
+                        menu.choices.append(current_choice)
+                        current_choice = None  # Clear to prevent double-adding
+                    break
+                
                 # Save previous choice if exists
                 if current_choice:
                     menu.choices.append(current_choice)
@@ -845,6 +853,14 @@ class RenpyParser:
                 indent_level = line_indent
                 
             elif choice_cond_match:
+                # NESTED MENU BOUNDARY: Check if this choice belongs to parent menu before processing
+                if parent_indent is not None and line_indent <= parent_indent:
+                    # This choice belongs to the parent menu, not this nested menu - stop parsing
+                    if current_choice:
+                        menu.choices.append(current_choice)
+                        current_choice = None  # Clear to prevent double-adding
+                    break
+                
                 # Save previous choice if exists
                 if current_choice:
                     menu.choices.append(current_choice)
@@ -1170,12 +1186,22 @@ class RenpyParser:
                     if (self.patterns['menu'].match(line) or 
                         self.patterns['menu_with_name'].match(line)):
                         
-                        menu = self.parse_menu_structure(file_path, line_num, lines)
-                        menu.label_context = current_label
-                        
                         # Determine nesting level and parent choice based on context
                         line_indent = len(line) - len(line.lstrip())
-                        menu.nesting_level = self._calculate_menu_nesting_level(line_num, lines, menu_stack)
+                        nesting_level = self._calculate_menu_nesting_level(line_num, lines, menu_stack)
+                        
+                        # For nested menus, determine parent indentation to limit parsing scope
+                        parent_indent = None
+                        if nesting_level > 0 and len(menu_stack) > 0:
+                            # Find the parent choice that contains this nested menu
+                            parent_choice = self._find_parent_choice_for_nested_menu(line_num, lines, menu_stack)
+                            if parent_choice:
+                                # Use the parent choice indentation level to limit nested menu parsing
+                                parent_indent = self._get_choice_indentation(parent_choice, lines)
+                        
+                        menu = self.parse_menu_structure(file_path, line_num, lines, parent_indent)
+                        menu.label_context = current_label
+                        menu.nesting_level = nesting_level
                         
                         # If this is a nested menu, find the parent choice and attach it
                         if menu.nesting_level > 0 and len(menu_stack) > 0:
@@ -1284,6 +1310,22 @@ class RenpyParser:
                 break
         
         return None
+    
+    def _get_choice_indentation(self, choice: MenuChoice, lines: List[str]) -> int:
+        """
+        Get the indentation level of a choice based on its line number.
+        
+        Args:
+            choice: The MenuChoice object
+            lines: All lines in the file
+            
+        Returns:
+            Indentation level of the choice
+        """
+        if choice.line_number > 0 and choice.line_number <= len(lines):
+            choice_line = lines[choice.line_number - 1]  # Convert to 0-based index
+            return len(choice_line) - len(choice_line.lstrip())
+        return 0
     
     def _skip_nested_menu_content(self, menu_start_line: int, lines: List[str], parent_indent: int) -> int:
         """
