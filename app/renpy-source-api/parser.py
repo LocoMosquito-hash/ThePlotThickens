@@ -330,7 +330,7 @@ class RenpyParser:
             'dialogue': re.compile(r'^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s+"([^"]+)"', re.IGNORECASE),
             'narrator': re.compile(r'^\s*"([^"]+)"'),
             'menu': re.compile(r'^\s*menu:', re.IGNORECASE),
-            'menu_choice': re.compile(r'^\s*"([^"]+)"\s*:'),
+            'menu_choice': re.compile(r'^\s*"([^"]+)"\s*(?:\([^)]*\))?\s*:'),
             
             # Enhanced menu and choice patterns
             'menu_with_name': re.compile(r'^\s*menu\s+([a-zA-Z_][a-zA-Z0-9_]*):', re.IGNORECASE),
