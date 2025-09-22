@@ -861,12 +861,11 @@ class RenpyParser:
             elif current_choice and line_indent > indent_level:
                 # This line belongs to the current choice
                 
-                # Check if this is a nested menu - if so, stop parsing this menu
+                # Check if this is a nested menu - if so, skip over it but continue parsing parent menu
                 if (self.patterns['menu'].match(line) or self.patterns['menu_with_name'].match(line)):
-                    # We've hit a nested menu, stop parsing choices for this menu
-                    menu.choices.append(current_choice)
-                    current_choice = None
-                    break
+                    # We've hit a nested menu, skip over its content and continue with parent menu
+                    current_line = self._skip_nested_menu_content(current_line, lines, line_indent)
+                    continue
                 
                 parsed_line = self._parse_line(file_path, current_line + 1, line)
                 
@@ -1285,6 +1284,36 @@ class RenpyParser:
                 break
         
         return None
+    
+    def _skip_nested_menu_content(self, menu_start_line: int, lines: List[str], parent_indent: int) -> int:
+        """
+        Skip over nested menu content and return the line number after the nested menu ends.
+        
+        Args:
+            menu_start_line: Line number where the nested menu starts (0-based)
+            lines: All lines in the file
+            parent_indent: Indentation level of the parent choice containing this nested menu
+            
+        Returns:
+            Line number after the nested menu ends (0-based)
+        """
+        current_line = menu_start_line + 1
+        nested_menu_indent = len(lines[menu_start_line]) - len(lines[menu_start_line].lstrip())
+        
+        while current_line < len(lines):
+            line = lines[current_line]
+            line_indent = len(line) - len(line.lstrip())
+            stripped_line = line.strip()
+            
+            # If we're back to or less than the parent choice level, we've exited the nested menu
+            if stripped_line and line_indent <= parent_indent:
+                # Don't consume this line, let the parent parser handle it
+                return current_line - 1
+            
+            current_line += 1
+        
+        # Reached end of file
+        return current_line - 1
     
     def _process_nested_menu_structures(self, parent_menu_node: MenuNode, parent_menu_structure: MenuStructure):
         """
