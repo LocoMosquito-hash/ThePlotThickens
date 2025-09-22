@@ -860,6 +860,14 @@ class RenpyParser:
                 
             elif current_choice and line_indent > indent_level:
                 # This line belongs to the current choice
+                
+                # Check if this is a nested menu - if so, stop parsing this menu
+                if (self.patterns['menu'].match(line) or self.patterns['menu_with_name'].match(line)):
+                    # We've hit a nested menu, stop parsing choices for this menu
+                    menu.choices.append(current_choice)
+                    current_choice = None
+                    break
+                
                 parsed_line = self._parse_line(file_path, current_line + 1, line)
                 
                 if parsed_line:
