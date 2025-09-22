@@ -1124,7 +1124,7 @@ class RenpyParser:
 
     def find_all_menus(self, project_path: str) -> List[MenuStructure]:
         """
-        Find and parse all menu structures in the project.
+        Find and parse all menu structures in the project with proper nested menu handling.
         
         Args:
             project_path: Path to the Ren'Py project
@@ -1134,6 +1134,7 @@ class RenpyParser:
         """
         menus = []
         current_label = None
+        menu_stack = []  # Track nested menu context
         
         try:
             rpy_files = self.find_rpy_files(project_path)
@@ -1156,6 +1157,7 @@ class RenpyParser:
                     label_match = self.patterns['label'].match(line)
                     if label_match:
                         current_label = label_match.group(1)
+                        menu_stack = []  # Reset menu stack for new label
                     
                     # Check for menu start
                     if (self.patterns['menu'].match(line) or 
@@ -1163,12 +1165,154 @@ class RenpyParser:
                         
                         menu = self.parse_menu_structure(file_path, line_num, lines)
                         menu.label_context = current_label
+                        
+                        # Determine nesting level and parent choice based on context
+                        line_indent = len(line) - len(line.lstrip())
+                        menu.nesting_level = self._calculate_menu_nesting_level(line_num, lines, menu_stack)
+                        
+                        # If this is a nested menu, find the parent choice and attach it
+                        if menu.nesting_level > 0 and len(menu_stack) > 0:
+                            parent_choice = self._find_parent_choice_for_nested_menu(line_num, lines, menu_stack)
+                            if parent_choice:
+                                if not hasattr(parent_choice, 'nested_menu_structures'):
+                                    parent_choice.nested_menu_structures = []
+                                parent_choice.nested_menu_structures.append(menu)
+                                print(f"[NESTED MENU] Attached nested menu at line {line_num} to choice '{parent_choice.text}'")
+                                
+                                # Clear the destination for the parent choice since it leads to a nested menu
+                                parent_choice.destination = None
+                                parent_choice.action_type = 'nested_menu'
+                        
                         menus.append(menu)
+                        
+                        # Update menu stack for potential further nesting
+                        if menu.nesting_level == 0:
+                            menu_stack = [(menu, -1)]  # Reset stack for top-level menu
+                        else:
+                            menu_stack.append((menu, -1))
         
         except Exception as e:
             raise RenpyParseError(f"Failed to find menus: {str(e)}")
         
         return menus
+    
+    def _calculate_menu_nesting_level(self, menu_line_num: int, lines: List[str], menu_stack: List) -> int:
+        """
+        Calculate the nesting level of a menu based on indentation and context.
+        
+        Args:
+            menu_line_num: Line number of the menu (1-indexed)
+            lines: All lines in the file
+            menu_stack: Current menu stack for context
+            
+        Returns:
+            Nesting level (0 for top-level, 1+ for nested)
+        """
+        if menu_line_num - 1 >= len(lines):
+            return 0
+        
+        menu_line = lines[menu_line_num - 1]
+        menu_indent = len(menu_line) - len(menu_line.lstrip())
+        
+        # If no menus in stack, this is top-level
+        if not menu_stack:
+            return 0
+        
+        # Look backwards to find the most recent choice that could contain this menu
+        for i in range(menu_line_num - 2, -1, -1):
+            line = lines[i]
+            line_indent = len(line) - len(line.lstrip())
+            stripped = line.strip()
+            
+            # If we find a choice line that's less indented than the menu,
+            # and the menu is more indented, it's likely nested
+            if stripped.startswith('"') and ':' in stripped and line_indent < menu_indent:
+                return 1  # Nested menu
+            
+            # If we hit a less-indented menu or label, stop looking
+            if (line_indent < menu_indent and 
+                (stripped.startswith('menu') or stripped.startswith('label'))):
+                break
+        
+        return 0
+    
+    def _find_parent_choice_for_nested_menu(self, menu_line_num: int, lines: List[str], menu_stack: List) -> Optional[MenuChoice]:
+        """
+        Find the parent choice that contains a nested menu.
+        
+        Args:
+            menu_line_num: Line number of the nested menu (1-indexed)
+            lines: All lines in the file
+            menu_stack: Current menu stack for context
+            
+        Returns:
+            The parent MenuChoice object, or None if not found
+        """
+        if not menu_stack or menu_line_num - 1 >= len(lines):
+            return None
+        
+        parent_menu, _ = menu_stack[-1]
+        menu_line = lines[menu_line_num - 1]
+        menu_indent = len(menu_line) - len(menu_line.lstrip())
+        
+        # Look backwards to find the choice that this menu belongs to
+        for i in range(menu_line_num - 2, -1, -1):
+            line = lines[i]
+            line_indent = len(line) - len(line.lstrip())
+            stripped = line.strip()
+            
+            # Check if this is a choice line
+            if stripped.startswith('"') and ':' in stripped:
+                # Extract choice text
+                choice_text = stripped.split('"')[1] if '"' in stripped else stripped
+                
+                # Find matching choice in parent menu
+                for choice in parent_menu.choices:
+                    if choice.text == choice_text and line_indent < menu_indent:
+                        return choice
+            
+            # Stop if we hit a less-indented menu or label
+            if (line_indent <= menu_indent and 
+                (stripped.startswith('menu') or stripped.startswith('label'))):
+                break
+        
+        return None
+    
+    def _process_nested_menu_structures(self, parent_menu_node: MenuNode, parent_menu_structure: MenuStructure):
+        """
+        Process nested menu structures and attach them to parent choices.
+        
+        Args:
+            parent_menu_node: The parent MenuNode to process
+            parent_menu_structure: The parent MenuStructure containing nested menus
+        """
+        for choice in parent_menu_node.choices:
+            if hasattr(choice, 'nested_menu_structures') and choice.nested_menu_structures:
+                # Mark this choice as having nested menus
+                choice.action_type = 'nested_menu'
+                choice.destination = None  # Clear any jump destination
+                
+                # Set up nested menu hierarchy
+                for nested_menu_structure in choice.nested_menu_structures:
+                    nested_menu_node = self._create_menu_node_from_structure(
+                        nested_menu_structure, 
+                        menu_index=0,  # Reset index for nested menu
+                        parent_choice_index=choice.choice_index,
+                        parent_node_id=parent_menu_node.node_id
+                    )
+                    
+                    # Set nested menu properties
+                    nested_menu_node.is_nested = True
+                    nested_menu_node.nesting_level = nested_menu_structure.nesting_level
+                    nested_menu_node.parent_menu_id = parent_menu_node.node_id
+                    
+                    # Add to parent's nested menu list
+                    parent_menu_node.nested_menu_ids.append(nested_menu_node.node_id)
+                    
+                    print(f"[NESTED MENU] Created nested menu {nested_menu_node.node_id} for choice '{choice.text}'")
+                    
+                    # Recursively process further nested menus
+                    self._process_nested_menu_structures(nested_menu_node, nested_menu_structure)
     
     def find_all_screens(self, project_path: str) -> List[ScreenStructure]:
         """
@@ -2392,9 +2536,13 @@ class RenpyParser:
                 all_menu_nodes = []  # Collect all MenuNodes including nested ones
                 
                 for i, menu_structure in enumerate(label_menus):
-                    # Only create top-level MenuNodes - nested menus are preserved in nested_menu_structures
+                    # Only create MenuNodes for truly top-level menus (nesting_level == 0)
+                    # Nested menus are now stored in their parent choice's nested_menu_structures
                     if menu_structure.nesting_level == 0:  # Only process top-level menus
                         main_menu_node = self._create_menu_node_from_structure(menu_structure, i)
+                        
+                        # Process nested menus recursively
+                        self._process_nested_menu_structures(main_menu_node, menu_structure)
                         
                         # Clean up any temporary nested nodes storage
                         if hasattr(main_menu_node, '_nested_menu_nodes'):
@@ -2403,7 +2551,7 @@ class RenpyParser:
                         all_menu_nodes.append(main_menu_node)
                         print(f"Created top-level menu for {label_name}: {main_menu_node.node_id}")
                     else:
-                        print(f"Skipping nested menu at level {menu_structure.nesting_level} for {label_name} - will be handled by hierarchy")
+                        print(f"Skipping nested menu at level {menu_structure.nesting_level} for {label_name} - handled by parent choice")
                 
                 # Add all MenuNodes (top-level and nested) to the label
                 node.menu_nodes.extend(all_menu_nodes)
