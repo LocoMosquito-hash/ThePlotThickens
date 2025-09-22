@@ -407,6 +407,7 @@ class AuthoritativeHierarchy:
                 'choice_index': choice_idx,
                 'full_text': choice_text,
                 'destination': getattr(choice, 'destination', ''),
+                'all_destinations': getattr(choice, 'all_destinations', []),  # NEW: Support multiple conditional destinations
                 'condition': getattr(choice, 'condition', ''),
                 'action_type': getattr(choice, 'action_type', 'jump'),
                 'has_condition': bool(getattr(choice, 'condition', '')),

@@ -1567,39 +1567,53 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             if choice_node.node_type != 'choice':
                 continue
                 
-            # Get destination from choice content
-            destination_label_name = choice_node.content.get('destination', '')
-            if not destination_label_name:
+            # Get all destinations from choice content (both primary and conditional)
+            primary_destination = choice_node.content.get('destination', '')
+            all_destinations = choice_node.content.get('all_destinations', [])
+            
+            # If no all_destinations list, fall back to primary destination
+            if not all_destinations and primary_destination:
+                all_destinations = [primary_destination]
+            
+            if not all_destinations:
                 print(f"[CHOICE DESTINATION] Warning: Choice {choice_node.semantic_id} has no destination")
                 continue
-                
-            # CRITICAL FIX: Find the destination label node and use its content hash
-            destination_node = self._authoritative_hierarchy.get_node_by_label_name(destination_label_name)
-            if not destination_node:
-                print(f"[CHOICE DESTINATION] ERROR: Destination label '{destination_label_name}' not found in hierarchy")
-                continue
-                
-            # Create connection from choice button to destination label
-            connection = VisualizationConnection(
-                connection_id=f"choice_{choice_node.content_hash}_to_label_{destination_node.content_hash}",
-                source_node_id=choice_node.content_hash,  # Source is the choice button
-                target_node_id=destination_node.content_hash,  # FIXED: Use destination node's content hash
-                connection_type='choice_to_label',
-                line_style='solid',
-                color_hint='green',  # Green for choice connections
-                weight_hint=1.0,
-                label=None,  # No label needed on edge
-                metadata={
-                    'connection_nature': 'choice_destination',
-                    'choice_semantic_id': choice_node.semantic_id,
-                    'choice_text': choice_node.content.get('full_text', choice_node.display_name),
-                    'destination_label': destination_label_name,
-                    'destination_node_hash': destination_node.content_hash,
-                    'generated_by': 'authoritative_hierarchy'
-                }
-            )
-            connections.append(connection)
-            print(f"[CHOICE DESTINATION] Connected choice {choice_node.semantic_id} -> {destination_label_name} (hash: {destination_node.content_hash[:8]})")
+            
+            # Create connections for ALL destinations (handles conditional jumps)
+            for dest_idx, destination_label_name in enumerate(all_destinations):
+                # CRITICAL FIX: Find the destination label node and use its content hash
+                destination_node = self._authoritative_hierarchy.get_node_by_label_name(destination_label_name)
+                if not destination_node:
+                    print(f"[CHOICE DESTINATION] ERROR: Destination label '{destination_label_name}' not found in hierarchy")
+                    continue
+                    
+                # Create connection from choice button to destination label
+                connection_id = f"choice_{choice_node.content_hash}_to_label_{destination_node.content_hash}"
+                if dest_idx > 0:  # Add suffix for multiple destinations
+                    connection_id += f"_alt{dest_idx}"
+                    
+                connection = VisualizationConnection(
+                    connection_id=connection_id,
+                    source_node_id=choice_node.content_hash,  # Source is the choice button
+                    target_node_id=destination_node.content_hash,  # FIXED: Use destination node's content hash
+                    connection_type='choice_to_label',
+                    line_style='dashed' if dest_idx > 0 else 'solid',  # Primary destination solid, alternatives dashed
+                    color_hint='conditional' if dest_idx > 0 else 'green',  # Different colors for conditional destinations
+                    weight_hint=1.0 if dest_idx == 0 else 0.7,  # Primary destination has higher weight
+                    label=None,  # No label needed on edge
+                    metadata={
+                        'connection_nature': 'choice_destination',
+                        'choice_semantic_id': choice_node.semantic_id,
+                        'choice_text': choice_node.content.get('full_text', choice_node.display_name),
+                        'destination_label': destination_label_name,
+                        'destination_node_hash': destination_node.content_hash,
+                        'generated_by': 'authoritative_hierarchy',
+                        'is_conditional_destination': dest_idx > 0,
+                        'destination_index': dest_idx,
+                    }
+                )
+                connections.append(connection)
+                print(f"[CHOICE DESTINATION] Connected choice {choice_node.semantic_id} -> {destination_label_name} (hash: {destination_node.content_hash[:8]})")
         
         print(f"[PHASE 2] Created {len(connections)} choice-to-destination connections from hierarchy")
         return connections

@@ -46,12 +46,16 @@ class MenuChoice:
     """Represents a choice within a menu."""
     text: str
     condition: Optional[str] = None
-    destination: Optional[str] = None  # jump/call target
+    destination: Optional[str] = None  # Primary jump/call target (for backwards compatibility)
     action_type: Optional[str] = None  # 'jump', 'call', 'return', 'pass', 'continue'
     file_path: str = ""
     line_number: int = 0
     subsequent_lines: List[str] = field(default_factory=list)  # Lines that follow this choice
     nested_labels: List[str] = field(default_factory=list)  # Labels defined within this choice
+    
+    # NEW: Support for multiple conditional destinations
+    all_destinations: List[str] = field(default_factory=list)  # All jump/call targets found in this choice
+    destination_conditions: List[str] = field(default_factory=list)  # Conditions for each destination
     
     # Enhanced metadata for app consumption
     choice_index: int = 0  # Order within the menu (0-based)
@@ -896,11 +900,26 @@ class RenpyParser:
                     
                     # Check for action types
                     elif parsed_line.line_type in ['jump', 'choice_jump']:
-                        current_choice.action_type = 'jump'
-                        current_choice.destination = parsed_line.target_label
+                        # Set primary destination (backwards compatibility)
+                        if not current_choice.destination:
+                            current_choice.action_type = 'jump'
+                            current_choice.destination = parsed_line.target_label
+                        
+                        # Add to all destinations list
+                        if parsed_line.target_label not in current_choice.all_destinations:
+                            current_choice.all_destinations.append(parsed_line.target_label)
+                            current_choice.destination_conditions.append(f"Line {current_line + 1}")
+                            
                     elif parsed_line.line_type in ['call', 'choice_call']:
-                        current_choice.action_type = 'call'
-                        current_choice.destination = parsed_line.target_label
+                        # Set primary destination (backwards compatibility)
+                        if not current_choice.destination:
+                            current_choice.action_type = 'call'
+                            current_choice.destination = parsed_line.target_label
+                        
+                        # Add to all destinations list
+                        if parsed_line.target_label not in current_choice.all_destinations:
+                            current_choice.all_destinations.append(parsed_line.target_label)
+                            current_choice.destination_conditions.append(f"Line {current_line + 1}")
                     elif parsed_line.line_type in ['return', 'choice_return']:
                         current_choice.action_type = 'return'
                     elif parsed_line.line_type in ['choice_pass']:
