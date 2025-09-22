@@ -225,3 +225,5 @@ The BOM encoding issue was a subtle but systematic problem that caused silent pa
 4. **Provided debugging visibility** - encoding detection is logged for troubleshooting
 
 This solution ensures that the flow visualizer can handle Ren'Py files created on different systems with different encoding settings, making it more reliable and user-friendly.
+
+

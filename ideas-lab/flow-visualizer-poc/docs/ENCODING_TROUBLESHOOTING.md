@@ -192,3 +192,5 @@ If encoding validation fails for specific files:
 ---
 
 **Note**: The encoding validation system was specifically designed to handle these issues automatically. Most users will never need to manually fix encoding problems, but this guide is provided for edge cases and developer reference.
+
+

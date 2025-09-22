@@ -247,3 +247,5 @@ except Exception as e:
 - **Works with all Python text encodings**
 - **Handles Windows/Mac/Linux file differences**
 - **Supports legacy encoding formats**
+
+

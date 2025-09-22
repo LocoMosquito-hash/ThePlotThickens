@@ -2338,10 +2338,9 @@ class RenpyParser:
                 if flow.target_label == 'v14beforecourt':
                     print(f"[GRAPH DEBUG] Added incoming flow: {flow.source_label} → {flow.target_label} (context: {flow.context})")
         
-        # Analyze label properties and create menu nodes using MenuAnalyzer for nested support
-        menu_analyzer = MenuAnalyzer()
-        menu_analysis = menu_analyzer.analyze_vn_menus(project_path)
-        menus = menu_analysis.get('menu_structures', [])
+        # Analyze label properties and create menu nodes using the working menu detection
+        # FIXED: Use find_all_menus instead of MenuAnalyzer which was missing day5 menus
+        menus = self.find_all_menus(project_path)
         
         # CRITICAL FIX: Add label menus to flow graph as valid jump targets
         for menu_structure in menus:
@@ -2378,9 +2377,11 @@ class RenpyParser:
                 if menu.label_context not in menus_by_label:
                     menus_by_label[menu.label_context] = []
                 menus_by_label[menu.label_context].append(menu)
+                
         
         # Create MenuNode objects and associate them with labels
         for label_name, label_menus in menus_by_label.items():
+                
             if label_name in graph:
                 node = graph[label_name]
                 
