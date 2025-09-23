@@ -40,8 +40,15 @@ class ConditionalBlindParser:
             re.MULTILINE | re.DOTALL
         )
         
+        # Enhanced imagebutton pattern to handle multiline definitions and complex actions
+        # Handles:
+        # 1. Single-line: imagebutton idle "..." hover "..." action Jump("target")
+        # 2. Multiline: imagebutton anchor (0.5, 0.5):
+        #                   idle "..."
+        #                   action Jump("target")
+        # 3. Complex actions: action [Play("sound", "file.mp3"), Jump("target")]
         self.imagebutton_pattern = re.compile(
-            r'imagebutton(?:\s+auto\s+"[^"]+"|:).*?action\s+(?:\[.*?)?(Jump|Call)\("([^"]+)"\)(?:.*?\])?',
+            r'imagebutton(?:\s+auto\s+"[^"]+"|[^:]*:|:).*?action\s+(?:\[.*?)?(Jump|Call)\s*\(\s*["\']([^"\']+)["\']\s*\)',
             re.MULTILINE | re.DOTALL
         )
         
