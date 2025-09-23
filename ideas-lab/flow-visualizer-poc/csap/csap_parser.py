@@ -122,9 +122,10 @@ class CSAPTransformer(Transformer):
     def screen_body(self, items):
         """Transform screen body."""
         # Filter out None values (from screen properties) and keep only actual elements
+        # Include both ScreenElementNode (with element_type) and ImageMapNode
         elements = []
         for item in items:
-            if item is not None and hasattr(item, 'element_type'):
+            if item is not None and (hasattr(item, 'element_type') or isinstance(item, ImageMapNode)):
                 elements.append(item)
         return elements
     
