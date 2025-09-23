@@ -45,9 +45,12 @@ class ConditionalBlindParser:
             re.MULTILINE | re.DOTALL
         )
         
-        # Hotspot with coordinates
+        # Hotspot with coordinates - handle both bracketed and non-bracketed actions
+        # Examples: 
+        # hotspot (x,y,w,h) action [Call("target")]
+        # hotspot (x,y,w,h) action Call("target")
         self.hotspot_pattern = re.compile(
-            r'hotspot\s+\([^)]+\)[^}]*?action\s+\[[^\]]*?(Jump|Call)\("([^"]+)"\)[^\]]*?\]',
+            r'hotspot\s+\([^)]+\).*?action\s+(?:\[.*?)?(Jump|Call)\("([^"]+)"\)(?:.*?\])?',
             re.MULTILINE | re.DOTALL
         )
     
