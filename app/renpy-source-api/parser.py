@@ -2475,8 +2475,10 @@ class RenpyParser:
             flow_indent = len(flow_line) - len(flow_line.lstrip())
             
             # Look backwards from the flow line to find controlling structures
-            # Check a reasonable range backwards (up to 50 lines or start of file)
-            search_start = max(0, flow_line_idx - 50)
+            # Check a reasonable range backwards (up to 100 lines or start of file)
+            # Increased from 50 to 100 to handle cases like 23 Sisters where menu choices
+            # can be 56+ lines away from their return statements
+            search_start = max(0, flow_line_idx - 100)
             
             for i in range(flow_line_idx - 1, search_start - 1, -1):
                 line = lines[i]
