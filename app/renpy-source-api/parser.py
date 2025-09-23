@@ -2448,10 +2448,10 @@ class RenpyParser:
     
     def _is_flow_conditional(self, flow: LabelFlow, project_path: str) -> bool:
         """
-        Check if a flow is inside a conditional block (if/elif/else).
+        Check if a flow is inside a conditional block (if/elif/else/menu choice).
         
-        This is a simplified implementation that looks for common conditional patterns.
-        A more sophisticated version would parse the full AST structure.
+        Enhanced to detect menu choices as conditional contexts, which was missing
+        and causing implicit flow detection bugs.
         
         Args:
             flow: The flow to check
@@ -2461,31 +2461,58 @@ class RenpyParser:
             True if the flow appears to be conditional
         """
         try:
-            # Read the file and examine the context around the flow
-            with open(flow.file_path, 'r', encoding='utf-8') as file:
-                lines = file.readlines()
+            # Use the same encoding validation as the rest of the parser
+            detected_encoding, content = self.validate_and_normalize_encoding(flow.file_path)
+            lines = content.splitlines()
             
             flow_line_idx = flow.line_number - 1  # Convert to 0-based
             
             if flow_line_idx < 0 or flow_line_idx >= len(lines):
                 return False
             
-            # Look backwards from the flow line to find if we're in a conditional block
-            for i in range(max(0, flow_line_idx - 10), flow_line_idx + 1):
-                line = lines[i].strip()
+            # Get the indentation level of the flow line
+            flow_line = lines[flow_line_idx]
+            flow_indent = len(flow_line) - len(flow_line.lstrip())
+            
+            # Look backwards from the flow line to find controlling structures
+            # Check a reasonable range backwards (up to 50 lines or start of file)
+            search_start = max(0, flow_line_idx - 50)
+            
+            for i in range(flow_line_idx - 1, search_start - 1, -1):
+                line = lines[i]
+                line_stripped = line.strip()
+                line_indent = len(line) - len(line.lstrip())
                 
-                # Check for conditional keywords with proper indentation context
-                if re.match(r'^\s*if\s+', line, re.IGNORECASE):
-                    return True
-                elif re.match(r'^\s*elif\s+', line, re.IGNORECASE):
-                    return True
-                elif re.match(r'^\s*else\s*:', line, re.IGNORECASE):
-                    return True
+                # Only consider lines with less indentation (potential controllers)
+                if line_indent < flow_indent:
+                    # Check for if/elif/else statements
+                    if re.match(r'^\s*if\s+', line_stripped, re.IGNORECASE):
+                        return True
+                    elif re.match(r'^\s*elif\s+', line_stripped, re.IGNORECASE):
+                        return True
+                    elif re.match(r'^\s*else\s*:', line_stripped, re.IGNORECASE):
+                        return True
+                    
+                    # ENHANCED: Check for menu choices (this was the missing piece!)
+                    elif re.match(r'^\s*"[^"]*"\s*(?:\([^)]*\))?\s*:', line_stripped):
+                        # This is a menu choice - flows inside it are conditional
+                        return True
+                    
+                    # Check for menu start (for context)
+                    elif line_stripped.startswith('menu'):
+                        # Continue looking - the choice itself makes it conditional
+                        continue
+                    
+                    # Check for label boundary - stop searching if we hit another label
+                    elif line_stripped.startswith('label '):
+                        break
             
             return False
             
-        except Exception:
+        except Exception as e:
             # If we can't determine, assume it's not conditional
+            # Log the error for debugging
+            print(f"[FLOW CONDITIONAL] Warning: Could not analyze flow at {flow.file_path}:{flow.line_number}: {e}")
             return False
     
     def _find_next_sequential_label(self, all_labels: List[Dict], current_index: int) -> Optional[Dict]:
