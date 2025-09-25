@@ -478,6 +478,76 @@ class VNControlPanel(QWidget):
             # Placeholder for other actions
             print(f"Future implementation: {action_name} for node {node_id}")
         
+    def get_node_display_name(self, node_id: str) -> str:
+        """Get the display name for a node ID, falling back to the ID if not found."""
+        
+        # Try to get from authoritative hierarchy first
+        if (self.visualizer and 
+            hasattr(self.visualizer, 'data_provider') and 
+            hasattr(self.visualizer.data_provider, '_authoritative_hierarchy')):
+            
+            hierarchy = self.visualizer.data_provider._authoritative_hierarchy
+            if hierarchy:
+                # Try content hash lookup first
+                hierarchy_node = hierarchy.get_node(node_id)
+                if hierarchy_node and hierarchy_node.display_name:
+                    return hierarchy_node.display_name
+                
+                # If not found by content hash, try to find by iterating through all nodes
+                if not hierarchy_node:
+                    # Search through all nodes to find one with this content hash
+                    for node in hierarchy.node_index.values():
+                        if node.content_hash == node_id:
+                            if node.display_name:
+                                return node.display_name
+                            # Use semantic_id without hash suffix
+                            elif node.semantic_id and '#' in node.semantic_id:
+                                return node.semantic_id.split('#')[0]
+        
+        # Try to get from visualization data nodes
+        if (self.visualizer and 
+            hasattr(self.visualizer, 'data_provider') and 
+            hasattr(self.visualizer.data_provider, 'visualization_data')):
+            
+            viz_data = self.visualizer.data_provider.visualization_data
+            if viz_data and hasattr(viz_data, 'nodes'):
+                for node in viz_data.nodes:
+                    if node.node_id == node_id and node.display_name:
+                        return node.display_name
+        
+        # If it's a pure hash, try to find it in the visualizer's nodes dict
+        if (self.visualizer and hasattr(self.visualizer, 'nodes')):
+            for vis_node_id, graphics_node in self.visualizer.nodes.items():
+                if hasattr(graphics_node, 'vis_node') and graphics_node.vis_node.node_id == node_id:
+                    if graphics_node.vis_node.display_name:
+                        return graphics_node.vis_node.display_name
+        
+        # Enhanced fallback for hash-based IDs
+        if len(node_id) == 16 and node_id.isalnum():
+            # This looks like a pure content hash - return a generic name
+            return f"Menu Container {node_id[:8]}"
+        elif '#' in node_id:
+            # Extract semantic part from hash-based ID
+            semantic_part = node_id.split('#')[0]
+            if semantic_part:
+                if semantic_part.startswith('label_'):
+                    return semantic_part[6:]
+                elif '_menu_' in semantic_part:
+                    parts = semantic_part.split('_')
+                    if len(parts) >= 3:
+                        label_part = parts[1] if parts[0] == 'label' else parts[0]
+                        menu_part = parts[-1] if parts[-2] == 'menu' else 'Menu'
+                        return f"{label_part.title()} Menu {menu_part}"
+                elif '_choice_' in semantic_part:
+                    parts = semantic_part.split('_')
+                    if 'choice' in parts:
+                        choice_idx = parts[parts.index('choice') + 1] if parts.index('choice') + 1 < len(parts) else '?'
+                        return f"Choice {choice_idx}"
+                return semantic_part
+        
+        # Last resort
+        return node_id
+    
     def populate_relationships_tree(self, node_id: str, node_data: Dict[str, Any]):
         """Populate the relationships tree with Parents, Children, and Siblings."""
         self.relationships_tree.clear()
@@ -500,21 +570,24 @@ class VNControlPanel(QWidget):
         self.relationships_tree.addTopLevelItem(children_item)
         self.relationships_tree.addTopLevelItem(siblings_item)
         
-        # Populate parents
+        # Populate parents with display names
         for parent_id in parents:
-            parent_node = QTreeWidgetItem([parent_id])
+            display_name = self.get_node_display_name(parent_id)
+            parent_node = QTreeWidgetItem([display_name])
             parent_node.setData(0, Qt.ItemDataRole.UserRole, parent_id)
             parents_item.addChild(parent_node)
             
-        # Populate children
+        # Populate children with display names
         for child_id in children:
-            child_node = QTreeWidgetItem([child_id])
+            display_name = self.get_node_display_name(child_id)
+            child_node = QTreeWidgetItem([display_name])
             child_node.setData(0, Qt.ItemDataRole.UserRole, child_id)
             children_item.addChild(child_node)
             
-        # Populate siblings
+        # Populate siblings with display names
         for sibling_id in siblings:
-            sibling_node = QTreeWidgetItem([sibling_id])
+            display_name = self.get_node_display_name(sibling_id)
+            sibling_node = QTreeWidgetItem([display_name])
             sibling_node.setData(0, Qt.ItemDataRole.UserRole, sibling_id)
             siblings_item.addChild(sibling_node)
         
