@@ -152,6 +152,9 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         # Build flow graph using parser
         flow_graph = self.parser.build_flow_graph(project_path)
         
+        # Store flow graph for named menu resolution
+        self._last_flow_graph = flow_graph
+        
         # Enhance with CSAP screen parsing if available
         if self.csap_integrated_parser:
             try:
@@ -1581,10 +1584,15 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             
             # Create connections for ALL destinations (handles conditional jumps)
             for dest_idx, destination_label_name in enumerate(all_destinations):
+                # NAMED MENU FIX: Resolve named menu references to their containing labels
+                resolved_destination = self._resolve_named_menu_reference(destination_label_name)
+                if resolved_destination != destination_label_name:
+                    print(f"[NAMED MENU RESOLVE] Resolved '{destination_label_name}' -> '{resolved_destination}'")
+                
                 # CRITICAL FIX: Find the destination label node and use its content hash
-                destination_node = self._authoritative_hierarchy.get_node_by_label_name(destination_label_name)
+                destination_node = self._authoritative_hierarchy.get_node_by_label_name(resolved_destination)
                 if not destination_node:
-                    print(f"[CHOICE DESTINATION] ERROR: Destination label '{destination_label_name}' not found in hierarchy")
+                    print(f"[CHOICE DESTINATION] ERROR: Destination label '{resolved_destination}' not found in hierarchy")
                     continue
                     
                 # Create connection from choice button to destination label
@@ -1617,6 +1625,27 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         
         print(f"[PHASE 2] Created {len(connections)} choice-to-destination connections from hierarchy")
         return connections
+    
+    def _resolve_named_menu_reference(self, destination_label_name: str) -> str:
+        """
+        Resolve named menu references to their containing labels.
+        
+        Args:
+            destination_label_name: The destination label name (might be a named menu)
+            
+        Returns:
+            The resolved label name (containing label if it was a named menu, otherwise unchanged)
+        """
+        # Check if we have access to the flow graph with named menu registry
+        if hasattr(self, '_last_flow_graph') and self._last_flow_graph:
+            named_menu_registry = self._last_flow_graph.get('_named_menu_registry', {})
+            
+            if destination_label_name in named_menu_registry:
+                containing_label = named_menu_registry[destination_label_name]
+                return containing_label
+        
+        # If not found in registry, return unchanged
+        return destination_label_name
     
     def _compare_hierarchy_systems(self, old_nodes: List[VisualizationNode], old_connections: List[VisualizationConnection]) -> None:
         """

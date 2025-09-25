@@ -942,6 +942,83 @@ class RenpyParser:
         
         return menu
     
+    def _is_actual_label_menu(self, menu_structure: MenuStructure) -> bool:
+        """
+        Determine if a MenuStructure represents an actual label menu vs a named menu within a label.
+        
+        Actual label menu: label some_label: followed by menu:
+        Named menu within label: menu MenuName: within an existing label
+        
+        Args:
+            menu_structure: MenuStructure to analyze
+            
+        Returns:
+            True if this is an actual label menu, False if it's a named menu within a label
+        """
+        if not menu_structure.label_name:
+            return False
+            
+        # If the menu has a label_context that's different from its label_name,
+        # then it's a named menu within that label
+        if (menu_structure.label_context and 
+            menu_structure.label_context != menu_structure.label_name):
+            return False
+            
+        # If label_context equals label_name, it's likely an actual label menu
+        # (the menu IS the label)
+        return True
+    
+    def _resolve_named_menu_jumps(self, graph: Dict[str, LabelNode], named_menu_registry: Dict[str, str]) -> None:
+        """
+        Resolve jumps to named menus by redirecting them to the containing labels.
+        
+        Args:
+            graph: The flow graph with label nodes
+            named_menu_registry: Dictionary mapping named menu names to their containing labels
+        """
+        if not named_menu_registry:
+            return
+        
+        print(f"[NAMED MENU FIX] Resolving jumps to {len(named_menu_registry)} named menus")
+        
+        # Collect all flows that target named menus
+        flows_to_fix = []
+        
+        for label_name, label_node in graph.items():
+            if label_name.startswith('_'):  # Skip special keys like _named_menu_registry
+                continue
+                
+            # Check outgoing flows
+            for flow in label_node.outgoing_flows:
+                if flow.target_label in named_menu_registry:
+                    flows_to_fix.append((label_node, flow, 'outgoing'))
+            
+            # Check incoming flows  
+            for flow in label_node.incoming_flows:
+                if flow.target_label in named_menu_registry:
+                    flows_to_fix.append((label_node, flow, 'incoming'))
+        
+        # Fix the flows
+        for label_node, flow, flow_direction in flows_to_fix:
+            original_target = flow.target_label
+            containing_label = named_menu_registry[original_target]
+            
+            # Update the flow target
+            flow.target_label = containing_label
+            flow.context = f"named_menu_jump_to_{original_target}"
+            
+            print(f"[NAMED MENU FIX] Redirected {flow.source_label} -> {original_target} to {flow.source_label} -> {containing_label}")
+            
+            # If this was an incoming flow, we need to move it to the correct target node
+            if flow_direction == 'incoming' and containing_label in graph:
+                # Remove from current node's incoming flows
+                if flow in label_node.incoming_flows:
+                    label_node.incoming_flows.remove(flow)
+                
+                # Add to the correct target node's incoming flows
+                if flow not in graph[containing_label].incoming_flows:
+                    graph[containing_label].incoming_flows.append(flow)
+    
     def _create_menu_node_from_structure(self, menu_structure: MenuStructure, menu_index: int = 0, parent_choice_index: int = None, parent_node_id: str = None) -> MenuNode:
         """
         Create a MenuNode with rich metadata from a MenuStructure.
@@ -2613,16 +2690,35 @@ class RenpyParser:
         # FIXED: Use find_all_menus instead of MenuAnalyzer which was missing day5 menus
         menus = self.find_all_menus(project_path)
         
+        # Create a named menu registry for handling jumps to named menus
+        named_menu_registry = {}  # {menu_name: containing_label}
+        
         # CRITICAL FIX: Add label menus to flow graph as valid jump targets
+        # BUT: Only create label nodes for actual label menus, not named menus within labels
         for menu_structure in menus:
             if menu_structure.label_name and menu_structure.label_name not in graph:
-                # Create a LabelNode for the label menu
-                graph[menu_structure.label_name] = LabelNode(
-                    name=menu_structure.label_name,
-                    file_path=menu_structure.file_path,
-                    line_number=menu_structure.line_number
-                )
-                print(f"[LABEL MENU FIX] Added label menu '{menu_structure.label_name}' to flow graph")
+                # Check if this is an actual label menu (label followed by menu) 
+                # vs a named menu within a label (menu MenuName: within a label)
+                is_actual_label_menu = self._is_actual_label_menu(menu_structure)
+                
+                if is_actual_label_menu:
+                    # Create a LabelNode for the actual label menu
+                    graph[menu_structure.label_name] = LabelNode(
+                        name=menu_structure.label_name,
+                        file_path=menu_structure.file_path,
+                        line_number=menu_structure.line_number
+                    )
+                    print(f"[LABEL MENU FIX] Added label menu '{menu_structure.label_name}' to flow graph")
+                else:
+                    # Register the named menu for jump resolution
+                    named_menu_registry[menu_structure.label_name] = menu_structure.label_context
+                    print(f"[NAMED MENU] Skipping named menu '{menu_structure.label_name}' within label '{menu_structure.label_context}' - not creating separate label node")
+        
+        # Store named menu registry in the graph for flow resolution
+        graph['_named_menu_registry'] = named_menu_registry
+        
+        # NAMED MENU FIX: Resolve jumps to named menus by redirecting them to containing labels
+        self._resolve_named_menu_jumps(graph, named_menu_registry)
         
         # Process screen structures and screen calls
         screens = self.find_all_screens(project_path)
