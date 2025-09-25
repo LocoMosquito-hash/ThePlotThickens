@@ -183,7 +183,10 @@ tuple_item: STRING | NUMBER | DECIMAL | IDENTIFIER | BOOLEAN
 // ACTION STATEMENTS: Jump and Call with both quote types
 // ============================================================================
 
-action_statement: "action" (action_list | jump_action | call_action)
+action_statement: action_keyword (action_list | jump_action | call_action)
+
+// Support both 'action' and 'clicked' keywords (Babysitter game uses 'clicked')
+action_keyword: "action" | "clicked"
 
 // Support both direct actions and list-wrapped actions: [Jump("dest")]
 action_list: "[" (jump_action | call_action) "]"

@@ -706,7 +706,13 @@ class CSAPTransformer(Transformer):
     
     def action_statement(self, items):
         """Transform action statement."""
-        return items[0]  # action_list, jump_action, or call_action
+        # items[0] is action_keyword ("action" or "clicked")
+        # items[1] is action_list, jump_action, or call_action
+        return items[1] if len(items) > 1 else items[0]
+    
+    def action_keyword(self, items):
+        """Transform action keyword (action or clicked)."""
+        return str(items[0])  # Return the keyword as string
     
     def action_list(self, items):
         """Transform list-wrapped action: [Jump("dest")]"""

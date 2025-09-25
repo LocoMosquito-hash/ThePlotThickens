@@ -53,11 +53,13 @@ class ConditionalBlindParser:
         )
         
         # Hotspot with coordinates - handle both bracketed and non-bracketed actions
+        # Supports both 'action' and 'clicked' keywords (Babysitter game uses 'clicked')
         # Examples: 
         # hotspot (x,y,w,h) action [Call("target")]
         # hotspot (x,y,w,h) action Call("target")
+        # hotspot (x,y,w,h) clicked Jump("target")
         self.hotspot_pattern = re.compile(
-            r'hotspot\s+\([^)]+\).*?action\s+(?:\[.*?)?(Jump|Call)\("([^"]+)"\)(?:.*?\])?',
+            r'hotspot\s+\([^)]+\).*?(?:action|clicked)\s+(?:\[.*?)?(Jump|Call)\s*\(\s*"([^"]+)"\s*\)(?:.*?\])?',
             re.MULTILINE | re.DOTALL
         )
     
