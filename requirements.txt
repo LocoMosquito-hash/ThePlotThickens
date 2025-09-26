@@ -1,11 +1,17 @@
-PyQt6==6.8.1
-PyQt6-Qt6==6.8.2
-PyQt6-sip==13.10.0
-SQLAlchemy==1.4.46
-pyqtdarktheme==2.1.0
+# PyQt6 - Updated for Python 3.12 compatibility
+PyQt6>=6.8.1
+PyQt6-Qt6>=6.8.2
+PyQt6-sip>=13.10.0
+
+# Database
+SQLAlchemy>=2.0.0  # Updated to 2.x for Python 3.12 compatibility
+
+# UI Theme - Use latest available version (Python 3.12 compatibility)
+pyqtdarktheme>=0.1.7  # Latest available version for Python 3.12
+
 # Tabler icons packages - you can use either one
-pytablericons==1.0.1  # Pillow-based, preferred option
-tabler-qicon==0.3.0   # Direct QIcon implementation, alternative
+pytablericons>=1.0.1  # Pillow-based, preferred option
+tabler-qicon>=0.3.0   # Direct QIcon implementation, alternative
 
 # Image processing dependencies
 numpy>=1.24.0
@@ -16,4 +22,7 @@ rembg>=2.0.60  # Background removal from images
 # Window management and automation dependencies
 psutil>=7.0.0  # Cross-platform process monitoring
 pywin32>=306   # Windows API access for window automation
-global-hotkeys>=0.1.2  # Global hotkey monitoring for background screenshot capture 
+global-hotkeys>=0.1.2  # Global hotkey monitoring for background screenshot capture
+
+# Parsing and AST dependencies for enhanced Ren'Py analysis
+lark>=1.1.0  # Parser toolkit for grammar-based parsing 
