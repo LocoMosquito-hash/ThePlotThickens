@@ -516,6 +516,36 @@ class CSAPTransformer(Transformer):
             column=column
         )
     
+    def auto_property(self, items):
+        """Transform auto property."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name='auto',
+            property_value=self._extract_string_value(items[0]),
+            line_number=line,
+            column=column
+        )
+    
+    def at_property(self, items):
+        """Transform at property."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name='at',
+            property_value=self._extract_identifier_value(items[0]),
+            line_number=line,
+            column=column
+        )
+    
+    def zorder_property(self, items):
+        """Transform zorder property."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name='zorder',
+            property_value=int(items[0]),
+            line_number=line,
+            column=column
+        )
+    
     # ========================================================================
     # BUTTON TRANSFORMATIONS (Battle of the Bulges style)
     # ========================================================================

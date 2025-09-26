@@ -47,8 +47,9 @@ class ConditionalBlindParser:
         #                   idle "..."
         #                   action Jump("target")
         # 3. Complex actions: action [Play("sound", "file.mp3"), Jump("target")]
+        # 4. Bad Memories style: imagebutton auto "file.png" clicked Jump("target")
         self.imagebutton_pattern = re.compile(
-            r'imagebutton(?:\s+auto\s+"[^"]+"|[^:]*:|:).*?action\s+(?:\[.*?)?(Jump|Call)\s*\(\s*["\']([^"\']+)["\']\s*\)',
+            r'imagebutton(?:\s+auto\s+"[^"]+"|[^:]*:|:).*?(?:action|clicked)\s+(?:\[.*?)?(Jump|Call)\s*\(\s*["\']([^"\']+)["\']\s*\)',
             re.MULTILINE | re.DOTALL
         )
         

@@ -10,7 +10,7 @@ param_list: IDENTIFIER ("," IDENTIFIER)*
 
 screen_body: (screen_property | screen_element | conditional_element | add_statement)+
 
-screen_property: modal_property
+screen_property: modal_property | zorder_property
 
 screen_element: textbutton_element
              | imagebutton_element  
@@ -138,8 +138,12 @@ imagebutton_properties: imagebutton_property+
 imagebutton_property: idle_property
                     | hover_property
                     | focus_mask_property
+                    | auto_property
+                    | at_property
                     | xoffset_property
                     | yoffset_property
+                    | xalign_property
+                    | yalign_property
                     | tooltip_property
                     | generic_property
 
@@ -147,6 +151,8 @@ imagebutton_property: idle_property
 idle_property: "idle" STRING
 hover_property: "hover" STRING
 focus_mask_property: "focus_mask" BOOLEAN
+auto_property: "auto" STRING
+at_property: "at" IDENTIFIER
 tooltip_property: "tooltip" ("_(" STRING ")" | STRING)
 
 // ============================================================================
@@ -167,6 +173,7 @@ button_property: xpos_property
 
 xysize_property: "xysize" coordinate_tuple
 modal_property: "modal" BOOLEAN
+zorder_property: "zorder" NUMBER
 
 // ============================================================================
 // HOTSPOT: Coordinate-based clickable areas
