@@ -14,6 +14,14 @@ import datetime
 import re
 from pathlib import Path
 
+# Import our enhanced AST-based menu parser
+try:
+    from .ast_menu_parser import ASTMenuParser, EnhancedMenuStructure
+    HAS_AST_PARSER = True
+except ImportError:
+    HAS_AST_PARSER = False
+    print("[ANALYZER] Warning: AST menu parser not available, using regex fallback")
+
 
 def parse_menu_structure(lines, start_line_idx, rel_path):
     """
@@ -372,17 +380,27 @@ def analyze_project(project_path, output_path=None):
     """
     project_root = Path(project_path)
     
+    # Initialize AST parser if available
+    ast_parser = None
+    if HAS_AST_PARSER:
+        ast_parser = ASTMenuParser()
+        print("[ANALYZER] Using AST-based menu parsing")
+    else:
+        print("[ANALYZER] Using regex-based menu parsing")
+
     # Overall results structure
     results = {
         "metadata": {
-            "analyzer_version": "2.0",
+            "analyzer_version": "2.1",
             "analysis_timestamp": datetime.datetime.now().isoformat(),
             "target_project": str(project_root),
+            "parsing_method": "AST" if HAS_AST_PARSER else "regex"
         },
         "project_info": {},
         "labels": [],
         "characters": [],
         "menus": [],
+        "enhanced_menus": [],  # New: AST-based menu analysis
         "assets": [],
         "errors": []
     }
@@ -416,6 +434,61 @@ def analyze_project(project_path, output_path=None):
     for rpy_file in rpy_files:
         print(f"Analyzing: {rpy_file.relative_to(project_root)}")
         file_results = analyze_rpy_file(rpy_file, project_root)
+        
+        # AST-based menu analysis if available
+        if ast_parser:
+            try:
+                enhanced_menus = ast_parser.parse_file_menus(str(rpy_file))
+                # Convert to serializable format
+                for menu in enhanced_menus:
+                    enhanced_menu_dict = {
+                        "file_path": menu.file_path,
+                        "line_number": menu.line_number,
+                        "menu_name": menu.menu_name,
+                        "menu_set": menu.menu_set,
+                        "prompt": menu.prompt,
+                        "menu_complexity": menu.menu_complexity,
+                        "total_conditional_paths": menu.total_conditional_paths,
+                        "has_complex_conditionals": menu.has_complex_conditionals,
+                        "referenced_variables": menu.referenced_variables,
+                        "variable_patterns": menu.variable_patterns,
+                        "choices": []
+                    }
+                    
+                    # Add choice details
+                    for choice in menu.choices:
+                        choice_dict = {
+                            "text": choice.text,
+                            "line_number": choice.line_number,
+                            "choice_index": choice.choice_index,
+                            "is_conditional": choice.is_conditional,
+                            "primary_condition": choice.primary_condition,
+                            "choice_complexity": choice.choice_complexity,
+                            "estimated_paths": choice.estimated_paths,
+                            "has_nested_conditionals": choice.has_nested_conditionals,
+                            "has_variable_changes": choice.has_variable_changes,
+                            "variable_changes": choice.variable_changes,
+                            "unconditional_destinations": choice.unconditional_destinations,
+                            "conditional_paths": []
+                        }
+                        
+                        # Add conditional path details
+                        for path in choice.conditional_paths:
+                            path_dict = {
+                                "condition": path.condition,
+                                "destination": path.destination,
+                                "action_type": path.action_type,
+                                "line_number": path.line_number,
+                                "complexity": path.complexity
+                            }
+                            choice_dict["conditional_paths"].append(path_dict)
+                        
+                        enhanced_menu_dict["choices"].append(choice_dict)
+                    
+                    results["enhanced_menus"].append(enhanced_menu_dict)
+                    
+            except Exception as e:
+                results["errors"].append(f"AST parsing error in {rpy_file}: {str(e)}")
         
         # Merge results
         results["labels"].extend(file_results["labels"])
