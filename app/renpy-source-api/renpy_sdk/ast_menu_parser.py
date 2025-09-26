@@ -19,14 +19,19 @@ sdk_path = current_dir / "renpy-8.4.0-sdk"
 if sdk_path.exists():
     sys.path.insert(0, str(sdk_path))
 
-try:
-    import renpy.parser
-    import renpy.ast
-    from renpy.lexer import Lexer
-    HAS_RENPY_AST = True
-except ImportError:
-    HAS_RENPY_AST = False
-    print("[AST_MENU_PARSER] Warning: Ren'Py AST not available, falling back to regex parsing")
+# Disable Ren'Py AST for now due to Python version compatibility issues
+# The Ren'Py SDK uses Python 3.12+ syntax that's not compatible with older versions
+HAS_RENPY_AST = False
+print("[AST_MENU_PARSER] Using regex-based parsing (Ren'Py AST disabled for compatibility)")
+
+# try:
+#     import renpy.parser
+#     import renpy.ast
+#     from renpy.lexer import Lexer
+#     HAS_RENPY_AST = True
+# except ImportError:
+#     HAS_RENPY_AST = False
+#     print("[AST_MENU_PARSER] Warning: Ren'Py AST not available, falling back to regex parsing")
 
 
 @dataclass

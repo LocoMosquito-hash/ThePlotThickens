@@ -22,10 +22,18 @@ try:
     # Try relative imports (when used as package)
     from .parser import RenpyParser, ProjectOverview
     from .exceptions import RenpyAnalysisError, RenpyProjectError
+    # Import our enhanced AST menu parser
+    from .renpy_sdk.ast_menu_parser import ASTMenuParser, EnhancedMenuStructure
+    ENHANCED_AST_AVAILABLE = True
 except ImportError:
     # Fall back to direct imports (when run standalone)
     from parser import RenpyParser, ProjectOverview
     from exceptions import RenpyAnalysisError, RenpyProjectError
+    try:
+        from renpy_sdk.ast_menu_parser import ASTMenuParser, EnhancedMenuStructure
+        ENHANCED_AST_AVAILABLE = True
+    except ImportError:
+        ENHANCED_AST_AVAILABLE = False
 
 
 @dataclass
@@ -536,13 +544,25 @@ class HybridRenpyParser:
         self.complexity_detector = ComplexityDetector()
         self.prefer_sdk = prefer_sdk
         
+        # Initialize enhanced AST menu parser if available
+        self.ast_menu_parser = None
+        if ENHANCED_AST_AVAILABLE:
+            try:
+                self.ast_menu_parser = ASTMenuParser()
+                print("[HYBRID] ✅ Enhanced AST menu parser initialized")
+            except Exception as e:
+                print(f"[HYBRID] ⚠️ AST menu parser initialization failed: {e}")
+        else:
+            print("[HYBRID] ⚠️ Enhanced AST menu parser not available")
+        
         # Statistics
         self.stats = {
             'regex_only': 0,
             'sdk_fallback': 0,
             'sdk_preferred': 0,
             'cache_hits': 0,
-            'total_projects': 0
+            'total_projects': 0,
+            'enhanced_menus': 0  # Track AST-enhanced menu parsing
         }
     
     # Delegate methods to maintain compatibility with RenpyParser interface
@@ -629,6 +649,25 @@ class HybridRenpyParser:
                 print("📝 Attempting regex analysis...")
             
             regex_results = self.regex_parser.analyze_project(project_path)
+            
+            # Enhance with AST menu parsing if available
+            if self.ast_menu_parser:
+                try:
+                    if verbose:
+                        print("🎯 Enhancing with AST-based menu analysis...")
+                    
+                    enhanced_menus = self._enhance_menus_with_ast(project_path, regex_results)
+                    if enhanced_menus:
+                        # Add enhanced menu data to results
+                        regex_results.enhanced_menus = enhanced_menus
+                        self.stats['enhanced_menus'] += len(enhanced_menus)
+                        
+                        if verbose:
+                            print(f"   ✅ Enhanced {len(enhanced_menus)} menus with AST analysis")
+                    
+                except Exception as e:
+                    if verbose:
+                        print(f"   ⚠️ AST menu enhancement failed: {e}")
             
             # Check if we need SDK enhancement
             needs_sdk, reasons = self.complexity_detector.needs_sdk_analysis(project_path, regex_results)
@@ -758,6 +797,91 @@ class HybridRenpyParser:
         
         return merged
     
+    def _enhance_menus_with_ast(self, project_path: str, regex_results: ProjectOverview) -> List[Dict[str, Any]]:
+        """
+        Enhance menu analysis using AST-based parsing for better conditional path detection.
+        
+        Args:
+            project_path: Path to the VN project
+            regex_results: Results from regex parsing
+            
+        Returns:
+            List of enhanced menu structures with conditional path analysis
+        """
+        if not self.ast_menu_parser:
+            return []
+        
+        enhanced_menus = []
+        
+        # Get all .rpy files from the project
+        rpy_files = self.regex_parser.find_rpy_files(project_path)
+        
+        for rpy_file in rpy_files:
+            try:
+                # Convert relative path to absolute path
+                if not Path(rpy_file).is_absolute():
+                    absolute_path = Path(project_path) / rpy_file
+                else:
+                    absolute_path = Path(rpy_file)
+                
+                # Parse menus in this file with AST parser
+                file_menus = self.ast_menu_parser.parse_file_menus(str(absolute_path))
+                
+                # Convert to serializable format for integration
+                for menu in file_menus:
+                    enhanced_menu = {
+                        "file_path": menu.file_path,
+                        "line_number": menu.line_number,
+                        "menu_name": menu.menu_name,
+                        "menu_set": menu.menu_set,
+                        "prompt": menu.prompt,
+                        "menu_complexity": menu.menu_complexity,
+                        "total_conditional_paths": menu.total_conditional_paths,
+                        "has_complex_conditionals": menu.has_complex_conditionals,
+                        "referenced_variables": menu.referenced_variables,
+                        "variable_patterns": menu.variable_patterns,
+                        "choices": []
+                    }
+                    
+                    # Add enhanced choice analysis
+                    for choice in menu.choices:
+                        choice_data = {
+                            "text": choice.text,
+                            "line_number": choice.line_number,
+                            "choice_index": choice.choice_index,
+                            "is_conditional": choice.is_conditional,
+                            "primary_condition": choice.primary_condition,
+                            "choice_complexity": choice.choice_complexity,
+                            "estimated_paths": choice.estimated_paths,
+                            "has_nested_conditionals": choice.has_nested_conditionals,
+                            "has_variable_changes": choice.has_variable_changes,
+                            "variable_changes": choice.variable_changes,
+                            "unconditional_destinations": choice.unconditional_destinations,
+                            "conditional_paths": []
+                        }
+                        
+                        # Add conditional path details
+                        for path in choice.conditional_paths:
+                            path_data = {
+                                "condition": path.condition,
+                                "destination": path.destination,
+                                "action_type": path.action_type,
+                                "line_number": path.line_number,
+                                "complexity": path.complexity
+                            }
+                            choice_data["conditional_paths"].append(path_data)
+                        
+                        enhanced_menu["choices"].append(choice_data)
+                    
+                    enhanced_menus.append(enhanced_menu)
+                    
+            except Exception as e:
+                # Don't let individual file failures break the entire analysis
+                print(f"[HYBRID] Warning: AST parsing failed for {rpy_file}: {e}")
+                continue
+        
+        return enhanced_menus
+
     def get_analysis_stats(self) -> Dict[str, Any]:
         """Get statistics about analysis method usage."""
         total = self.stats['total_projects']
@@ -769,5 +893,6 @@ class HybridRenpyParser:
             'regex_only_percent': (self.stats['regex_only'] / total) * 100,
             'sdk_usage_percent': ((self.stats['sdk_fallback'] + self.stats['sdk_preferred']) / total) * 100,
             'cache_hit_percent': (self.stats['cache_hits'] / total) * 100 if total > 0 else 0,
-            'sdk_available': self.sdk_analyzer.is_available
+            'sdk_available': self.sdk_analyzer.is_available,
+            'enhanced_menus_count': self.stats['enhanced_menus']
         } 

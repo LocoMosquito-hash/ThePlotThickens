@@ -34,12 +34,29 @@ from flow_visualizer_interface import (
 from authoritative_hierarchy import AuthoritativeHierarchy, HierarchyNode
 
 try:
+    # Add the app/renpy-source-api directory to the path
+    import sys
+    from pathlib import Path
+    app_dir = Path(__file__).parent.parent.parent / "app" / "renpy-source-api"
+    if str(app_dir) not in sys.path:
+        sys.path.insert(0, str(app_dir))
+    
     from sdk_integration import HybridRenpyParser, ComplexityDetector
     from parser import RenpyParser
     SDK_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: SDK integration not available: {e}")
-    from parser import RenpyParser
+    # Fallback: try to import just the parser
+    try:
+        import sys
+        from pathlib import Path
+        app_dir = Path(__file__).parent.parent.parent / "app" / "renpy-source-api"
+        if str(app_dir) not in sys.path:
+            sys.path.insert(0, str(app_dir))
+        from parser import RenpyParser
+    except ImportError:
+        print("Error: Cannot import RenpyParser")
+        RenpyParser = None
     SDK_AVAILABLE = False
 
 

@@ -310,6 +310,7 @@ class ProjectOverview:
     character_definitions: Dict[str, str]  # code -> name
     label_list: List[str]
     errors: List[str]
+    enhanced_menus: List[Dict[str, Any]] = field(default_factory=list)  # Enhanced AST menu analysis
 
 
 class RenpyParser:
