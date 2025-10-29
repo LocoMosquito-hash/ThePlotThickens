@@ -8,7 +8,13 @@ menu_name: IDENTIFIER
 
 menu_body: menu_item+
 
-menu_item: conditional_choice | simple_choice
+menu_item: conditional_choice | simple_choice | menu_text | character_dialogue
+
+// Menu text (descriptive text without colon)
+menu_text: STRING
+
+// Character dialogue in menu
+character_dialogue: IDENTIFIER STRING
 
 simple_choice: STRING ":" choice_body?
 

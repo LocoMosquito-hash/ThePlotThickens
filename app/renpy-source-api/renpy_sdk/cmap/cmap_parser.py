@@ -109,7 +109,10 @@ class CMAPTransformer(Transformer):
         
         if isinstance(body_items, list):
             for item in body_items:
-                if isinstance(item, MenuChoiceNode):
+                # Skip None items (descriptive text and character dialogue)
+                if item is None:
+                    continue
+                elif isinstance(item, MenuChoiceNode):
                     choices.append(item)
                 elif isinstance(item, ConditionalMenuItemNode):
                     conditional_items.append(item)
@@ -161,7 +164,17 @@ class CMAPTransformer(Transformer):
     
     def menu_item(self, items):
         """Transform menu item."""
-        return items[0]  # Return the choice or set statement
+        return items[0]  # Return the choice, text, or dialogue
+    
+    def menu_text(self, items):
+        """Transform menu text (descriptive text)."""
+        # Just return None - we ignore descriptive text for flow analysis
+        return None
+    
+    def character_dialogue(self, items):
+        """Transform character dialogue in menu."""
+        # Just return None - we ignore character dialogue for flow analysis
+        return None
     
     # ========================================================================
     # MENU CHOICES

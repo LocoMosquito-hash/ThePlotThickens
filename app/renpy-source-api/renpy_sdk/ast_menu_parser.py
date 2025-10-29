@@ -577,19 +577,20 @@ class ASTMenuParser:
             enhanced_choice = EnhancedMenuChoice(
                 text=choice.text,
                 line_number=choice.line_number,
-                destinations=destinations,
+                choice_index=len(enhanced_choices),  # Current index in the list
                 is_conditional=choice.is_conditional,
                 primary_condition=condition_text,
+                unconditional_destinations=destinations,
                 conditional_paths=[],  # TODO: Implement if needed
-                choice_complexity=condition_complexity,
-                referenced_variables=self._extract_variables_from_condition(condition_text) if condition_text else []
+                choice_complexity=condition_complexity
             )
             enhanced_choices.append(enhanced_choice)
         
         # Analyze menu-level properties
-        total_paths = sum(len(choice.conditional_paths) + (1 if choice.destinations else 0) for choice in enhanced_choices)
+        total_paths = sum(len(choice.conditional_paths) + (1 if choice.unconditional_destinations else 0) for choice in enhanced_choices)
         has_complex = any(choice.choice_complexity in ["complex", "dynamic"] for choice in enhanced_choices)
-        has_nested = any(isinstance(stmt, NestedMenuNode) for choice in cmap_menu.choices for stmt in choice.body)
+        # Check for nested menus (simplified for now)
+        has_nested = False  # TODO: Implement nested menu detection from CMAP
         
         # Determine menu complexity
         if has_complex:
@@ -600,9 +601,12 @@ class ASTMenuParser:
             menu_complexity = "simple"
         
         # Extract referenced variables
+        # Extract variables from conditions (simplified for now)
         all_variables = []
         for choice in enhanced_choices:
-            all_variables.extend(choice.referenced_variables)
+            if choice.primary_condition:
+                variables = self._extract_variables_from_condition(choice.primary_condition)
+                all_variables.extend(variables)
         
         return EnhancedMenuStructure(
             file_path=file_path,
