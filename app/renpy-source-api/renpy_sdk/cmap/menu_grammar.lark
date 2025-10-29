@@ -1,0 +1,140 @@
+// CMAP Grammar for Ren'Py Menu Parsing
+// Custom Menu AST Parser - handles menus, choices, conditionals, and nesting
+
+start: menu_definition
+
+menu_definition: menu_header menu_body
+
+menu_header: "menu" menu_name? ":"
+
+menu_name: IDENTIFIER
+
+menu_body: menu_item+
+
+menu_item: menu_set_statement | menu_choice
+
+// ============================================================================
+// MENU CHOICES: Basic and conditional choices
+// ============================================================================
+
+menu_choice: conditional_choice | simple_choice
+
+simple_choice: STRING ":" choice_body?
+
+conditional_choice: STRING "if" conditional_expression ":" choice_body?
+
+// Simplified conditional expression - match common patterns
+conditional_expression: IDENTIFIER
+                      | IDENTIFIER comparison_operator condition_value
+                      | "not" IDENTIFIER
+                      | "(" conditional_expression ")"
+
+comparison_operator: "==" | "!=" | "<" | ">" | "<=" | ">="
+
+condition_value: STRING | NUMBER | DECIMAL | IDENTIFIER | "True" | "False"
+
+choice_body: statement+
+
+statement: jump_statement
+         | call_statement  
+         | return_statement
+         | pass_statement
+         | python_statement
+         | dialogue_statement
+         | nested_menu
+         | variable_assignment
+         | generic_statement
+
+// ============================================================================
+// CONDITIONAL MENU ITEMS: if/elif/else in menus
+// ============================================================================
+
+conditional_menu_item: if_menu_statement elif_menu_statement* else_menu_statement?
+
+if_menu_statement: "if" conditional_expression ":" conditional_menu_body
+
+elif_menu_statement: "elif" conditional_expression ":" conditional_menu_body
+
+else_menu_statement: "else" ":" conditional_menu_body
+
+conditional_menu_body: menu_item+
+
+// ============================================================================
+// NESTED MENUS: Menus within choice blocks
+// ============================================================================
+
+nested_menu: menu_definition
+
+// ============================================================================
+// CHOICE BODY STATEMENTS: What happens when a choice is selected
+// ============================================================================
+
+jump_statement: "jump" IDENTIFIER
+
+call_statement: "call" IDENTIFIER call_params?
+
+call_params: "(" call_arg_list? ")"
+call_arg_list: call_arg ("," call_arg)*
+call_arg: IDENTIFIER | STRING | NUMBER
+
+return_statement: "return" return_value?
+
+return_value: STRING | NUMBER | IDENTIFIER
+
+pass_statement: "pass"
+
+// Generic statement to catch anything else
+generic_statement: /[^\n\r]+/
+
+python_statement: "$" python_code
+
+python_code: /[^\n\r]+/  // Single line Python code
+
+dialogue_statement: speaker_name? dialogue_text
+
+speaker_name: IDENTIFIER
+
+dialogue_text: STRING
+
+variable_assignment: "$" IDENTIFIER assignment_operator assignment_value
+
+assignment_operator: "=" | "+=" | "-=" | "*=" | "/="
+
+assignment_value: STRING | NUMBER | DECIMAL | IDENTIFIER | boolean_value
+
+boolean_value: "True" | "False"
+
+// ============================================================================
+// MENU SET STATEMENT: menu set variable
+// ============================================================================
+
+menu_set_statement: "set" IDENTIFIER
+
+// ============================================================================
+// TERMINALS: Basic tokens
+// ============================================================================
+
+IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
+
+STRING: /"([^"\\]|\\.)*"/
+      | /'([^'\\]|\\.)*'/
+
+NUMBER: /\d+/
+
+DECIMAL: /\d+\.\d+/
+
+// Comments
+COMMENT: /#[^\n\r]*/
+
+// Whitespace and newlines
+%import common.WS
+%ignore WS
+%ignore COMMENT
+
+// Newlines are significant for indentation
+NEWLINE: /\r?\n/
+
+// Indentation tokens (handled by RenpyIndenter)
+_INDENT: "__INDENT__"
+_DEDENT: "__DEDENT__"
+_NEWLINE: "__NEWLINE__"

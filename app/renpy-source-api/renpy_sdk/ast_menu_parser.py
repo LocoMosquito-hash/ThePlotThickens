@@ -27,10 +27,19 @@ try:
     print("[AST_MENU_PARSER] ✅ Ren'Py AST successfully imported - using true AST parsing")
 except ImportError as e:
     HAS_RENPY_AST = False
-    print(f"[AST_MENU_PARSER] Warning: Ren'Py AST not available ({e}), falling back to enhanced regex parsing")
+    print(f"[AST_MENU_PARSER] Warning: Ren'Py AST not available ({e}), falling back to CMAP + enhanced regex parsing")
 except SyntaxError as e:
     HAS_RENPY_AST = False
-    print(f"[AST_MENU_PARSER] Warning: Ren'Py AST syntax incompatible ({e}), falling back to enhanced regex parsing")
+    print(f"[AST_MENU_PARSER] Warning: Ren'Py AST syntax incompatible ({e}), falling back to CMAP + enhanced regex parsing")
+
+# Import CMAP (Custom Menu AST Parser) as alternative to Ren'Py AST
+try:
+    from .cmap import CMAPParser, MenuNode as CMAPMenuNode
+    HAS_CMAP = True
+    print("[AST_MENU_PARSER] ✅ CMAP (Custom Menu AST Parser) available - using Lark-based parsing")
+except ImportError as e:
+    HAS_CMAP = False
+    print(f"[AST_MENU_PARSER] Warning: CMAP not available ({e}), using enhanced regex only")
 
 
 @dataclass
@@ -95,7 +104,21 @@ class ASTMenuParser:
     """AST-based menu parser using actual Ren'Py AST structures."""
     
     def __init__(self):
+        """Initialize the AST Menu Parser with subprocess-based true AST parsing."""
         self.has_ast = HAS_RENPY_AST
+        self.has_cmap = HAS_CMAP
+        self.cmap_parser = None
+        
+        if self.has_cmap:
+            # Initialize CMAP parser
+            try:
+                self.cmap_parser = CMAPParser()
+                print("[AST_MENU_PARSER] ✅ CMAP parser initialized successfully")
+            except Exception as e:
+                print(f"[AST_MENU_PARSER] ⚠️ CMAP parser initialization failed: {e}")
+                self.has_cmap = False
+                self.cmap_parser = None
+        
         self.variable_patterns = {
             'relationship': ['love', 'trust', 'friendship', 'affection', 'romance'],
             'story_flags': ['completed', 'discovered', 'unlocked', 'seen', 'met'],
@@ -104,14 +127,141 @@ class ASTMenuParser:
         }
     
     def parse_file_menus(self, file_path: str) -> List[EnhancedMenuStructure]:
-        """Parse all menus in a file using AST when available."""
+        """Parse all menus in a file using the best available method."""
         if self.has_ast:
             return self._parse_with_ast(file_path)
+        elif self.has_cmap:
+            return self._parse_with_cmap(file_path)
         else:
             return self._parse_with_regex_fallback(file_path)
     
     def _parse_with_ast(self, file_path: str) -> List[EnhancedMenuStructure]:
-        """Parse menus using the actual Ren'Py AST."""
+        """Parse menus using true Ren'Py AST via subprocess."""
+        if not self.has_ast:
+            return self._parse_with_regex_fallback(file_path)
+        
+        try:
+            return self._parse_with_renpy_subprocess(file_path)
+        except Exception as e:
+            print(f"[AST_MENU_PARSER] AST subprocess failed ({e}), falling back to regex")
+            return self._parse_with_regex_fallback(file_path)
+    
+    def _parse_with_renpy_subprocess(self, file_path: str) -> List[EnhancedMenuStructure]:
+        """Use Ren'Py's Python interpreter to parse AST via subprocess."""
+        import subprocess
+        import json
+        import shutil
+        from pathlib import Path
+        
+        # Path to Ren'Py executable and our AST parser script  
+        renpy_sdk_dir = Path(__file__).parent / "renpy-8.4.0-sdk"
+        renpy_python_exe = renpy_sdk_dir / "lib" / "py3-windows-x86_64" / "python.exe"
+        ast_parser_script = Path(__file__).parent / "ast_parser_with_renpy.py"
+        
+        if not renpy_python_exe.exists():
+            raise FileNotFoundError(f"Ren'Py Python executable not found: {renpy_python_exe}")
+        
+        if not ast_parser_script.exists():
+            raise FileNotFoundError(f"AST parser script not found: {ast_parser_script}")
+        
+        try:
+            # Run Ren'Py's standalone Python with our AST parser script
+            cmd = [str(renpy_python_exe), str(ast_parser_script), str(file_path)]
+            
+            print(f"[AST_MENU_PARSER] 🚀 Running true AST parsing with Ren'Py...")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=str(renpy_sdk_dir)
+            )
+            
+            # Print debug messages from stderr (they won't interfere with JSON)
+            if result.stderr.strip():
+                print(f"[AST_MENU_PARSER] Debug output from Ren'Py AST:")
+                for line in result.stderr.strip().split('\n'):
+                    if line.strip():
+                        print(f"  {line}")
+            
+            if result.returncode != 0:
+                print(f"[AST_MENU_PARSER] Ren'Py Python process failed with return code {result.returncode}")
+                print(f"[AST_MENU_PARSER] stderr: {result.stderr}")
+                print(f"[AST_MENU_PARSER] stdout: {result.stdout}")
+                raise RuntimeError(f"Ren'Py Python process failed: {result.stderr}")
+            
+            # Parse JSON output from stdout (now clean of debug messages)
+            try:
+                ast_data = json.loads(result.stdout)
+                print(f"[AST_MENU_PARSER] ✅ Successfully parsed JSON from AST subprocess")
+                
+                if ast_data.get('success'):
+                    menus = self._convert_ast_to_enhanced_menus(ast_data, file_path)
+                    print(f"[AST_MENU_PARSER] ✅ True AST parsing successful: {len(menus)} menus found")
+                    return menus
+                else:
+                    error_msg = ast_data.get('error', 'Unknown error')
+                    print(f"[AST_MENU_PARSER] AST parsing reported failure: {error_msg}")
+                    raise RuntimeError(f"AST parsing failed: {error_msg}")
+            except json.JSONDecodeError as e:
+                print(f"[AST_MENU_PARSER] Failed to parse JSON: {e}")
+                print(f"[AST_MENU_PARSER] Raw stdout: {result.stdout[:500]}...")
+                print(f"[AST_MENU_PARSER] Raw stderr: {result.stderr[:500]}...")
+                raise RuntimeError("Invalid JSON output from Ren'Py AST parser")
+        
+        except Exception as e:
+            print(f"[AST_MENU_PARSER] Subprocess error: {e}")
+            raise
+    
+    def _convert_ast_to_enhanced_menus(self, ast_data: dict, file_path: str) -> List[EnhancedMenuStructure]:
+        """Convert AST data to EnhancedMenuStructure objects."""
+        menus = []
+        
+        for stmt in ast_data.get('statements', []):
+            if stmt.get('type') == 'Menu':
+                menu = EnhancedMenuStructure(
+                    file_path=file_path,
+                    line_number=stmt.get('line', 0),
+                    menu_set=stmt.get('set'),
+                    with_statement=stmt.get('with_')
+                )
+                
+                for item_data in stmt.get('items', []):
+                    if item_data.get('label'):  # Only process choices with labels
+                        choice = EnhancedMenuChoice(
+                            text=item_data['label'],
+                            line_number=stmt.get('line', 0),
+                            choice_index=len(menu.choices),
+                            is_conditional=bool(item_data.get('condition')),
+                            primary_condition=item_data.get('condition')
+                        )
+                        
+                        # Add destinations from AST analysis
+                        for dest in item_data.get('destinations', []):
+                            if dest['type'] == 'jump':
+                                choice.unconditional_destinations.append(dest['target'])
+                        
+                        # Analyze condition if present
+                        if choice.is_conditional:
+                            choice.condition_complexity = self._classify_condition_complexity(choice.primary_condition)
+                            choice.referenced_variables = self._extract_variables_from_condition(choice.primary_condition)
+                        
+                        # Classify choice complexity
+                        self._classify_choice_complexity(choice)
+                        
+                        menu.choices.append(choice)
+                
+                # Compute menu statistics
+                self._compute_menu_statistics(menu)
+                
+                if menu.choices:  # Only add menus with choices
+                    menus.append(menu)
+        
+        return menus
+    
+    def _parse_with_ast_old(self, file_path: str) -> List[EnhancedMenuStructure]:
+        """Old direct AST parsing method (kept for reference)."""
         menus = []
         
         try:
@@ -360,6 +510,135 @@ class ASTMenuParser:
         
         return patterns
     
+    def _parse_with_cmap(self, file_path: str) -> List[EnhancedMenuStructure]:
+        """Parse menus using CMAP (Custom Menu AST Parser)."""
+        if not self.has_cmap or not self.cmap_parser:
+            return self._parse_with_regex_fallback(file_path)
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+        except Exception as e:
+            print(f"[CMAP] Failed to read file {file_path}: {e}")
+            return []
+        
+        menus = []
+        
+        # Find all menu definitions in the file
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            if line_stripped.startswith('menu') and ':' in line_stripped:
+                # Found a menu definition
+                try:
+                    cmap_menu = self.cmap_parser.parse_menu_from_lines(lines, i + 1)
+                    if cmap_menu:
+                        # Convert CMAP menu to EnhancedMenuStructure
+                        enhanced_menu = self._convert_cmap_to_enhanced(cmap_menu, file_path, i + 1)
+                        menus.append(enhanced_menu)
+                        print(f"[CMAP] ✅ Parsed menu at line {i + 1} with {len(enhanced_menu.choices)} choices")
+                    else:
+                        print(f"[CMAP] ⚠️ Failed to parse menu at line {i + 1}, falling back to regex")
+                        # Fall back to regex for this specific menu
+                        regex_menu = self._parse_single_menu_regex(lines, i + 1, file_path)
+                        if regex_menu:
+                            menus.append(regex_menu)
+                except Exception as e:
+                    print(f"[CMAP] Error parsing menu at line {i + 1}: {e}")
+                    # Fall back to regex for this specific menu
+                    try:
+                        regex_menu = self._parse_single_menu_regex(lines, i + 1, file_path)
+                        if regex_menu:
+                            menus.append(regex_menu)
+                    except Exception as regex_e:
+                        print(f"[CMAP] Regex fallback also failed: {regex_e}")
+        
+        print(f"[CMAP] Parsed {len(menus)} menus from {file_path}")
+        return menus
+    
+    def _convert_cmap_to_enhanced(self, cmap_menu: 'CMAPMenuNode', file_path: str, line_number: int) -> EnhancedMenuStructure:
+        """Convert CMAP MenuNode to EnhancedMenuStructure."""
+        enhanced_choices = []
+        
+        # Convert CMAP choices to enhanced choices
+        for choice in cmap_menu.choices:
+            # Extract destinations from choice body
+            destinations = []
+            for statement in choice.body:
+                if hasattr(statement, 'target'):  # Jump/Call statements
+                    destinations.append(statement.target)
+            
+            # Analyze condition if present
+            condition_text = None
+            condition_complexity = "simple"
+            if choice.condition:
+                condition_text = self._cmap_condition_to_text(choice.condition)
+                condition_complexity = self._classify_condition_complexity(condition_text)
+            
+            enhanced_choice = EnhancedMenuChoice(
+                text=choice.text,
+                line_number=choice.line_number,
+                destinations=destinations,
+                is_conditional=choice.is_conditional,
+                primary_condition=condition_text,
+                conditional_paths=[],  # TODO: Implement if needed
+                choice_complexity=condition_complexity,
+                referenced_variables=self._extract_variables_from_condition(condition_text) if condition_text else []
+            )
+            enhanced_choices.append(enhanced_choice)
+        
+        # Analyze menu-level properties
+        total_paths = sum(len(choice.conditional_paths) + (1 if choice.destinations else 0) for choice in enhanced_choices)
+        has_complex = any(choice.choice_complexity in ["complex", "dynamic"] for choice in enhanced_choices)
+        has_nested = any(isinstance(stmt, NestedMenuNode) for choice in cmap_menu.choices for stmt in choice.body)
+        
+        # Determine menu complexity
+        if has_complex:
+            menu_complexity = "complex"
+        elif any(choice.is_conditional for choice in enhanced_choices):
+            menu_complexity = "conditional"
+        else:
+            menu_complexity = "simple"
+        
+        # Extract referenced variables
+        all_variables = []
+        for choice in enhanced_choices:
+            all_variables.extend(choice.referenced_variables)
+        
+        return EnhancedMenuStructure(
+            file_path=file_path,
+            line_number=line_number,
+            menu_name=cmap_menu.name,
+            menu_set=cmap_menu.set_variable,
+            choices=enhanced_choices,
+            total_conditional_paths=total_paths,
+            has_complex_conditionals=has_complex,
+            has_nested_menus=has_nested,
+            menu_complexity=menu_complexity,
+            referenced_variables=list(set(all_variables))
+        )
+    
+    def _cmap_condition_to_text(self, condition: 'ConditionalExpressionNode') -> str:
+        """Convert CMAP conditional expression to text."""
+        if condition.is_negated:
+            result = f"not {condition.variable}"
+        elif condition.operator:
+            result = f"{condition.variable} {condition.operator} {condition.value}"
+        else:
+            result = condition.variable
+        
+        # Handle chained conditions
+        if condition.next_condition:
+            next_text = self._cmap_condition_to_text(condition.next_condition)
+            result += f" {condition.logical_operator} {next_text}"
+        
+        return result
+    
+    def _parse_single_menu_regex(self, lines: List[str], start_line: int, file_path: str) -> Optional[EnhancedMenuStructure]:
+        """Parse a single menu using regex (helper for CMAP fallback)."""
+        # This is a simplified version of the regex parsing for individual menus
+        # We can extract this from the main regex method if needed
+        return None  # TODO: Implement if needed
+    
     def _parse_with_regex_fallback(self, file_path: str) -> List[EnhancedMenuStructure]:
         """Fallback regex-based parsing when AST is not available."""
         
@@ -414,6 +693,7 @@ class ASTMenuParser:
         current_line = start_line + 1
         choice_index = 0
         base_indent = None
+        menu_indent = len(lines[start_line]) - len(lines[start_line].lstrip())
         
         while current_line < len(lines):
             line = lines[current_line]
@@ -425,10 +705,16 @@ class ASTMenuParser:
             
             line_indent = len(line) - len(line.lstrip())
             
+            # Check if we've encountered a nested menu
+            if re.match(r'^\s*menu\s*(?:[a-zA-Z_][a-zA-Z0-9_]*)?\s*(?:\([^)]*\))?\s*:', stripped_line):
+                if line_indent > menu_indent:
+                    # This is a nested menu - stop parsing this menu's choices
+                    break
+            
             if base_indent is None:
                 base_indent = line_indent
-            elif line_indent <= base_indent and not stripped_line.startswith('"'):
-                # End of menu
+            elif line_indent <= menu_indent and not stripped_line.startswith('"'):
+                # End of menu (back to same or lower indentation than menu declaration)
                 break
             
             # Check for choice patterns
@@ -539,10 +825,11 @@ class ASTMenuParser:
             current_line += 1
     
     def _find_menu_end(self, lines: List[str], start_line: int) -> int:
-        """Find the end of a menu block."""
+        """Find the end of a menu block, respecting nested menus."""
         
         base_indent = None
         current_line = start_line + 1
+        menu_indent = len(lines[start_line]) - len(lines[start_line].lstrip())
         
         while current_line < len(lines):
             line = lines[current_line]
@@ -554,10 +841,16 @@ class ASTMenuParser:
             
             line_indent = len(line) - len(line.lstrip())
             
+            # Check if we've encountered a nested menu
+            if re.match(r'^\s*menu\s*(?:[a-zA-Z_][a-zA-Z0-9_]*)?\s*(?:\([^)]*\))?\s*:', stripped_line):
+                if line_indent > menu_indent:
+                    # This is a nested menu - don't skip it, let it be parsed separately
+                    return current_line - 1
+            
             if base_indent is None:
                 base_indent = line_indent
-            elif line_indent <= base_indent and not stripped_line.startswith('"'):
-                # End of menu
+            elif line_indent <= menu_indent and not stripped_line.startswith('"'):
+                # End of menu (back to same or lower indentation than menu declaration)
                 return current_line - 1
             
             current_line += 1

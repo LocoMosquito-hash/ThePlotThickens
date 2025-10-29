@@ -19,11 +19,57 @@ from datetime import datetime
 try:
     # Try relative imports (when used as package)
     from .exceptions import RenpyParseError, RenpyProjectError
-    from .control_flow.analyze_vn_menus import MenuStructure, MenuChoice as MenuAnalysisChoice, MenuAnalyzer
+    # Import MenuStructure and related classes without circular dependency
+    try:
+        from .control_flow.analyze_vn_menus import MenuStructure, MenuChoice as MenuAnalysisChoice, MenuAnalyzer
+    except ImportError:
+        # If circular import, define minimal classes here temporarily
+        from dataclasses import dataclass, field
+        from typing import List, Optional, Any, Dict
+        
+        @dataclass
+        class MenuAnalysisChoice:
+            text: str
+            line_number: int
+            condition: Optional[str] = None
+            destinations: List[str] = field(default_factory=list)
+        
+        @dataclass 
+        class MenuStructure:
+            file_path: str
+            line_number: int
+            label_name: Optional[str] = None
+            choices: List[MenuAnalysisChoice] = field(default_factory=list)
+            
+        class MenuAnalyzer:
+            pass
+            
 except ImportError:
     # Fall back to direct imports (when run standalone)
     from exceptions import RenpyParseError, RenpyProjectError
-    from control_flow.analyze_vn_menus import MenuStructure, MenuChoice as MenuAnalysisChoice, MenuAnalyzer
+    try:
+        from control_flow.analyze_vn_menus import MenuStructure, MenuChoice as MenuAnalysisChoice, MenuAnalyzer
+    except ImportError:
+        # If circular import, define minimal classes here temporarily
+        from dataclasses import dataclass, field
+        from typing import List, Optional, Any, Dict
+        
+        @dataclass
+        class MenuAnalysisChoice:
+            text: str
+            line_number: int
+            condition: Optional[str] = None
+            destinations: List[str] = field(default_factory=list)
+        
+        @dataclass 
+        class MenuStructure:
+            file_path: str
+            line_number: int
+            label_name: Optional[str] = None
+            choices: List[MenuAnalysisChoice] = field(default_factory=list)
+            
+        class MenuAnalyzer:
+            pass
 
 
 @dataclass

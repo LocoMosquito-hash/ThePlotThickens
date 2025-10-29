@@ -12,14 +12,28 @@ from pathlib import Path
 
 try:
     # Try relative imports (when used as package)
-    from ..parser import RenpyParser, RenpyLine
     from ..exceptions import RenpyParseError, RenpyProjectError
+    # Lazy import to avoid circular dependency
+    RenpyParser = None
+    RenpyLine = None
 except ImportError:
     # Fall back to direct imports (when run standalone)
     import sys
     sys.path.append(str(Path(__file__).parent.parent))
-    from parser import RenpyParser, RenpyLine
     from exceptions import RenpyParseError, RenpyProjectError
+    # Lazy import to avoid circular dependency
+    RenpyParser = None
+    RenpyLine = None
+
+def _get_parser_classes():
+    """Lazy import of parser classes to avoid circular dependency."""
+    global RenpyParser, RenpyLine
+    if RenpyParser is None:
+        try:
+            from ..parser import RenpyParser, RenpyLine
+        except ImportError:
+            from parser import RenpyParser, RenpyLine
+    return RenpyParser, RenpyLine
 
 
 class StartLabelNotFoundError(RenpyProjectError):
@@ -47,7 +61,8 @@ class StartLabelFinder:
             RenpyProjectError: If the project path doesn't exist or isn't a valid Ren'Py project
         """
         self.project_path = str(Path(project_path).resolve())
-        self.parser = RenpyParser()
+        RenpyParserClass, _ = _get_parser_classes()
+        self.parser = RenpyParserClass()
         
         # Validate project path
         if not os.path.exists(self.project_path):

@@ -1,0 +1,54 @@
+// Simplified CMAP Grammar - based on working minimal grammar
+
+start: menu_definition
+
+menu_definition: "menu" menu_name? ":" menu_body
+
+menu_name: IDENTIFIER
+
+menu_body: menu_item+
+
+menu_item: conditional_choice | simple_choice
+
+simple_choice: STRING ":" choice_body?
+
+conditional_choice: STRING "if" conditional_expression ":" choice_body?
+
+conditional_expression: IDENTIFIER
+                      | IDENTIFIER comparison_operator condition_value
+
+comparison_operator: "==" | "!=" | "<" | ">" | "<=" | ">="
+
+condition_value: STRING | NUMBER | IDENTIFIER
+
+choice_body: statement+
+
+statement: jump_statement
+         | call_statement  
+         | return_statement
+         | pass_statement
+         | generic_statement
+
+jump_statement: "jump" IDENTIFIER
+
+call_statement: "call" IDENTIFIER
+
+return_statement: "return"
+
+pass_statement: "pass"
+
+generic_statement: /[^\n\r]+/
+
+// Terminals
+IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
+
+STRING: /"([^"\\]|\\.)*"/
+
+NUMBER: /\d+/
+
+// Whitespace and comments
+%import common.WS
+%ignore WS
+
+COMMENT: /#[^\n\r]*/
+%ignore COMMENT
