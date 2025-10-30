@@ -537,7 +537,10 @@ class ASTMenuParser:
                         menus.append(enhanced_menu)
                         print(f"[CMAP] ✅ Parsed menu at line {i + 1} with {len(enhanced_menu.choices)} choices")
                     else:
+                        # Show the actual line content where parsing failed
+                        problem_line = lines[i].rstrip() if i < len(lines) else "(line not found)"
                         print(f"[CMAP] ⚠️ Failed to parse menu at line {i + 1}, falling back to regex")
+                        print(f"[CMAP] Problem line: {problem_line}")
                         # Fall back to regex for this specific menu
                         regex_menu = self._parse_single_menu_regex(lines, i + 1, file_path)
                         if regex_menu:

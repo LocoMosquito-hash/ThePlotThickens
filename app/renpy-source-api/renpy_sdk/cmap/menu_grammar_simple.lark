@@ -20,12 +20,13 @@ simple_choice: STRING ":" choice_body?
 
 conditional_choice: STRING "if" conditional_expression ":" choice_body?
 
-conditional_expression: IDENTIFIER
+conditional_expression: "not" IDENTIFIER
                       | IDENTIFIER comparison_operator condition_value
+                      | IDENTIFIER
 
 comparison_operator: "==" | "!=" | "<" | ">" | "<=" | ">="
 
-condition_value: STRING | NUMBER | IDENTIFIER
+condition_value: STRING | NUMBER | IDENTIFIER | "True" | "False"
 
 choice_body: statement+
 
@@ -33,6 +34,7 @@ statement: jump_statement
          | call_statement  
          | return_statement
          | pass_statement
+         | python_block
          | generic_statement
 
 jump_statement: "jump" IDENTIFIER
@@ -42,6 +44,11 @@ call_statement: "call" IDENTIFIER
 return_statement: "return"
 
 pass_statement: "pass"
+
+// Python blocks - skip the content
+python_block: "python" ":" python_content*
+
+python_content: /[^\n\r]+/
 
 generic_statement: /[^\n\r]+/
 

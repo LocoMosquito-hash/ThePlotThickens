@@ -611,7 +611,13 @@ class CMAPParser:
                 return None
                 
         except LarkError as e:
+            # Show first 5 lines of menu_text for context
+            menu_lines = menu_text.split('\n') if menu_text else []
+            context_lines = menu_lines[:5] if len(menu_lines) > 0 else ["(empty)"]
             print(f"[CMAP] Parse error: {e}")
+            print(f"[CMAP] Problem menu context:")
+            for idx, line in enumerate(context_lines, 1):
+                print(f"[CMAP]   {idx}: {line}")
             return None
         except Exception as e:
             print(f"[CMAP] Unexpected error during parsing: {e}")
@@ -619,7 +625,7 @@ class CMAPParser:
     
     def extract_menu_from_lines(self, lines: List[str], start_line: int) -> tuple[str, int]:
         """
-        Extract menu text from lines starting at a specific line.
+        Extract ONLY the menu block from lines, focusing on menu structure.
         
         Args:
             lines: List of all lines in the file
@@ -633,35 +639,54 @@ class CMAPParser:
         
         menu_lines = []
         current_line = start_line - 1  # Convert to 0-based
-        base_indent = None
+        menu_indent = None
+        in_menu_block = False
         
         while current_line < len(lines):
             line = lines[current_line]
             
-            # Skip empty lines
+            # Skip empty lines within the menu
             if not line.strip():
-                menu_lines.append(line)
+                if in_menu_block:
+                    menu_lines.append(line)
                 current_line += 1
                 continue
             
             # Get indentation level
             indent_level = len(line) - len(line.lstrip())
+            stripped_line = line.strip()
             
-            # If this is the first non-empty line, set base indentation
-            if base_indent is None:
-                base_indent = indent_level
+            # If this is the menu declaration line
+            if not in_menu_block and stripped_line.startswith('menu'):
+                menu_indent = indent_level
+                in_menu_block = True
                 menu_lines.append(line)
                 current_line += 1
                 continue
             
-            # If we're back to base indentation or less, check if this ends the menu
-            if indent_level <= base_indent and line.strip() and not line.strip().startswith('#'):
-                # Check if this starts a new top-level construct
-                if (re.match(r'^\s*(label|screen|init|define|default|menu)\s+', line, re.IGNORECASE) or
-                    re.match(r'^\s*[a-zA-Z_][a-zA-Z0-9_]*\s+"', line)):  # Character dialogue
+            # If we're in the menu block
+            if in_menu_block:
+                # Stop if we're back to menu indentation or less (except for comments)
+                if indent_level <= menu_indent and not stripped_line.startswith('#'):
                     break
+                
+                # Stop if we encounter a nested menu (menu statement at higher indentation)
+                if stripped_line.startswith('menu') and ':' in stripped_line and indent_level > menu_indent:
+                    break
+                
+                # Only include menu-relevant content:
+                # - Choice definitions (strings with colons)
+                # - Choice bodies (jump, call, return, pass, etc.)
+                # - Conditional statements within choices
+                if (indent_level > menu_indent and 
+                    (stripped_line.startswith('"') or stripped_line.startswith("'") or  # Choices
+                     stripped_line.startswith('jump ') or stripped_line.startswith('call ') or  # Actions
+                     stripped_line.startswith('return') or stripped_line == 'pass' or  # Actions
+                     stripped_line.startswith('if ') or stripped_line.startswith('elif ') or  # Conditionals
+                     stripped_line.startswith('else:') or stripped_line.startswith('#'))):  # Comments
+                    menu_lines.append(line)
+                # Skip non-menu statements like 'scene', 'python:', etc.
             
-            menu_lines.append(line)
             current_line += 1
         
         return '\n'.join(menu_lines), current_line + 1
