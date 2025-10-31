@@ -256,17 +256,26 @@ class AuthoritativeHierarchy:
         """
         menu_count = 0
         choice_count = 0
+        labels_with_menus = 0
+        total_labels_checked = 0
         
         # flow_graph keys are label names directly
         for label_name, label_data in flow_graph.items():
             # Skip non-LabelNode entries (like _screen_structures)
             if label_name.startswith('_') or not hasattr(label_data, 'has_dialogue'):
                 continue
+            
+            total_labels_checked += 1
                 
             label_node = label_nodes[label_name]
             
             # Process menu nodes attached to this label
             menu_nodes = getattr(label_data, 'menu_nodes', [])
+            
+            if menu_nodes:
+                labels_with_menus += 1
+                if labels_with_menus <= 3:  # Debug first 3 labels with menus
+                    print(f"[HIERARCHY DEBUG] Label '{label_name}' has {len(menu_nodes)} menu_nodes")
             
             for menu_idx, menu_node in enumerate(menu_nodes):
                 # Create menu container from MenuStructure
@@ -283,6 +292,7 @@ class AuthoritativeHierarchy:
                         menu_node, menu_container
                     )
         
+        print(f"[HIERARCHY] Checked {total_labels_checked} labels, {labels_with_menus} had menu_nodes")
         print(f"[HIERARCHY] Processed {menu_count} menus with {choice_count} choices")
     
     def _create_menu_container_from_structure(self, menu_node: Any, parent_label: HierarchyNode, menu_idx: int) -> Optional[HierarchyNode]:

@@ -2786,11 +2786,20 @@ class RenpyParser:
         
         # Group menus by their label context for processing
         menus_by_label = {}
+        menus_without_context = []
         for menu in menus:
             if menu.label_context:
                 if menu.label_context not in menus_by_label:
                     menus_by_label[menu.label_context] = []
                 menus_by_label[menu.label_context].append(menu)
+            else:
+                menus_without_context.append((menu.file_path, menu.line_number))
+        
+        print(f"[MENU GROUPING] Grouped {len(menus)} menus:")
+        print(f"[MENU GROUPING]   - {sum(len(v) for v in menus_by_label.values())} menus with label_context")
+        print(f"[MENU GROUPING]   - {len(menus_without_context)} menus WITHOUT label_context")
+        if menus_without_context:
+            print(f"[MENU GROUPING] First 5 menus without context: {menus_without_context[:5]}")
                 
         
         # Create MenuNode objects and associate them with labels

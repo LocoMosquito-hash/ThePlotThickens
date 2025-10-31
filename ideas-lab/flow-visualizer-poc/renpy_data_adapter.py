@@ -172,6 +172,15 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         # Store flow graph for named menu resolution
         self._last_flow_graph = flow_graph
         
+        # Integrate AST-enhanced menus into flow graph
+        print(f"[ADAPTER DEBUG] use_hybrid={self.use_hybrid}, has enhanced_menus={hasattr(overview, 'enhanced_menus')}")
+        if hasattr(overview, 'enhanced_menus'):
+            print(f"[ADAPTER DEBUG] enhanced_menus count={len(overview.enhanced_menus) if overview.enhanced_menus else 0}")
+        
+        if self.use_hybrid and hasattr(overview, 'enhanced_menus') and overview.enhanced_menus:
+            print(f"[ADAPTER] Integrating {len(overview.enhanced_menus)} AST-enhanced menus into flow graph...")
+            self._integrate_enhanced_menus_into_flow_graph(flow_graph, overview.enhanced_menus)
+        
         # Enhance with CSAP screen parsing if available
         if self.csap_integrated_parser:
             try:
@@ -1727,6 +1736,107 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         for root in self._authoritative_hierarchy.root_nodes:
             if 'ep2cont5' in root.semantic_id:
                 self._authoritative_hierarchy.print_hierarchy(root)
+    
+    def _integrate_enhanced_menus_into_flow_graph(self, flow_graph: Dict[str, Any], enhanced_menus: List[Any]) -> None:
+        """
+        Integrate AST-enhanced menu structures into the flow graph.
+        
+        This converts EnhancedMenuStructure objects from the AST parser into MenuNode objects
+        and attaches them to the appropriate LabelNode in the flow graph.
+        
+        Args:
+            flow_graph: The flow graph dict mapping label names to LabelNode objects
+            enhanced_menus: List of EnhancedMenuStructure objects from AST parsing
+        """
+        # Import MenuNode and MenuChoice - path already set up at top of file
+        from parser import MenuNode, MenuChoice
+        
+        # Group menus by their parent label
+        menus_by_label = {}
+        menus_without_context = 0
+        for menu in enhanced_menus:
+            label_name = menu.get('label_context', None) if isinstance(menu, dict) else getattr(menu, 'label_context', None)
+            if label_name:
+                if label_name not in menus_by_label:
+                    menus_by_label[label_name] = []
+                menus_by_label[label_name].append(menu)
+            else:
+                menus_without_context += 1
+        
+        print(f"[ADAPTER DEBUG] {len(enhanced_menus)} menus total, {len(menus_by_label)} unique labels, {menus_without_context} without context")
+        if len(menus_by_label) > 0:
+            print(f"[ADAPTER DEBUG] First 5 label names from menus: {list(menus_by_label.keys())[:5]}")
+            print(f"[ADAPTER DEBUG] First 5 flow_graph keys: {list(flow_graph.keys())[:5]}")
+            # Check if any menu labels exist in flow graph
+            matches = sum(1 for label in menus_by_label.keys() if label in flow_graph)
+            print(f"[ADAPTER DEBUG] {matches} out of {len(menus_by_label)} menu labels found in flow_graph")
+        
+        # Integrate menus into flow graph label nodes
+        integrated_count = 0
+        labels_processed = 0
+        for label_name, label_menus in menus_by_label.items():
+            if label_name in flow_graph:
+                labels_processed += 1
+                label_node = flow_graph[label_name]
+                
+                if labels_processed <= 2:  # Debug first 2 labels
+                    print(f"[ADAPTER DEBUG] Processing label '{label_name}' with {len(label_menus)} menus")
+                
+                # Clear existing menu_nodes (they're from regex parsing)
+                label_node.menu_nodes = []
+                
+                # Convert EnhancedMenuStructure to MenuNode
+                for menu_idx, enhanced_menu in enumerate(label_menus):
+                    # enhanced_menu is a dict, not an object
+                    menu_node = MenuNode(
+                        node_id=f"{label_name}_menu_{menu_idx}",
+                        name=f"Menu {menu_idx + 1}",
+                        parent_label=label_name,
+                        menu_index=menu_idx,
+                        file_path=enhanced_menu.get('file_path', ''),
+                        line_number=enhanced_menu.get('line_number', 0),
+                        prompt=enhanced_menu.get('prompt', None),
+                        choices=[],
+                        total_choices=len(enhanced_menu.get('choices', [])),
+                        has_conditions=enhanced_menu.get('has_complex_conditionals', False)
+                    )
+                    
+                    # Convert choices (enhanced_choice is also a dict)
+                    for choice_idx, enhanced_choice in enumerate(enhanced_menu.get('choices', [])):
+                        # Get all possible destinations from unconditional_destinations and conditional_paths
+                        destinations = enhanced_choice.get('unconditional_destinations', [])
+                        conditional_paths = enhanced_choice.get('conditional_paths', [])
+                        
+                        # Add destinations from conditional paths
+                        for path in conditional_paths:
+                            dest = path.get('destination', '')
+                            if dest and dest not in destinations:
+                                destinations.append(dest)
+                        
+                        # Use first destination as primary, or empty string
+                        primary_destination = destinations[0] if destinations else ''
+                        
+                        menu_choice = MenuChoice(
+                            text=enhanced_choice.get('text', ''),
+                            destination=primary_destination,
+                            condition=enhanced_choice.get('primary_condition', None),
+                            has_condition=enhanced_choice.get('is_conditional', False)
+                        )
+                        menu_node.choices.append(menu_choice)
+                        
+                        # Track all destinations
+                        for dest in destinations:
+                            if dest and dest not in menu_node.choice_destinations:
+                                menu_node.choice_destinations.append(dest)
+                    
+                    label_node.menu_nodes.append(menu_node)
+                    integrated_count += 1
+                
+                # Update computed fields
+                label_node.has_menu = len(label_node.menu_nodes) > 0
+                label_node.menu_count = len(label_node.menu_nodes)
+        
+        print(f"[ADAPTER] ✅ Integrated {integrated_count} enhanced menus into {len(menus_by_label)} labels")
     
     def _create_screen_nodes_and_connections(self, flow_graph: Dict[str, Any]) -> Tuple[List[VisualizationNode], List[VisualizationConnection]]:
         """

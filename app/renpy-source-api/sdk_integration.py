@@ -664,6 +664,7 @@ class HybridRenpyParser:
                         
                         if verbose:
                             print(f"   ✅ Enhanced {len(enhanced_menus)} menus with AST analysis")
+                            print(f"   [SDK DEBUG] regex_results.enhanced_menus has {len(regex_results.enhanced_menus)} items")
                     
                 except Exception as e:
                     if verbose:
@@ -699,6 +700,7 @@ class HybridRenpyParser:
             self.stats['regex_only'] += 1
             if verbose:
                 print("OK: Using regex-only results")
+                print(f"[SDK DEBUG] Returning regex_results with {len(regex_results.enhanced_menus)} enhanced_menus")
             
             return regex_results
         
@@ -792,7 +794,8 @@ class HybridRenpyParser:
             file_list=list(set(regex_results.file_list + sdk_overview.file_list)),
             character_definitions={**regex_results.character_definitions, **sdk_overview.character_definitions},
             label_list=list(set(regex_results.label_list + sdk_overview.label_list)),
-            errors=regex_results.errors + sdk_overview.errors
+            errors=regex_results.errors + sdk_overview.errors,
+            enhanced_menus=regex_results.enhanced_menus  # CRITICAL: Preserve enhanced menus from AST parsing!
         )
         
         return merged
@@ -827,8 +830,18 @@ class HybridRenpyParser:
                 # Parse menus in this file with AST parser
                 file_menus = self.ast_menu_parser.parse_file_menus(str(absolute_path))
                 
+                # Read the file to detect labels for each menu
+                try:
+                    with open(absolute_path, 'r', encoding='utf-8') as f:
+                        file_lines = f.readlines()
+                except:
+                    file_lines = []
+                
                 # Convert to serializable format for integration
                 for menu in file_menus:
+                    # Determine which label this menu belongs to
+                    label_context = self._find_label_for_menu(file_lines, menu.line_number)
+                    
                     enhanced_menu = {
                         "file_path": menu.file_path,
                         "line_number": menu.line_number,
@@ -840,6 +853,7 @@ class HybridRenpyParser:
                         "has_complex_conditionals": menu.has_complex_conditionals,
                         "referenced_variables": menu.referenced_variables,
                         "variable_patterns": menu.variable_patterns,
+                        "label_context": label_context,  # CRITICAL: Add label context!
                         "choices": []
                     }
                     
@@ -882,6 +896,35 @@ class HybridRenpyParser:
         
         return enhanced_menus
 
+    def _find_label_for_menu(self, file_lines: List[str], menu_line_number: int) -> Optional[str]:
+        """
+        Find the label that contains a given menu by looking backwards from the menu line.
+        
+        Args:
+            file_lines: All lines in the file
+            menu_line_number: Line number of the menu (1-indexed)
+            
+        Returns:
+            Label name or None if no label found
+        """
+        import re
+        
+        # Convert to 0-indexed
+        current_line = menu_line_number - 1
+        
+        # Look backwards for the nearest label
+        while current_line >= 0:
+            line = file_lines[current_line].strip()
+            
+            # Check for label definition
+            label_match = re.match(r'^label\s+([a-zA-Z_][a-zA-Z0-9_]*)', line)
+            if label_match:
+                return label_match.group(1)
+            
+            current_line -= 1
+        
+        return None
+    
     def get_analysis_stats(self) -> Dict[str, Any]:
         """Get statistics about analysis method usage."""
         total = self.stats['total_projects']
