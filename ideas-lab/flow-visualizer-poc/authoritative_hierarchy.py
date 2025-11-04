@@ -391,6 +391,7 @@ class AuthoritativeHierarchy:
     def _create_choice_from_structure(self, choice: Any, parent_menu: HierarchyNode, choice_idx: int) -> Optional[HierarchyNode]:
         """Create a choice node from MenuChoice semantic data."""
         choice_text = getattr(choice, 'text', f'Choice {choice_idx}')
+        destination = getattr(choice, 'destination', '')
         
         # Generate content-based ID
         content_hash = self._generate_content_hash({
@@ -398,7 +399,7 @@ class AuthoritativeHierarchy:
             'parent_menu': parent_menu.content_hash,
             'choice_index': choice_idx,
             'text': choice_text,
-            'destination': getattr(choice, 'destination', ''),
+            'destination': destination,
             'condition': getattr(choice, 'condition', '')
         })
         

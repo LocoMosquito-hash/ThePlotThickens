@@ -1819,6 +1819,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                         menu_choice = MenuChoice(
                             text=enhanced_choice.get('text', ''),
                             destination=primary_destination,
+                            all_destinations=destinations,  # CRITICAL FIX: Include all destinations for AHS
                             condition=enhanced_choice.get('primary_condition', None),
                             has_condition=enhanced_choice.get('is_conditional', False)
                         )

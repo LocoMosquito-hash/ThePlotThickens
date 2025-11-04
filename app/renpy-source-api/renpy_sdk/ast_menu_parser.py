@@ -642,9 +642,10 @@ class ASTMenuParser:
     
     def _parse_single_menu_regex(self, lines: List[str], start_line: int, file_path: str) -> Optional[EnhancedMenuStructure]:
         """Parse a single menu using regex (helper for CMAP fallback)."""
-        # This is a simplified version of the regex parsing for individual menus
-        # We can extract this from the main regex method if needed
-        return None  # TODO: Implement if needed
+        # Use the existing regex parsing method
+        # start_line is 1-indexed (from the caller), but _parse_regex_menu expects 0-indexed
+        menu = self._parse_regex_menu(lines, start_line - 1, file_path)
+        return menu if menu.choices else None
     
     def _parse_with_regex_fallback(self, file_path: str) -> List[EnhancedMenuStructure]:
         """Fallback regex-based parsing when AST is not available."""

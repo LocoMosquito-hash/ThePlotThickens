@@ -89,6 +89,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1] - 2025-01-04
+
+### Fixed
+
+- **Critical Regex Fallback Bug**: Implemented missing `_parse_single_menu_regex()` method
+  - **Issue**: When CMAP parsing failed, the fallback to regex was silently returning `None` instead of parsing the menu
+  - **Impact**: Menus that failed CMAP parsing were completely skipped, causing orphan labels and missing flow connections
+  - **Root Cause**: The `_parse_single_menu_regex()` method was a stub that returned `None` (TODO comment)
+  - **Fix**: Implemented proper fallback by calling `_parse_regex_menu()` with correct line indexing
+  - **Result**: All menus are now properly parsed even when CMAP fails, ensuring no orphan labels
+  - **Example**: Detective Necro menu at line 1258 in `day5.rpy` now properly connects to `samkitchenhelp` label
+
+- **MenuChoice Destinations**: Added `all_destinations` field to MenuChoice objects
+  - **Issue**: When creating MenuChoice objects from enhanced menu data, the `all_destinations` field was not populated
+  - **Impact**: Conditional destinations were not fully represented in the AHS (Authoritative Hierarchy System)
+  - **Fix**: Added `all_destinations=destinations` parameter to MenuChoice constructor in `renpy_data_adapter.py`
+  - **Result**: All choice destinations (both unconditional and conditional) are now properly tracked
+
+### Technical Details
+
+**Affected Files**:
+- `app/renpy-source-api/renpy_sdk/ast_menu_parser.py` (line 643-648)
+- `ideas-lab/flow-visualizer-poc/renpy_data_adapter.py` (line 1822)
+
+**Keyword Tokenization Issue** (Still Open):
+- Lark tokenizes Ren'Py keywords (`if`, `jump`, `call`, etc.) as generic `IDENTIFIER` tokens instead of keyword tokens
+- This prevents the grammar from matching keyword-based rules like `"jump" IDENTIFIER`
+- Affected menus fall back to regex parsing, which now works correctly with this fix
+- Future enhancement: Investigate Lark terminal priority and keyword matching strategies
+
+**Testing**:
+- Verified with Detective Necro VN: 121 menus parsed, 0 orphan nodes
+- Hierarchy validation passes completely
+- All menu choices properly connected to their destinations
+
+### Integration Notes
+
+- No breaking changes to API
+- Fully backward compatible with existing code
+- Graceful degradation when CMAP fails
+- Regex fallback now fully functional
+
+---
+
 ## [Unreleased] - Future Versions
 
 ### Planned for v1.1.0

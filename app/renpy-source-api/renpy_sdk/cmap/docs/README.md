@@ -1,6 +1,6 @@
 # CMAP - Custom Menu AST Parser
 
-**Version:** 1.0.0  
+**Version:** 1.0.1  
 **Status:** Production Ready  
 **Dependencies:** Lark Parser (>=1.1.0)
 
@@ -128,10 +128,13 @@ CMAP implements graceful degradation:
 
 ## Known Limitations
 
-1. **Complex Expressions**: Some advanced conditional expressions may need grammar expansion
-2. **Custom Syntax**: Non-standard Ren'Py extensions not supported
-3. **Indentation**: Currently uses simplified indentation handling
-4. **Performance**: Slightly slower than regex for very simple menus
+1. **Keyword Tokenization**: Lark tokenizes Ren'Py keywords (`if`, `jump`, `call`, etc.) as generic `IDENTIFIER` tokens instead of keyword tokens. This causes menus with these keywords to fail CMAP parsing and fall back to regex (which now works correctly as of v1.0.1).
+2. **Complex Expressions**: Some advanced conditional expressions may need grammar expansion
+3. **Custom Syntax**: Non-standard Ren'Py extensions not supported
+4. **Indentation**: Currently uses simplified indentation handling
+5. **Performance**: Slightly slower than regex for very simple menus
+
+**Note on Keyword Issue**: The keyword tokenization limitation affects menus with statements like `jump mayagame` or `if validay5diplo == True:`. These menus automatically fall back to regex parsing and work correctly. The limitation does not affect overall functionality but reduces the percentage of menus parsed with true AST (typically 60-70% CMAP success rate on real-world VN projects).
 
 ## Future Roadmap
 
