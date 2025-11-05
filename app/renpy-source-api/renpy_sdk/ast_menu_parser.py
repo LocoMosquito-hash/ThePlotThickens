@@ -703,6 +703,9 @@ class ASTMenuParser:
         base_indent = None
         menu_indent = len(lines[start_line]) - len(lines[start_line].lstrip())
         
+        in_nested_menu = False
+        nested_menu_base_indent = None
+        
         while current_line < len(lines):
             line = lines[current_line]
             stripped_line = line.strip()
@@ -713,11 +716,26 @@ class ASTMenuParser:
             
             line_indent = len(line) - len(line.lstrip())
             
-            # Check if we've encountered a nested menu
+            # Check if we're entering a nested menu
             if re.match(r'^\s*menu\s*(?:[a-zA-Z_][a-zA-Z0-9_]*)?\s*(?:\([^)]*\))?\s*:', stripped_line):
-                if line_indent > menu_indent:
-                    # This is a nested menu - stop parsing this menu's choices
-                    break
+                if line_indent > menu_indent and not in_nested_menu:
+                    # Entering a nested menu - start skipping
+                    in_nested_menu = True
+                    nested_menu_base_indent = line_indent
+                    current_line += 1
+                    continue
+            
+            # If we're in a nested menu, skip until we're back to the base indent
+            if in_nested_menu:
+                if line_indent <= nested_menu_base_indent and stripped_line:
+                    # Exited nested menu
+                    in_nested_menu = False
+                    nested_menu_base_indent = None
+                    # Don't increment current_line - process this line
+                else:
+                    # Still in nested menu - skip
+                    current_line += 1
+                    continue
             
             if base_indent is None:
                 base_indent = line_indent

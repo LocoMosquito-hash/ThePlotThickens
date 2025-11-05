@@ -670,10 +670,6 @@ class CMAPParser:
                 if indent_level <= menu_indent and not stripped_line.startswith('#'):
                     break
                 
-                # Stop if we encounter a nested menu (menu statement at higher indentation)
-                if stripped_line.startswith('menu') and ':' in stripped_line and indent_level > menu_indent:
-                    break
-                
                 # Only include menu-relevant content:
                 # - Choice definitions (strings with colons)
                 # - Choice bodies (jump, call, return, pass, etc.)
@@ -685,7 +681,7 @@ class CMAPParser:
                      stripped_line.startswith('if ') or stripped_line.startswith('elif ') or  # Conditionals
                      stripped_line.startswith('else:') or stripped_line.startswith('#'))):  # Comments
                     menu_lines.append(line)
-                # Skip non-menu statements like 'scene', 'python:', etc.
+                # Skip non-menu statements like 'scene', 'python:', nested menus, etc.
             
             current_line += 1
         
