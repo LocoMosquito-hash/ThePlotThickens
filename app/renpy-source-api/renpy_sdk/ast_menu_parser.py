@@ -722,11 +722,26 @@ class ASTMenuParser:
         return len(lines)
     
     def _convert_cmap_to_enhanced(self, cmap_menu: 'CMAPMenuNode', file_path: str, line_number: int) -> EnhancedMenuStructure:
-        """Convert CMAP MenuNode to EnhancedMenuStructure."""
+        """Convert CMAP MenuNode to EnhancedMenuStructure.
+        
+        Args:
+            cmap_menu: The CMAP MenuNode to convert
+            file_path: Path to the source file
+            line_number: The actual line number where the menu starts in the file (1-indexed)
+        """
+        # Read file to find actual line numbers for choices
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                file_lines = f.readlines()
+        except Exception as e:
+            print(f"[CMAP] Warning: Could not read file for line number resolution: {e}")
+            file_lines = []
+        
         enhanced_choices = []
         
-        # Convert CMAP choices to enhanced choices
-        for choice in cmap_menu.choices:
+        # Find actual line numbers by searching for choice text in the file
+        # starting from the menu line
+        for choice_idx, choice in enumerate(cmap_menu.choices):
             # Extract destinations from choice body
             destinations = []
             for statement in choice.body:
@@ -740,9 +755,19 @@ class ASTMenuParser:
                 condition_text = self._cmap_condition_to_text(choice.condition)
                 condition_complexity = self._classify_condition_complexity(condition_text)
             
+            # Find the actual line number by searching for the choice text
+            actual_line_number = line_number  # Default fallback
+            if file_lines:
+                # Search for the choice text starting from the menu line
+                search_start = line_number  # 1-indexed
+                for i in range(search_start - 1, min(search_start + 200, len(file_lines))):
+                    if choice.text in file_lines[i]:
+                        actual_line_number = i + 1  # Convert to 1-indexed
+                        break
+            
             enhanced_choice = EnhancedMenuChoice(
                 text=choice.text,
-                line_number=choice.line_number,
+                line_number=actual_line_number,
                 choice_index=len(enhanced_choices),  # Current index in the list
                 is_conditional=choice.is_conditional,
                 primary_condition=condition_text,

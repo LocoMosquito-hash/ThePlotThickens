@@ -44,5 +44,5 @@ __all__ = [
     'NestedMenuNode'
 ]
 
-__version__ = "1.0.0"
+__version__ = "1.0.2"
 __author__ = "The Plot Thickens Development Team"

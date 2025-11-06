@@ -133,6 +133,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.2] - 2025-01-06
+
+### Fixed
+
+- **Nested Menu Detection**: Fixed incorrect parent choice assignment for nested menus
+  - **Issue**: Both nested menus in Westview Academy `ch1s4a2` were incorrectly attached to the second choice instead of being split between the two parent choices
+  - **Impact**: Nested menu hierarchy visualization was incorrect, showing all nested menus under a single parent choice
+  - **Root Causes**:
+    1. **Extraction with Extra Blank Lines**: Using `'\n'.join()` on lines that already contained newlines created double newlines, adding blank lines that didn't exist in the original file
+    2. **Relative Line Numbers**: CMAP line numbers were relative to extracted text, which skipped dialogue/scene statements, causing misalignment with actual file line numbers
+    3. **Menu Extraction Logic**: Initially broke at nested menus instead of skipping over them to continue extracting sibling choices
+  - **Fixes**:
+    1. Changed `'\n'.join(menu_lines)` to `''.join(menu_lines)` in `extract_menu_from_lines()` since lines already have newlines
+    2. Implemented nested menu skipping with `in_nested_menu` state tracking to properly handle nested menus while continuing to extract top-level choices
+    3. Resolved line numbers by searching for choice text in the original file instead of using CMAP's relative line numbers
+  - **Result**: Nested menus now correctly attach to their actual parent choices based on line number analysis
+  - **Example**: Westview Academy `ch1s4a2` now correctly shows:
+    - First-tier menu with 2 choices
+    - "Yes" choice → nested menu with 2 choices (line 61)
+    - "Yes, but I'm retired now" choice → nested menu with 2 choices (line 97)
+
+- **Conditional Menu Indentation**: Fixed menu detection inside conditional blocks
+  - **Issue**: Menus indented inside `if`/`else` blocks were incorrectly detected as nested within previous menus
+  - **Impact**: Caused orphan labels when menu destinations weren't properly connected
+  - **Root Cause**: Menu stack only checked indentation levels, not line position, so menus in conditional blocks appeared nested
+  - **Fix**: Enhanced menu stack popping logic to check both indentation AND estimated end line:
+    ```python
+    if (i + 1) > parent_end or indent_level <= parent_indent:
+        menu_stack.pop()
+    ```
+  - **Result**: Menus in conditional blocks are now correctly recognized as label-level menus
+  - **Example**: Detective Necro `continueday20alone` now shows all 4 menus correctly (was showing only 3)
+
+### Technical Details
+
+**Affected Files**:
+- `app/renpy-source-api/renpy_sdk/cmap/cmap_parser.py`:
+  - Lines 640-711: Nested menu skipping in `extract_menu_from_lines()`
+  - Line 711: Fixed line joining (`''.join()` instead of `'\n'.join()`)
+- `app/renpy-source-api/renpy_sdk/ast_menu_parser.py`:
+  - Lines 549-559: Enhanced menu stack popping logic for conditional blocks
+  - Lines 733-787: Line number resolution via text search in `_convert_cmap_to_enhanced()`
+
+**Key Concepts**:
+
+**Menu Extraction Philosophy**:
+- CMAP extracts only menu-relevant content (choices, control flow statements, conditionals)
+- Skips non-menu statements (dialogue, scenes, character statements, Python blocks)
+- This allows CMAP grammar to focus on menu structure without parsing full Ren'Py syntax
+- Trade-off: Line numbers in extracted text don't match original file line numbers
+
+**Line Number Resolution Strategy**:
+- CMAP parses extracted text where line numbers are relative (start at 1)
+- To get actual file line numbers, search for choice text in original file starting from menu line
+- This approach is robust to any amount of skipped content between choices
+- Handles nested menus, dialogue, conditionals, and any other content transparently
+
+**Nested Menu Detection**:
+- Uses menu stack to track currently active menus as file is scanned
+- Menu is considered nested if found while another menu is still on stack
+- Stack is popped when: (a) indentation returns to menu level or less, OR (b) line position exceeds menu's estimated end
+- Stack is cleared at label boundaries (menus can't nest across labels)
+- Parent choice is determined by finding closest choice before nested menu that has no intervening choices
+
+**Menu Boundary Detection**:
+- A menu ends when encountering non-empty line with indentation ≤ menu's starting indentation
+- Empty lines and comments are skipped when detecting boundaries
+- Works with any indentation size (4 spaces, 3 spaces, tabs, etc.)
+- Based on relative indentation, not absolute column positions
+
+### Testing
+
+**Verified with**:
+- Detective Necro: 121 menus parsed, 0 orphan nodes, all conditionally-indented menus correctly detected
+- Westview Academy: Nested menus correctly assigned to parent choices, hierarchy validation passes
+- A O A: 424 menus parsed with correct nesting relationships
+
+### Integration Notes
+
+- No API changes
+- Fully backward compatible
+- Improved accuracy for nested menu detection
+- More robust handling of various indentation styles
+- Better support for menus inside conditional blocks
+
+---
+
 ## [Unreleased] - Future Versions
 
 ### Planned for v1.1.0

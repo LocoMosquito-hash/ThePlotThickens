@@ -1,6 +1,6 @@
 # CMAP - Custom Menu AST Parser
 
-**Version:** 1.0.1  
+**Version:** 1.0.2  
 **Status:** Production Ready  
 **Dependencies:** Lark Parser (>=1.1.0)
 
@@ -164,6 +164,49 @@ When contributing to CMAP:
 2. **Maintain Grammar Compatibility**: See `GRAMMAR_GUIDE.md`
 3. **Prevent Regressions**: Run full test suite before changes
 4. **Document Changes**: Update relevant documentation
+
+## Key Concepts
+
+### Menu Extraction Philosophy
+
+CMAP extracts only menu-relevant content to keep the grammar focused:
+
+- **Included**: Menu declarations, choice definitions, control flow (`jump`, `call`, `return`), conditionals (`if`, `elif`, `else`)
+- **Excluded**: Dialogue lines, scene statements, character statements, Python blocks (except variable assignments in choices)
+
+This selective extraction allows CMAP to parse menu structure without understanding full Ren'Py syntax.
+
+### Line Number Resolution
+
+CMAP parses extracted text where line numbers are relative (starting at 1). To map back to actual file locations:
+
+1. Extract menu-relevant content (which may skip many lines)
+2. Parse the extracted text with CMAP
+3. Search for choice text in the original file to find actual line numbers
+4. Use actual line numbers for nested menu detection and hierarchy building
+
+This approach is robust to any amount of skipped content between choices.
+
+### Nested Menu Detection
+
+CMAP uses a **menu stack** to track nested menu relationships:
+
+1. **Tracking**: As the file is scanned, active menus are pushed onto a stack
+2. **Detection**: A menu is nested if found while another menu is on the stack
+3. **Popping**: Menus are popped when:
+   - Indentation returns to menu level or less, OR
+   - Line position exceeds the menu's estimated end
+4. **Boundaries**: Stack is cleared at label boundaries (menus can't nest across labels)
+5. **Parent Choice**: Determined by finding the closest choice before the nested menu with no intervening choices
+
+### Menu Boundary Detection
+
+A menu ends when encountering a non-empty line with indentation ≤ the menu's starting indentation:
+
+- **Flexible**: Works with any indentation size (4 spaces, 3 spaces, tabs, mixed)
+- **Relative**: Based on relative indentation, not absolute column positions
+- **Robust**: Empty lines and comments don't affect boundary detection
+- **Conditional-Aware**: Menus in `if`/`else` blocks use their own indentation level as the baseline
 
 ## Support
 

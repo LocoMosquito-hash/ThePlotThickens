@@ -641,14 +641,15 @@ class CMAPParser:
         current_line = start_line - 1  # Convert to 0-based
         menu_indent = None
         in_menu_block = False
+        in_nested_menu = False
+        nested_menu_indent = None
         
         while current_line < len(lines):
             line = lines[current_line]
             
             # Skip empty lines within the menu
+            # Don't add them to preserve accurate line number mapping
             if not line.strip():
-                if in_menu_block:
-                    menu_lines.append(line)
                 current_line += 1
                 continue
             
@@ -670,6 +671,27 @@ class CMAPParser:
                 if indent_level <= menu_indent and not stripped_line.startswith('#'):
                     break
                 
+                # Check if this is a nested menu declaration
+                if stripped_line.startswith('menu') and ':' in stripped_line and indent_level > menu_indent:
+                    if not in_nested_menu:
+                        # Entering nested menu - start skipping
+                        in_nested_menu = True
+                        nested_menu_indent = indent_level
+                        current_line += 1
+                        continue
+                
+                # If we're in a nested menu, skip until we exit it
+                if in_nested_menu:
+                    # Exit nested menu when we return to the indent level where the nested menu started or less
+                    if indent_level <= nested_menu_indent:
+                        in_nested_menu = False
+                        nested_menu_indent = None
+                        # Don't increment current_line - process this line
+                    else:
+                        # Still in nested menu - skip
+                        current_line += 1
+                        continue
+                
                 # Only include menu-relevant content:
                 # - Choice definitions (strings with colons)
                 # - Choice bodies (jump, call, return, pass, etc.)
@@ -685,7 +707,8 @@ class CMAPParser:
             
             current_line += 1
         
-        return '\n'.join(menu_lines), current_line + 1
+        # Lines from file already have newlines, so just concatenate them
+        return ''.join(menu_lines), current_line + 1
     
     def parse_menu_from_lines(self, lines: List[str], start_line: int) -> Optional[MenuNode]:
         """
