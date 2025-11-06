@@ -1913,9 +1913,12 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             return screen_nodes, screen_connections
         
         print(f"[SCREEN NODES] Creating nodes for {len(screen_structures)} screens")
+        print("🔧 [ADAPTER] About to loop through screen structures...")
         
         # Create screen container nodes and screen element nodes
-        for screen_name, screen_structure in screen_structures.items():
+        for screen_idx, (screen_name, screen_structure) in enumerate(screen_structures.items()):
+            if screen_idx % 10 == 0:
+                print(f"🔧 [ADAPTER] Processing screen {screen_idx}/{len(screen_structures)}...")
             screen_elements = getattr(screen_structure, 'elements', [])
             
             # Create screen container node (like menu container)
@@ -1936,6 +1939,10 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             )
             screen_nodes.append(screen_container_node)
             print(f"[SCREEN NODES] Created screen container: {screen_container_node.display_name}")
+            
+            # Debug: Check if this is where QPainter errors occur
+            if 'gallery' in screen_name.lower():
+                print(f"🔧 [ADAPTER] Created gallery screen: {screen_name}, about to process {len(screen_elements)} elements")
             
             # Create screen element nodes (like choice buttons)
             for i, element in enumerate(screen_elements):

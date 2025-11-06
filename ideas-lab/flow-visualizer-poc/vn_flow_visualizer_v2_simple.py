@@ -415,14 +415,30 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         Returns:
             True if successful
         """
+        print("=" * 80)
+        print("🔧 [VISUALIZER] load_project() STARTED")
+        print("=" * 80)
+        
+        # SAFETY: Disable updates BEFORE analysis starts to prevent QPainter errors
+        # This prevents the view from trying to paint while data is being prepared
+        print("🔧 [VISUALIZER] Disabling updates and hiding view...")
+        self.setUpdatesEnabled(False)
+        
+        # CRITICAL: Use Qt attribute to completely prevent screen drawing
+        from PyQt6.QtCore import Qt
+        self.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
+        print("🔧 [VISUALIZER] Updates disabled, screen drawing disabled")
+        
         try:
-            print(f"🔍 Loading project: {project_path}")
-            print(f"🔧 Using SDK: {use_sdk}")
+            print(f"🔍 [VISUALIZER] Loading project: {project_path}")
+            print(f"🔧 [VISUALIZER] Using SDK: {use_sdk}")
             
+            print("🔧 [VISUALIZER] Calling data_provider.analyze_project()...")
             # Get visualization data from adapter
             self.current_data = self.data_provider.analyze_project(project_path, use_sdk)
+            print("🔧 [VISUALIZER] analyze_project() completed")
             
-            # Load the data
+            # Load the data (this method also manages its own update blocking)
             self.load_flow_data(self.current_data)
             
             # Show analysis info
@@ -437,6 +453,14 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         except Exception as e:
             print(f"❌ Failed to load project: {e}")
             return False
+        
+        finally:
+            # SAFETY: Re-enable updates and screen drawing after everything is complete
+            from PyQt6.QtCore import Qt
+            self.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, False)
+            self.setUpdatesEnabled(True)
+            self.viewport().update()
+            print("🔧 [VISUALIZER] Screen drawing re-enabled, updates re-enabled")
     
     def load_flow_data(self, data: VisualizationData) -> None:
         """
@@ -448,137 +472,147 @@ class VNFlowVisualizerV2Simple(QGraphicsView):
         self.clear_visualization()
         self.current_data = data
         
-        print(f"📦 Loading visualization data:")
-        print(f"   Nodes: {len(data.nodes)}")
-        print(f"   Connections: {len(data.connections)}")
+        # SAFETY: Block scene signals during bulk loading
+        # (View updates are managed by load_project())
+        self.scene.blockSignals(True)
         
-        # Create visual nodes with proper menu container hierarchy
-        menu_containers = {}  # Track container nodes
-        choice_buttons_data = []   # Track choice button data for later processing
-        
-        # First pass: Create containers and regular nodes
-        for i, node_data in enumerate(data.nodes):
-            if node_data.node_type == 'menu_container':
-                visual_node = SimpleVisualNode(node_data)
-                # Position containers in a grid
-                x = (len(menu_containers) % 3) * 300  # 3 containers per row
-                y = (len(menu_containers) // 3) * 250  # Multiple rows if needed
-                visual_node.setPos(x, y)
-                menu_containers[node_data.node_id] = visual_node
-                self.scene.addItem(visual_node)
-                self.nodes[node_data.node_id] = visual_node
-                
-            elif node_data.node_type == 'choice_button':
-                # Store choice button data for second pass
-                choice_buttons_data.append(node_data)
-                
-            elif node_data.node_type == 'screen_element':
-                # Store screen element data for second pass (similar to choice buttons)
-                choice_buttons_data.append(node_data)  # Reuse same list for simplicity
-                
-            elif node_data.node_type in ['screen_container', 'screen']:
-                # Screen nodes - special handling with distinct appearance
-                visual_node = SimpleVisualNode(node_data)
-                # Position screens in a separate area to avoid overlap
-                screen_count = len([n for n in data.nodes[:i+1] if n.node_type in ['screen_container', 'screen']])
-                x = (screen_count % 4) * 220  # 4 screens per row, wider spacing
-                y = -150 - ((screen_count // 4) * 100)  # Above regular nodes, more vertical space
-                visual_node.setPos(x, y)
-                self.scene.addItem(visual_node)
-                self.nodes[node_data.node_id] = visual_node
-                
-                # Store screen containers for screen element positioning
-                if node_data.node_type == 'screen_container':
-                    menu_containers[node_data.node_id] = visual_node  # Reuse menu container logic
-                
-            else:
-                # Regular label nodes
-                visual_node = SimpleVisualNode(node_data)
-                x = (i % 5) * 250
-                y = (i // 5) * 200
-                visual_node.setPos(x, y)
-                self.scene.addItem(visual_node)
-                self.nodes[node_data.node_id] = visual_node
-        
-        # Second pass: Create choice buttons and screen elements as children of their containers
-        for choice_data in choice_buttons_data:
-            if choice_data.node_type == 'choice_button':
-                parent_container_id = choice_data.metadata.get('parent_container')
-                
-                if parent_container_id and parent_container_id in menu_containers:
-                    container = menu_containers[parent_container_id]
-                    choice_index = choice_data.metadata.get('choice_index', 0)
-                    
-                    # Create choice button
-                    choice_visual = SimpleVisualNode(choice_data)
-                    
-                    # CRITICAL: Set container as parent BEFORE positioning (this makes them move together)
-                    choice_visual.setParentItem(container)
-                    
-                    # Position relative to container (0,0 is container's top-left)
-                    # Use consistent spacing calculations
-                    spacing = SimpleVisualNode.get_menu_container_spacing()
-                    
-                    x_offset = spacing['padding']  # Left margin
-                    y_offset = spacing['header_height'] + spacing['padding'] + (choice_index * (spacing['choice_height'] + spacing['choice_spacing']))
-                    choice_visual.setPos(x_offset, y_offset)
-                    
-                    # Store in nodes dict for connections
-                    self.nodes[choice_data.node_id] = choice_visual
-                else:
-                    # Fallback: add as regular node if no container found
-                    choice_visual = SimpleVisualNode(choice_data)
-                    self.scene.addItem(choice_visual)
-                    self.nodes[choice_data.node_id] = choice_visual
-                    
-            elif choice_data.node_type == 'screen_element':
-                parent_screen_id = choice_data.metadata.get('parent_screen')
-                
-                if parent_screen_id and parent_screen_id in menu_containers:  # Screen containers stored here
-                    container = menu_containers[parent_screen_id]
-                    element_index = choice_data.metadata.get('element_index', 0)
-                    
-                    # Create screen element as child of screen container
-                    element_visual = SimpleVisualNode(choice_data)
-                    
-                    # CRITICAL: Set container as parent BEFORE positioning
-                    element_visual.setParentItem(container)
-                    
-                    # Position relative to container (similar to menu choices but simpler)
-                    x_offset = 10  # Small left margin
-                    y_offset = 40 + (element_index * 35)  # Header space + element spacing
-                    element_visual.setPos(x_offset, y_offset)
-                    
-                    # Store in nodes dict for connections
-                    self.nodes[choice_data.node_id] = element_visual
-                else:
-                    # Fallback: add as regular node if no container found
-                    element_visual = SimpleVisualNode(choice_data)
-                    self.scene.addItem(element_visual)
-                    self.nodes[choice_data.node_id] = element_visual
-        
-        # Create visual connections with Bezier curves and arrows
-        for connection in data.connections:
-            source_node: Optional[SimpleVisualNode] = self.nodes.get(connection.source_node_id)
-            target_node: Optional[SimpleVisualNode] = self.nodes.get(connection.target_node_id)
+        try:
+            print(f"📦 Loading visualization data:")
+            print(f"   Nodes: {len(data.nodes)}")
+            print(f"   Connections: {len(data.connections)}")
             
-            if source_node and target_node:
-                # Create Bezier connection with arrow
-                bezier_connection = BezierConnection(source_node, target_node)
-                self.scene.addItem(bezier_connection)
+            # Create visual nodes with proper menu container hierarchy
+            menu_containers = {}  # Track container nodes
+            choice_buttons_data = []   # Track choice button data for later processing
+            
+            # First pass: Create containers and regular nodes
+            for i, node_data in enumerate(data.nodes):
+                if node_data.node_type == 'menu_container':
+                    visual_node = SimpleVisualNode(node_data)
+                    # Position containers in a grid
+                    x = (len(menu_containers) % 3) * 300  # 3 containers per row
+                    y = (len(menu_containers) // 3) * 250  # Multiple rows if needed
+                    visual_node.setPos(x, y)
+                    menu_containers[node_data.node_id] = visual_node
+                    self.scene.addItem(visual_node)
+                    self.nodes[node_data.node_id] = visual_node
+                    
+                elif node_data.node_type == 'choice_button':
+                    # Store choice button data for second pass
+                    choice_buttons_data.append(node_data)
+                    
+                elif node_data.node_type == 'screen_element':
+                    # Store screen element data for second pass (similar to choice buttons)
+                    choice_buttons_data.append(node_data)  # Reuse same list for simplicity
+                    
+                elif node_data.node_type in ['screen_container', 'screen']:
+                    # Screen nodes - special handling with distinct appearance
+                    visual_node = SimpleVisualNode(node_data)
+                    # Position screens in a separate area to avoid overlap
+                    screen_count = len([n for n in data.nodes[:i+1] if n.node_type in ['screen_container', 'screen']])
+                    x = (screen_count % 4) * 220  # 4 screens per row, wider spacing
+                    y = -150 - ((screen_count // 4) * 100)  # Above regular nodes, more vertical space
+                    visual_node.setPos(x, y)
+                    self.scene.addItem(visual_node)
+                    self.nodes[node_data.node_id] = visual_node
+                    
+                    # Store screen containers for screen element positioning
+                    if node_data.node_type == 'screen_container':
+                        menu_containers[node_data.node_id] = visual_node  # Reuse menu container logic
+                    
+                else:
+                    # Regular label nodes
+                    visual_node = SimpleVisualNode(node_data)
+                    x = (i % 5) * 250
+                    y = (i // 5) * 200
+                    visual_node.setPos(x, y)
+                    self.scene.addItem(visual_node)
+                    self.nodes[node_data.node_id] = visual_node
+            
+            # Second pass: Create choice buttons and screen elements as children of their containers
+            for choice_data in choice_buttons_data:
+                if choice_data.node_type == 'choice_button':
+                    parent_container_id = choice_data.metadata.get('parent_container')
+                    
+                    if parent_container_id and parent_container_id in menu_containers:
+                        container = menu_containers[parent_container_id]
+                        choice_index = choice_data.metadata.get('choice_index', 0)
+                        
+                        # Create choice button
+                        choice_visual = SimpleVisualNode(choice_data)
+                        
+                        # CRITICAL: Set container as parent BEFORE positioning (this makes them move together)
+                        choice_visual.setParentItem(container)
+                        
+                        # Position relative to container (0,0 is container's top-left)
+                        # Use consistent spacing calculations
+                        spacing = SimpleVisualNode.get_menu_container_spacing()
+                        
+                        x_offset = spacing['padding']  # Left margin
+                        y_offset = spacing['header_height'] + spacing['padding'] + (choice_index * (spacing['choice_height'] + spacing['choice_spacing']))
+                        choice_visual.setPos(x_offset, y_offset)
+                        
+                        # Store in nodes dict for connections
+                        self.nodes[choice_data.node_id] = choice_visual
+                    else:
+                        # Fallback: add as regular node if no container found
+                        choice_visual = SimpleVisualNode(choice_data)
+                        self.scene.addItem(choice_visual)
+                        self.nodes[choice_data.node_id] = choice_visual
+                        
+                elif choice_data.node_type == 'screen_element':
+                    parent_screen_id = choice_data.metadata.get('parent_screen')
+                    
+                    if parent_screen_id and parent_screen_id in menu_containers:  # Screen containers stored here
+                        container = menu_containers[parent_screen_id]
+                        element_index = choice_data.metadata.get('element_index', 0)
+                        
+                        # Create screen element as child of screen container
+                        element_visual = SimpleVisualNode(choice_data)
+                        
+                        # CRITICAL: Set container as parent BEFORE positioning
+                        element_visual.setParentItem(container)
+                        
+                        # Position relative to container (similar to menu choices but simpler)
+                        x_offset = 10  # Small left margin
+                        y_offset = 40 + (element_index * 35)  # Header space + element spacing
+                        element_visual.setPos(x_offset, y_offset)
+                        
+                        # Store in nodes dict for connections
+                        self.nodes[choice_data.node_id] = element_visual
+                    else:
+                        # Fallback: add as regular node if no container found
+                        element_visual = SimpleVisualNode(choice_data)
+                        self.scene.addItem(element_visual)
+                        self.nodes[choice_data.node_id] = element_visual
+            
+            # Create visual connections with Bezier curves and arrows
+            for connection in data.connections:
+                source_node: Optional[SimpleVisualNode] = self.nodes.get(connection.source_node_id)
+                target_node: Optional[SimpleVisualNode] = self.nodes.get(connection.target_node_id)
                 
-                # Register connection with both source and target nodes for automatic updates
-                source_node.add_connection(bezier_connection)
-                target_node.add_connection(bezier_connection)
-                
-                # Store connection for potential updates
-                self.connections.append(bezier_connection)
+                if source_node and target_node:
+                    # Create Bezier connection with arrow
+                    bezier_connection = BezierConnection(source_node, target_node)
+                    self.scene.addItem(bezier_connection)
+                    
+                    # Register connection with both source and target nodes for automatic updates
+                    source_node.add_connection(bezier_connection)
+                    target_node.add_connection(bezier_connection)
+                    
+                    # Store connection for potential updates
+                    self.connections.append(bezier_connection)
         
-        print(f"✅ Created {len(self.nodes)} visual nodes and {len(data.connections)} connections")
-        
-        # Auto-apply default layout (dot_like) and fit view
-        self.apply_layout("dot_like")  # This already calls update_all_connections() and _update_scene_margins()
-        self.fit_view_to_content()
+            print(f"✅ Created {len(self.nodes)} visual nodes and {len(data.connections)} connections")
+            
+            # Auto-apply default layout (dot_like) and fit view
+            self.apply_layout("dot_like")  # This already calls update_all_connections() and _update_scene_margins()
+            self.fit_view_to_content()
+            
+        finally:
+            # SAFETY: Re-enable scene signals after all items are loaded
+            # (View updates are managed by load_project())
+            self.scene.blockSignals(False)
     
     def clear_visualization(self):
         """Clear the current visualization."""

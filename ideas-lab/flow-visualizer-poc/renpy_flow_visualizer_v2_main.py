@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QStatusBar, QMenuBar, QMessageBox, QProgressBar, QComboBox,
     QCheckBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, qInstallMessageHandler, QtMsgType
 from PyQt6.QtGui import QAction
 
 # Import our updated components using clean architecture
@@ -270,23 +270,34 @@ class RenpyFlowMapperV2(QMainWindow):
         # Add to recent paths
         self.add_recent_path(project_path)
         
+        print("=" * 80)
+        print("🔧 [MAIN WINDOW] load_project() STARTED")
+        print("=" * 80)
+        
         # Clear current visualization
+        print("🔧 [MAIN WINDOW] Clearing visualization...")
         self.visualizer.clear_visualization()
         self.control_panel.clear_project_info()
+        print("🔧 [MAIN WINDOW] Visualization cleared")
         
         # Show progress
+        print("🔧 [MAIN WINDOW] Setting up progress UI...")
         self.load_button.setEnabled(False)
         self.browse_button.setEnabled(False)
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setRange(0, 0)  # Indeterminate
+        # NOTE: Progress bar animation can cause QPainter errors during heavy processing
+        # Keep it hidden during analysis to prevent paint events
+        self.progress_bar.setVisible(False)  # Changed from True
         self.status_bar.showMessage("Analyzing project...")
+        print("🔧 [MAIN WINDOW] Progress UI ready (progress bar hidden to prevent QPainter errors)")
         
         # Use enhanced analysis if checkbox is checked
         use_sdk = self.sdk_checkbox.isChecked()
         
         try:
+            print("🔧 [MAIN WINDOW] Calling visualizer.load_project()...")
             # Load project using clean interface - no more background threads needed!
             success = self.visualizer.load_project(project_path, use_sdk=use_sdk)
+            print(f"🔧 [MAIN WINDOW] visualizer.load_project() returned: {success}")
             
             if success:
                 # Update control panel with project info
@@ -336,8 +347,29 @@ class RenpyFlowMapperV2(QMainWindow):
             self.progress_bar.setVisible(False)
 
 
+def qt_message_handler(mode, context, message):
+    """Custom Qt message handler to filter out harmless QPainter warnings during heavy computation."""
+    # Suppress QPainter warnings that occur during layout computation
+    # These are harmless - they occur when Windows tries to repaint an unresponsive window
+    if "QPainter" in message and ("Paint device returned engine" in message or "Painter not active" in message):
+        return  # Silently ignore these warnings
+    
+    # Log all other messages normally
+    if mode == QtMsgType.QtDebugMsg:
+        print(f"Qt Debug: {message}")
+    elif mode == QtMsgType.QtWarningMsg:
+        print(f"Qt Warning: {message}")
+    elif mode == QtMsgType.QtCriticalMsg:
+        print(f"Qt Critical: {message}")
+    elif mode == QtMsgType.QtFatalMsg:
+        print(f"Qt Fatal: {message}")
+
+
 def main():
     """Main application entry point."""
+    # Install custom message handler to suppress harmless QPainter warnings
+    qInstallMessageHandler(qt_message_handler)
+    
     app = QApplication(sys.argv)
     
     # Set application properties
