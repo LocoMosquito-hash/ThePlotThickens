@@ -191,6 +191,9 @@ class MenuNode:
     choices: List[MenuChoice] = field(default_factory=list)
     total_choices: int = 0
     
+    # Nested menu support
+    is_nested: bool = False  # True if this menu is nested inside a choice
+    
     # Enhanced metadata for app consumption
     menu_type: str = "standard"  # "standard", "conditional", "nested", "set_based"
     complexity_level: str = "simple"  # "simple", "moderate", "complex", "expert"

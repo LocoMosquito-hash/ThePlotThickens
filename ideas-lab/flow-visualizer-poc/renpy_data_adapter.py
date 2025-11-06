@@ -1785,59 +1785,107 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 # Clear existing menu_nodes (they're from regex parsing)
                 label_node.menu_nodes = []
                 
-                # Convert EnhancedMenuStructure to MenuNode
-                for menu_idx, enhanced_menu in enumerate(label_menus):
-                    # enhanced_menu is a dict, not an object
-                    menu_node = MenuNode(
-                        node_id=f"{label_name}_menu_{menu_idx}",
-                        name=f"Menu {menu_idx + 1}",
-                        parent_label=label_name,
-                        menu_index=menu_idx,
-                        file_path=enhanced_menu.get('file_path', ''),
-                        line_number=enhanced_menu.get('line_number', 0),
-                        prompt=enhanced_menu.get('prompt', None),
-                        choices=[],
-                        total_choices=len(enhanced_menu.get('choices', [])),
-                        has_conditions=enhanced_menu.get('has_complex_conditionals', False)
-                    )
+                # Convert EnhancedMenuStructure to MenuNode (only non-nested menus)
+                top_level_menu_idx = 0
+                for enhanced_menu in label_menus:
+                    # enhanced_menu might be a dataclass or dict - handle both
+                    is_nested = getattr(enhanced_menu, 'is_nested', False) if hasattr(enhanced_menu, 'is_nested') else enhanced_menu.get('is_nested', False) if isinstance(enhanced_menu, dict) else False
+                    line_num = getattr(enhanced_menu, 'line_number', '?') if hasattr(enhanced_menu, 'line_number') else enhanced_menu.get('line_number', '?') if isinstance(enhanced_menu, dict) else '?'
                     
-                    # Convert choices (enhanced_choice is also a dict)
-                    for choice_idx, enhanced_choice in enumerate(enhanced_menu.get('choices', [])):
-                        # Get all possible destinations from unconditional_destinations and conditional_paths
-                        destinations = enhanced_choice.get('unconditional_destinations', [])
-                        conditional_paths = enhanced_choice.get('conditional_paths', [])
-                        
-                        # Add destinations from conditional paths
-                        for path in conditional_paths:
-                            dest = path.get('destination', '')
-                            if dest and dest not in destinations:
-                                destinations.append(dest)
-                        
-                        # Use first destination as primary, or empty string
-                        primary_destination = destinations[0] if destinations else ''
-                        
-                        menu_choice = MenuChoice(
-                            text=enhanced_choice.get('text', ''),
-                            destination=primary_destination,
-                            all_destinations=destinations,  # CRITICAL FIX: Include all destinations for AHS
-                            condition=enhanced_choice.get('primary_condition', None),
-                            has_condition=enhanced_choice.get('is_conditional', False)
-                        )
-                        menu_node.choices.append(menu_choice)
-                        
-                        # Track all destinations
-                        for dest in destinations:
-                            if dest and dest not in menu_node.choice_destinations:
-                                menu_node.choice_destinations.append(dest)
+                    # Skip nested menus - they will be handled through their parent choice
+                    if is_nested:
+                        print(f"[ADAPTER] Skipping nested menu at line {line_num} (will be attached to parent choice)")
+                        continue
+                    
+                    # enhanced_menu is a dataclass or dict
+                    menu_node = self._convert_enhanced_menu_to_node(
+                        enhanced_menu, label_name, top_level_menu_idx
+                    )
                     
                     label_node.menu_nodes.append(menu_node)
                     integrated_count += 1
+                    top_level_menu_idx += 1
                 
                 # Update computed fields
                 label_node.has_menu = len(label_node.menu_nodes) > 0
                 label_node.menu_count = len(label_node.menu_nodes)
         
         print(f"[ADAPTER] ✅ Integrated {integrated_count} enhanced menus into {len(menus_by_label)} labels")
+    
+    def _convert_enhanced_menu_to_node(self, enhanced_menu, label_name: str, menu_idx: int) -> 'MenuNode':
+        """
+        Convert an EnhancedMenuStructure to a MenuNode with nested menu support.
+        
+        Args:
+            enhanced_menu: EnhancedMenuStructure (dataclass or dict)
+            label_name: Name of the parent label
+            menu_idx: Index of this menu within the label
+            
+        Returns:
+            MenuNode with choices and nested menus properly structured
+        """
+        from parser import MenuNode, MenuChoice
+        
+        # Helper to get attribute from dataclass or dict
+        def get_attr(obj, attr, default=None):
+            if hasattr(obj, attr):
+                return getattr(obj, attr, default)
+            elif isinstance(obj, dict):
+                return obj.get(attr, default)
+            return default
+        
+        menu_node = MenuNode(
+            node_id=f"{label_name}_menu_{menu_idx}",
+            name=f"Menu {menu_idx + 1}",
+            parent_label=label_name,
+            menu_index=menu_idx,
+            file_path=get_attr(enhanced_menu, 'file_path', ''),
+            line_number=get_attr(enhanced_menu, 'line_number', 0),
+            prompt=get_attr(enhanced_menu, 'prompt', None),
+            choices=[],
+            total_choices=len(get_attr(enhanced_menu, 'choices', [])),
+            has_conditions=get_attr(enhanced_menu, 'has_complex_conditionals', False),
+            is_nested=get_attr(enhanced_menu, 'is_nested', False)  # Track nested status
+        )
+        
+        # Convert choices (enhanced_choice can be dataclass or dict)
+        for choice_idx, enhanced_choice in enumerate(get_attr(enhanced_menu, 'choices', [])):
+            # Get all possible destinations from unconditional_destinations and conditional_paths
+            destinations = get_attr(enhanced_choice, 'unconditional_destinations', [])
+            conditional_paths = get_attr(enhanced_choice, 'conditional_paths', [])
+            
+            # Add destinations from conditional paths
+            for path in conditional_paths:
+                dest = get_attr(path, 'destination', '')
+                if dest and dest not in destinations:
+                    destinations.append(dest)
+            
+            # Use first destination as primary, or empty string
+            primary_destination = destinations[0] if destinations else ''
+            
+            menu_choice = MenuChoice(
+                text=get_attr(enhanced_choice, 'text', ''),
+                destination=primary_destination,
+                all_destinations=destinations,
+                condition=get_attr(enhanced_choice, 'primary_condition', None),
+                has_condition=get_attr(enhanced_choice, 'is_conditional', False)
+            )
+            
+            # Handle nested menus in this choice
+            nested_menus = get_attr(enhanced_choice, 'nested_menu_structures', [])
+            if nested_menus:
+                # Store nested menu structures on the choice for AHS to process
+                menu_choice.nested_menu_structures = nested_menus
+                print(f"[ADAPTER] ✅ Attached {len(nested_menus)} nested menu(s) to choice '{menu_choice.text[:30]}...'")
+            
+            menu_node.choices.append(menu_choice)
+            
+            # Track all destinations
+            for dest in destinations:
+                if dest and dest not in menu_node.choice_destinations:
+                    menu_node.choice_destinations.append(dest)
+        
+        return menu_node
     
     def _create_screen_nodes_and_connections(self, flow_graph: Dict[str, Any]) -> Tuple[List[VisualizationNode], List[VisualizationConnection]]:
         """

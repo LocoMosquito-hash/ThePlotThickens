@@ -72,6 +72,9 @@ class EnhancedMenuChoice:
     has_variable_changes: bool = False
     variable_changes: List[str] = field(default_factory=list)
     
+    # Nested menu support
+    nested_menu_structures: List['EnhancedMenuStructure'] = field(default_factory=list)
+    
     # Complexity analysis
     choice_complexity: str = "simple"  # simple, conditional, complex, dynamic
     estimated_paths: int = 1
@@ -98,6 +101,11 @@ class EnhancedMenuStructure:
     # Variable pattern analysis
     referenced_variables: List[str] = field(default_factory=list)
     variable_patterns: Dict[str, List[str]] = field(default_factory=dict)
+    
+    # Parent tracking for nested menus
+    parent_menu_line: Optional[int] = None
+    parent_choice_index: Optional[int] = None
+    is_nested: bool = False
 
 
 class ASTMenuParser:
@@ -523,18 +531,63 @@ class ASTMenuParser:
             return []
         
         menus = []
+        menu_stack = []  # Stack to track menu hierarchy: [(menu_obj, line, indent, end_line)]
         
         # Find all menu definitions in the file
         for i, line in enumerate(lines):
             line_stripped = line.strip()
+            
+            # Check if this is a label definition - if so, clear the menu stack
+            # since menus can't be nested across label boundaries
+            if line_stripped.startswith('label ') and ':' in line_stripped:
+                menu_stack.clear()
+            
             if line_stripped.startswith('menu') and ':' in line_stripped:
+                # Calculate indentation
+                indent_level = len(line) - len(line.lstrip())
+                
+                # Pop menus from stack that we've exited
+                # A menu should be popped if:
+                # 1. We're at the same or lower indentation level, OR
+                # 2. We've moved past the estimated end line of the menu
+                while menu_stack:
+                    parent_menu, parent_line, parent_indent, parent_end = menu_stack[-1]
+                    # If we're past the parent menu's estimated end, it's not a parent anymore
+                    if (i + 1) > parent_end or indent_level <= parent_indent:
+                        menu_stack.pop()
+                    else:
+                        break
+                
                 # Found a menu definition
                 try:
                     cmap_menu = self.cmap_parser.parse_menu_from_lines(lines, i + 1)
                     if cmap_menu:
                         # Convert CMAP menu to EnhancedMenuStructure
                         enhanced_menu = self._convert_cmap_to_enhanced(cmap_menu, file_path, i + 1)
+                        
+                        # Check if this menu is nested inside another menu's choice
+                        if menu_stack:
+                            parent_menu, parent_line, parent_indent, parent_end = menu_stack[-1]
+                            # This menu is nested - need to find which choice it belongs to
+                            choice_idx = self._find_parent_choice_for_nested_menu(
+                                parent_menu, i + 1, indent_level, lines
+                            )
+                            if choice_idx is not None:
+                                enhanced_menu.is_nested = True
+                                enhanced_menu.parent_menu_line = parent_line
+                                enhanced_menu.parent_choice_index = choice_idx
+                                # Add to parent choice's nested menus
+                                if choice_idx < len(parent_menu.choices):
+                                    parent_menu.choices[choice_idx].nested_menu_structures.append(enhanced_menu)
+                                    parent_menu.has_nested_menus = True
+                                    print(f"[CMAP] ✅ Detected nested menu at line {i + 1} (parent choice {choice_idx} in menu at line {parent_line})")
+                        
                         menus.append(enhanced_menu)
+                        
+                        # Estimate end line for this menu (for stack tracking)
+                        end_line = self._estimate_menu_end_line(lines, i, indent_level)
+                        menu_stack.append((enhanced_menu, i + 1, indent_level, end_line))
+                        
                         print(f"[CMAP] ✅ Parsed menu at line {i + 1} with {len(enhanced_menu.choices)} choices")
                     else:
                         # Show the actual line content where parsing failed
@@ -544,19 +597,129 @@ class ASTMenuParser:
                         # Fall back to regex for this specific menu
                         regex_menu = self._parse_single_menu_regex(lines, i + 1, file_path)
                         if regex_menu:
+                            # Check if this menu is nested (same logic as CMAP)
+                            if menu_stack:
+                                parent_menu, parent_line, parent_indent, parent_end = menu_stack[-1]
+                                choice_idx = self._find_parent_choice_for_nested_menu(
+                                    parent_menu, i + 1, indent_level, lines
+                                )
+                                if choice_idx is not None:
+                                    regex_menu.is_nested = True
+                                    regex_menu.parent_menu_line = parent_line
+                                    regex_menu.parent_choice_index = choice_idx
+                                    # Add to parent choice's nested menus
+                                    if choice_idx < len(parent_menu.choices):
+                                        parent_menu.choices[choice_idx].nested_menu_structures.append(regex_menu)
+                                        parent_menu.has_nested_menus = True
+                                        print(f"[CMAP/REGEX] ✅ Detected nested menu at line {i + 1} (parent choice {choice_idx} in menu at line {parent_line})")
+                            
                             menus.append(regex_menu)
+                            
+                            # Add to stack for tracking
+                            end_line = self._estimate_menu_end_line(lines, i, indent_level)
+                            menu_stack.append((regex_menu, i + 1, indent_level, end_line))
                 except Exception as e:
                     print(f"[CMAP] Error parsing menu at line {i + 1}: {e}")
                     # Fall back to regex for this specific menu
                     try:
                         regex_menu = self._parse_single_menu_regex(lines, i + 1, file_path)
                         if regex_menu:
+                            # Check if this menu is nested (same logic as CMAP)
+                            if menu_stack:
+                                parent_menu, parent_line, parent_indent, parent_end = menu_stack[-1]
+                                choice_idx = self._find_parent_choice_for_nested_menu(
+                                    parent_menu, i + 1, indent_level, lines
+                                )
+                                if choice_idx is not None:
+                                    regex_menu.is_nested = True
+                                    regex_menu.parent_menu_line = parent_line
+                                    regex_menu.parent_choice_index = choice_idx
+                                    # Add to parent choice's nested menus
+                                    if choice_idx < len(parent_menu.choices):
+                                        parent_menu.choices[choice_idx].nested_menu_structures.append(regex_menu)
+                                        parent_menu.has_nested_menus = True
+                                        print(f"[CMAP/REGEX] ✅ Detected nested menu at line {i + 1} (parent choice {choice_idx} in menu at line {parent_line})")
+                            
                             menus.append(regex_menu)
+                            
+                            # Add to stack for tracking
+                            end_line = self._estimate_menu_end_line(lines, i, indent_level)
+                            menu_stack.append((regex_menu, i + 1, indent_level, end_line))
                     except Exception as regex_e:
                         print(f"[CMAP] Regex fallback also failed: {regex_e}")
         
         print(f"[CMAP] Parsed {len(menus)} menus from {file_path}")
         return menus
+    
+    def _find_parent_choice_for_nested_menu(self, parent_menu: EnhancedMenuStructure, 
+                                           nested_menu_line: int, nested_indent: int, 
+                                           lines: List[str]) -> Optional[int]:
+        """
+        Find which choice in the parent menu contains this nested menu.
+        
+        Args:
+            parent_menu: The parent EnhancedMenuStructure
+            nested_menu_line: Line number of the nested menu (1-indexed)
+            nested_indent: Indentation level of the nested menu
+            lines: All lines in the file
+            
+        Returns:
+            Index of the parent choice, or None if not found
+        """
+        # Look backwards from the nested menu to find the most recent choice
+        # that could contain it (based on line numbers and indentation)
+        for choice_idx, choice in enumerate(parent_menu.choices):
+            choice_line = choice.line_number
+            
+            # The nested menu should come after the choice line
+            if choice_line < nested_menu_line:
+                # Check if this is the closest choice before the nested menu
+                # by checking if there's no other choice between them
+                is_closest = True
+                for other_choice in parent_menu.choices[choice_idx + 1:]:
+                    if choice_line < other_choice.line_number < nested_menu_line:
+                        is_closest = False
+                        break
+                
+                if is_closest:
+                    return choice_idx
+        
+        # Fallback: return first choice if no better match found
+        return 0 if parent_menu.choices else None
+    
+    def _estimate_menu_end_line(self, lines: List[str], menu_start_idx: int, menu_indent: int) -> int:
+        """
+        Estimate the end line of a menu based on indentation.
+        
+        Args:
+            lines: All lines in the file
+            menu_start_idx: 0-indexed line where menu starts
+            menu_indent: Indentation level of the menu statement
+            
+        Returns:
+            Estimated end line (1-indexed)
+        """
+        current_line = menu_start_idx + 1
+        
+        while current_line < len(lines):
+            line = lines[current_line]
+            stripped_line = line.strip()
+            
+            # Skip empty lines and comments
+            if not stripped_line or stripped_line.startswith('#'):
+                current_line += 1
+                continue
+            
+            # Check indentation
+            line_indent = len(line) - len(line.lstrip())
+            
+            # If we're back to menu indentation or less, we've exited the menu
+            if line_indent <= menu_indent:
+                return current_line  # 0-indexed, but we'll use as approximation
+            
+            current_line += 1
+        
+        return len(lines)
     
     def _convert_cmap_to_enhanced(self, cmap_menu: 'CMAPMenuNode', file_path: str, line_number: int) -> EnhancedMenuStructure:
         """Convert CMAP MenuNode to EnhancedMenuStructure."""

@@ -854,6 +854,10 @@ class HybridRenpyParser:
                         "referenced_variables": menu.referenced_variables,
                         "variable_patterns": menu.variable_patterns,
                         "label_context": label_context,  # CRITICAL: Add label context!
+                        # Nested menu support
+                        "is_nested": menu.is_nested,
+                        "parent_menu_line": menu.parent_menu_line,
+                        "parent_choice_index": menu.parent_choice_index,
                         "choices": []
                     }
                     
@@ -871,6 +875,7 @@ class HybridRenpyParser:
                             "has_variable_changes": choice.has_variable_changes,
                             "variable_changes": choice.variable_changes,
                             "unconditional_destinations": choice.unconditional_destinations,
+                            "nested_menu_structures": choice.nested_menu_structures,  # Nested menu support
                             "conditional_paths": []
                         }
                         
