@@ -6,8 +6,8 @@ PyQt6-sip>=13.10.0
 # Database
 SQLAlchemy>=2.0.0  # Updated to 2.x for Python 3.12 compatibility
 
-# UI Theme - Use latest available version (Python 3.12 compatibility)
-pyqtdarktheme>=0.1.7  # Latest available version for Python 3.12
+# UI Theme - Python 3.12 compatible
+qt-material>=2.14  # Material Design themes for PyQt6
 
 # Tabler icons packages - you can use either one
 pytablericons>=1.0.1  # Pillow-based, preferred option

@@ -10,7 +10,7 @@ This module provides utilities for managing and switching application themes.
 import os
 import json
 from typing import Literal, Optional
-import qdarktheme
+from qt_material import apply_stylesheet
 from PyQt6.QtWidgets import QApplication
 
 # Import our icon manager reference
@@ -18,10 +18,17 @@ from app.utils.icons.icon_manager import icon_manager
 
 
 class ThemeManager:
-    """Manages application themes using PyQtDarkTheme."""
+    """Manages application themes using Qt-Material."""
     
     CONFIG_FILE = "theme_config.json"
     ThemeType = Literal["dark", "light", "auto"]
+    
+    # Qt-Material theme mappings
+    THEME_MAP = {
+        "dark": "dark_blue.xml",
+        "light": "light_blue.xml",
+        "auto": "dark_blue.xml"  # Default to dark for auto
+    }
     
     def __init__(self, app_dir: str):
         """Initialize the theme manager.
@@ -70,8 +77,39 @@ class ThemeManager:
             self.current_theme = theme
             self._save_theme_config()
         
-        # Apply the theme using PyQtDarkTheme
-        qdarktheme.setup_theme(self.current_theme)
+        # Apply the theme using Qt-Material
+        app = QApplication.instance()
+        if app:
+            apply_stylesheet(app, theme=self.THEME_MAP[self.current_theme])
+            
+            # Apply custom CSS to make UI elements more compact
+            extra_css = """
+            * {
+                font-size: 10pt;
+            }
+            QPushButton {
+                padding: 4px 8px;
+                font-size: 10pt;
+            }
+            QComboBox {
+                padding: 3px 5px;
+                font-size: 10pt;
+            }
+            QCheckBox, QRadioButton {
+                font-size: 10pt;
+            }
+            QLineEdit, QTextEdit, QPlainTextEdit {
+                padding: 4px;
+                font-size: 10pt;
+            }
+            QTreeView, QListView, QTableView {
+                font-size: 10pt;
+            }
+            """
+            
+            # Append our custom styles to the existing stylesheet
+            current_stylesheet = app.styleSheet()
+            app.setStyleSheet(current_stylesheet + extra_css)
         
         # Update icons to match the current theme
         if self.current_theme == "auto":
