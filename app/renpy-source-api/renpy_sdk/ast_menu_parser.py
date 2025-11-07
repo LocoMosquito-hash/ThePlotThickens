@@ -932,11 +932,14 @@ class ASTMenuParser:
                 break
             
             # Check for choice patterns
+            # Note: Patterns now support optional parameters in parentheses after the choice text
+            # e.g., "Choice" (param=value, ...) or "Choice" (wt="hint"):
+            # The (?:\(.*?\))? part matches optional (params) with any content including nested quotes/braces
             choice_patterns = [
-                (r'^\s*"([^"]+)"\s*:', "basic"),
-                (r'^\s*"([^"]+)"\s+if\s+(.+)\s*:', "conditional"),
-                (r'^\s*"\[([^\]]+)\]"\s*:', "expression"),
-                (r'^\s*"\[([^\]]+)\]"\s+if\s+(.+)\s*:', "conditional_expression"),
+                (r'^\s*"([^"]+)"\s*(?:\(.*?\))?\s*:', "basic"),
+                (r'^\s*"([^"]+)"\s*(?:\(.*?\))?\s+if\s+(.+)\s*:', "conditional"),
+                (r'^\s*"\[([^\]]+)\]"\s*(?:\(.*?\))?\s*:', "expression"),
+                (r'^\s*"\[([^\]]+)\]"\s*(?:\(.*?\))?\s+if\s+(.+)\s*:', "conditional_expression"),
             ]
             
             choice_match = None
