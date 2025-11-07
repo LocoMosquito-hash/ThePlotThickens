@@ -1874,9 +1874,23 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             # Handle nested menus in this choice
             nested_menus = get_attr(enhanced_choice, 'nested_menu_structures', [])
             if nested_menus:
-                # Store nested menu structures on the choice for AHS to process
-                menu_choice.nested_menu_structures = nested_menus
-                print(f"[ADAPTER] ✅ Attached {len(nested_menus)} nested menu(s) to choice '{menu_choice.text[:30]}...'")
+                # Convert nested EnhancedMenuStructure objects to MenuNode objects
+                # so they have the correct structure (MenuChoice with all_destinations)
+                converted_nested_menus = []
+                for nest_idx, nested_enhanced in enumerate(nested_menus):
+                    # Recursively convert nested menu using the same conversion logic
+                    nested_menu_node = self._convert_enhanced_menu_to_node(
+                        nested_enhanced, 
+                        label_name,  # Same parent label
+                        nest_idx  # Use nested index for ID generation
+                    )
+                    # Mark as nested
+                    nested_menu_node.is_nested = True
+                    converted_nested_menus.append(nested_menu_node)
+                
+                # Store converted nested menu nodes on the choice for AHS to process
+                menu_choice.nested_menu_structures = converted_nested_menus
+                print(f"[ADAPTER] ✅ Converted and attached {len(converted_nested_menus)} nested menu(s) to choice '{menu_choice.text[:30]}...'")
             
             menu_node.choices.append(menu_choice)
             
