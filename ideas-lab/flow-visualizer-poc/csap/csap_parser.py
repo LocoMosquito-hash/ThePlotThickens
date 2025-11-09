@@ -91,13 +91,25 @@ class CSAPTransformer(Transformer):
     
     def screen_definition(self, items):
         """Transform screen definition."""
-        screen_name = str(items[0])
+        # Grammar: SCREEN IDENTIFIER screen_params? ":" _NEWLINE _INDENT screen_body _DEDENT
+        # items[0] = SCREEN token
+        # items[1] = IDENTIFIER (screen name)
+        # items[2] = screen_params (if present) or screen_body (list)
+        # items[3] = screen_body (list) if screen_params is present
+        
+        # Extract screen name (skip SCREEN token at items[0])
+        screen_name = str(items[1])
         line, column = self._get_node_location(items)
         
-        # Items structure: [screen_name, screen_params (list), screen_body (list)]
-        # screen_params is items[1] (may be empty list)
-        # screen_body is items[2] (list of elements)
-        elements = items[2] if len(items) > 2 and isinstance(items[2], list) else []
+        # Determine if screen_params is present
+        if len(items) == 4:
+            # Has screen_params: [SCREEN, name, screen_params, screen_body]
+            elements = items[3] if isinstance(items[3], list) else []
+        elif len(items) == 3:
+            # No screen_params: [SCREEN, name, screen_body]
+            elements = items[2] if isinstance(items[2], list) else []
+        else:
+            elements = []
         
         return ScreenNode(
             screen_name=screen_name,
@@ -124,11 +136,15 @@ class CSAPTransformer(Transformer):
     def screen_body(self, items):
         """Transform screen body."""
         # Filter out None values (from screen properties) and keep only actual elements
-        # Include both ScreenElementNode (with element_type) and ImageMapNode
+        # Include ScreenElementNode (with element_type), ImageMapNode, LayoutNode, and ConditionalElementNode
         elements = []
         for item in items:
-            if item is not None and (hasattr(item, 'element_type') or isinstance(item, ImageMapNode)):
-                elements.append(item)
+            if item is not None:
+                # Include elements with element_type attribute, or specific node types
+                if (hasattr(item, 'element_type') or 
+                    isinstance(item, (ImageMapNode, LayoutNode, ConditionalElementNode))):
+                    elements.append(item)
+        
         return elements
     
     # ========================================================================
@@ -137,51 +153,133 @@ class CSAPTransformer(Transformer):
     
     def conditional_element(self, items):
         """Transform conditional element."""
-        return items[0]  # if_statement
+        result = items[0]  # if_statement
+        return result
     
     def if_statement(self, items):
-        """Transform if statement."""
+        """Transform if statement with elif and else support."""
         line, column = self._get_node_location(items)
         
-        condition = items[0]  # conditional_expression
-        body = items[1] if len(items) > 1 else []  # conditional_body
+        # Parse structure from grammar: IF conditional_expression ":" _NEWLINE _INDENT conditional_body _DEDENT elif* else*
+        # items[0] = IF token
+        # items[1] = conditional_expression (ConditionalExpressionNode)
+        # items[2] = conditional_body (list)
+        # items[3+] = elif_statement or else_statement (ConditionalBranch)
+        branches = []
         
-        return ConditionalElementNode(
+        # First branch: if
+        if_condition = items[1]  # conditional_expression
+        if_body = items[2] if len(items) > 2 and isinstance(items[2], list) else []
+        
+        
+        if_branch = ConditionalBranch(
+            condition=if_condition,
+            body=if_body,
+            branch_type="if",
+            line_number=line,
+            column=column
+        )
+        branches.append(if_branch)
+        
+        # Process remaining items (elif and else branches)
+        for i in range(3, len(items)):
+            item = items[i]
+            if isinstance(item, ConditionalBranch):
+                branches.append(item)
+        
+        result = ConditionalElementNode(
+            branches=branches,
+            line_number=line,
+            column=column
+        )
+        return result
+    
+    def elif_statement(self, items):
+        """Transform elif statement."""
+        line, column = self._get_node_location(items)
+        
+        # Parse structure from grammar: ELIF conditional_expression ":" _NEWLINE _INDENT conditional_body _DEDENT
+        # items[0] = ELIF token
+        # items[1] = conditional_expression (ConditionalExpressionNode)
+        # items[2] = conditional_body (list)
+        condition = items[1]  # conditional_expression
+        body = items[2] if len(items) > 2 and isinstance(items[2], list) else []  # conditional_body
+        
+        return ConditionalBranch(
             condition=condition,
             body=body,
+            branch_type="elif",
             line_number=line,
             column=column
         )
     
-    def conditional_expression(self, items):
-        """Transform conditional expression with support for compound conditions."""
+    def else_statement(self, items):
+        """Transform else statement."""
         line, column = self._get_node_location(items)
         
+        # Parse structure from grammar: ELSE ":" _NEWLINE _INDENT conditional_body _DEDENT
+        # items[0] = ELSE token
+        # items[1] = conditional_body (list)
+        body = items[1] if len(items) > 1 and isinstance(items[1], list) else []  # conditional_body
+        
+        return ConditionalBranch(
+            condition=None,
+            body=body,
+            branch_type="else",
+            line_number=line,
+            column=column
+        )
+    
+    def conditional_body(self, items):
+        """Transform conditional body (list of screen elements)."""
+        # items is a list from the + operator in grammar: (conditional_body_item _NEWLINE?)+
+        # Each item should already be transformed by conditional_body_item
+        # Filter out None values and newlines
+        result = []
+        for item in items:
+            if item is not None and not (hasattr(item, 'type') and item.type == '_NEWLINE'):
+                result.append(item)
+        return result
+    
+    def conditional_body_item(self, items):
+        """Transform conditional body item."""
+        return items[0]  # Either screen_element or add_statement
+    
+    def conditional_expression(self, items):
+        """Transform conditional expression with support for compound conditions."""
         # For now, just take the first simple_condition and ignore compound logic
         # This handles: variable == value, variable > value, etc.
         # TODO: Full compound condition support later if needed
-        first_condition = items[0]  # simple_condition
-        
-        return first_condition
+        if items and len(items) > 0:
+            first_condition = items[0]  # simple_condition
+            return first_condition
+        return None
     
     def simple_condition(self, items):
         """Transform simple condition (variable operator value)."""
         line, column = self._get_node_location(items)
         
-        variable = str(items[0])  # IDENTIFIER
-        operator = str(items[1])  # comparison_operator  
-        value = items[2]         # conditional_value
+        variable = str(items[0])  # Token with variable name
         
-        # Extract value based on type
-        if hasattr(value, 'type'):
-            if value.type == 'STRING':
-                value = self._extract_string_value(value)
-            elif value.type in ('NUMBER', 'DECIMAL'):
-                value = self._extract_number_value(value)
-            elif value.type == 'IDENTIFIER':
-                value = self._extract_identifier_value(value)
+        # operator might be a Token (inlined) or transformed value
+        if hasattr(items[1], 'type'):
+            operator = str(items[1])  # It's a Token
         else:
-            value = str(value)
+            operator = items[1]  # Already transformed
+        
+        # value might be a Token or transformed value
+        if hasattr(items[2], 'type'):
+            # Extract value based on type
+            if items[2].type in ['STRING', 'ESCAPED_STRING', 'SINGLE_QUOTED_STRING']:
+                value = self._extract_string_value(items[2])
+            elif items[2].type in ('NUMBER', 'DECIMAL'):
+                value = self._extract_number_value(items[2])
+            elif items[2].type == 'IDENTIFIER':
+                value = self._extract_identifier_value(items[2])
+            else:
+                value = str(items[2])
+        else:
+            value = items[2]  # Already transformed
         
         return ConditionalExpressionNode(
             variable=variable,
@@ -193,13 +291,30 @@ class CSAPTransformer(Transformer):
     
     def conditional_value(self, items):
         """Transform conditional value."""
-        return items[0]  # STRING, NUMBER, DECIMAL, or IDENTIFIER token
+        if not items:
+            return ""
+        
+        value = items[0]
+        
+        # Extract value based on type
+        if hasattr(value, 'type'):
+            if value.type in ['STRING', 'ESCAPED_STRING', 'SINGLE_QUOTED_STRING']:
+                return self._extract_string_value(value)
+            elif value.type in ('NUMBER', 'DECIMAL'):
+                return self._extract_number_value(value)
+            elif value.type == 'IDENTIFIER':
+                return self._extract_identifier_value(value)
+        
+        return str(value)
     
     def comparison_operator(self, items):
         """Transform comparison operator."""
+        # The comparison_operator in the grammar is a choice of terminals
+        # Lark doesn't create a tree node for simple choices, so this might not be called
+        # But if it is, just return the token value
         if not items:
-            return "=="  # Default fallback
-        return str(items[0])
+            return "=="
+        return str(items[0]) if items else "=="
     
     def logical_operator(self, items):
         """Transform logical operator."""
@@ -386,6 +501,38 @@ class CSAPTransformer(Transformer):
         return PropertyNode(
             property_name='text_size',
             property_value=self._extract_number_value(items[0]),
+            line_number=line,
+            column=column
+        )
+    
+    def focus_mask_property(self, items):
+        """Transform focus_mask property."""
+        line, column = self._get_node_location(items)
+        # items[0] is a BOOLEAN token (True/False)
+        prop_value = str(items[0]).strip() if items else "True"
+        return PropertyNode(
+            property_name='focus_mask',
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
+    def hover_sound_property(self, items):
+        """Transform hover_sound property."""
+        line, column = self._get_node_location(items)
+        # items[0] is either a STRING token or an IDENTIFIER (for sound variables)
+        if items and isinstance(items[0], Token):
+            if items[0].type in ['ESCAPED_STRING', 'STRING']:
+                prop_value = self._extract_string_value(items[0])
+            else:
+                # IDENTIFIER like sound_menu_button
+                prop_value = str(items[0])
+        else:
+            prop_value = str(items[0]) if items else ""
+        
+        return PropertyNode(
+            property_name='hover_sound',
+            property_value=prop_value,
             line_number=line,
             column=column
         )
@@ -827,6 +974,11 @@ class CSAPTransformer(Transformer):
         return items[0] if items else None
     
     # ========================================================================
+    # DUPLICATE CONDITIONAL TRANSFORMATIONS - REMOVED (already defined above)
+    # ========================================================================
+    
+    
+    # ========================================================================
     # PROPERTY TRANSFORMATIONS
     # ========================================================================
     
@@ -1031,7 +1183,11 @@ class CSAPParser:
             raise CSAPGrammarError(f"Grammar file not found: {self.grammar_path}")
         
         try:
-            self.parser = Lark.open(str(self.grammar_path), parser='earley')
+            self.parser = Lark.open(
+                str(self.grammar_path), 
+                parser='earley',
+                postlex=RenpyIndenter()
+            )
             self.transformer = CSAPTransformer()
         except Exception as e:
             raise CSAPGrammarError(f"Failed to load grammar: {e}")

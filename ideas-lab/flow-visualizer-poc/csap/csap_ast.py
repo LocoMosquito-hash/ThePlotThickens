@@ -326,10 +326,42 @@ class AddStatementNode(CSAPNode):
 
 
 @dataclass
-class ConditionalElementNode(CSAPNode):
-    """Represents a conditional block (if statement) in a screen."""
-    condition: ConditionalExpressionNode = None
+class ConditionalBranch(CSAPNode):
+    """Represents a single branch (if/elif/else) in a conditional block."""
+    condition: Optional[ConditionalExpressionNode] = None  # None for else branch
     body: List[Union[ScreenElementNode, 'AddStatementNode']] = field(default_factory=list)
+    branch_type: str = "if"  # "if", "elif", or "else"
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'type': 'conditional_branch',
+            'branch_type': self.branch_type,
+            'condition': self.condition.to_dict() if self.condition else None,
+            'body': [item.to_dict() for item in self.body],
+            'line': self.line_number
+        }
+    
+    def validate(self) -> List[str]:
+        errors = []
+        if self.branch_type in ["if", "elif"] and not self.condition:
+            errors.append(f"{self.branch_type} branch must have a condition")
+        elif self.branch_type == "else" and self.condition:
+            errors.append("else branch should not have a condition")
+        
+        if self.condition:
+            errors.extend(self.condition.validate())
+        
+        for item in self.body:
+            if hasattr(item, 'validate'):
+                errors.extend(item.validate())
+        
+        return errors
+
+
+@dataclass
+class ConditionalElementNode(CSAPNode):
+    """Represents a conditional block (if/elif/else statement) in a screen."""
+    branches: List[ConditionalBranch] = field(default_factory=list)
     
     def __post_init__(self):
         self.element_type = 'conditional_element'
@@ -337,29 +369,26 @@ class ConditionalElementNode(CSAPNode):
     def to_dict(self) -> Dict[str, Any]:
         return {
             'type': 'conditional_element',
-            'condition': self.condition.to_dict() if self.condition else None,
-            'body': [item.to_dict() for item in self.body],
+            'branches': [branch.to_dict() for branch in self.branches],
             'line': self.line_number
         }
     
     def get_interactive_elements(self) -> List[ScreenElementNode]:
-        """Get all interactive elements from this conditional block."""
+        """Get all interactive elements from all branches of this conditional block."""
         interactive = []
-        for item in self.body:
-            if isinstance(item, ScreenElementNode) and hasattr(item, 'action') and item.action:
-                interactive.append(item)
+        for branch in self.branches:
+            for item in branch.body:
+                if isinstance(item, ScreenElementNode) and hasattr(item, 'action') and item.action:
+                    interactive.append(item)
         return interactive
     
     def validate(self) -> List[str]:
         errors = []
-        if not self.condition:
-            errors.append("Conditional element must have a condition")
-        else:
-            errors.extend(self.condition.validate())
+        if not self.branches:
+            errors.append("Conditional element must have at least one branch")
         
-        for item in self.body:
-            if hasattr(item, 'validate'):
-                errors.extend(item.validate())
+        for branch in self.branches:
+            errors.extend(branch.validate())
         
         return errors
 

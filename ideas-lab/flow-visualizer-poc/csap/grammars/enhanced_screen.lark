@@ -3,12 +3,13 @@
 
 start: screen_definition
 
-screen_definition: "screen" IDENTIFIER screen_params? ":" screen_body
+screen_definition: SCREEN IDENTIFIER screen_params? ":" _NEWLINE _INDENT screen_body _DEDENT
 
 screen_params: "(" param_list? ")"
 param_list: IDENTIFIER ("," IDENTIFIER)*
 
-screen_body: (screen_property | screen_element | conditional_element | add_statement)+
+// Allow optional newlines between body elements (for blank lines between elif/else blocks)
+screen_body: _NEWLINE* (screen_property | screen_element | conditional_element | add_statement) (_NEWLINE* (screen_property | screen_element | conditional_element | add_statement))*
 
 screen_property: modal_property | zorder_property
 
@@ -21,12 +22,17 @@ screen_element: textbutton_element
              | other_element
 
 // ============================================================================
-// CONDITIONAL ELEMENTS: if/else statements in screens
+// CONDITIONAL ELEMENTS: if/elif/else statements in screens
 // ============================================================================
 
 conditional_element: if_statement
 
-if_statement: "if" conditional_expression ":" conditional_body
+// Allow blank lines between conditional blocks by consuming optional _NEWLINE tokens
+if_statement: IF conditional_expression ":" _NEWLINE _INDENT conditional_body _DEDENT _NEWLINE* elif_statement* _NEWLINE* else_statement?
+
+elif_statement: ELIF conditional_expression ":" _NEWLINE _INDENT conditional_body _DEDENT _NEWLINE*
+
+else_statement: ELSE ":" _NEWLINE _INDENT conditional_body _DEDENT
 
 conditional_expression: simple_condition (logical_operator simple_condition)*
 
@@ -38,12 +44,12 @@ logical_operator: "and" | "or"
 
 conditional_value: STRING | NUMBER | DECIMAL | IDENTIFIER
 
-conditional_body: conditional_body_item+
+conditional_body: (conditional_body_item _NEWLINE?)+
 
 conditional_body_item: screen_element | add_statement
 
 // ADD statement support - parse but ignore for flow analysis
-add_statement: "add" add_content add_properties?
+add_statement: ADD add_content add_properties?
 
 add_content: STRING | IDENTIFIER | dotted_identifier
 
@@ -60,13 +66,14 @@ add_property: property_name (STRING | NUMBER | DECIMAL | IDENTIFIER)
 textbutton_element: textbutton_single_line | textbutton_multi_line
 
 // Single-line with flexible property/action order (Futagenesis style)
-textbutton_single_line: "textbutton" STRING textbutton_content*
+// Properties first, then action at the end
+textbutton_single_line: TEXTBUTTON STRING textbutton_property* action_statement
 
 // Multi-line: textbutton "Text": [properties...] action Jump("dest")
-textbutton_multi_line: "textbutton" STRING ":" textbutton_properties? action_statement
+textbutton_multi_line: TEXTBUTTON STRING ":" textbutton_properties? action_statement
 
-// Content for single-line textbuttons - more restrictive
-textbutton_content: textbutton_property | action_statement
+// Content for single-line textbuttons - removed, using direct property list instead
+// textbutton_content: textbutton_property | action_statement
 
 // Mixed content allows properties and actions in any order (for multi-line)
 textbutton_mixed_content: textbutton_property | action_statement
@@ -97,7 +104,8 @@ generic_property: property_name (STRING | NUMBER | DECIMAL | IDENTIFIER | list_l
 property_name: PROPERTY_IDENTIFIER
 
 // Terminal for property identifiers (excludes keywords)
-PROPERTY_IDENTIFIER: /(?!textbutton|imagebutton|button|hotspot|add|if|screen)[a-zA-Z_][a-zA-Z0-9_]*/
+// Much lower priority than IDENTIFIER
+PROPERTY_IDENTIFIER.-1: /(?!textbutton|imagebutton|button|hotspot|add|if|screen|elif|else)[a-zA-Z_][a-zA-Z0-9_]*/
 
 // Textbutton-specific properties (from Apocalust VN)
 text_color_property: "text_color" STRING
@@ -105,18 +113,18 @@ text_outlines_property: "text_outlines" list_literal
 text_hover_color_property: "text_hover_color" STRING  
 text_hover_outlines_property: "text_hover_outlines" list_literal
 text_size_property: "text_size" (NUMBER | IDENTIFIER)
-hover_sound_property: "hover_sound" STRING
-activate_sound_property: "activate_sound" STRING
+hover_sound_property: HOVER_SOUND (STRING | IDENTIFIER)
+activate_sound_property: "activate_sound" (STRING | IDENTIFIER)
 
 // Common positioning properties
-xalign_property: "xalign" (NUMBER | DECIMAL | IDENTIFIER)
-yalign_property: "yalign" (NUMBER | DECIMAL | IDENTIFIER)
-xpos_property: "xpos" (NUMBER | DECIMAL | IDENTIFIER)
-ypos_property: "ypos" (NUMBER | DECIMAL | IDENTIFIER)
-xoffset_property: "xoffset" (NUMBER | DECIMAL | IDENTIFIER)
-yoffset_property: "yoffset" (NUMBER | DECIMAL | IDENTIFIER)
-xsize_property: "xsize" (NUMBER | DECIMAL | IDENTIFIER)
-ysize_property: "ysize" (NUMBER | DECIMAL | IDENTIFIER)
+xalign_property: XALIGN (NUMBER | DECIMAL | IDENTIFIER)
+yalign_property: YALIGN (NUMBER | DECIMAL | IDENTIFIER)
+xpos_property: XPOS (NUMBER | DECIMAL | IDENTIFIER)
+ypos_property: YPOS (NUMBER | DECIMAL | IDENTIFIER)
+xoffset_property: XOFFSET (NUMBER | DECIMAL | IDENTIFIER)
+yoffset_property: YOFFSET (NUMBER | DECIMAL | IDENTIFIER)
+xsize_property: XSIZE (NUMBER | DECIMAL | IDENTIFIER)
+ysize_property: YSIZE (NUMBER | DECIMAL | IDENTIFIER)
 
 // ============================================================================
 // IMAGEBUTTON: Supports single-line, multi-line, and anchor-based patterns
@@ -125,12 +133,12 @@ ysize_property: "ysize" (NUMBER | DECIMAL | IDENTIFIER)
 imagebutton_element: imagebutton_single_line | imagebutton_multi_line
 
 // Single-line: imagebutton idle "image.png" [properties...] action Jump("dest")
-imagebutton_single_line: "imagebutton" imagebutton_properties action_statement
+imagebutton_single_line: IMAGEBUTTON imagebutton_properties action_statement
 
 // Multi-line: imagebutton [anchor (0.5, 0.5)]: [properties...] action Jump("dest")
-imagebutton_multi_line: "imagebutton" imagebutton_anchor? ":" imagebutton_body
+imagebutton_multi_line: IMAGEBUTTON imagebutton_anchor? ":" imagebutton_body
 
-imagebutton_anchor: "anchor" coordinate_tuple
+imagebutton_anchor: ANCHOR coordinate_tuple
 
 imagebutton_body: (imagebutton_property | action_statement)+
 
@@ -140,6 +148,7 @@ imagebutton_property: idle_property
                     | focus_mask_property
                     | auto_property
                     | at_property
+                    | hover_sound_property
                     | xoffset_property
                     | yoffset_property
                     | xalign_property
@@ -148,18 +157,18 @@ imagebutton_property: idle_property
                     | generic_property
 
 // Imagebutton-specific properties
-idle_property: "idle" STRING
-hover_property: "hover" STRING
-focus_mask_property: "focus_mask" BOOLEAN
-auto_property: "auto" STRING
-at_property: "at" IDENTIFIER
-tooltip_property: "tooltip" ("_(" STRING ")" | STRING)
+idle_property: IDLE STRING
+hover_property: HOVER STRING
+focus_mask_property: FOCUS_MASK BOOLEAN
+auto_property: AUTO STRING
+at_property: AT IDENTIFIER
+tooltip_property: TOOLTIP ("_(" STRING ")" | STRING)
 
 // ============================================================================
 // BUTTON: Generic button element (Battle of the Bulges style)
 // ============================================================================
 
-button_element: "button" ":" button_body
+button_element: BUTTON ":" button_body
 
 button_body: (button_property | action_statement)+
 
@@ -171,15 +180,15 @@ button_property: xpos_property
                | modal_property
                | generic_property
 
-xysize_property: "xysize" coordinate_tuple
-modal_property: "modal" BOOLEAN
-zorder_property: "zorder" NUMBER
+xysize_property: XYSIZE coordinate_tuple
+modal_property: MODAL BOOLEAN
+zorder_property: ZORDER NUMBER
 
 // ============================================================================
 // HOTSPOT: Coordinate-based clickable areas
 // ============================================================================
 
-hotspot_element: "hotspot" coordinate_tuple action_statement
+hotspot_element: HOTSPOT coordinate_tuple action_statement
 
 coordinate_tuple: "(" tuple_item ("," tuple_item)+ ")"
 
@@ -193,7 +202,7 @@ tuple_item: STRING | NUMBER | DECIMAL | IDENTIFIER | BOOLEAN
 action_statement: action_keyword action_sequence
 
 // Support both 'action' and 'clicked' keywords (Babysitter game uses 'clicked')
-action_keyword: "action" | "clicked"
+action_keyword: ACTION | CLICKED
 
 // Action sequence: single action, comma-separated actions, or list-wrapped actions
 action_sequence: action_list_wrapped | action_chain
@@ -208,14 +217,15 @@ action_chain: generic_action ("," generic_action)*
 generic_action: jump_action | call_action | other_action
 
 // Flow-relevant actions (we extract these for flow analysis)
-jump_action: "Jump" "(" STRING ")"
-call_action: "Call" "(" STRING ")"
+jump_action: JUMP "(" STRING ")"
+call_action: CALL "(" STRING ")"
 
 // Other actions (we parse but ignore these for flow analysis)
 other_action: ACTION_FUNCTION "(" action_arguments? ")"
 
 // Action function names (anything that's not a reserved screen keyword)
-ACTION_FUNCTION: /(?!screen|textbutton|imagebutton|button|hotspot|if|elif|else|menu|label|vbox|hbox|add)[A-Z][a-zA-Z0-9_]*/
+// Priority 1 to compete with IDENTIFIER
+ACTION_FUNCTION.1: /(?!screen|textbutton|imagebutton|button|hotspot|if|elif|else|menu|label|vbox|hbox|add)[A-Z][a-zA-Z0-9_]*/
 
 // Action arguments: flexible to support various parameter types
 action_arguments: action_arg ("," action_arg)*
@@ -231,9 +241,9 @@ imagemap_body: (imagemap_property | hotspot_element)+
 
 imagemap_property: ground_property | hover_property | alpha_property | generic_property
 
-ground_property: "ground" STRING
+ground_property: GROUND STRING
 
-alpha_property: "alpha" BOOLEAN
+alpha_property: ALPHA BOOLEAN
 
 // ============================================================================
 // LAYOUT ELEMENTS: vbox, hbox (basic support)
@@ -278,8 +288,50 @@ list_item: STRING | NUMBER | DECIMAL | coordinate_tuple | list_literal | BOOLEAN
 // TOKENS: Terminal symbols
 // ============================================================================
 
+// Keywords (highest priority)
+SCREEN.2: "screen"
+IF.2: "if"
+ELIF.2: "elif"
+ELSE.2: "else"
+TEXTBUTTON.2: "textbutton"
+IMAGEBUTTON.2: "imagebutton"
+BUTTON.2: "button"
+HOTSPOT.2: "hotspot"
+ADD.2: "add"
+ACTION.2: "action"
+CLICKED.2: "clicked"
+JUMP.2: "Jump"
+CALL.2: "Call"
+
+// Property keywords (high priority)
+AUTO.2: "auto"
+IDLE.2: "idle"
+HOVER.2: "hover"
+FOCUS_MASK.2: "focus_mask"
+AT.2: "at"
+TOOLTIP.2: "tooltip"
+XPOS.2: "xpos"
+YPOS.2: "ypos"
+XALIGN.2: "xalign"
+YALIGN.2: "yalign"
+XOFFSET.2: "xoffset"
+YOFFSET.2: "yoffset"
+ANCHOR.2: "anchor"
+XYSIZE.2: "xysize"
+XSIZE.2: "xsize"
+YSIZE.2: "ysize"
+MODAL.2: "modal"
+ZORDER.2: "zorder"
+GROUND.2: "ground"
+ALPHA.2: "alpha"
+HOVER_SOUND.2: "hover_sound"
+
+// Boolean literals (high priority to match before IDENTIFIER)
+BOOLEAN.2: "True" | "False"
+
 // Identifiers: screen names, property names, etc.
-IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
+// Medium priority
+IDENTIFIER.1: /[a-zA-Z_][a-zA-Z0-9_]*/
 
 // Numbers: integers and decimals
 NUMBER: /\d+/
@@ -289,12 +341,16 @@ DECIMAL: /\d+\.\d+/ | /\.\d+/
 ESCAPED_STRING: /"([^"\\]|\\.)*"/
 SINGLE_QUOTED_STRING: /'([^'\\]|\\.)*'/
 
-// Boolean literals
-BOOLEAN: "True" | "False"
-
 // Comments: ignore Python-style comments
 COMMENT: /#[^\n]*/
 
-// Ignore whitespace and comments
-%ignore /\s+/
+// Newline handling for indentation  
+// Capture newline + any following whitespace (including blank lines)
+_NEWLINE: /\r?\n([\t ]*\r?\n)*[\t ]*/
+
+// Ignore horizontal whitespace (spaces and tabs, but not newlines)
+%ignore /[ \t]+/
 %ignore COMMENT
+
+// Declare indentation tokens
+%declare _INDENT _DEDENT
