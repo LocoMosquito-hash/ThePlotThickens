@@ -150,8 +150,9 @@ class ImageButtonNode(ScreenElementNode):
         errors = super().validate()
         
         # Check for required properties
-        if not self.get_property('idle'):
-            errors.append("ImageButton must have 'idle' property")
+        # ImageButton must have either 'idle' or 'auto' property
+        if not self.get_property('idle') and not self.get_property('auto'):
+            errors.append("ImageButton must have 'idle' or 'auto' property")
         
         # Validate anchor if present
         if self.anchor:

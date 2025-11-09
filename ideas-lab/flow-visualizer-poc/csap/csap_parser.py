@@ -94,8 +94,10 @@ class CSAPTransformer(Transformer):
         screen_name = str(items[0])
         line, column = self._get_node_location(items)
         
-        # Items[1] should be screen_body (list of elements)
-        elements = items[1] if len(items) > 1 and isinstance(items[1], list) else []
+        # Items structure: [screen_name, screen_params (list), screen_body (list)]
+        # screen_params is items[1] (may be empty list)
+        # screen_body is items[2] (list of elements)
+        elements = items[2] if len(items) > 2 and isinstance(items[2], list) else []
         
         return ScreenNode(
             screen_name=screen_name,
@@ -736,17 +738,49 @@ class CSAPTransformer(Transformer):
     
     def action_statement(self, items):
         """Transform action statement."""
-        # items[0] is action_keyword ("action" or "clicked")
-        # items[1] is action_list, jump_action, or call_action
-        return items[1] if len(items) > 1 else items[0]
+        # items may contain action_keyword (None) and action_sequence
+        # Filter out None values and get the action_sequence
+        actions = [item for item in items if item is not None]
+        return actions[0] if actions else None
     
     def action_keyword(self, items):
         """Transform action keyword (action or clicked)."""
-        return str(items[0])  # Return the keyword as string
+        # action_keyword is just a marker in the tree, items may be empty
+        # We don't actually need to return anything since we only care about the actions
+        return None
     
-    def action_list(self, items):
-        """Transform list-wrapped action: [Jump("dest")]"""
-        return items[0]  # The jump_action or call_action inside the list
+    def action_sequence(self, items):
+        """Transform action sequence (single action or chain)."""
+        # items[0] is either action_list_wrapped or action_chain
+        return items[0]
+    
+    def action_list_wrapped(self, items):
+        """Transform list-wrapped actions: [Action1(...), Action2(...), ...]"""
+        # items[0] is action_chain
+        return items[0]
+    
+    def action_chain(self, items):
+        """
+        Transform chain of actions.
+        Extract only the first Jump or Call action for flow analysis.
+        Ignore all other actions (Hide, Show, SetVariable, etc.)
+        """
+        # items is a list of generic_action nodes
+        # Find first Jump or Call action
+        for action in items:
+            if isinstance(action, ActionNode):
+                # This is a Jump or Call action - return it
+                return action
+        
+        # No flow-relevant action found
+        return None
+    
+    def generic_action(self, items):
+        """Transform generic action (Jump, Call, or other)."""
+        # items[0] is either jump_action, call_action, or other_action
+        # jump_action and call_action return ActionNode
+        # other_action returns None (we ignore non-flow actions)
+        return items[0]
     
     def jump_action(self, items):
         """Transform jump action."""
@@ -771,6 +805,26 @@ class CSAPTransformer(Transformer):
             line_number=line,
             column=column
         )
+    
+    def other_action(self, items):
+        """
+        Transform other actions (Hide, Show, SetVariable, etc.).
+        We parse these to avoid syntax errors, but ignore them for flow analysis.
+        """
+        # items[0] is ACTION_FUNCTION token
+        # items[1:] are action_arguments (if any)
+        # Return None to indicate this action is not flow-relevant
+        return None
+    
+    def action_arguments(self, items):
+        """Transform action arguments."""
+        # We don't need to process these, just let them parse
+        return items
+    
+    def action_arg(self, items):
+        """Transform single action argument."""
+        # We don't need to process these, just let them parse
+        return items[0] if items else None
     
     # ========================================================================
     # PROPERTY TRANSFORMATIONS

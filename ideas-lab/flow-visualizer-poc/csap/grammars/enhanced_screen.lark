@@ -187,19 +187,39 @@ coordinate_tuple: "(" tuple_item ("," tuple_item)+ ")"
 tuple_item: STRING | NUMBER | DECIMAL | IDENTIFIER | BOOLEAN
 
 // ============================================================================
-// ACTION STATEMENTS: Jump and Call with both quote types
+// ACTION STATEMENTS: Support chained actions and any Ren'Py action function
 // ============================================================================
 
-action_statement: action_keyword (action_list | jump_action | call_action)
+action_statement: action_keyword action_sequence
 
 // Support both 'action' and 'clicked' keywords (Babysitter game uses 'clicked')
 action_keyword: "action" | "clicked"
 
-// Support both direct actions and list-wrapped actions: [Jump("dest")]
-action_list: "[" (jump_action | call_action) "]"
+// Action sequence: single action, comma-separated actions, or list-wrapped actions
+action_sequence: action_list_wrapped | action_chain
 
+// List-wrapped actions: [Action1(...), Action2(...), ...]
+action_list_wrapped: "[" action_chain "]"
+
+// Comma-separated chain of actions: Action1(...), Action2(...), ...
+action_chain: generic_action ("," generic_action)*
+
+// Generic action: any function call (Jump, Call, Hide, Show, SetVariable, etc.)
+generic_action: jump_action | call_action | other_action
+
+// Flow-relevant actions (we extract these for flow analysis)
 jump_action: "Jump" "(" STRING ")"
 call_action: "Call" "(" STRING ")"
+
+// Other actions (we parse but ignore these for flow analysis)
+other_action: ACTION_FUNCTION "(" action_arguments? ")"
+
+// Action function names (anything that's not a reserved screen keyword)
+ACTION_FUNCTION: /(?!screen|textbutton|imagebutton|button|hotspot|if|elif|else|menu|label|vbox|hbox|add)[A-Z][a-zA-Z0-9_]*/
+
+// Action arguments: flexible to support various parameter types
+action_arguments: action_arg ("," action_arg)*
+action_arg: STRING | NUMBER | DECIMAL | IDENTIFIER | BOOLEAN | dotted_identifier
 
 // ============================================================================
 // IMAGEMAP: Container for hotspots (basic support)
