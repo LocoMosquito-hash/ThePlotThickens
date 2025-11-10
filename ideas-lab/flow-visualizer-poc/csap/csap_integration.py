@@ -145,6 +145,8 @@ class CSAPIntegratedParser:
     def _extract_screen_content(self, lines: List[str], start_line: int, screen_name: str) -> str:
         """Extract the complete screen content from lines."""
         
+        debug_this_screen = False  # Set to True for debugging specific screens
+        
         # Find the screen definition line
         screen_def_line = None
         for i, line in enumerate(lines):
@@ -160,13 +162,21 @@ class CSAPIntegratedParser:
         current_line = screen_def_line
         base_indent = None
         
+        if debug_this_screen:
+            print(f"[EXTRACT DEBUG] Starting extraction for '{screen_name}' at line {start_line}")
+        
         while current_line < len(lines):
             line = lines[current_line]
+            
+            if debug_this_screen:
+                print(f"[EXTRACT DEBUG]   Line {current_line + 1}: '{line[:60]}...' (indent={len(line) - len(line.lstrip())})")
             
             # Skip empty lines
             if not line.strip():
                 screen_lines.append(line)
                 current_line += 1
+                if debug_this_screen:
+                    print(f"[EXTRACT DEBUG]     -> Added empty line")
                 continue
             
             # Get indentation level
@@ -177,19 +187,34 @@ class CSAPIntegratedParser:
                 base_indent = indent_level
                 screen_lines.append(line)
                 current_line += 1
+                if debug_this_screen:
+                    print(f"[EXTRACT DEBUG]     -> Added as first line, base_indent={base_indent}")
                 continue
             
-            # If we're back to base indentation or less, and it's not a comment/empty line
-            if indent_level <= base_indent and line.strip() and not line.strip().startswith('#'):
+            # If we're back to base indentation or less, check if we should stop
+            if indent_level <= base_indent and line.strip():
+                # Stop if it's a comment at base level or a new top-level construct
+                if line.strip().startswith('#'):
+                    if debug_this_screen:
+                        print(f"[EXTRACT DEBUG]     -> BREAK: Found comment at base level")
+                    break
                 # Check if this starts a new top-level construct
                 if (re.match(r'^\s*(label|screen|init|define|default)\s+', line, re.IGNORECASE) or
                     re.match(r'^\s*[a-zA-Z_][a-zA-Z0-9_]*\s+"', line)):  # Character dialogue
+                    if debug_this_screen:
+                        print(f"[EXTRACT DEBUG]     -> BREAK: Found new top-level construct")
                     break
             
             screen_lines.append(line)
             current_line += 1
+            if debug_this_screen:
+                print(f"[EXTRACT DEBUG]     -> Added line (total: {len(screen_lines)})")
         
-        return '\n'.join(screen_lines)
+        if debug_this_screen:
+            print(f"[EXTRACT DEBUG] Extraction complete, collected {len(screen_lines)} lines")
+        
+        # Join without adding newlines since readlines() already includes them
+        return ''.join(screen_lines)
     
     def _regex_fallback_parse_screen(self, file_path: str, start_line: int, lines: List[str], screen_name: str) -> ScreenStructure:
         """
