@@ -9,7 +9,9 @@ screen_params: "(" param_list? ")"
 param_list: IDENTIFIER ("," IDENTIFIER)*
 
 // Allow optional newlines between body elements (for blank lines between elif/else blocks)
-screen_body: _NEWLINE* (screen_property | screen_element | conditional_element | add_statement) (_NEWLINE* (screen_property | screen_element | conditional_element | add_statement))*
+screen_body: (screen_body_item | _NEWLINE)+
+
+screen_body_item: screen_property | screen_element | conditional_element | add_statement
 
 screen_property: modal_property | zorder_property
 
@@ -28,21 +30,38 @@ screen_element: textbutton_element
 conditional_element: if_statement
 
 // Allow blank lines between conditional blocks by consuming optional _NEWLINE tokens
-if_statement: IF conditional_expression ":" _NEWLINE _INDENT conditional_body _DEDENT _NEWLINE* elif_statement* _NEWLINE* else_statement?
+if_statement: IF conditional_expression ":" _NEWLINE _INDENT conditional_body _DEDENT elif_statement* else_statement?
 
-elif_statement: ELIF conditional_expression ":" _NEWLINE _INDENT conditional_body _DEDENT _NEWLINE*
+elif_statement: ELIF conditional_expression ":" _NEWLINE _INDENT conditional_body _DEDENT
 
 else_statement: ELSE ":" _NEWLINE _INDENT conditional_body _DEDENT
 
-conditional_expression: simple_condition (logical_operator simple_condition)*
+// Flexible conditional expression - accepts various Python expression patterns
+// Since we treat conditions as metadata, we don't need perfect parsing
+conditional_expression: condition_term (logical_operator condition_term)*
 
-simple_condition: IDENTIFIER comparison_operator conditional_value
+condition_term: NOT? condition_atom
+
+condition_atom: function_call | comparison | IDENTIFIER | parenthesized_condition
+
+function_call: IDENTIFIER "(" function_args? ")"
+
+function_args: function_arg ("," function_arg)*
+function_arg: STRING | NUMBER | DECIMAL | IDENTIFIER | dotted_identifier
+
+comparison: IDENTIFIER comparison_operator conditional_value
 
 comparison_operator: "==" | "!=" | "<" | ">" | "<=" | ">="
 
-logical_operator: "and" | "or"
+logical_operator: AND | OR
 
-conditional_value: STRING | NUMBER | DECIMAL | IDENTIFIER
+conditional_value: STRING | NUMBER | DECIMAL | IDENTIFIER | dotted_identifier
+
+parenthesized_condition: "(" conditional_expression ")"
+
+NOT.2: "not"
+AND.2: "and"
+OR.2: "or"
 
 conditional_body: (conditional_body_item _NEWLINE?)+
 
@@ -157,12 +176,16 @@ imagebutton_property: idle_property
                     | generic_property
 
 // Imagebutton-specific properties
-idle_property: IDLE STRING
-hover_property: HOVER STRING
+idle_property: IDLE string_expression
+hover_property: HOVER string_expression
 focus_mask_property: FOCUS_MASK BOOLEAN
-auto_property: AUTO STRING
+auto_property: AUTO string_expression
 at_property: AT IDENTIFIER
 tooltip_property: TOOLTIP ("_(" STRING ")" | STRING)
+
+// String expression: supports simple strings or concatenation
+string_expression: string_term ("+" string_term)*
+string_term: STRING | IDENTIFIER | dotted_identifier
 
 // ============================================================================
 // BUTTON: Generic button element (Battle of the Bulges style)
@@ -235,13 +258,15 @@ action_arg: STRING | NUMBER | DECIMAL | IDENTIFIER | BOOLEAN | dotted_identifier
 // IMAGEMAP: Container for hotspots (basic support)
 // ============================================================================
 
-imagemap_element: "imagemap" ":" imagemap_body
+imagemap_element: IMAGEMAP ":" _NEWLINE _INDENT imagemap_body _DEDENT
 
-imagemap_body: (imagemap_property | hotspot_element)+
+imagemap_body: (imagemap_line | _NEWLINE)+
 
-imagemap_property: ground_property | hover_property | alpha_property | generic_property
+imagemap_line: imagemap_property | hotspot_element | conditional_element
 
-ground_property: GROUND STRING
+imagemap_property: idle_property | ground_property | hover_property | alpha_property | generic_property
+
+ground_property: GROUND string_expression
 
 alpha_property: ALPHA BOOLEAN
 
@@ -297,6 +322,7 @@ TEXTBUTTON.2: "textbutton"
 IMAGEBUTTON.2: "imagebutton"
 BUTTON.2: "button"
 HOTSPOT.2: "hotspot"
+IMAGEMAP.2: "imagemap"
 ADD.2: "add"
 ACTION.2: "action"
 CLICKED.2: "clicked"

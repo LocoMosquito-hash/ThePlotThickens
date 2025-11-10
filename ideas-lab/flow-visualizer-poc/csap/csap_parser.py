@@ -135,17 +135,21 @@ class CSAPTransformer(Transformer):
     
     def screen_body(self, items):
         """Transform screen body."""
-        # Filter out None values (from screen properties) and keep only actual elements
+        # Filter out None values, newlines (Token objects), and keep only actual elements
         # Include ScreenElementNode (with element_type), ImageMapNode, LayoutNode, and ConditionalElementNode
         elements = []
         for item in items:
-            if item is not None:
+            if item is not None and not isinstance(item, Token):
                 # Include elements with element_type attribute, or specific node types
                 if (hasattr(item, 'element_type') or 
                     isinstance(item, (ImageMapNode, LayoutNode, ConditionalElementNode))):
                     elements.append(item)
         
         return elements
+    
+    def screen_body_item(self, items):
+        """Transform screen body item."""
+        return items[0] if items else None
     
     # ========================================================================
     # CONDITIONAL TRANSFORMATIONS
@@ -247,16 +251,44 @@ class CSAPTransformer(Transformer):
     
     def conditional_expression(self, items):
         """Transform conditional expression with support for compound conditions."""
-        # For now, just take the first simple_condition and ignore compound logic
-        # This handles: variable == value, variable > value, etc.
-        # TODO: Full compound condition support later if needed
+        # items[0] is condition_term, rest are (logical_operator, condition_term) pairs
+        # For flow visualization, we treat the entire expression as opaque metadata
         if items and len(items) > 0:
-            first_condition = items[0]  # simple_condition
+            first_condition = items[0]  # condition_term
             return first_condition
         return None
     
-    def simple_condition(self, items):
-        """Transform simple condition (variable operator value)."""
+    def condition_term(self, items):
+        """Transform condition term (with optional NOT)."""
+        # items: [NOT?, condition_atom]
+        # Return the condition_atom for now (we don't evaluate, just store metadata)
+        if items:
+            return items[-1]  # Return the condition_atom (last item)
+        return None
+    
+    def condition_atom(self, items):
+        """Transform condition atom (function_call, comparison, identifier, etc)."""
+        # Return whatever was matched
+        return items[0] if items else None
+    
+    def function_call(self, items):
+        """Transform function call in conditional."""
+        # items: [function_name, args...]
+        # For metadata purposes, create a simple representation
+        line, column = self._get_node_location(items)
+        function_name = str(items[0])
+        # Return a ConditionalExpressionNode with the function name as variable
+        return ConditionalExpressionNode(
+            variable=function_name,
+            operator="()",  # Indicate it's a function call
+            value="",
+            line_number=line,
+            column=column
+        )
+    
+    def comparison(self, items):
+        """Transform comparison expression."""
+        # items: [identifier, operator, value]
         line, column = self._get_node_location(items)
         
         variable = str(items[0])  # Token with variable name
@@ -648,9 +680,18 @@ class CSAPTransformer(Transformer):
     def idle_property(self, items):
         """Transform idle property."""
         line, column = self._get_node_location(items)
+        # items[0] = IDLE token
+        # items[1] = string_expression
+        value = items[1] if len(items) > 1 else ""
+        # Convert string_expression to a simple string (flatten it)
+        if isinstance(value, str):
+            property_value = value
+        else:
+            property_value = str(value)
+        
         return PropertyNode(
             property_name='idle',
-            property_value=self._extract_string_value(items[0]),
+            property_value=property_value,
             line_number=line,
             column=column
         )
@@ -658,9 +699,18 @@ class CSAPTransformer(Transformer):
     def hover_property(self, items):
         """Transform hover property."""
         line, column = self._get_node_location(items)
+        # items[0] = HOVER token
+        # items[1] = string_expression
+        value = items[1] if len(items) > 1 else ""
+        # Convert string_expression to a simple string (flatten it)
+        if isinstance(value, str):
+            property_value = value
+        else:
+            property_value = str(value)
+        
         return PropertyNode(
             property_name='hover',
-            property_value=self._extract_string_value(items[0]),
+            property_value=property_value,
             line_number=line,
             column=column
         )
@@ -781,8 +831,11 @@ class CSAPTransformer(Transformer):
         """Transform hotspot element."""
         line, column = self._get_node_location(items)
         
-        coordinates = items[0]  # Should be coordinate_tuple
-        action = items[1] if len(items) > 1 else None
+        # items[0] = HOTSPOT token
+        # items[1] = coordinate_tuple
+        # items[2] = action_statement
+        coordinates = items[1] if len(items) > 1 else None
+        action = items[2] if len(items) > 2 else None
         
         return HotspotNode(
             coordinates=coordinates,
@@ -795,28 +848,48 @@ class CSAPTransformer(Transformer):
         """Transform imagemap element."""
         line, column = self._get_node_location(items)
         
-        # imagemap_body contains properties and hotspots
-        imagemap_body = items[0] if items else []
+        # imagemap_body contains properties, hotspots, and conditionals
+        # items[0] = IMAGEMAP token
+        # items[1] = imagemap_body (list)
+        imagemap_body = items[1] if len(items) > 1 else []
         
-        # Extract ground and hover images from properties
+        # Extract ground, idle, and hover images from properties
         ground_image = None
+        idle_image = None
         hover_image = None
         hotspots = []
         
         if isinstance(imagemap_body, list):
             for item in imagemap_body:
                 if isinstance(item, dict) and 'property_name' in item:
-                    # Handle ground/hover properties
+                    # Handle image properties (dictionary format)
                     if item['property_name'] == 'ground':
                         ground_image = item['property_value']
+                    elif item['property_name'] == 'idle':
+                        idle_image = item['property_value']
                     elif item['property_name'] == 'hover':
                         hover_image = item['property_value']
+                elif isinstance(item, PropertyNode):
+                    # Handle image properties (PropertyNode format)
+                    if item.property_name == 'ground':
+                        ground_image = item.property_value
+                    elif item.property_name == 'idle':
+                        idle_image = item.property_value
+                    elif item.property_name == 'hover':
+                        hover_image = item.property_value
                 elif isinstance(item, HotspotNode):
                     # Handle hotspot elements
                     hotspots.append(item)
+                elif isinstance(item, ConditionalElementNode):
+                    # Handle conditional blocks containing hotspots
+                    # Extract hotspots from all branches (if/elif/else)
+                    for branch in item.branches:
+                        for body_item in branch.body:
+                            if isinstance(body_item, HotspotNode):
+                                hotspots.append(body_item)
         
         return ImageMapNode(
-            ground_image=ground_image or "",
+            ground_image=ground_image or idle_image or "",
             hover_image=hover_image or "",
             hotspots=hotspots,
             line_number=line,
@@ -825,7 +898,12 @@ class CSAPTransformer(Transformer):
     
     def imagemap_body(self, items):
         """Transform imagemap body."""
-        return items  # Return list of properties and hotspots
+        # Filter out None values, newline tokens, and flatten the list
+        return [item for item in items if item is not None and not isinstance(item, Token)]
+    
+    def imagemap_line(self, items):
+        """Transform imagemap line."""
+        return items[0] if items else None
     
     def imagemap_property(self, items):
         """Transform imagemap property."""
@@ -833,17 +911,52 @@ class CSAPTransformer(Transformer):
     
     def ground_property(self, items):
         """Transform ground property."""
+        # items[0] = GROUND token
+        # items[1] = string_expression
+        value = items[1] if len(items) > 1 else ""
+        # Convert string_expression to a simple string (flatten it)
+        if isinstance(value, str):
+            property_value = value
+        else:
+            property_value = str(value)
+        
         return {
             'property_name': 'ground',
-            'property_value': self._extract_string_value(items[0]) if items else ""
+            'property_value': property_value
         }
     
-    def hover_property(self, items):
-        """Transform hover property."""
-        return {
-            'property_name': 'hover',
-            'property_value': self._extract_string_value(items[0]) if items else ""
-        }
+    # Note: hover_property is already defined above for imagebuttons (returns PropertyNode)
+    # This duplicate would override it. Removing to avoid conflict.
+    
+    def string_expression(self, items):
+        """Transform string expression (supports concatenation)."""
+        # items are string_term values, possibly with '+' tokens
+        # For metadata purposes, just concatenate them as a description
+        if not items:
+            return ""
+        
+        # Filter out '+' tokens and concatenate the terms
+        terms = [item for item in items if not isinstance(item, Token) or item.type != 'OP']
+        if len(terms) == 1:
+            return terms[0]
+        else:
+            # Multiple terms - represent as concatenation for metadata
+            return " + ".join(str(term) for term in terms)
+    
+    def string_term(self, items):
+        """Transform string term."""
+        if not items:
+            return ""
+        
+        value = items[0]
+        if isinstance(value, Token):
+            if value.type in ['STRING', 'ESCAPED_STRING', 'SINGLE_QUOTED_STRING']:
+                return self._extract_string_value(value)
+            elif value.type == 'IDENTIFIER':
+                return self._extract_identifier_value(value)
+            else:
+                return str(value)
+        return str(value)
     
     def alpha_property(self, items):
         """Transform alpha property."""
@@ -932,7 +1045,10 @@ class CSAPTransformer(Transformer):
     def jump_action(self, items):
         """Transform jump action."""
         line, column = self._get_node_location(items)
-        destination = self._extract_string_value(items[0])
+        # Grammar: JUMP "(" STRING ")"
+        # items[0] = JUMP token
+        # items[1] = destination string (already extracted by Lark)
+        destination = str(items[1]) if len(items) > 1 else ""
         
         return ActionNode(
             action_type='Jump',
@@ -944,7 +1060,10 @@ class CSAPTransformer(Transformer):
     def call_action(self, items):
         """Transform call action."""
         line, column = self._get_node_location(items)
-        destination = self._extract_string_value(items[0])
+        # Grammar: CALL "(" STRING ")"
+        # items[0] = CALL token
+        # items[1] = destination string (already extracted by Lark)
+        destination = str(items[1]) if len(items) > 1 else ""
         
         return ActionNode(
             action_type='Call',
@@ -1183,10 +1302,16 @@ class CSAPParser:
             raise CSAPGrammarError(f"Grammar file not found: {self.grammar_path}")
         
         try:
-            self.parser = Lark.open(
-                str(self.grammar_path), 
-                parser='earley',
-                postlex=RenpyIndenter()
+            # Read grammar from file directly (no caching)
+            with open(self.grammar_path, 'r', encoding='utf-8') as f:
+                grammar_text = f.read()
+            
+            self.parser = Lark(
+                grammar_text,
+                parser='lalr',
+                start='start',
+                postlex=RenpyIndenter(),
+                maybe_placeholders=False
             )
             self.transformer = CSAPTransformer()
         except Exception as e:

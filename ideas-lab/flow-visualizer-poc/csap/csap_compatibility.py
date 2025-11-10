@@ -193,13 +193,13 @@ class CSAPCompatibilityAdapter:
             )
         
         elif isinstance(element, ImageMapNode):
-            # ImageMap nodes contain hotspots - convert the hotspots
+            # ImageMap nodes contain hotspots - convert all hotspots
             converted_elements = []
             for i, hotspot in enumerate(element.hotspots):
                 converted_hotspot = self._convert_screen_element(hotspot, file_path, element_index + i)
                 if converted_hotspot:
                     converted_elements.append(converted_hotspot)
-            return converted_elements[0] if converted_elements else None
+            return converted_elements if converted_elements else None
         
         elif isinstance(element, LayoutNode):
             # Layout nodes contain children - convert the children
