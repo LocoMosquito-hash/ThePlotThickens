@@ -193,12 +193,13 @@ class CSAPCompatibilityAdapter:
             )
         
         elif isinstance(element, ImageMapNode):
-            # ImageMap nodes contain hotspots - convert all hotspots
+            # ImageMap nodes contain interactive elements (hotspots, textbuttons, imagebuttons)
+            # Convert all of them to ScreenElements
             converted_elements = []
-            for i, hotspot in enumerate(element.hotspots):
-                converted_hotspot = self._convert_screen_element(hotspot, file_path, element_index + i)
-                if converted_hotspot:
-                    converted_elements.append(converted_hotspot)
+            for i, interactive_element in enumerate(element.hotspots):
+                converted_element = self._convert_screen_element(interactive_element, file_path, element_index + i)
+                if converted_element:
+                    converted_elements.append(converted_element)
             return converted_elements if converted_elements else None
         
         elif isinstance(element, LayoutNode):

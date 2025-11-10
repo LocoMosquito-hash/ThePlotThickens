@@ -219,7 +219,7 @@ class ImageMapNode(CSAPNode):
     """Represents an imagemap container."""
     ground_image: Optional[str] = None
     hover_image: Optional[str] = None
-    hotspots: List[HotspotNode] = field(default_factory=list)
+    hotspots: List[Union['HotspotNode', 'TextButtonNode', 'ImageButtonNode']] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -233,9 +233,9 @@ class ImageMapNode(CSAPNode):
     def validate(self) -> List[str]:
         errors = []
         
-        # Validate hotspots
-        for hotspot in self.hotspots:
-            errors.extend(hotspot.validate())
+        # Validate all interactive elements (hotspots, textbuttons, imagebuttons)
+        for element in self.hotspots:
+            errors.extend(element.validate())
         
         return errors
 

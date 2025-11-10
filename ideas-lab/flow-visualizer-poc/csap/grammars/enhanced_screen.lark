@@ -86,10 +86,11 @@ textbutton_element: textbutton_single_line | textbutton_multi_line
 
 // Single-line with flexible property/action order (Futagenesis style)
 // Properties first, then action at the end
-textbutton_single_line: TEXTBUTTON STRING textbutton_property* action_statement
+// Single-line: properties can be before OR after the action
+textbutton_single_line: TEXTBUTTON STRING textbutton_property* action_statement textbutton_property*
 
 // Multi-line: textbutton "Text": [properties...] action Jump("dest")
-textbutton_multi_line: TEXTBUTTON STRING ":" textbutton_properties? action_statement
+textbutton_multi_line: TEXTBUTTON STRING ":" textbutton_properties? action_statement textbutton_property*
 
 // Content for single-line textbuttons - removed, using direct property list instead
 // textbutton_content: textbutton_property | action_statement
@@ -262,7 +263,7 @@ imagemap_element: IMAGEMAP ":" _NEWLINE _INDENT imagemap_body _DEDENT
 
 imagemap_body: (imagemap_line | _NEWLINE)+
 
-imagemap_line: imagemap_property | hotspot_element | conditional_element
+imagemap_line: imagemap_property | hotspot_element | textbutton_element | imagebutton_element | text_element | conditional_element | other_element
 
 imagemap_property: idle_property | ground_property | hover_property | alpha_property | generic_property
 
@@ -285,6 +286,17 @@ layout_param: xpos_property | ypos_property | generic_property
 // Position properties already defined above
 
 layout_body: screen_element+
+
+// ============================================================================
+// TEXT ELEMENTS: Non-interactive text display
+// ============================================================================
+
+text_element: TEXT STRING text_properties?
+
+text_properties: text_property+
+text_property: xalign_property | yalign_property | xpos_property | ypos_property | generic_property
+
+TEXT.2: "text"
 
 // ============================================================================
 // GENERIC ELEMENTS: Catch-all for other elements

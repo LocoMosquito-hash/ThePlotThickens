@@ -877,15 +877,15 @@ class CSAPTransformer(Transformer):
                         idle_image = item.property_value
                     elif item.property_name == 'hover':
                         hover_image = item.property_value
-                elif isinstance(item, HotspotNode):
-                    # Handle hotspot elements
+                elif isinstance(item, (HotspotNode, TextButtonNode, ImageButtonNode)):
+                    # Handle interactive elements (hotspots, textbuttons, imagebuttons)
                     hotspots.append(item)
                 elif isinstance(item, ConditionalElementNode):
-                    # Handle conditional blocks containing hotspots
-                    # Extract hotspots from all branches (if/elif/else)
+                    # Handle conditional blocks containing interactive elements
+                    # Extract elements from all branches (if/elif/else)
                     for branch in item.branches:
                         for body_item in branch.body:
-                            if isinstance(body_item, HotspotNode):
+                            if isinstance(body_item, (HotspotNode, TextButtonNode, ImageButtonNode)):
                                 hotspots.append(body_item)
         
         return ImageMapNode(
@@ -957,6 +957,15 @@ class CSAPTransformer(Transformer):
             else:
                 return str(value)
         return str(value)
+    
+    def text_element(self, items):
+        """Transform text element (non-interactive, ignore for flow analysis)."""
+        # Text elements are just for display, not part of navigation flow
+        return None
+    
+    def text_property(self, items):
+        """Transform text property."""
+        return items[0] if items else None
     
     def alpha_property(self, items):
         """Transform alpha property."""
