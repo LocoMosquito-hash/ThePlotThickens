@@ -111,7 +111,7 @@ class FlowTracer:
             'call': re.compile(r'^\s*call\s+(\w+)', re.IGNORECASE),
             'return': re.compile(r'^\s*return\s*$', re.IGNORECASE),
             'menu': re.compile(r'^\s*menu:', re.IGNORECASE),
-            'label': re.compile(r'^\s*label\s+(\w+):', re.IGNORECASE),
+            'label': re.compile(r'^\s*label\s+(\w+)\s*(?:\([^)]*\))?\s*:', re.IGNORECASE),
             'scene': re.compile(r'^\s*scene\s+', re.IGNORECASE),
             'show': re.compile(r'^\s*show\s+', re.IGNORECASE),
             'hide': re.compile(r'^\s*hide\s+', re.IGNORECASE),
@@ -258,7 +258,7 @@ class FlowTracer:
         """
         choice_pattern = re.compile(r'^\s*"([^"]+)"\s*:', re.IGNORECASE)
         jump_pattern = re.compile(r'^\s*jump\s+(\w+)', re.IGNORECASE)
-        label_pattern = re.compile(r'^\s*label\s+(\w+):', re.IGNORECASE)
+        label_pattern = re.compile(r'^\s*label\s+(\w+)\s*(?:\([^)]*\))?\s*:', re.IGNORECASE)
         
         choices = []
         i = menu_line_idx + 1

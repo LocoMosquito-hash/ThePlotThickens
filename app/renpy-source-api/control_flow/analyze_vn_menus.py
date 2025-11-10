@@ -86,7 +86,7 @@ class MenuAnalyzer:
             'choice': re.compile(r'^\s*"([^"]+)"\s*(\([^)]*\))?\s*(if\s+[^:]+)?\s*:', re.IGNORECASE),
             'jump_call': re.compile(r'^\s*(jump|call)\s+([a-zA-Z_][a-zA-Z0-9_\.]*)', re.IGNORECASE),
             'variable': re.compile(r'^\s*\$\s+', re.IGNORECASE),
-            'label': re.compile(r'^\s*label\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:', re.IGNORECASE),
+            'label': re.compile(r'^\s*label\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\([^)]*\))?\s*:', re.IGNORECASE),
         }
     
     def analyze_vn_menus(self, vn_path: str) -> Dict[str, Any]:

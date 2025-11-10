@@ -48,7 +48,7 @@ label ending:
         
         # Find labels manually
         import re
-        label_pattern = re.compile(r'^\s*label\s+([a-zA-Z_][a-zA-Z0-9_\.]*)\s*:', re.IGNORECASE)
+        label_pattern = re.compile(r'^\s*label\s+([a-zA-Z_][a-zA-Z0-9_\.]*)\s*(?:\([^)]*\))?\s*:', re.IGNORECASE)
         
         print(f"\n🏷️  Labels found:")
         for i, line in enumerate(lines, 1):

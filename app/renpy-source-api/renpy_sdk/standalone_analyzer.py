@@ -272,9 +272,9 @@ def analyze_rpy_file(rpy_file_path, project_root):
             # Label detection
             if stripped.startswith('label ') and ':' in stripped:
                 label_name = stripped.split('label ')[1].split(':')[0].strip()
-                # Remove parentheses if present (for parameterized labels like "label myLabel():")
-                if label_name.endswith('()'):
-                    label_name = label_name[:-2]
+                # Remove parentheses if present (for parameterized labels like "label myLabel():" or "label myLabel(x, y):")
+                if '(' in label_name:
+                    label_name = label_name.split('(')[0].strip()
                 results["labels"].append({
                     "name": label_name,
                     "file": rel_path,
