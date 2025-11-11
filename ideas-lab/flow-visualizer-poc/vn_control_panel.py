@@ -11,11 +11,13 @@ and showing details about selected nodes.
 """
 
 from typing import Dict, Any, Optional, List
+import subprocess
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, 
     QPushButton, QComboBox, QTextEdit, QScrollArea, QFrame,
     QGridLayout, QSizePolicy, QLineEdit, QCheckBox, QTreeWidget,
-    QTreeWidgetItem, QMenu
+    QTreeWidgetItem, QMenu, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QAction
@@ -245,6 +247,13 @@ class VNControlPanel(QWidget):
         self.node_info.setFont(small_font)
         layout.addWidget(self.node_info)
         
+        # Open in Editor button - placed right below the textbox
+        self.open_editor_button = QPushButton("Open in Editor")
+        self.open_editor_button.setEnabled(False)
+        self.open_editor_button.clicked.connect(self.open_in_editor)
+        self.open_editor_button.setToolTip("Open the script file in Notepad++ at the specific line")
+        layout.addWidget(self.open_editor_button)
+        
         # Node relationships tree widget
         self.relationships_tree = QTreeWidget()
         self.relationships_tree.setHeaderHidden(True)
@@ -314,119 +323,132 @@ class VNControlPanel(QWidget):
         
     def update_node_details(self, node_id: str, node_data: Dict[str, Any]):
         """Update the selected node details display."""
-        # Handle case when no node is selected
-        if not node_id or not node_data:
-            self.clear_node_details()
-            return
-            
-        self.current_node_data = node_data
-        
-        # Format node information with both hash ID and proper name
-        info_text = f"Label: {node_id}\n"
-        
-        # Add the proper node name if available from AHS metadata
-        if 'semantic_id' in node_data:
-            semantic_id = node_data['semantic_id']
-            # Clean up label names by removing the "label_" prefix for better readability
-            if semantic_id.startswith('label_'):
-                # Extract just the label name part (before any hash)
-                clean_name = semantic_id[6:]  # Remove "label_" prefix
-                if '#' in clean_name:
-                    clean_name = clean_name.split('#')[0]  # Remove hash suffix if present
-                info_text += f"Name: {clean_name}\n"
-            else:
-                info_text += f"Name: {semantic_id}\n"
-        elif 'display_name' in node_data:
-            display_name = node_data['display_name'] 
-            info_text += f"Name: {display_name}\n"
-        
-        # Special handling for menu choice nodes - show the choice text
-        if '_choice_' in node_id and 'full_text' in node_data:
-            choice_text = node_data['full_text']
-            info_text += f"\nChoice Text: \"{choice_text}\"\n"
-            
-            # Show parent container
-            if 'parent_container' in node_data:
-                parent = node_data['parent_container']
-                info_text += f"Parent Menu: {parent}\n"
+        try:
+            # Handle case when no node is selected
+            if not node_id or not node_data:
+                self.clear_node_details()
+                return
                 
-            # Show choice index
-            if 'choice_index' in node_data:
-                choice_idx = node_data['choice_index']
-                info_text += f"Choice Index: {choice_idx}\n"
+            self.current_node_data = node_data
             
-            # Show destination if available
-            if 'destination' in node_data:
-                destination = node_data['destination']
-                info_text += f"Destination: {destination}\n"
-                
-            # Show action type
-            if 'action_type' in node_data:
-                action_type = node_data['action_type']
-                info_text += f"Action Type: {action_type}\n"
-                
-            # Show condition if available
-            if 'condition' in node_data and node_data['condition']:
-                condition = node_data['condition']
-                info_text += f"Condition: {condition}\n"
-        
-        # Special handling for menu container nodes
-        elif '_menu_' in node_id and 'prompt' in node_data:
-            if node_data['prompt']:
-                info_text += f"\nMenu Prompt: \"{node_data['prompt']}\"\n"
+            # Format node information with both hash ID and proper name
+            info_text = f"Label: {node_id}\n"
             
-            if 'total_choices' in node_data:
-                total_choices = node_data['total_choices']
-                info_text += f"Total Choices: {total_choices}\n"
-                
-            if 'parent_label' in node_data:
-                parent_label = node_data['parent_label']
-                info_text += f"Parent Label: {parent_label}\n"
-        
-        info_text += "\n"
-        
-        # Add basic node properties
-        if 'file_path' in node_data:
-            info_text += f"File: {node_data['file_path']}\n"
-        if 'line_number' in node_data:
-            info_text += f"Line: {node_data['line_number']}\n"
-        
-        info_text += "\nProperties:\n"
-        if node_data.get('has_menu', False):
-            info_text += "• Has menu choices\n"
-        if node_data.get('has_dialogue', False):
-            info_text += "• Contains dialogue\n"
-        if node_data.get('is_reachable', True):
-            info_text += "• Reachable from start\n"
-        if node_data.get('is_dead_end', False):
-            info_text += "• Dead end (no outgoing flows)\n"
-        
-        # Add flow information
-        incoming_flows = node_data.get('incoming_flows', [])
-        outgoing_flows = node_data.get('outgoing_flows', [])
-        
-        info_text += f"\nConnections:\n"
-        info_text += f"• Incoming: {len(incoming_flows)}\n"
-        info_text += f"• Outgoing: {len(outgoing_flows)}\n"
-        
-        if outgoing_flows:
-            info_text += "\nOutgoing Connections:\n"
-            for flow in outgoing_flows[:5]:  # Show first 5
-                target = flow.get('target_label', 'Unknown')
-                flow_type = flow.get('flow_type', 'unknown')
-                info_text += f"• {target} ({flow_type})\n"
+            # Add the proper node name if available from AHS metadata
+            if 'semantic_id' in node_data:
+                semantic_id = node_data['semantic_id']
+                # Clean up label names by removing the "label_" prefix for better readability
+                if semantic_id.startswith('label_'):
+                    # Extract just the label name part (before any hash)
+                    clean_name = semantic_id[6:]  # Remove "label_" prefix
+                    if '#' in clean_name:
+                        clean_name = clean_name.split('#')[0]  # Remove hash suffix if present
+                    info_text += f"Name: {clean_name}\n"
+                else:
+                    info_text += f"Name: {semantic_id}\n"
+            elif 'display_name' in node_data:
+                display_name = node_data['display_name'] 
+                info_text += f"Name: {display_name}\n"
             
-            if len(outgoing_flows) > 5:
-                info_text += f"... and {len(outgoing_flows) - 5} more\n"
-        
-        self.node_info.setPlainText(info_text)
-        
-        # Populate the relationships tree
-        self.populate_relationships_tree(node_id, node_data)
-        
-        # Enable action buttons
-        self.highlight_button.setEnabled(True)
-        self.show_details_button.setEnabled(True)
+            # Special handling for menu choice nodes - show the choice text
+            if '_choice_' in node_id and 'full_text' in node_data:
+                choice_text = node_data['full_text']
+                info_text += f"\nChoice Text: \"{choice_text}\"\n"
+                
+                # Show parent container
+                if 'parent_container' in node_data:
+                    parent = node_data['parent_container']
+                    info_text += f"Parent Menu: {parent}\n"
+                    
+                # Show choice index
+                if 'choice_index' in node_data:
+                    choice_idx = node_data['choice_index']
+                    info_text += f"Choice Index: {choice_idx}\n"
+                
+                # Show destination if available
+                if 'destination' in node_data:
+                    destination = node_data['destination']
+                    info_text += f"Destination: {destination}\n"
+                    
+                # Show action type
+                if 'action_type' in node_data:
+                    action_type = node_data['action_type']
+                    info_text += f"Action Type: {action_type}\n"
+                    
+                # Show condition if available
+                if 'condition' in node_data and node_data['condition']:
+                    condition = node_data['condition']
+                    info_text += f"Condition: {condition}\n"
+            
+            # Special handling for menu container nodes
+            elif '_menu_' in node_id and 'prompt' in node_data:
+                if node_data['prompt']:
+                    info_text += f"\nMenu Prompt: \"{node_data['prompt']}\"\n"
+                
+                if 'total_choices' in node_data:
+                    total_choices = node_data['total_choices']
+                    info_text += f"Total Choices: {total_choices}\n"
+                    
+                if 'parent_label' in node_data:
+                    parent_label = node_data['parent_label']
+                    info_text += f"Parent Label: {parent_label}\n"
+            
+            info_text += "\n"
+            
+            # Add basic node properties
+            if 'file_path' in node_data:
+                info_text += f"File: {node_data['file_path']}\n"
+            if 'line_number' in node_data:
+                info_text += f"Line: {node_data['line_number']}\n"
+            
+            info_text += "\nProperties:\n"
+            if node_data.get('has_menu', False):
+                info_text += "• Has menu choices\n"
+            if node_data.get('has_dialogue', False):
+                info_text += "• Contains dialogue\n"
+            if node_data.get('is_reachable', True):
+                info_text += "• Reachable from start\n"
+            if node_data.get('is_dead_end', False):
+                info_text += "• Dead end (no outgoing flows)\n"
+            
+            # Add flow information
+            incoming_flows = node_data.get('incoming_flows', [])
+            outgoing_flows = node_data.get('outgoing_flows', [])
+            
+            info_text += f"\nConnections:\n"
+            info_text += f"• Incoming: {len(incoming_flows)}\n"
+            info_text += f"• Outgoing: {len(outgoing_flows)}\n"
+            
+            if outgoing_flows:
+                info_text += "\nOutgoing Connections:\n"
+                for flow in outgoing_flows[:5]:  # Show first 5
+                    target = flow.get('target_label', 'Unknown')
+                    flow_type = flow.get('flow_type', 'unknown')
+                    info_text += f"• {target} ({flow_type})\n"
+                
+                if len(outgoing_flows) > 5:
+                    info_text += f"... and {len(outgoing_flows) - 5} more\n"
+            
+            self.node_info.setPlainText(info_text)
+            
+            # Populate the relationships tree
+            self.populate_relationships_tree(node_id, node_data)
+            
+            # Enable action buttons
+            self.highlight_button.setEnabled(True)
+            self.show_details_button.setEnabled(True)
+            
+            # Enable "Open in Editor" button only if we have file path
+            has_file_path = bool(node_data.get('file_path'))
+            self.open_editor_button.setEnabled(has_file_path)
+            
+        except Exception as e:
+            # Log the error but don't crash the application
+            print(f"Error updating node details: {e}")
+            import traceback
+            traceback.print_exc()
+            # Try to show something useful to the user
+            self.node_info.setPlainText(f"Error displaying node details:\n{str(e)}")
         
     def clear_node_details(self):
         """Clear the node details display."""
@@ -435,6 +457,64 @@ class VNControlPanel(QWidget):
         self.relationships_tree.clear()
         self.highlight_button.setEnabled(False)
         self.show_details_button.setEnabled(False)
+        self.open_editor_button.setEnabled(False)
+        
+    def open_in_editor(self):
+        """Open the current node's file in Notepad++ at the specific line."""
+        if not self.current_node_data:
+            return
+        
+        # Extract file path and line number
+        file_path = self.current_node_data.get('file_path')
+        line_number = self.current_node_data.get('line_number')
+        
+        if not file_path:
+            QMessageBox.warning(
+                self,
+                "No File Path",
+                "No file path information available for this node."
+            )
+            return
+        
+        # Check if file exists
+        file_path_obj = Path(file_path)
+        if not file_path_obj.exists():
+            QMessageBox.warning(
+                self,
+                "File Not Found",
+                f"The file does not exist:\n{file_path}"
+            )
+            return
+        
+        # Notepad++ executable path
+        notepadpp_path = Path(r"C:\Program Files\Notepad++\notepad++.exe")
+        
+        if not notepadpp_path.exists():
+            QMessageBox.warning(
+                self,
+                "Notepad++ Not Found",
+                f"Notepad++ not found at:\n{notepadpp_path}\n\n"
+                "Please verify the installation path."
+            )
+            return
+        
+        try:
+            # Build command
+            # Notepad++ syntax: notepad++.exe -n<line_number> <file_path>
+            if line_number:
+                cmd = [str(notepadpp_path), f"-n{line_number}", str(file_path)]
+            else:
+                cmd = [str(notepadpp_path), str(file_path)]
+            
+            # Open Notepad++ without blocking the GUI
+            subprocess.Popen(cmd)
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error Opening Editor",
+                f"Failed to open Notepad++:\n{str(e)}"
+            )
         
     def show_tree_context_menu(self, position):
         """Show context menu for tree items."""
