@@ -68,14 +68,14 @@ class RenpyFlowMapperV2(QMainWindow):
             if self.settings_file.exists():
                 with open(self.settings_file, 'r') as f:
                     data = json.load(f)
-                    self.recent_paths = data.get('recent_paths', [])[:200]  # Keep only last 200
+                    self.recent_paths = data.get('recent_paths', [])[:500]  # Keep only last 500
         except Exception:
             self.recent_paths = []
             
     def save_recent_paths(self):
         """Save recent paths to settings file."""
         try:
-            data = {'recent_paths': self.recent_paths[:200]}  # Keep only last 200
+            data = {'recent_paths': self.recent_paths[:500]}  # Keep only last 500
             with open(self.settings_file, 'w') as f:
                 json.dump(data, f, indent=2)
         except Exception:
@@ -86,7 +86,7 @@ class RenpyFlowMapperV2(QMainWindow):
         if path in self.recent_paths:
             self.recent_paths.remove(path)
         self.recent_paths.insert(0, path)
-        self.recent_paths = self.recent_paths[:200]  # Keep only last 200
+        self.recent_paths = self.recent_paths[:500]  # Keep only last 500
         self.save_recent_paths()
         self.update_path_combo()
         
