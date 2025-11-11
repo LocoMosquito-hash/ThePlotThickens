@@ -199,7 +199,7 @@ class CSAPIntegratedParser:
                         print(f"[EXTRACT DEBUG]     -> BREAK: Found comment at base level")
                     break
                 # Check if this starts a new top-level construct
-                if (re.match(r'^\s*(label|screen|init|define|default)\s+', line, re.IGNORECASE) or
+                if (re.match(r'^\s*(label|screen|init|define|default|transform|image|style)\s+', line, re.IGNORECASE) or
                     re.match(r'^\s*[a-zA-Z_][a-zA-Z0-9_]*\s+"', line)):  # Character dialogue
                     if debug_this_screen:
                         print(f"[EXTRACT DEBUG]     -> BREAK: Found new top-level construct")

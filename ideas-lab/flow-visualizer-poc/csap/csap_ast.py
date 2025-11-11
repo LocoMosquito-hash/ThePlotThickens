@@ -242,10 +242,10 @@ class ImageMapNode(CSAPNode):
 
 @dataclass
 class LayoutNode(CSAPNode):
-    """Represents a layout container (vbox, hbox)."""
-    layout_type: str = ""  # 'vbox', 'hbox'
+    """Represents a layout container (vbox, hbox, grid)."""
+    layout_type: str = ""  # 'vbox', 'hbox', 'grid'
     properties: List[PropertyNode] = field(default_factory=list)
-    children: List[ScreenElementNode] = field(default_factory=list)
+    children: List[Union[ScreenElementNode, 'ImageMapNode', 'ConditionalElementNode', 'LayoutNode']] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -256,10 +256,31 @@ class LayoutNode(CSAPNode):
             'line': self.line_number
         }
     
+    def get_interactive_elements(self) -> List[ScreenElementNode]:
+        """Get all interactive elements from layout children, including nested layouts and conditionals."""
+        interactive = []
+        
+        def collect_from_children(children):
+            for child in children:
+                if isinstance(child, ScreenElementNode) and hasattr(child, 'action') and child.action:
+                    interactive.append(child)
+                elif isinstance(child, ImageMapNode):
+                    interactive.extend(child.hotspots)
+                elif isinstance(child, LayoutNode):
+                    # Recursively collect from nested layouts
+                    collect_from_children(child.children)
+                elif isinstance(child, ConditionalElementNode):
+                    # Collect from all conditional branches
+                    for branch in child.branches:
+                        collect_from_children(branch.body)
+        
+        collect_from_children(self.children)
+        return interactive
+    
     def validate(self) -> List[str]:
         errors = []
         
-        if self.layout_type not in ['vbox', 'hbox']:
+        if self.layout_type not in ['vbox', 'hbox', 'grid']:
             errors.append(f"Invalid layout type: {self.layout_type}")
         
         # Validate properties
@@ -268,7 +289,8 @@ class LayoutNode(CSAPNode):
         
         # Validate children
         for child in self.children:
-            errors.extend(child.validate())
+            if hasattr(child, 'validate'):
+                errors.extend(child.validate())
         
         return errors
 
@@ -296,8 +318,8 @@ class ConditionalExpressionNode(CSAPNode):
         errors = []
         if not self.variable:
             errors.append("Conditional expression must have a variable")
-        if not self.operator:
-            errors.append("Conditional expression must have an operator")
+        # Note: operator can be empty for simple identifier conditions (e.g., "if flag:")
+        # Only validate operator for comparison-style conditions
         return errors
 
 
@@ -412,7 +434,7 @@ class ScreenNode(CSAPNode):
         }
     
     def get_interactive_elements(self) -> List[ScreenElementNode]:
-        """Get all elements that have actions (clickable elements), including those in conditionals."""
+        """Get all elements that have actions (clickable elements), including those in conditionals and layouts."""
         interactive = []
         
         def collect_interactive(elements):
@@ -422,7 +444,8 @@ class ScreenNode(CSAPNode):
                 elif isinstance(element, ImageMapNode):
                     interactive.extend(element.hotspots)
                 elif isinstance(element, LayoutNode):
-                    collect_interactive(element.children)
+                    # Use LayoutNode's get_interactive_elements for proper nested handling
+                    interactive.extend(element.get_interactive_elements())
                 elif isinstance(element, ConditionalElementNode):
                     # Collect interactive elements from conditional blocks
                     interactive.extend(element.get_interactive_elements())

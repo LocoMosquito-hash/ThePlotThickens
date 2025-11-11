@@ -268,8 +268,25 @@ class CSAPTransformer(Transformer):
     
     def condition_atom(self, items):
         """Transform condition atom (function_call, comparison, identifier, etc)."""
-        # Return whatever was matched
-        return items[0] if items else None
+        # items[0] could be: function_call, comparison, IDENTIFIER, or parenthesized_condition
+        if not items:
+            return None
+        
+        result = items[0]
+        
+        # If it's an IDENTIFIER token (not already a ConditionalExpressionNode),
+        # wrap it in a ConditionalExpressionNode for consistency
+        if isinstance(result, (str, Token)) and not isinstance(result, ConditionalExpressionNode):
+            line, column = self._get_node_location(items)
+            return ConditionalExpressionNode(
+                variable=str(result),
+                operator="",  # No operator for simple identifier
+                value="",
+                line_number=line,
+                column=column
+            )
+        
+        return result
     
     def function_call(self, items):
         """Transform function call in conditional."""
@@ -433,11 +450,22 @@ class CSAPTransformer(Transformer):
         """Transform textbutton element (enhanced)."""
         return items[0]  # Either textbutton_single_line or textbutton_multi_line
     
+    def textbutton_text(self, items):
+        """Transform textbutton text (plain STRING or parenthesized STRING)."""
+        # items will contain either: [STRING] or ["(", STRING, ")"]
+        # Find and return the STRING
+        for item in items:
+            if isinstance(item, Token) and item.type == 'STRING':
+                return item
+            elif isinstance(item, str) and item.startswith('"'):
+                return item
+        return items[0] if items else ""
+    
     def textbutton_single_line(self, items):
         """Transform single-line textbutton with content (Futagenesis style)."""
         line, column = self._get_node_location(items)
         
-        text = items[0]  # Should be processed by STRING token handler
+        text = items[0]  # textbutton_text result (just the STRING)
         properties = []
         action = None
         
@@ -475,16 +503,19 @@ class CSAPTransformer(Transformer):
         """Transform multi-line textbutton."""
         line, column = self._get_node_location(items)
         
-        text = items[0]  # Should be processed by STRING token handler
+        text = items[0]  # textbutton_text result (the STRING)
         properties = []
         action = None
         
+        # items: [textbutton_text, textbutton_property*, textbutton_body]
         for item in items[1:]:
-            if isinstance(item, list):  # textbutton_properties
-                # Filter to ensure only PropertyNode objects
-                for prop in item:
-                    if isinstance(prop, PropertyNode):
-                        properties.append(prop)
+            if isinstance(item, list):  # textbutton_body or properties before colon
+                # Filter to ensure only PropertyNode and ActionNode objects
+                for sub_item in item:
+                    if isinstance(sub_item, PropertyNode):
+                        properties.append(sub_item)
+                    elif isinstance(sub_item, ActionNode):
+                        action = sub_item
             elif isinstance(item, PropertyNode):
                 properties.append(item)
             elif isinstance(item, ActionNode):
@@ -497,6 +528,19 @@ class CSAPTransformer(Transformer):
             line_number=line,
             column=column
         )
+    
+    def textbutton_body(self, items):
+        """Transform textbutton body (properties and action in indented block)."""
+        # Filter out None and Token objects, keep PropertyNode and ActionNode
+        result = []
+        for item in items:
+            if isinstance(item, (PropertyNode, ActionNode)):
+                result.append(item)
+        return result
+    
+    def textbutton_body_item(self, items):
+        """Transform textbutton body item."""
+        return items[0] if items else None
     
     def textbutton_properties(self, items):
         """Transform textbutton properties."""
@@ -1006,6 +1050,140 @@ class CSAPTransformer(Transformer):
         return items[0]  # STRING, NUMBER, DECIMAL, IDENTIFIER, or BOOLEAN
     
     # ========================================================================
+    # LAYOUT TRANSFORMATIONS: vbox, hbox, grid
+    # ========================================================================
+    
+    def layout_element(self, items):
+        """Transform layout element (vbox, hbox, or grid)."""
+        return items[0]  # Either vbox_element, hbox_element, or grid_element
+    
+    def vbox_element(self, items):
+        """Transform vbox layout container."""
+        line, column = self._get_node_location(items)
+        
+        # items may contain: layout_params?, layout_body
+        # Find layout_body (it's a list)
+        layout_body = None
+        properties = []
+        
+        for item in items:
+            if isinstance(item, list):
+                # Could be layout_params or layout_body
+                # layout_params contains PropertyNode objects
+                # layout_body contains ScreenElementNode, ConditionalElementNode, etc.
+                if item and isinstance(item[0], PropertyNode):
+                    properties = item
+                else:
+                    layout_body = item
+        
+        children = layout_body if layout_body else []
+        
+        return LayoutNode(
+            layout_type='vbox',
+            properties=properties,
+            children=children,
+            line_number=line,
+            column=column
+        )
+    
+    def hbox_element(self, items):
+        """Transform hbox layout container."""
+        line, column = self._get_node_location(items)
+        
+        # Same structure as vbox
+        layout_body = None
+        properties = []
+        
+        for item in items:
+            if isinstance(item, list):
+                if item and isinstance(item[0], PropertyNode):
+                    properties = item
+                else:
+                    layout_body = item
+        
+        children = layout_body if layout_body else []
+        
+        return LayoutNode(
+            layout_type='hbox',
+            properties=properties,
+            children=children,
+            line_number=line,
+            column=column
+        )
+    
+    def grid_element(self, items):
+        """Transform grid layout container."""
+        line, column = self._get_node_location(items)
+        
+        # items: [NUMBER (columns), NUMBER (rows), layout_params?, layout_body]
+        # Extract columns and rows (first two NUMBER tokens)
+        columns = None
+        rows = None
+        layout_body = None
+        properties = []
+        
+        for item in items:
+            if isinstance(item, Token) and item.type == 'NUMBER':
+                if columns is None:
+                    columns = int(item.value)
+                elif rows is None:
+                    rows = int(item.value)
+            elif isinstance(item, list):
+                if item and isinstance(item[0], PropertyNode):
+                    properties = item
+                else:
+                    layout_body = item
+        
+        children = layout_body if layout_body else []
+        
+        # Store grid dimensions as properties (for metadata)
+        if columns is not None and rows is not None:
+            properties.insert(0, PropertyNode(
+                property_name='grid_dimensions',
+                property_value=f"{columns}x{rows}",
+                line_number=line,
+                column=column
+            ))
+        
+        return LayoutNode(
+            layout_type='grid',
+            properties=properties,
+            children=children,
+            line_number=line,
+            column=column
+        )
+    
+    def layout_body(self, items):
+        """Transform layout body (children of layout containers)."""
+        # Filter out None values, newlines (Token objects), and PropertyNodes (we ignore layout body properties)
+        # Keep ScreenElementNode, ConditionalElementNode, AddStatementNode, LayoutNode
+        children = []
+        for item in items:
+            if item is not None and not isinstance(item, Token) and not isinstance(item, PropertyNode):
+                if (hasattr(item, 'element_type') or 
+                    isinstance(item, (ImageMapNode, LayoutNode, ConditionalElementNode))):
+                    children.append(item)
+        
+        return children
+    
+    def layout_body_item(self, items):
+        """Transform layout body item."""
+        return items[0] if items else None
+    
+    def layout_property(self, items):
+        """Transform layout property - return the property node."""
+        return items[0] if items else None
+    
+    def layout_params(self, items):
+        """Transform layout parameters."""
+        # items is a list of PropertyNode objects
+        return items if items else []
+    
+    def layout_param(self, items):
+        """Transform single layout parameter."""
+        return items[0] if items else None
+    
+    # ========================================================================
     # ACTION TRANSFORMATIONS
     # ========================================================================
     
@@ -1286,6 +1464,21 @@ class CSAPTransformer(Transformer):
             prop_value = self._extract_number_value(value)
         return PropertyNode(
             property_name='yalign',
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
+    def spacing_property(self, items):
+        """Transform spacing property."""
+        line, column = self._get_node_location(items)
+        value = items[0]
+        if hasattr(value, 'type') and value.type == 'IDENTIFIER':
+            prop_value = self._extract_identifier_value(value)
+        else:
+            prop_value = self._extract_number_value(value)
+        return PropertyNode(
+            property_name='spacing',
             property_value=prop_value,
             line_number=line,
             column=column

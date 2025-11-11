@@ -928,6 +928,113 @@ python extract_menu_from_file.py "path\to\file.rpy" 123
 
 ---
 
+## Common Extraction Pitfalls
+
+### Issue: Transform/Image/Style Definitions Breaking Screen Parsing
+
+**Symptom**: CSAP parses fewer elements than expected, especially missing early elements in the screen.
+
+**Root Cause**: The `_extract_screen_content` method in `csap_integration.py` was including top-level constructs that appear after the screen definition (like `transform`, `image`, or `style`) as part of the screen content. This breaks CSAP's parsing because it expects only screen syntax.
+
+**Example of problematic extraction**:
+
+```python
+screen dreams():
+    tag menu
+    hbox:
+        # ... screen content ...
+        grid 3 3:
+            if condition:
+                imagebutton action Start("label1")  # Missing!
+            # ... more elements ...
+
+transform bonusbutton:  # ← This gets included in extraction!
+    xalign 0.9
+    yalign 0.36
+```
+
+**How to Detect**:
+
+1. Create a test that saves extracted content:
+```python
+# In csap_integration.py, temporarily add:
+if screen_name == 'problematic_screen':
+    debug_file = f"debug_extracted_{screen_name}.txt"
+    with open(debug_file, 'w', encoding='utf-8') as f:
+        f.write(screen_content)
+    print(f"[DEBUG] Saved to {debug_file}")
+```
+
+2. Check if the extracted content includes lines after the screen should end
+
+3. Test CSAP with and without the extra content:
+```python
+# With transform at end
+screen_node = parser.parse_screen_text(full_extraction)
+print(f"With transforms: {len(screen_node.get_interactive_elements())} elements")
+
+# Without transform
+clean_content = content_without_transform_definitions
+screen_node = parser.parse_screen_text(clean_content)
+print(f"Without transforms: {len(screen_node.get_interactive_elements())} elements")
+```
+
+**The Fix**:
+
+Update the regex pattern in `_extract_screen_content` (line ~225 in `csap_integration.py`) to recognize all top-level constructs:
+
+```python
+# Check if this starts a new top-level construct
+if (re.match(r'^\s*(label|screen|init|define|default|transform|image|style)\s+', line, re.IGNORECASE) or
+    re.match(r'^\s*[a-zA-Z_][a-zA-Z0-9_]*\s+"', line)):  # Character dialogue
+    break  # Stop extraction
+```
+
+**Other constructs to watch for**:
+- `transform` (most common)
+- `image` 
+- `style`
+- `layeredimage`
+- `python` (blocks)
+- `class` (Python classes)
+
+**Prevention**:
+
+When adding new Ren'Py construct support, always update the extraction stop pattern to include it.
+
+**Test Case**:
+
+```python
+def test_extraction_stops_at_transform():
+    """Ensure extraction stops when encountering a transform."""
+    script_content = '''
+screen test():
+    textbutton "A" action Jump("label1")
+    
+transform my_transform:
+    xalign 0.5
+'''
+    # Extract screen
+    lines = script_content.split('\n')
+    extracted = extract_screen_content(lines, start_line=1, screen_name='test')
+    
+    # Verify transform is NOT included
+    assert 'transform' not in extracted.lower()
+    assert 'my_transform' not in extracted
+```
+
+**Affected Cases**:
+
+This issue has caused:
+1. ✅ **dreams screen** (Leaving DNA): Missing 2 Start actions (bonus_scene_1, bonus_scene_2)
+   - Extracted content included `transform` definitions
+   - Fixed: 7 elements → 9 elements
+2. ✅ **screenEp02ChoosePhoto** (Hillside): Screen appeared empty
+   - Extracted content had double newlines and comment inclusion
+   - Different extraction issue but same component
+
+---
+
 ## Summary
 
 The key to effective debugging is **progressive isolation**:

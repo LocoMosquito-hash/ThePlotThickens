@@ -42,7 +42,7 @@ conditional_expression: condition_term (logical_operator condition_term)*
 
 condition_term: NOT? condition_atom
 
-condition_atom: function_call | comparison | IDENTIFIER | parenthesized_condition
+condition_atom: function_call | comparison | dotted_identifier | IDENTIFIER | parenthesized_condition
 
 function_call: IDENTIFIER "(" function_args? ")"
 
@@ -87,10 +87,17 @@ textbutton_element: textbutton_single_line | textbutton_multi_line
 // Single-line with flexible property/action order (Futagenesis style)
 // Properties first, then action at the end
 // Single-line: properties can be before OR after the action
-textbutton_single_line: TEXTBUTTON STRING textbutton_property* action_statement textbutton_property*
+textbutton_single_line: TEXTBUTTON textbutton_text textbutton_property* action_statement textbutton_property*
 
-// Multi-line: textbutton "Text": [properties...] action Jump("dest")
-textbutton_multi_line: TEXTBUTTON STRING ":" textbutton_properties? action_statement textbutton_property*
+// Multi-line: textbutton "Text" [properties before colon] : \n INDENT [properties...] action Jump("dest") DEDENT
+textbutton_multi_line: TEXTBUTTON textbutton_text textbutton_property* ":" _NEWLINE _INDENT textbutton_body _DEDENT
+
+// Textbutton body: properties and action statement
+textbutton_body: textbutton_body_item+
+textbutton_body_item: textbutton_property | action_statement | _NEWLINE
+
+// Textbutton text can be a plain string or a parenthesized string
+textbutton_text: "(" STRING ")" | STRING
 
 // Content for single-line textbuttons - removed, using direct property list instead
 // textbutton_content: textbutton_property | action_statement
@@ -106,6 +113,7 @@ textbutton_specific_property: text_color_property
                             | text_hover_color_property 
                             | text_hover_outlines_property 
                             | text_size_property 
+                            | text_style_property
                             | hover_sound_property 
                             | activate_sound_property
                             | xalign_property
@@ -133,6 +141,7 @@ text_outlines_property: "text_outlines" list_literal
 text_hover_color_property: "text_hover_color" STRING  
 text_hover_outlines_property: "text_hover_outlines" list_literal
 text_size_property: "text_size" (NUMBER | IDENTIFIER)
+text_style_property: "text_style" (STRING | IDENTIFIER)
 hover_sound_property: HOVER_SOUND (STRING | IDENTIFIER)
 activate_sound_property: "activate_sound" (STRING | IDENTIFIER)
 
@@ -141,6 +150,7 @@ xalign_property: XALIGN (NUMBER | DECIMAL | IDENTIFIER)
 yalign_property: YALIGN (NUMBER | DECIMAL | IDENTIFIER)
 xpos_property: XPOS (NUMBER | DECIMAL | IDENTIFIER)
 ypos_property: YPOS (NUMBER | DECIMAL | IDENTIFIER)
+spacing_property: SPACING (NUMBER | DECIMAL | IDENTIFIER)
 xoffset_property: XOFFSET (NUMBER | DECIMAL | IDENTIFIER)
 yoffset_property: YOFFSET (NUMBER | DECIMAL | IDENTIFIER)
 xsize_property: XSIZE (NUMBER | DECIMAL | IDENTIFIER)
@@ -252,7 +262,7 @@ other_action: ACTION_FUNCTION "(" action_arguments? ")"
 
 // Action function names (anything that's not a reserved screen keyword)
 // Priority 1 to compete with IDENTIFIER
-ACTION_FUNCTION.1: /(?!screen|textbutton|imagebutton|button|hotspot|if|elif|else|menu|label|vbox|hbox|add)[A-Z][a-zA-Z0-9_]*/
+ACTION_FUNCTION.1: /(?!screen|textbutton|imagebutton|button|hotspot|if|elif|else|menu|label|vbox|hbox|grid|add)[A-Z][a-zA-Z0-9_]*/
 
 // Action arguments: flexible to support various parameter types
 action_arguments: action_arg ("," action_arg)*
@@ -275,20 +285,26 @@ ground_property: GROUND string_expression
 alpha_property: ALPHA BOOLEAN
 
 // ============================================================================
-// LAYOUT ELEMENTS: vbox, hbox (basic support)
+// LAYOUT ELEMENTS: vbox, hbox, grid (basic support)
 // ============================================================================
 
-layout_element: vbox_element | hbox_element
+layout_element: vbox_element | hbox_element | grid_element
 
-vbox_element: "vbox" layout_params? ":" layout_body
-hbox_element: "hbox" layout_params? ":" layout_body
+vbox_element: VBOX layout_params? ":" _NEWLINE _INDENT layout_body _DEDENT
+hbox_element: HBOX layout_params? ":" _NEWLINE _INDENT layout_body _DEDENT
+grid_element: GRID NUMBER NUMBER layout_params? ":" _NEWLINE _INDENT layout_body _DEDENT
 
 layout_params: layout_param+
-layout_param: xpos_property | ypos_property | generic_property
+layout_param: xpos_property | ypos_property | xalign_property | yalign_property | generic_property
 
 // Position properties already defined above
 
-layout_body: screen_element+
+// Layout body supports elements, properties, and conditionals (like screen_body)
+layout_body: (layout_body_item | _NEWLINE)+
+layout_body_item: layout_property | screen_element | conditional_element | add_statement
+
+// Layout properties (positioning, alignment, spacing, etc.)
+layout_property: xpos_property | ypos_property | xalign_property | yalign_property | spacing_property | generic_property
 
 // ============================================================================
 // TEXT ELEMENTS: Non-interactive text display
@@ -338,6 +354,9 @@ IMAGEBUTTON.2: "imagebutton"
 BUTTON.2: "button"
 HOTSPOT.2: "hotspot"
 IMAGEMAP.2: "imagemap"
+VBOX.2: "vbox"
+HBOX.2: "hbox"
+GRID.2: "grid"
 ADD.2: "add"
 ACTION.2: "action"
 CLICKED.2: "clicked"
@@ -356,6 +375,7 @@ XPOS.2: "xpos"
 YPOS.2: "ypos"
 XALIGN.2: "xalign"
 YALIGN.2: "yalign"
+SPACING.2: "spacing"
 XOFFSET.2: "xoffset"
 YOFFSET.2: "yoffset"
 ANCHOR.2: "anchor"

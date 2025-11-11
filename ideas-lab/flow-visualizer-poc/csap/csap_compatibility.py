@@ -203,12 +203,17 @@ class CSAPCompatibilityAdapter:
             return converted_elements if converted_elements else None
         
         elif isinstance(element, LayoutNode):
-            # Layout nodes contain children - convert the children
-            # For now, just convert the first interactive child
-            for child in element.children:
-                converted_child = self._convert_screen_element(child, file_path, element_index)
+            # Layout nodes (vbox, hbox, grid) contain children - convert all children
+            converted_elements = []
+            for i, child in enumerate(element.children):
+                converted_child = self._convert_screen_element(child, file_path, element_index + i)
                 if converted_child:
-                    return converted_child
+                    # Handle both single elements and lists
+                    if isinstance(converted_child, list):
+                        converted_elements.extend(converted_child)
+                    else:
+                        converted_elements.append(converted_child)
+            return converted_elements if converted_elements else None
         
         elif isinstance(element, ConditionalElementNode):
             # Conditional elements contain branches, each with body elements
