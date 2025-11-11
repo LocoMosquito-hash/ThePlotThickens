@@ -289,19 +289,14 @@ class CSAPTransformer(Transformer):
         return result
     
     def function_call(self, items):
-        """Transform function call in conditional."""
-        # items: [function_name, args...]
-        # For metadata purposes, create a simple representation
-        line, column = self._get_node_location(items)
+        """Transform function call - can be in conditional or as property value."""
+        # items: [function_name, function_args?]
+        # Return string representation for use in both contexts
         function_name = str(items[0])
-        # Return a ConditionalExpressionNode with the function name as variable
-        return ConditionalExpressionNode(
-            variable=function_name,
-            operator="()",  # Indicate it's a function call
-            value="",
-            line_number=line,
-            column=column
-        )
+        if len(items) > 1 and items[1]:
+            args = ', '.join(str(arg) for arg in items[1])
+            return f"{function_name}({args})"
+        return f"{function_name}()"
     
     def comparison(self, items):
         """Transform comparison expression."""
@@ -397,8 +392,13 @@ class CSAPTransformer(Transformer):
         return str(items[0])  # STRING, IDENTIFIER, or dotted_identifier
     
     def dotted_identifier(self, items):
-        """Transform dotted identifier like gui.main_menu_background."""
+        """Transform dotted identifier like gui.main_menu_background or im.MatrixColor."""
+        # items are identifier_or_action tokens
         return ".".join(str(item) for item in items)
+    
+    def identifier_or_action(self, items):
+        """Transform identifier_or_action (can be IDENTIFIER or ACTION_FUNCTION)."""
+        return str(items[0]) if items else ""
     
     def add_properties(self, items):
         """Transform add properties."""
@@ -608,30 +608,6 @@ class CSAPTransformer(Transformer):
         
         return PropertyNode(
             property_name='hover_sound',
-            property_value=prop_value,
-            line_number=line,
-            column=column
-        )
-    
-    def generic_property(self, items):
-        """Transform generic property."""
-        line, column = self._get_node_location(items)
-        prop_name = str(items[0])
-        prop_value = ""
-        
-        if len(items) > 1:
-            if isinstance(items[1], Token):
-                if items[1].type in ['ESCAPED_STRING', 'SINGLE_QUOTED_STRING']:
-                    prop_value = self._extract_string_value(items[1])
-                elif items[1].type == 'NUMBER':
-                    prop_value = self._extract_number_value(items[1])
-                else:
-                    prop_value = str(items[1])
-            else:
-                prop_value = items[1]
-        
-        return PropertyNode(
-            property_name=prop_name,
             property_value=prop_value,
             line_number=line,
             column=column
@@ -1407,22 +1383,18 @@ class CSAPTransformer(Transformer):
         """Transform textbutton specific property."""
         return items[0]  # Delegate to specific property transformers
     
-    def generic_property(self, items):
-        """Transform generic property."""
+    def property_dotted_function(self, items):
+        """Transform property with dotted function call (e.g., background im.MatrixColor(...))."""
         line, column = self._get_node_location(items)
         prop_name = str(items[0])  # property_name
-        prop_value = items[1] if len(items) > 1 else ""
+        func_name = str(items[1])  # dotted_identifier
+        func_args = items[2] if len(items) > 2 and items[2] else []
         
-        # Handle different value types
-        if hasattr(prop_value, 'type'):
-            if prop_value.type == 'STRING':
-                prop_value = self._extract_string_value(prop_value)
-            elif prop_value.type in ('NUMBER', 'DECIMAL'):
-                prop_value = self._extract_number_value(prop_value)
-            elif prop_value.type == 'IDENTIFIER':
-                prop_value = self._extract_identifier_value(prop_value)
+        if func_args:
+            args_str = ', '.join(str(arg) for arg in func_args)
+            prop_value = f"{func_name}({args_str})"
         else:
-            prop_value = str(prop_value)
+            prop_value = f"{func_name}()"
         
         return PropertyNode(
             property_name=prop_name,
@@ -1430,6 +1402,105 @@ class CSAPTransformer(Transformer):
             line_number=line,
             column=column
         )
+    
+    def property_simple_function(self, items):
+        """Transform property with simple function call (e.g., area area(x, y, w, h))."""
+        line, column = self._get_node_location(items)
+        prop_name = str(items[0])  # property_name
+        func_name = str(items[1])  # IDENTIFIER
+        func_args = items[2] if len(items) > 2 and items[2] else []
+        
+        if func_args:
+            args_str = ', '.join(str(arg) for arg in func_args)
+            prop_value = f"{func_name}({args_str})"
+        else:
+            prop_value = f"{func_name}()"
+        
+        return PropertyNode(
+            property_name=prop_name,
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
+    def property_string(self, items):
+        """Transform property with string value."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name=str(items[0]),
+            property_value=self._extract_string_value(items[1]),
+            line_number=line,
+            column=column
+        )
+    
+    def property_number(self, items):
+        """Transform property with number value."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name=str(items[0]),
+            property_value=self._extract_number_value(items[1]),
+            line_number=line,
+            column=column
+        )
+    
+    def property_decimal(self, items):
+        """Transform property with decimal value."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name=str(items[0]),
+            property_value=self._extract_number_value(items[1]),
+            line_number=line,
+            column=column
+        )
+    
+    def property_list(self, items):
+        """Transform property with list value."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name=str(items[0]),
+            property_value=str(items[1]),
+            line_number=line,
+            column=column
+        )
+    
+    def property_boolean(self, items):
+        """Transform property with boolean value."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name=str(items[0]),
+            property_value=str(items[1]),
+            line_number=line,
+            column=column
+        )
+    
+    def property_identifier(self, items):
+        """Transform property with identifier value."""
+        line, column = self._get_node_location(items)
+        return PropertyNode(
+            property_name=str(items[0]),
+            property_value=self._extract_identifier_value(items[1]),
+            line_number=line,
+            column=column
+        )
+    
+    def function_args(self, items):
+        """Transform function arguments list."""
+        # Return list of argument values
+        return items if items else []
+    
+    def function_arg(self, items):
+        """Transform single function argument."""
+        if not items:
+            return ""
+        arg = items[0]
+        if hasattr(arg, 'type'):
+            if arg.type == 'STRING':
+                return self._extract_string_value(arg)
+            elif arg.type in ('NUMBER', 'DECIMAL'):
+                return str(arg.value)
+            else:
+                return str(arg)
+        return str(arg)
     
     def property_name(self, items):
         """Transform property name."""
@@ -1484,6 +1555,59 @@ class CSAPTransformer(Transformer):
             column=column
         )
     
+    def area_property(self, items):
+        """Transform area property (function call)."""
+        line, column = self._get_node_location(items)
+        # items[0] is function_args (list)
+        args = items[0] if items else []
+        if args:
+            args_str = ', '.join(str(arg) for arg in args)
+            prop_value = f"area({args_str})"
+        else:
+            prop_value = "area()"
+        return PropertyNode(
+            property_name='area',
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
+    def background_property(self, items):
+        """Transform background property."""
+        line, column = self._get_node_location(items)
+        value = items[0] if items else ""
+        if hasattr(value, 'type'):
+            if value.type == 'STRING':
+                prop_value = self._extract_string_value(value)
+            else:
+                prop_value = str(value)
+        else:
+            prop_value = str(value)  # Already processed (e.g., dotted_function_call)
+        return PropertyNode(
+            property_name='background',
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
+    def hover_background_property(self, items):
+        """Transform hover_background property."""
+        line, column = self._get_node_location(items)
+        value = items[0] if items else ""
+        if hasattr(value, 'type'):
+            if value.type == 'STRING':
+                prop_value = self._extract_string_value(value)
+            else:
+                prop_value = str(value)
+        else:
+            prop_value = str(value)  # Already processed (e.g., dotted_function_call)
+        return PropertyNode(
+            property_name='hover_background',
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
     def xoffset_property(self, items):
         """Transform xoffset property."""
         line, column = self._get_node_location(items)
@@ -1533,7 +1657,7 @@ class CSAPParser:
             
             self.parser = Lark(
                 grammar_text,
-                parser='lalr',
+                parser='earley',  # Changed from 'lalr' to support function call lookahead
                 start='start',
                 postlex=RenpyIndenter(),
                 maybe_placeholders=False

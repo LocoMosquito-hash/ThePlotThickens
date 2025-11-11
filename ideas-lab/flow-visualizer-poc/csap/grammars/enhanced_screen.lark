@@ -47,7 +47,17 @@ condition_atom: function_call | comparison | dotted_identifier | IDENTIFIER | pa
 function_call: IDENTIFIER "(" function_args? ")"
 
 function_args: function_arg ("," function_arg)*
-function_arg: STRING | NUMBER | DECIMAL | IDENTIFIER | dotted_identifier
+// Function arguments can be literals, identifiers, or nested function calls
+function_arg: dotted_function_call
+            | simple_function_call  
+            | STRING
+            | NUMBER
+            | DECIMAL
+            | dotted_identifier
+            | IDENTIFIER
+
+// Simple function call for arguments (e.g., area(...))
+simple_function_call: IDENTIFIER "(" function_args? ")"
 
 comparison: IDENTIFIER comparison_operator conditional_value
 
@@ -73,7 +83,10 @@ add_statement: ADD add_content add_properties?
 add_content: STRING | IDENTIFIER | dotted_identifier
 
 // Support for gui.main_menu_background style identifiers
-dotted_identifier: IDENTIFIER ("." IDENTIFIER)+
+// Dotted identifiers can use regular IDENTIFIER or ACTION_FUNCTION tokens
+// (e.g., im.MatrixColor where MatrixColor is tokenized as ACTION_FUNCTION)
+dotted_identifier: identifier_or_action ("." identifier_or_action)+
+identifier_or_action: IDENTIFIER | ACTION_FUNCTION
 
 add_properties: add_property+
 add_property: property_name (STRING | NUMBER | DECIMAL | IDENTIFIER)
@@ -124,12 +137,25 @@ textbutton_specific_property: text_color_property
                             | yoffset_property
                             | xsize_property
                             | ysize_property
+                            | area_property
+                            | background_property
+                            | hover_background_property
 
 // Generic property for any other properties (excluding keywords)
-generic_property: property_name (STRING | NUMBER | DECIMAL | IDENTIFIER | list_literal | BOOLEAN)
+// Supports function calls like area(x, y, w, h) or im.MatrixColor(...)
+// IMPORTANT: Function call alternatives have higher priority (.3) than plain IDENTIFIER (.1)
+generic_property.2: property_name dotted_identifier "(" function_args? ")"  -> property_dotted_function
+                  | property_name IDENTIFIER "(" function_args? ")"           -> property_simple_function
+                  | property_name STRING                                       -> property_string
+                  | property_name NUMBER                                       -> property_number
+                  | property_name DECIMAL                                      -> property_decimal
+                  | property_name list_literal                                 -> property_list
+                  | property_name BOOLEAN                                      -> property_boolean
+                  | property_name IDENTIFIER                                   -> property_identifier
 
-// Property names that are NOT screen element keywords  
-property_name: PROPERTY_IDENTIFIER
+// Property names - can be either PROPERTY_IDENTIFIER or IDENTIFIER  
+// (since tokenizer may assign IDENTIFIER before PROPERTY_IDENTIFIER due to priority)
+property_name: PROPERTY_IDENTIFIER | IDENTIFIER
 
 // Terminal for property identifiers (excludes keywords)
 // Much lower priority than IDENTIFIER
@@ -155,6 +181,18 @@ xoffset_property: XOFFSET (NUMBER | DECIMAL | IDENTIFIER)
 yoffset_property: YOFFSET (NUMBER | DECIMAL | IDENTIFIER)
 xsize_property: XSIZE (NUMBER | DECIMAL | IDENTIFIER)
 ysize_property: YSIZE (NUMBER | DECIMAL | IDENTIFIER)
+
+// Area property - defines clickable area with function call
+area_property: AREA "(" function_args ")"
+
+// Background property - defines button background image
+background_property: BACKGROUND (STRING | IDENTIFIER | dotted_function_call)
+
+// Hover background property - defines button hover background image  
+hover_background_property: HOVER_BACKGROUND (STRING | IDENTIFIER | dotted_function_call)
+
+// Function call with dotted prefix (e.g., im.MatrixColor(...))
+dotted_function_call: dotted_identifier "(" function_args? ")"
 
 // ============================================================================
 // IMAGEBUTTON: Supports single-line, multi-line, and anchor-based patterns
@@ -345,7 +383,7 @@ list_item: STRING | NUMBER | DECIMAL | coordinate_tuple | list_literal | BOOLEAN
 // ============================================================================
 
 // Keywords (highest priority)
-SCREEN.2: "screen"
+SCREEN.2: "screen" /(?![a-zA-Z0-9_])/  // Word boundary - don't match "screen" in "screen22"
 IF.2: "if"
 ELIF.2: "elif"
 ELSE.2: "else"
@@ -387,6 +425,9 @@ ZORDER.2: "zorder"
 GROUND.2: "ground"
 ALPHA.2: "alpha"
 HOVER_SOUND.2: "hover_sound"
+AREA.2: "area"
+BACKGROUND.2: "background"
+HOVER_BACKGROUND.2: "hover_background"
 
 // Boolean literals (high priority to match before IDENTIFIER)
 BOOLEAN.2: "True" | "False"
