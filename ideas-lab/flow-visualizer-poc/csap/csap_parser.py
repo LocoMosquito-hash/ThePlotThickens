@@ -451,9 +451,12 @@ class CSAPTransformer(Transformer):
         return items[0]  # Either textbutton_single_line or textbutton_multi_line
     
     def textbutton_text(self, items):
-        """Transform textbutton text (plain STRING or parenthesized STRING)."""
-        # items will contain either: [STRING] or ["(", STRING, ")"]
-        # Find and return the STRING
+        """Transform textbutton text (plain STRING, parenthesized STRING, or function call)."""
+        # items can be:
+        # - [STRING] - plain string
+        # - ["(", STRING, ")"] - parenthesized string
+        # - [IDENTIFIER, "(", STRING, ")"] - translation function like _("text")
+        # Always find and return the STRING token
         for item in items:
             if isinstance(item, Token) and item.type == 'STRING':
                 return item
@@ -762,9 +765,10 @@ class CSAPTransformer(Transformer):
     def zorder_property(self, items):
         """Transform zorder property."""
         line, column = self._get_node_location(items)
+        # items: [ZORDER token, NUMBER token/value]
         return PropertyNode(
             property_name='zorder',
-            property_value=int(items[0]),
+            property_value=self._extract_number_value(items[1]) if len(items) > 1 else 0,
             line_number=line,
             column=column
         )
@@ -1087,6 +1091,31 @@ class CSAPTransformer(Transformer):
             column=column
         )
     
+    def frame_element(self, items):
+        """Transform frame layout container."""
+        line, column = self._get_node_location(items)
+        
+        # Same structure as vbox/hbox
+        layout_body = None
+        properties = []
+        
+        for item in items:
+            if isinstance(item, list):
+                if item and isinstance(item[0], PropertyNode):
+                    properties = item
+                else:
+                    layout_body = item
+        
+        children = layout_body if layout_body else []
+        
+        return LayoutNode(
+            layout_type='frame',
+            properties=properties,
+            children=children,
+            line_number=line,
+            column=column
+        )
+    
     def grid_element(self, items):
         """Transform grid layout container."""
         line, column = self._get_node_location(items)
@@ -1270,12 +1299,20 @@ class CSAPTransformer(Transformer):
     
     def action_arguments(self, items):
         """Transform action arguments."""
-        # We don't need to process these, just let them parse
+        # We don't need to process these for flow analysis, just let them parse
         return items
     
     def action_arg(self, items):
-        """Transform single action argument."""
-        # We don't need to process these, just let them parse
+        """Transform single action argument (positional or keyword)."""
+        # items can be:
+        # - [IDENTIFIER, "=", action_arg_value] for keyword args
+        # - [action_arg_value] for positional args
+        # We don't need to process these for flow analysis
+        return items[0] if items else None
+    
+    def action_arg_value(self, items):
+        """Transform action argument value."""
+        # Just return the value, no processing needed for flow analysis
         return items[0] if items else None
     
     # ========================================================================

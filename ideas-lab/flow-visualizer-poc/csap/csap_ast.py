@@ -242,8 +242,8 @@ class ImageMapNode(CSAPNode):
 
 @dataclass
 class LayoutNode(CSAPNode):
-    """Represents a layout container (vbox, hbox, grid)."""
-    layout_type: str = ""  # 'vbox', 'hbox', 'grid'
+    """Represents a layout container (vbox, hbox, grid, frame)."""
+    layout_type: str = ""  # 'vbox', 'hbox', 'grid', 'frame'
     properties: List[PropertyNode] = field(default_factory=list)
     children: List[Union[ScreenElementNode, 'ImageMapNode', 'ConditionalElementNode', 'LayoutNode']] = field(default_factory=list)
     
@@ -280,7 +280,7 @@ class LayoutNode(CSAPNode):
     def validate(self) -> List[str]:
         errors = []
         
-        if self.layout_type not in ['vbox', 'hbox', 'grid']:
+        if self.layout_type not in ['vbox', 'hbox', 'grid', 'frame']:
             errors.append(f"Invalid layout type: {self.layout_type}")
         
         # Validate properties

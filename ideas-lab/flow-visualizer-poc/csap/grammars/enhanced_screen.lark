@@ -13,7 +13,7 @@ screen_body: (screen_body_item | _NEWLINE)+
 
 screen_body_item: screen_property | screen_element | conditional_element | add_statement
 
-screen_property: modal_property | zorder_property
+screen_property: modal_property | zorder_property | generic_property
 
 screen_element: textbutton_element
              | imagebutton_element  
@@ -21,6 +21,7 @@ screen_element: textbutton_element
              | hotspot_element
              | imagemap_element
              | layout_element
+             | text_element
              | other_element
 
 // ============================================================================
@@ -122,8 +123,10 @@ textbutton_multi_line: TEXTBUTTON textbutton_text textbutton_property* ":" _NEWL
 textbutton_body: textbutton_body_item+
 textbutton_body_item: textbutton_property | action_statement | _NEWLINE
 
-// Textbutton text can be a plain string or a parenthesized string
-textbutton_text: "(" STRING ")" | STRING
+// Textbutton text can be a plain string, parenthesized string, or translation function call
+textbutton_text: "(" STRING ")"           // Parenthesized string  
+               | IDENTIFIER "(" STRING ")" // Translation function like _("text")
+               | STRING                     // Plain string
 
 // Content for single-line textbuttons - removed, using direct property list instead
 // textbutton_content: textbutton_property | action_statement
@@ -317,7 +320,11 @@ ACTION_FUNCTION.1: /(?!screen|textbutton|imagebutton|button|hotspot|if|elif|else
 
 // Action arguments: flexible to support various parameter types
 action_arguments: action_arg ("," action_arg)*
-action_arg: STRING | NUMBER | DECIMAL | IDENTIFIER | BOOLEAN | dotted_identifier
+// Action arguments - permissive to handle keyword args (ignored for flow analysis)
+action_arg: IDENTIFIER "=" action_arg_value  // Keyword argument (e.g., transition=dis)
+          | action_arg_value                 // Positional argument
+
+action_arg_value: STRING | NUMBER | DECIMAL | IDENTIFIER | BOOLEAN | dotted_identifier
 
 // ============================================================================
 // IMAGEMAP: Container for hotspots (basic support)
@@ -339,11 +346,12 @@ alpha_property: ALPHA BOOLEAN
 // LAYOUT ELEMENTS: vbox, hbox, grid (basic support)
 // ============================================================================
 
-layout_element: vbox_element | hbox_element | grid_element
+layout_element: vbox_element | hbox_element | grid_element | frame_element
 
 vbox_element: VBOX layout_params? ":" _NEWLINE _INDENT layout_body _DEDENT
 hbox_element: HBOX layout_params? ":" _NEWLINE _INDENT layout_body _DEDENT
 grid_element: GRID NUMBER NUMBER layout_params? ":" _NEWLINE _INDENT layout_body _DEDENT
+frame_element: FRAME layout_params? ":" _NEWLINE _INDENT layout_body _DEDENT
 
 layout_params: layout_param+
 layout_param: xpos_property | ypos_property | xalign_property | yalign_property | spacing_property | generic_property
@@ -361,7 +369,19 @@ layout_property: xpos_property | ypos_property | xalign_property | yalign_proper
 // TEXT ELEMENTS: Non-interactive text display
 // ============================================================================
 
-text_element: TEXT STRING text_properties?
+text_element: text_single_line | text_multi_line
+
+// Single-line: text "string" properties...
+text_single_line: TEXT text_content text_properties?
+
+// Multi-line: text "string": \n    properties...
+text_multi_line: TEXT text_content ":" _NEWLINE _INDENT text_body _DEDENT
+
+// Text content can be a string or translation function
+text_content: IDENTIFIER "(" STRING ")"  // Translation function like _("text")
+            | STRING                      // Plain string
+
+text_body: (text_property | _NEWLINE)+
 
 text_properties: text_property+
 text_property: xalign_property | yalign_property | xpos_property | ypos_property | generic_property
@@ -408,6 +428,7 @@ IMAGEMAP.2: "imagemap"
 VBOX.2: "vbox"
 HBOX.2: "hbox"
 GRID.2: "grid"
+FRAME.2: "frame"
 ADD.2: "add"
 ACTION.2: "action"
 CLICKED.2: "clicked"
