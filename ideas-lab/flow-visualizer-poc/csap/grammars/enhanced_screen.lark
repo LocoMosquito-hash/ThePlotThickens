@@ -240,11 +240,12 @@ action_list_wrapped: "[" action_chain "]"
 action_chain: generic_action ("," generic_action)*
 
 // Generic action: any function call (Jump, Call, Hide, Show, SetVariable, etc.)
-generic_action: jump_action | call_action | other_action
+generic_action: jump_action | call_action | start_action | other_action
 
 // Flow-relevant actions (we extract these for flow analysis)
 jump_action: JUMP "(" STRING ")"
 call_action: CALL "(" STRING ")"
+start_action: START "(" STRING? ")"  // STRING is optional - Start() with no args starts at "start" label
 
 // Other actions (we parse but ignore these for flow analysis)
 other_action: ACTION_FUNCTION "(" action_arguments? ")"
@@ -342,6 +343,7 @@ ACTION.2: "action"
 CLICKED.2: "clicked"
 JUMP.2: "Jump"
 CALL.2: "Call"
+START.2: "Start"
 
 // Property keywords (high priority)
 AUTO.2: "auto"

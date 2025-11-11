@@ -1085,6 +1085,25 @@ class CSAPTransformer(Transformer):
             column=column
         )
     
+    def start_action(self, items):
+        """Transform start action - treated like Jump for flow visualization."""
+        line, column = self._get_node_location(items)
+        # Grammar: START "(" STRING? ")"
+        # items[0] = START token
+        # items[1] = destination string (if provided), or None
+        # When no argument: Start() defaults to starting at "start" label
+        if len(items) > 1 and items[1] is not None:
+            destination = str(items[1])
+        else:
+            destination = "start"  # Default Ren'Py behavior
+        
+        return ActionNode(
+            action_type='Start',
+            destination=destination,
+            line_number=line,
+            column=column
+        )
+    
     def other_action(self, items):
         """
         Transform other actions (Hide, Show, SetVariable, etc.).

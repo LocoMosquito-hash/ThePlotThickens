@@ -65,7 +65,7 @@ class ActionNode(CSAPNode):
     
     def validate(self) -> List[str]:
         errors = []
-        if self.action_type not in ['Jump', 'Call']:
+        if self.action_type not in ['Jump', 'Call', 'Start']:
             errors.append(f"Invalid action type: {self.action_type}")
         if not self.destination:
             errors.append("Action destination cannot be empty")
