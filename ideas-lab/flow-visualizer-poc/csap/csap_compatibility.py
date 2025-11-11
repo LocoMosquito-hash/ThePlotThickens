@@ -211,16 +211,18 @@ class CSAPCompatibilityAdapter:
                     return converted_child
         
         elif isinstance(element, ConditionalElementNode):
-            # Conditional elements contain body elements - convert all interactive body elements
+            # Conditional elements contain branches, each with body elements
+            # Convert all interactive elements from all branches
             converted_elements = []
-            for i, body_element in enumerate(element.body):
-                converted_element = self._convert_screen_element(body_element, file_path, element_index + i)
-                if converted_element:
-                    # Handle both single elements and lists
-                    if isinstance(converted_element, list):
-                        converted_elements.extend(converted_element)
-                    else:
-                        converted_elements.append(converted_element)
+            for branch in element.branches:
+                for i, body_element in enumerate(branch.body):
+                    converted_element = self._convert_screen_element(body_element, file_path, element_index + i)
+                    if converted_element:
+                        # Handle both single elements and lists
+                        if isinstance(converted_element, list):
+                            converted_elements.extend(converted_element)
+                        else:
+                            converted_elements.append(converted_element)
             return converted_elements if converted_elements else None
         
         # Unknown element type

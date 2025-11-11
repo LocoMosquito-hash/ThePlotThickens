@@ -656,8 +656,12 @@ class CSAPTransformer(Transformer):
         )
     
     def imagebutton_body(self, items):
-        """Transform imagebutton body."""
-        return items
+        """Transform imagebutton body - filter out tokens, keep only items."""
+        return [item for item in items if not isinstance(item, Token)]
+    
+    def imagebutton_body_item(self, items):
+        """Transform imagebutton body item."""
+        return items[0] if items else None
     
     def imagebutton_line(self, items):
         """Transform imagebutton line."""

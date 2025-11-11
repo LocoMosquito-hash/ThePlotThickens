@@ -156,11 +156,13 @@ imagebutton_element: imagebutton_single_line | imagebutton_multi_line
 imagebutton_single_line: IMAGEBUTTON imagebutton_properties action_statement
 
 // Multi-line: imagebutton [anchor (0.5, 0.5)]: [properties...] action Jump("dest")
-imagebutton_multi_line: IMAGEBUTTON imagebutton_anchor? ":" imagebutton_body
+// Now supports indented body blocks
+imagebutton_multi_line: IMAGEBUTTON imagebutton_anchor? ":" _NEWLINE _INDENT imagebutton_body _DEDENT
 
 imagebutton_anchor: ANCHOR coordinate_tuple
 
-imagebutton_body: (imagebutton_property | action_statement)+
+imagebutton_body: (imagebutton_body_item | _NEWLINE)+
+imagebutton_body_item: imagebutton_property | action_statement
 
 imagebutton_properties: imagebutton_property+
 imagebutton_property: idle_property
