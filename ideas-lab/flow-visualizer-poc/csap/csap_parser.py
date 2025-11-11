@@ -1485,11 +1485,19 @@ class CSAPTransformer(Transformer):
     
     def function_args(self, items):
         """Transform function arguments list."""
-        # Return list of argument values
+        # Return list of argument values (can be strings or "name=value" for kwargs)
         return items if items else []
     
-    def function_arg(self, items):
-        """Transform single function argument."""
+    def named_arg(self, items):
+        """Transform named argument (keyword argument): name=value."""
+        # items: [name (IDENTIFIER), arg_value]
+        name = str(items[0])
+        value = str(items[1]) if len(items) > 1 else ""
+        return f"{name}={value}"
+    
+    def positional_arg(self, items):
+        """Transform positional argument."""
+        # items contain the actual value (could be various types)
         if not items:
             return ""
         arg = items[0]
@@ -1498,6 +1506,38 @@ class CSAPTransformer(Transformer):
                 return self._extract_string_value(arg)
             elif arg.type in ('NUMBER', 'DECIMAL'):
                 return str(arg.value)
+            elif arg.type == 'BOOLEAN':
+                return str(arg)
+            else:
+                return str(arg)
+        return str(arg)
+    
+    def literal_value(self, items):
+        """Transform literal value."""
+        if not items:
+            return ""
+        value = items[0]
+        if hasattr(value, 'type'):
+            if value.type == 'STRING':
+                return self._extract_string_value(value)
+            elif value.type in ('NUMBER', 'DECIMAL'):
+                return str(value.value)
+            elif value.type == 'BOOLEAN':
+                return str(value)
+        return str(value)
+    
+    def arg_value(self, items):
+        """Transform argument value."""
+        if not items:
+            return ""
+        arg = items[0]
+        if hasattr(arg, 'type'):
+            if arg.type == 'STRING':
+                return self._extract_string_value(arg)
+            elif arg.type in ('NUMBER', 'DECIMAL'):
+                return str(arg.value)
+            elif arg.type == 'BOOLEAN':
+                return str(arg)
             else:
                 return str(arg)
         return str(arg)

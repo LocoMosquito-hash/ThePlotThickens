@@ -47,14 +47,27 @@ condition_atom: function_call | comparison | dotted_identifier | IDENTIFIER | pa
 function_call: IDENTIFIER "(" function_args? ")"
 
 function_args: function_arg ("," function_arg)*
-// Function arguments can be literals, identifiers, or nested function calls
-function_arg: dotted_function_call
-            | simple_function_call  
-            | STRING
-            | NUMBER
-            | DECIMAL
-            | dotted_identifier
-            | IDENTIFIER
+// Function arguments can be positional or named (keyword arguments)
+// For Earley parser, we need to explicitly check for "=" lookahead
+function_arg: IDENTIFIER "=" arg_value  -> named_arg
+            | dotted_function_call       -> positional_arg
+            | simple_function_call       -> positional_arg
+            | literal_value              -> positional_arg
+            | dotted_identifier          -> positional_arg
+            | IDENTIFIER                 -> positional_arg
+
+// Literal values (non-identifier, non-function-call)
+literal_value: STRING | NUMBER | DECIMAL | BOOLEAN
+
+// Argument value (for use in named_arg right-hand side)
+arg_value: dotted_function_call
+         | simple_function_call  
+         | STRING
+         | NUMBER
+         | DECIMAL
+         | BOOLEAN
+         | dotted_identifier
+         | IDENTIFIER
 
 // Simple function call for arguments (e.g., area(...))
 simple_function_call: IDENTIFIER "(" function_args? ")"
@@ -333,7 +346,7 @@ hbox_element: HBOX layout_params? ":" _NEWLINE _INDENT layout_body _DEDENT
 grid_element: GRID NUMBER NUMBER layout_params? ":" _NEWLINE _INDENT layout_body _DEDENT
 
 layout_params: layout_param+
-layout_param: xpos_property | ypos_property | xalign_property | yalign_property | generic_property
+layout_param: xpos_property | ypos_property | xalign_property | yalign_property | spacing_property | generic_property
 
 // Position properties already defined above
 
