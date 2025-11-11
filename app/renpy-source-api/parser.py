@@ -2403,6 +2403,10 @@ class RenpyParser:
         - Menu 1: "Open the door" (no destination, continues to Menu 2)
         - Menu 2: "Come on in" (has destination, provides control transfer)
         
+        CRITICAL: A menu system only provides guaranteed flow if ALL execution paths
+        lead to explicit control transfer. If ANY path can fall through, implicit flow
+        is needed.
+        
         Args:
             label_menus: List of MenuStructure objects for this label
             label_name: Name of the label containing these menus
@@ -2410,27 +2414,32 @@ class RenpyParser:
         Returns:
             True if the multi-menu system provides guaranteed control transfer
         """
-        # Check if at least one menu has choices with guaranteed control transfer
-        has_exit_menu = False
+        if not label_menus:
+            return False
+        
+        # Check if ALL menus in the system provide guaranteed control transfer
+        # A menu system can only guarantee flow if every menu guarantees it
+        all_menus_provide_guaranteed_flow = True
         
         for menu in label_menus:
             if not hasattr(menu, 'choices') or not menu.choices:
+                # Empty menu cannot provide guaranteed flow
+                all_menus_provide_guaranteed_flow = False
                 continue
-                
-            # Check if this menu has choices that provide control transfer
-            menu_has_exits = False
+            
+            # Check if ALL choices in this menu provide guaranteed control transfer
+            menu_provides_guaranteed_flow = True
             for choice in menu.choices:
-                if self._choice_provides_guaranteed_flow(choice, label_name):
-                    menu_has_exits = True
+                if not self._choice_provides_guaranteed_flow(choice, label_name):
+                    menu_provides_guaranteed_flow = False
                     break
             
-            if menu_has_exits:
-                has_exit_menu = True
+            if not menu_provides_guaranteed_flow:
+                all_menus_provide_guaranteed_flow = False
         
-        # For now, if we have multiple menus and at least one provides exits,
-        # assume the system provides guaranteed flow
-        # This is a heuristic that works for common patterns like My Milly
-        if has_exit_menu and len(label_menus) > 1:
+        # FIXED LOGIC: Only return True if ALL menus provide guaranteed flow
+        # If even ONE menu can fall through, the label needs implicit flow
+        if all_menus_provide_guaranteed_flow and len(label_menus) > 0:
             print(f"[MENU ANALYSIS] Multi-menu system in '{label_name}' provides guaranteed flow")
             return True
         
