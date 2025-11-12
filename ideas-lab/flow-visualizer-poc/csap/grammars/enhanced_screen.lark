@@ -483,7 +483,8 @@ COMMENT: /#[^\n]*/
 
 // Newline handling for indentation  
 // Capture newline + any following whitespace (including blank lines)
-_NEWLINE: /\r?\n([\t ]*\r?\n)*[\t ]*/
+// Also skip over comment-only lines to prevent them from affecting indentation
+_NEWLINE: /(\r?\n[\t ]*#[^\n]*)*\r?\n([\t ]*\r?\n)*[\t ]*/
 
 // Ignore horizontal whitespace (spaces and tabs, but not newlines)
 %ignore /[ \t]+/
