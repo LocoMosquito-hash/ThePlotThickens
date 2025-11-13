@@ -1432,6 +1432,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                     'choice_index': hierarchy_node.content.get('choice_index', -1),
                     'full_text': hierarchy_node.content.get('full_text', ''),
                     'destination': hierarchy_node.content.get('destination', ''),
+                    'all_destinations': hierarchy_node.content.get('all_destinations', []),
                     'has_condition': hierarchy_node.content.get('has_condition', False),
                     'condition': hierarchy_node.content.get('condition', ''),
                     
@@ -1763,13 +1764,14 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             else:
                 menus_without_context += 1
         
-        print(f"[ADAPTER DEBUG] {len(enhanced_menus)} menus total, {len(menus_by_label)} unique labels, {menus_without_context} without context")
+        print(f"[ADAPTER] {len(enhanced_menus)} menus total, {len(menus_by_label)} unique labels, {menus_without_context} without context")
+        if menus_without_context > 0:
+            print(f"[ADAPTER] Warning: {menus_without_context} menus have no label context and will not be integrated")
+        
         if len(menus_by_label) > 0:
-            print(f"[ADAPTER DEBUG] First 5 label names from menus: {list(menus_by_label.keys())[:5]}")
-            print(f"[ADAPTER DEBUG] First 5 flow_graph keys: {list(flow_graph.keys())[:5]}")
             # Check if any menu labels exist in flow graph
             matches = sum(1 for label in menus_by_label.keys() if label in flow_graph)
-            print(f"[ADAPTER DEBUG] {matches} out of {len(menus_by_label)} menu labels found in flow_graph")
+            print(f"[ADAPTER] {matches} out of {len(menus_by_label)} menu labels found in flow_graph")
         
         # Integrate menus into flow graph label nodes
         integrated_count = 0

@@ -242,3 +242,4 @@ This limitation is **documented and acceptable** for the current use case:
 
 **Recommendation**: Leave as-is unless AST-level detail becomes critical for features beyond flow visualization.
 
+

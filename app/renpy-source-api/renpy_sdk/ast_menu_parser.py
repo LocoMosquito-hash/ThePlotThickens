@@ -106,6 +106,9 @@ class EnhancedMenuStructure:
     parent_menu_line: Optional[int] = None
     parent_choice_index: Optional[int] = None
     is_nested: bool = False
+    
+    # Label context for integration
+    label_context: Optional[str] = None
 
 
 class ASTMenuParser:
@@ -532,15 +535,20 @@ class ASTMenuParser:
         
         menus = []
         menu_stack = []  # Stack to track menu hierarchy: [(menu_obj, line, indent, end_line)]
+        current_label = None  # Track current label for context
         
         # Find all menu definitions in the file
         for i, line in enumerate(lines):
             line_stripped = line.strip()
             
             # Check if this is a label definition - if so, clear the menu stack
-            # since menus can't be nested across label boundaries
+            # and track the label name for menu context
             if line_stripped.startswith('label ') and ':' in line_stripped:
                 menu_stack.clear()
+                # Extract label name (handle parameterized labels)
+                label_match = re.match(r'label\s+([a-zA-Z_][a-zA-Z0-9_]*)', line_stripped)
+                if label_match:
+                    current_label = label_match.group(1)
             
             if line_stripped.startswith('menu') and ':' in line_stripped:
                 # Calculate indentation
@@ -564,6 +572,28 @@ class ASTMenuParser:
                     if cmap_menu:
                         # Convert CMAP menu to EnhancedMenuStructure
                         enhanced_menu = self._convert_cmap_to_enhanced(cmap_menu, file_path, i + 1)
+                        
+                        # Set label context for integration
+                        enhanced_menu.label_context = current_label
+                        
+                        # Check if CMAP extracted any destinations (if not, fall back to regex)
+                        has_destinations = any(
+                            choice.unconditional_destinations or choice.conditional_paths
+                            for choice in enhanced_menu.choices
+                        )
+                        
+                        if not has_destinations and len(enhanced_menu.choices) > 0:
+                            print(f"[CMAP] ⚠️ CMAP parsed menu but found no destinations, falling back to regex")
+                            # Try regex fallback
+                            regex_menu = self._parse_single_menu_regex(lines, i + 1, file_path)
+                            if regex_menu:
+                                regex_menu.label_context = current_label
+                                menus.append(regex_menu)
+                                # Add to stack for tracking
+                                end_line = self._estimate_menu_end_line(lines, i, indent_level)
+                                menu_stack.append((regex_menu, i + 1, indent_level, end_line))
+                                print(f"[CMAP] ✅ Regex fallback succeeded for menu at line {i + 1}")
+                            continue  # Skip CMAP menu since we're using regex
                         
                         # Check if this menu is nested inside another menu's choice
                         if menu_stack:
@@ -597,6 +627,9 @@ class ASTMenuParser:
                         # Fall back to regex for this specific menu
                         regex_menu = self._parse_single_menu_regex(lines, i + 1, file_path)
                         if regex_menu:
+                            # Set label context for integration
+                            regex_menu.label_context = current_label
+                            
                             # Check if this menu is nested (same logic as CMAP)
                             if menu_stack:
                                 parent_menu, parent_line, parent_indent, parent_end = menu_stack[-1]
@@ -624,6 +657,9 @@ class ASTMenuParser:
                     try:
                         regex_menu = self._parse_single_menu_regex(lines, i + 1, file_path)
                         if regex_menu:
+                            # Set label context for integration
+                            regex_menu.label_context = current_label
+                            
                             # Check if this menu is nested (same logic as CMAP)
                             if menu_stack:
                                 parent_menu, parent_line, parent_indent, parent_end = menu_stack[-1]
