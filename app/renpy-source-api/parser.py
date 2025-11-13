@@ -1992,6 +1992,9 @@ class RenpyParser:
         
         Enhanced to filter out flows that are already handled by menu choices to prevent
         duplicate flows from label to destination.
+        
+        CRITICAL: This method now EXCLUDES any jump/call statements that are inside menu blocks,
+        as those flows belong to the menu choices, not the label's immediate scope.
         """
         flows = []
         current_label = None
@@ -2025,8 +2028,13 @@ class RenpyParser:
                 if not afternikkidate_found:
                     print(f"[PROBLEM] afternikkidate label NOT found in v14point5.rpy")
             
+            # Track menu blocks to exclude their content from label flow detection
+            inside_menu = False
+            menu_indent = 0
+            
             for line_num, line in enumerate(lines, 1):
                 stripped_line = line.strip()
+                current_indent = len(line) - len(line.lstrip())
                 
                 # Track current label for context
                 label_match = self.patterns['label'].match(line)
@@ -2044,6 +2052,22 @@ class RenpyParser:
                     current_label = label_name
                     current_label_start_line = line_num - 1  # Convert to 0-based for _extract_conditional_jumps
                     current_file_path = file_path
+                    inside_menu = False  # Reset menu tracking
+                    continue
+                
+                # Detect menu start
+                menu_match = self.patterns['menu'].match(line) or self.patterns['menu_with_name'].match(line)
+                if menu_match and current_label:
+                    inside_menu = True
+                    menu_indent = current_indent
+                    continue
+                
+                # Check if we've exited the menu block
+                if inside_menu and stripped_line and current_indent <= menu_indent:
+                    inside_menu = False
+                
+                # Skip flow detection if we're inside a menu block
+                if inside_menu:
                     continue
                 
                 # Find direct jumps and calls (existing logic)
@@ -2205,6 +2229,9 @@ class RenpyParser:
         This method performs static analysis to find jump statements in if/elif/else blocks,
         creating flows for all possible execution paths regardless of variable values.
         
+        CRITICAL: This method now EXCLUDES any jump/call statements that are inside menu blocks,
+        as those flows belong to the menu choices, not the label's immediate scope.
+        
         Args:
             label_name: Name of the label being analyzed
             file_path: Path to the .rpy file
@@ -2227,15 +2254,38 @@ class RenpyParser:
                     label_end_line = i
                     break
             
+            # Track menu blocks to exclude their content
+            inside_menu = False
+            menu_indent = 0
+            
             # SIMPLIFIED CONDITIONAL JUMP DETECTION
             # Scan through the label content for jump statements in conditional blocks
             i = start_line
             while i < label_end_line:
-                line = lines[i].strip()
+                line = lines[i]
+                stripped_line = line.strip()
+                current_indent = len(line) - len(line.lstrip())
+                
+                # Detect menu start
+                menu_match = self.patterns['menu'].match(line) or self.patterns['menu_with_name'].match(line)
+                if menu_match:
+                    inside_menu = True
+                    menu_indent = current_indent
+                    i += 1
+                    continue
+                
+                # Check if we've exited the menu block
+                if inside_menu and stripped_line and current_indent <= menu_indent:
+                    inside_menu = False
+                
+                # Skip flow detection if we're inside a menu block
+                if inside_menu:
+                    i += 1
+                    continue
                 
                 # Look for jump statements preceded by if/elif/else  
-                if re.match(r'^\s*jump\s+([a-zA-Z_][a-zA-Z0-9_]*)', line, re.IGNORECASE):
-                    jump_match = re.match(r'^\s*jump\s+([a-zA-Z_][a-zA-Z0-9_]*)', line, re.IGNORECASE)
+                if re.match(r'^\s*jump\s+([a-zA-Z_][a-zA-Z0-9_]*)', stripped_line, re.IGNORECASE):
+                    jump_match = re.match(r'^\s*jump\s+([a-zA-Z_][a-zA-Z0-9_]*)', stripped_line, re.IGNORECASE)
                     if jump_match:
                         target_label = jump_match.group(1)
                         
