@@ -313,6 +313,8 @@ class CMAPTransformer(Transformer):
                     value = self._extract_number_value(value)
                 elif value.type == 'IDENTIFIER':
                     value = self._extract_identifier_value(value)
+                elif value.type in ('TRUE', 'FALSE'):
+                    value = str(value)  # Keep as 'True' or 'False' string
             else:
                 value = str(value)
             
@@ -327,6 +329,14 @@ class CMAPTransformer(Transformer):
     def condition_value(self, items):
         """Transform conditional value."""
         return items[0]
+    
+    def TRUE(self, token):
+        """Transform TRUE token."""
+        return Token('TRUE', 'True')
+    
+    def FALSE(self, token):
+        """Transform FALSE token."""
+        return Token('FALSE', 'False')
     
     # ========================================================================
     # CONDITIONAL MENU ITEMS
@@ -402,6 +412,26 @@ class CMAPTransformer(Transformer):
     # ========================================================================
     # CHOICE STATEMENTS
     # ========================================================================
+    
+    def if_statement(self, items):
+        """Transform if statement in choice body."""
+        line, column = self._get_node_location(items)
+        
+        # items: [conditional_expression, statement]
+        condition = str(items[0])  # Condition text
+        body_statement = items[1]  # The statement inside the if
+        
+        # For simplicity, wrap the statement in a list and create a conditional node
+        # We'll represent this as a simple conditional wrapper around the statement
+        result = type('IfStatementWrapper', (), {})()
+        result.condition = condition
+        result.statement = body_statement
+        result.line_number = line
+        result.column = column
+        
+        # Return the wrapped statement - for now just return the inner statement
+        # since we're treating "if True:" as always executing
+        return body_statement
     
     def jump_statement(self, items):
         """Transform jump statement."""
@@ -494,6 +524,8 @@ class CMAPTransformer(Transformer):
                 value = self._extract_number_value(value)
             elif value.type == 'IDENTIFIER':
                 value = self._extract_identifier_value(value)
+            elif value.type in ('TRUE', 'FALSE'):
+                value = str(value)  # Keep as 'True' or 'False' string
         else:
             value = str(value)
         

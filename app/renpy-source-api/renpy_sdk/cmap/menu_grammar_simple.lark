@@ -23,19 +23,26 @@ conditional_choice: STRING "if" conditional_expression ":" choice_body?
 conditional_expression: "not" IDENTIFIER
                       | IDENTIFIER comparison_operator condition_value
                       | IDENTIFIER
+                      | TRUE
+                      | FALSE
+                      | NUMBER
 
 comparison_operator: "==" | "!=" | "<" | ">" | "<=" | ">="
 
-condition_value: STRING | NUMBER | IDENTIFIER | "True" | "False"
+condition_value: STRING | NUMBER | IDENTIFIER | TRUE | FALSE
 
 choice_body: statement+
 
-statement: jump_statement
+statement: if_statement
+         | jump_statement
          | call_statement  
          | return_statement
          | pass_statement
          | python_block
          | generic_statement
+
+// If statement in choice body (e.g., "if True: jump label")
+if_statement: "if" conditional_expression ":" statement
 
 jump_statement: "jump" IDENTIFIER
 
@@ -53,6 +60,11 @@ python_content: /[^\n\r]+/
 generic_statement: /[^\n\r]+/
 
 // Terminals
+// TRUE and FALSE must come BEFORE IDENTIFIER to have higher priority
+TRUE: "True"
+
+FALSE: "False"
+
 IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
 
 STRING: /"([^"\\]|\\.)*"/
