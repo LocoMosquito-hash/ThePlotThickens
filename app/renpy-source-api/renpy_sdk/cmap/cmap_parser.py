@@ -205,12 +205,17 @@ class CMAPTransformer(Transformer):
         """Transform conditional choice."""
         line, column = self._get_node_location(items)
         
-        # items: [STRING, "if", conditional_expression, ":", choice_body?]
+        # Grammar: STRING IF conditional_expression ":" choice_body?
+        # items: [STRING, IF, conditional_expression, choice_body?]
+        # Lark doesn't include literal tokens like ":" in items
         choice_text = self._extract_string_value(items[0])
-        condition_text = str(items[1])  # Raw conditional text
-        body = items[2] if len(items) > 2 else []
+        # items[1] is the IF keyword token (skip it)
+        condition_expr = items[2]  # The conditional_expression
+        body = items[3] if len(items) > 3 else []  # Body is at index 3, not 2
         
         # Create a simple conditional expression node
+        # Store the condition expression text for display
+        condition_text = str(condition_expr) if condition_expr else "unknown"
         condition = ConditionalExpressionNode(
             variable=condition_text,  # Store the full condition as text
             operator=None,
@@ -235,7 +240,8 @@ class CMAPTransformer(Transformer):
     
     def choice_body(self, items):
         """Transform choice body."""
-        return items  # List of choice statements
+        # Filter out None items (from statements we don't care about like stop, with, etc.)
+        return [item for item in items if item is not None]
     
     def statement(self, items):
         """Transform statement."""
@@ -521,6 +527,13 @@ class CMAPTransformer(Transformer):
             line_number=line,
             column=column
         )
+    
+    def stop_statement(self, items):
+        """Transform stop statement (audio control)."""
+        # Grammar: STOP IDENTIFIER (FADEOUT NUMBER)?
+        # items: [STOP, channel] or [STOP, channel, FADEOUT, duration]
+        # We don't care about audio control for flow analysis, return None
+        return None
     
     def with_statement(self, items):
         """Transform standalone with statement (transition)."""

@@ -40,6 +40,7 @@ statement: if_statement
          | pass_statement
          | scene_statement
          | pause_statement
+         | stop_statement
          | with_statement
          | dialogue_statement
          | empty_char_dialogue
@@ -62,6 +63,9 @@ scene_statement: SCENE IDENTIFIER (WITH IDENTIFIER)?
 
 // Pause statement (e.g., "pause", "pause 2.0", "pause 3")
 pause_statement: PAUSE NUMBER?
+
+// Stop statement (e.g., "stop music", "stop music fadeout 1.0")
+stop_statement: STOP IDENTIFIER (FADEOUT NUMBER)?
 
 // Standalone with statement (e.g., "with dissolve", "with fade")
 with_statement: WITH IDENTIFIER
@@ -89,6 +93,8 @@ FALSE.2: "False"
 // Reserve keywords with high priority (priority 2 > default priority 0)
 SCENE.2: "scene"
 PAUSE.2: "pause"
+STOP.2: "stop"
+FADEOUT.2: "fadeout"
 WITH.2: "with"
 JUMP.2: "jump"
 CALL.2: "call"
