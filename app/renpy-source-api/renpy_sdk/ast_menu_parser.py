@@ -576,13 +576,15 @@ class ASTMenuParser:
                         # Set label context for integration
                         enhanced_menu.label_context = current_label
                         
-                        # Check if CMAP extracted any destinations (if not, fall back to regex)
-                        has_destinations = any(
+                        # Check if ALL choices have destinations (if any are missing, fall back to regex)
+                        # This handles cases where CMAP parses block-style if statements but can't
+                        # extract the jump statements inside them
+                        all_choices_have_destinations = all(
                             choice.unconditional_destinations or choice.conditional_paths
                             for choice in enhanced_menu.choices
                         )
                         
-                        if not has_destinations and len(enhanced_menu.choices) > 0:
+                        if not all_choices_have_destinations and len(enhanced_menu.choices) > 0:
                             print(f"[CMAP] ⚠️ CMAP parsed menu but found no destinations, falling back to regex")
                             # Try regex fallback
                             regex_menu = self._parse_single_menu_regex(lines, i + 1, file_path)
