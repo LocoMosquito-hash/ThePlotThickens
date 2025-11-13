@@ -2,7 +2,7 @@
 
 start: menu_definition
 
-menu_definition: "menu" menu_name? ":" menu_body
+menu_definition: MENU menu_name? ":" menu_body
 
 menu_name: IDENTIFIER
 
@@ -18,7 +18,7 @@ character_dialogue: IDENTIFIER STRING
 
 simple_choice: STRING ":" choice_body?
 
-conditional_choice: STRING "if" conditional_expression ":" choice_body?
+conditional_choice: STRING IF conditional_expression ":" choice_body?
 
 conditional_expression: "not" IDENTIFIER
                       | IDENTIFIER comparison_operator condition_value
@@ -38,38 +38,75 @@ statement: if_statement
          | call_statement  
          | return_statement
          | pass_statement
+         | scene_statement
+         | pause_statement
+         | with_statement
+         | dialogue_statement
+         | empty_char_dialogue
          | python_block
-         | generic_statement
+         | inline_python
 
 // If statement in choice body (e.g., "if True: jump label")
-if_statement: "if" conditional_expression ":" statement
+if_statement: IF conditional_expression ":" statement
 
-jump_statement: "jump" IDENTIFIER
+jump_statement: JUMP IDENTIFIER
 
-call_statement: "call" IDENTIFIER
+call_statement: CALL IDENTIFIER
 
-return_statement: "return"
+return_statement: RETURN
 
-pass_statement: "pass"
+pass_statement: PASS
+
+// Scene statement (e.g., "scene bg_room", "scene bg_room with fade")
+scene_statement: SCENE IDENTIFIER (WITH IDENTIFIER)?
+
+// Pause statement (e.g., "pause", "pause 2.0", "pause 3")
+pause_statement: PAUSE NUMBER?
+
+// Standalone with statement (e.g., "with dissolve", "with fade")
+with_statement: WITH IDENTIFIER
+
+// Dialogue statement in choice body (e.g., 'A "Some text"')
+dialogue_statement: IDENTIFIER STRING
+
+// Empty character narrator dialogue (e.g., '"" "Some text"')
+empty_char_dialogue: EMPTY_STRING STRING
 
 // Python blocks - skip the content
-python_block: "python" ":" python_content*
+python_block: PYTHON ":" python_content*
 
 python_content: /[^\n\r]+/
 
-generic_statement: /[^\n\r]+/
+// Inline Python statement (e.g., "$ dp +1", "$ my_var = True")
+inline_python: "$" /[^\n\r]+/
 
 // Terminals
-// TRUE and FALSE must come BEFORE IDENTIFIER to have higher priority
-TRUE: "True"
+// Keywords must have higher priority than IDENTIFIER using .priority notation
+TRUE.2: "True"
 
-FALSE: "False"
+FALSE.2: "False"
 
+// Reserve keywords with high priority (priority 2 > default priority 0)
+SCENE.2: "scene"
+PAUSE.2: "pause"
+WITH.2: "with"
+JUMP.2: "jump"
+CALL.2: "call"
+RETURN.2: "return"
+PASS.2: "pass"
+PYTHON.2: "python"
+IF.2: "if"
+MENU.2: "menu"
+
+// IDENTIFIER has default priority (0), so keywords will match first
 IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
+
+// EMPTY_STRING must have higher priority than STRING to match "" before general strings
+EMPTY_STRING.3: "\"\""
 
 STRING: /"([^"\\]|\\.)*"/
 
-NUMBER: /\d+/
+NUMBER: /\d+\.?\d*/
 
 // Whitespace and comments
 %import common.WS

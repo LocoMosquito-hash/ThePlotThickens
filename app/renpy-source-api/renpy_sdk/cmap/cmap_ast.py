@@ -214,6 +214,30 @@ class PassStatementNode(ChoiceStatementNode):
 
 
 @dataclass
+class SceneStatementNode(ChoiceStatementNode):
+    """Represents a scene statement."""
+    image_name: Optional[str] = None  # The scene image (e.g., "bg_room")
+    transition: Optional[str] = None  # Optional transition (e.g., "fade", "dissolve")
+    
+    def validate(self) -> List[str]:
+        """Validate the scene statement."""
+        return []  # Scene statements are always valid (image_name can be optional)
+
+
+@dataclass
+class PauseStatementNode(ChoiceStatementNode):
+    """Represents a pause statement."""
+    duration: Optional[float] = None  # Optional pause duration in seconds (e.g., 2.0, 3)
+    
+    def validate(self) -> List[str]:
+        """Validate the pause statement."""
+        errors = []
+        if self.duration is not None and self.duration < 0:
+            errors.append(f"Invalid pause duration {self.duration} at line {self.line_number}")
+        return errors
+
+
+@dataclass
 class PythonStatementNode(ChoiceStatementNode):
     """Represents a Python code statement."""
     code: str = ""

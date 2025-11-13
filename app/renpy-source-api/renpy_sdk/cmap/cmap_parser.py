@@ -436,7 +436,9 @@ class CMAPTransformer(Transformer):
     def jump_statement(self, items):
         """Transform jump statement."""
         line, column = self._get_node_location(items)
-        target = str(items[0])
+        # Grammar: JUMP IDENTIFIER
+        # items: [JUMP, IDENTIFIER]
+        target = str(items[1])
         
         return JumpStatementNode(
             target=target,
@@ -447,8 +449,10 @@ class CMAPTransformer(Transformer):
     def call_statement(self, items):
         """Transform call statement."""
         line, column = self._get_node_location(items)
-        target = str(items[0])
-        params = items[1] if len(items) > 1 else []
+        # Grammar: CALL IDENTIFIER
+        # items: [CALL, IDENTIFIER]
+        target = str(items[1])
+        params = items[2] if len(items) > 2 else []
         
         return CallStatementNode(
             target=target,
@@ -460,7 +464,9 @@ class CMAPTransformer(Transformer):
     def return_statement(self, items):
         """Transform return statement."""
         line, column = self._get_node_location(items)
-        value = items[0] if len(items) > 0 else None
+        # Grammar: RETURN
+        # items: [RETURN]
+        value = None
         
         return ReturnStatementNode(
             value=value,
@@ -471,11 +477,67 @@ class CMAPTransformer(Transformer):
     def pass_statement(self, items):
         """Transform pass statement."""
         line, column = self._get_node_location(items)
+        # Grammar: PASS
+        # items: [PASS]
         
         return PassStatementNode(
             line_number=line,
             column=column
         )
+    
+    def scene_statement(self, items):
+        """Transform scene statement."""
+        line, column = self._get_node_location(items)
+        
+        # Grammar: SCENE IDENTIFIER (WITH IDENTIFIER)?
+        # items: [SCENE, IDENTIFIER] or [SCENE, IDENTIFIER, WITH, IDENTIFIER]
+        image_name = str(items[1])
+        
+        # Check if there's a transition (4 items means WITH and transition present)
+        transition = None
+        if len(items) >= 4:
+            transition = str(items[3])  # The transition name after WITH
+        
+        return SceneStatementNode(
+            image_name=image_name,
+            transition=transition,
+            line_number=line,
+            column=column
+        )
+    
+    def pause_statement(self, items):
+        """Transform pause statement."""
+        line, column = self._get_node_location(items)
+        
+        # Grammar: PAUSE NUMBER?
+        # items: [PAUSE] or [PAUSE, NUMBER]
+        # We only care about the optional NUMBER (items[1] if present)
+        duration = None
+        if len(items) > 1:  # Has NUMBER
+            duration = self._extract_number_value(items[1])
+        
+        return PauseStatementNode(
+            duration=duration,
+            line_number=line,
+            column=column
+        )
+    
+    def with_statement(self, items):
+        """Transform standalone with statement (transition)."""
+        # Grammar: WITH IDENTIFIER
+        # items: [WITH, IDENTIFIER]
+        # We don't care about transitions for flow analysis, return None
+        return None
+    
+    def empty_char_dialogue(self, items):
+        """Transform empty character narrator dialogue ('"" "text"')."""
+        # We don't care about dialogue for flow analysis, return None
+        return None
+    
+    def inline_python(self, items):
+        """Transform inline Python statement ($ code)."""
+        # We don't care about Python code for flow analysis, return None
+        return None
     
     def python_statement(self, items):
         """Transform Python statement."""
