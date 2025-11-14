@@ -75,17 +75,19 @@ simple_function_call: IDENTIFIER "(" function_args? ")"
 
 comparison: IDENTIFIER comparison_operator conditional_value
 
-comparison_operator: "==" | "!=" | "<" | ">" | "<=" | ">="
+comparison_operator: "==" | "!=" | "<" | ">" | "<=" | ">=" | IS NOT? | NOT IN | IN
 
 logical_operator: AND | OR
 
-conditional_value: STRING | NUMBER | DECIMAL | IDENTIFIER | dotted_identifier
+conditional_value: STRING | NUMBER | DECIMAL | BOOLEAN | IDENTIFIER | dotted_identifier
 
 parenthesized_condition: "(" conditional_expression ")"
 
 NOT.2: "not"
 AND.2: "and"
 OR.2: "or"
+IS.2: "is"
+IN.2: "in"
 
 conditional_body: (conditional_body_item _NEWLINE?)+
 
@@ -226,13 +228,22 @@ imagebutton_multi_line: IMAGEBUTTON imagebutton_anchor? ":" _NEWLINE _INDENT ima
 imagebutton_anchor: ANCHOR coordinate_tuple
 
 imagebutton_body: (imagebutton_body_item | _NEWLINE)+
-imagebutton_body_item: imagebutton_property | action_statement
+imagebutton_body_item: imagebutton_conditional | imagebutton_property | action_statement
+
+// Conditional blocks inside imagebutton (Vinovella pattern)
+imagebutton_conditional: if_imagebutton_block elif_imagebutton_block* else_imagebutton_block?
+if_imagebutton_block: IF conditional_expression ":" _NEWLINE _INDENT imagebutton_conditional_body _DEDENT
+elif_imagebutton_block: ELIF conditional_expression ":" _NEWLINE _INDENT imagebutton_conditional_body _DEDENT
+else_imagebutton_block: ELSE ":" _NEWLINE _INDENT imagebutton_conditional_body _DEDENT
+imagebutton_conditional_body: (imagebutton_property | action_statement | _NEWLINE)+
 
 imagebutton_properties: imagebutton_property+
 imagebutton_property: idle_property
                     | hover_property
                     | focus_mask_property
                     | auto_property
+                    | hovered_property
+                    | unhovered_property
                     | at_property
                     | hover_sound_property
                     | xoffset_property
@@ -245,9 +256,11 @@ imagebutton_property: idle_property
 // Imagebutton-specific properties
 idle_property: IDLE string_expression
 hover_property: HOVER string_expression
-focus_mask_property: FOCUS_MASK BOOLEAN
+focus_mask_property: FOCUS_MASK (BOOLEAN | string_expression)
 auto_property: AUTO string_expression
 at_property: AT IDENTIFIER
+hovered_property: HOVERED other_action
+unhovered_property: UNHOVERED other_action
 tooltip_property: TOOLTIP ("_(" STRING ")" | STRING)
 
 // String expression: supports simple strings or concatenation
@@ -294,11 +307,14 @@ action_statement: action_keyword action_sequence
 // Support both 'action' and 'clicked' keywords (Babysitter game uses 'clicked')
 action_keyword: ACTION | CLICKED
 
-// Action sequence: single action, comma-separated actions, or list-wrapped actions
-action_sequence: action_list_wrapped | action_chain
+// Action sequence: single action, comma-separated actions, or wrapped actions (list/tuple)
+action_sequence: action_list_wrapped | action_tuple_wrapped | action_chain
 
 // List-wrapped actions: [Action1(...), Action2(...), ...]
 action_list_wrapped: "[" action_chain "]"
+
+// Tuple-wrapped actions: (Action1(...), Action2(...), ...)
+action_tuple_wrapped: "(" action_chain ")"
 
 // Comma-separated chain of actions: Action1(...), Action2(...), ...
 action_chain: generic_action ("," generic_action)*
@@ -324,7 +340,15 @@ action_arguments: action_arg ("," action_arg)*
 action_arg: IDENTIFIER "=" action_arg_value  // Keyword argument (e.g., transition=dis)
           | action_arg_value                 // Positional argument
 
-action_arg_value: STRING | NUMBER | DECIMAL | IDENTIFIER | BOOLEAN | dotted_identifier
+// Action argument value - recursively support nested calls
+?action_arg_value: STRING 
+                 | NUMBER 
+                 | DECIMAL 
+                 | BOOLEAN 
+                 | dotted_function_call 
+                 | dotted_identifier 
+                 | IDENTIFIER "(" action_arguments? ")"  // Function call
+                 | IDENTIFIER                             // Plain identifier
 
 // ============================================================================
 // IMAGEMAP: Container for hotspots (basic support)
@@ -440,6 +464,8 @@ START.2: "Start"
 AUTO.2: "auto"
 IDLE.2: "idle"
 HOVER.2: "hover"
+HOVERED.2: "hovered"
+UNHOVERED.2: "unhovered"
 FOCUS_MASK.2: "focus_mask"
 AT.2: "at"
 TOOLTIP.2: "tooltip"

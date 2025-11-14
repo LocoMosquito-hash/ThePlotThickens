@@ -587,8 +587,11 @@ class CSAPTransformer(Transformer):
     def focus_mask_property(self, items):
         """Transform focus_mask property."""
         line, column = self._get_node_location(items)
-        # items[0] is a BOOLEAN token (True/False)
-        prop_value = str(items[0]).strip() if items else "True"
+        # items[0] is a BOOLEAN token (True/False) or string_expression
+        if items:
+            prop_value = str(items[0]).strip() if isinstance(items[0], Token) else items[0]
+        else:
+            prop_value = "True"
         return PropertyNode(
             property_name='focus_mask',
             property_value=prop_value,
@@ -679,12 +682,63 @@ class CSAPTransformer(Transformer):
         )
     
     def imagebutton_body(self, items):
-        """Transform imagebutton body - filter out tokens, keep only items."""
-        return [item for item in items if not isinstance(item, Token)]
+        """Transform imagebutton body - filter out tokens, flatten conditionals."""
+        result = []
+        for item in items:
+            if isinstance(item, Token):
+                continue
+            elif isinstance(item, list):
+                # This is a flattened conditional block - extend the result
+                result.extend(item)
+            else:
+                # Single property or action
+                result.append(item)
+        return result
     
     def imagebutton_body_item(self, items):
         """Transform imagebutton body item."""
         return items[0] if items else None
+    
+    def imagebutton_conditional(self, items):
+        """
+        Transform conditional blocks inside imagebutton.
+        For flow visualization, we extract actions from ALL branches (if/elif/else).
+        """
+        # items contains: if_block, [elif_blocks...], [else_block]
+        # Each block returns a list of properties and actions
+        # Flatten all branches into a single list
+        result = []
+        for item in items:
+            if isinstance(item, list):
+                result.extend(item)
+        return result
+    
+    def if_imagebutton_block(self, items):
+        """Transform if block inside imagebutton."""
+        # items: conditional_expression, imagebutton_conditional_body
+        # We only care about the body (properties/actions)
+        for item in items:
+            if isinstance(item, list):
+                return item
+        return []
+    
+    def elif_imagebutton_block(self, items):
+        """Transform elif block inside imagebutton."""
+        # Same as if_imagebutton_block
+        for item in items:
+            if isinstance(item, list):
+                return item
+        return []
+    
+    def else_imagebutton_block(self, items):
+        """Transform else block inside imagebutton."""
+        # items: imagebutton_conditional_body
+        return items[0] if items else []
+    
+    def imagebutton_conditional_body(self, items):
+        """Transform conditional body inside imagebutton."""
+        # Filter out tokens and newlines, keep properties and actions
+        return [item for item in items if not isinstance(item, Token)]
     
     def imagebutton_line(self, items):
         """Transform imagebutton line."""
@@ -738,6 +792,32 @@ class CSAPTransformer(Transformer):
         return PropertyNode(
             property_name='hover',
             property_value=property_value,
+            line_number=line,
+            column=column
+        )
+    
+    def hovered_property(self, items):
+        """Transform hovered property (event handler)."""
+        line, column = self._get_node_location(items)
+        # items[0] = other_action (function call like Function(...))
+        # We store it as a string for now since we don't track event handlers for flow
+        prop_value = str(items[0]) if items else ""
+        return PropertyNode(
+            property_name='hovered',
+            property_value=prop_value,
+            line_number=line,
+            column=column
+        )
+    
+    def unhovered_property(self, items):
+        """Transform unhovered property (event handler)."""
+        line, column = self._get_node_location(items)
+        # items[0] = other_action (function call like Function(...))
+        # We store it as a string for now since we don't track event handlers for flow
+        prop_value = str(items[0]) if items else ""
+        return PropertyNode(
+            property_name='unhovered',
+            property_value=prop_value,
             line_number=line,
             column=column
         )
@@ -1212,6 +1292,11 @@ class CSAPTransformer(Transformer):
     
     def action_list_wrapped(self, items):
         """Transform list-wrapped actions: [Action1(...), Action2(...), ...]"""
+        # items[0] is action_chain
+        return items[0]
+    
+    def action_tuple_wrapped(self, items):
+        """Transform tuple-wrapped actions: (Action1(...), Action2(...), ...)"""
         # items[0] is action_chain
         return items[0]
     
