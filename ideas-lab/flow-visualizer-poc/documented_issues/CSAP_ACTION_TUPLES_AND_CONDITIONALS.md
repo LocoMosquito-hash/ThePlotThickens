@@ -7,6 +7,7 @@
 ## Summary
 
 Added support for three advanced Ren'Py screen patterns commonly used in visual novels:
+
 1. **Action tuples** - Multiple actions in parentheses
 2. **Conditionals inside imagebutton bodies** - if/else blocks for properties
 3. **Event handler properties** - `hovered` and `unhovered` callbacks
@@ -20,6 +21,7 @@ Added support for three advanced Ren'Py screen patterns commonly used in visual 
 **File:** `T:\AG\VinovellaUniversity-0.4.17-pc\game\code\Book-1\Chapter-4\s00.rpy:134`
 
 The screen uses a pattern with:
+
 - 3 imagebuttons inside an hbox
 - Action tuples: `action (Function(...), Jump(...))`
 - Conditional properties based on game state
@@ -28,16 +30,19 @@ The screen uses a pattern with:
 ### Expected Behavior
 
 CSAP should extract:
+
 - 3 imagebutton elements
 - Jump connections to: `b1c04_nv`, `b1c04_sm`, `b1c04_zp`
 
 ### Actual Behavior
 
 **Before fixes:**
+
 - ❌ Lark parse error: "Unexpected token"
 - ❌ 0 elements extracted
 
 **After grammar fixes:**
+
 - ✅ Lark parse succeeds
 - ✅ Screen extraction works (2063 chars)
 - ❌ 0 elements extracted (transformer issue)
@@ -110,6 +115,7 @@ def action_tuple_wrapped(self, items):
 ```
 
 **Rationale:**
+
 - Ren'Py supports both list `[]` and tuple `()` syntax for multiple actions
 - Both are functionally equivalent and execute actions sequentially
 - Parser extracts only Jump/Call actions for flow analysis, ignoring utility actions
@@ -161,6 +167,7 @@ def imagebutton_body(self, items):
 ```
 
 **Rationale:**
+
 - For flow visualization, we treat conditions as **metadata**, not executable code
 - We extract actions from **all branches** to show all possible paths
 - This follows the established pattern from conditional menu choices
@@ -209,6 +216,7 @@ def unhovered_property(self, items):
 ```
 
 **Rationale:**
+
 - `hovered` and `unhovered` are event callbacks, not flow control actions
 - We parse them as properties to prevent grammar errors
 - They don't affect flow visualization (not extracted as connections)
@@ -219,12 +227,12 @@ def unhovered_property(self, items):
 
 Created test files to verify each component:
 
-| Test | Pattern | Result |
-|------|---------|--------|
-| `test_action_tuple.py` | Single action vs tuple | ✅ Both work |
-| `test_conditional_with_tuple.py` | Conditional + tuple | ✅ Works |
-| `test_hbox_conditional.py` | Imagebuttons in hbox | ✅ Works |
-| `test_three_buttons.py` | 3 buttons, full pattern | ✅ Works (3/3 actions) |
+| Test                             | Pattern                 | Result                 |
+| -------------------------------- | ----------------------- | ---------------------- |
+| `test_action_tuple.py`           | Single action vs tuple  | ✅ Both work           |
+| `test_conditional_with_tuple.py` | Conditional + tuple     | ✅ Works               |
+| `test_hbox_conditional.py`       | Imagebuttons in hbox    | ✅ Works               |
+| `test_three_buttons.py`          | 3 buttons, full pattern | ✅ Works (3/3 actions) |
 
 ### Real Game File Test
 
@@ -238,6 +246,7 @@ Elements:   ❌ 0 elements extracted
 ```
 
 **Analysis:**
+
 - Grammar correctly parses the screen
 - Parse tree is created without errors
 - **Transformers fail to create element nodes**
@@ -256,7 +265,8 @@ Elements:   ❌ 0 elements extracted
 ### ⚠️ Known Limitation
 
 **Nested Function Calls in Action Arguments:**
-- Pattern: `Function(callback, (_("text")))` 
+
+- Pattern: `Function(callback, (_("text")))`
 - Status: Grammar ambiguity prevents parsing
 - Workaround: Developers can use simpler patterns
 - Impact: Rare edge case (translation functions inside event handlers)
@@ -264,21 +274,25 @@ Elements:   ❌ 0 elements extracted
 ### Diagnostic Results
 
 **Simple Test (Working):**
+
 ```
 if some_var:
     action Jump("label1")
 ```
+
 - ✅ Parse: SUCCESS
-- ✅ Transform: SUCCESS  
+- ✅ Transform: SUCCESS
 - ✅ Elements: 1 (hbox with 1 child)
 
 **Vinovella Screen (Partial):**
+
 ```
 if b1c04_nv_investigate is False:
     action (Function(...), Jump("b1c04_nv"))
     hovered Function(show_hover_notify, (_("Investigate Nia")))
 ```
-- ❌ Parse: FAILS at nested `_("...")` 
+
+- ❌ Parse: FAILS at nested `_("...")`
 - Reason: `IDENTIFIER "(" action_arguments? ")"` creates ambiguity
 - Location: Line 10, column 53 in extracted screen
 
@@ -294,12 +308,14 @@ The Vinovella failure is due to a **grammar ambiguity**:
 6. Parse fails
 
 **Why the ambiguity is hard to resolve:**
+
 - Both `IDENTIFIER` and `IDENTIFIER "(" ...` start with IDENTIFIER
 - Earley parser evaluates alternatives left-to-right
 - By the time parser sees `(`, it's already committed to IDENTIFIER
 - Restructuring requires lookahead or grammar redesign
 
 **Potential Solutions (Future Work):**
+
 1. Use Lark's `>>` lookahead operator
 2. Restructure action_arg_value to use a separate lexer mode
 3. Pre-process nested function calls before parsing
@@ -323,6 +339,7 @@ This implementation successfully adds support for **6 major Ren'Py patterns**:
 ### Known Limitation
 
 One edge case remains unsupported:
+
 - **Nested function calls in action arguments** (e.g., `Function(callback, (_("text")))`)
 - This is a grammar ambiguity issue requiring significant restructuring
 - Affects: ~1-2% of screens (those using translation functions in event handlers)
@@ -330,14 +347,14 @@ One edge case remains unsupported:
 
 ### Testing Status
 
-| Pattern | Grammar | Transform | Real Files | Notes |
-|---------|---------|-----------|------------|-------|
-| Action tuples | ✅ | ✅ | ⚠️ | Blocked by nested call issue |
-| Conditionals | ✅ | ✅ | ⚠️ | Blocked by nested call issue |
-| Event handlers | ✅ | ✅ | ⚠️ | Blocked by nested call issue |
-| `is`/`is not` | ✅ | ✅ | ⚠️ | Blocked by nested call issue |
-| `in`/`not in` | ✅ | ✅ | ⚠️ | Blocked by nested call issue |
-| Boolean values | ✅ | ✅ | ⚠️ | Blocked by nested call issue |
+| Pattern        | Grammar | Transform | Real Files | Notes                        |
+| -------------- | ------- | --------- | ---------- | ---------------------------- |
+| Action tuples  | ✅      | ✅        | ⚠️         | Blocked by nested call issue |
+| Conditionals   | ✅      | ✅        | ⚠️         | Blocked by nested call issue |
+| Event handlers | ✅      | ✅        | ⚠️         | Blocked by nested call issue |
+| `is`/`is not`  | ✅      | ✅        | ⚠️         | Blocked by nested call issue |
+| `in`/`not in`  | ✅      | ✅        | ⚠️         | Blocked by nested call issue |
+| Boolean values | ✅      | ✅        | ⚠️         | Blocked by nested call issue |
 
 **Note:** All features work individually. The Vinovella screen failure is specifically due to the nested function call pattern, not the features themselves.
 
@@ -349,6 +366,7 @@ One edge case remains unsupported:
 ## Files Modified
 
 ### Grammar
+
 - `ideas-lab/flow-visualizer-poc/csap/grammars/enhanced_screen.lark`
   - Lines 297-304: Action tuple support
   - Lines 228-236: Conditional blocks in imagebutton
@@ -356,6 +374,7 @@ One edge case remains unsupported:
   - Lines 457-458: Event handler terminals
 
 ### Parser/Transformer
+
 - `ideas-lab/flow-visualizer-poc/csap/csap_parser.py`
   - Lines 1218-1221: `action_tuple_wrapped` transformer
   - Lines 681-693: `imagebutton_body` transformer (updated)
@@ -390,4 +409,3 @@ screen test_all_features():
 ```
 
 **Expected:** 1 imagebutton element with Jump to "destination"
-
