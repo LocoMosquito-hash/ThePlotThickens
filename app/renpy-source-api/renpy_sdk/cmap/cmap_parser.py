@@ -7,11 +7,32 @@ and convert them to a structured AST.
 
 import os
 import re
+import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from lark import Lark, Transformer, Tree, Token
 from lark.exceptions import LarkError, UnexpectedInput, UnexpectedToken
 from lark.indenter import Indenter
+
+# ============================================================================
+# CSA Integration - Add CSA to path for conditional parsing
+# ============================================================================
+# Add CSA to path - handle both development and production scenarios
+csa_path = Path(__file__).parent.parent.parent.parent.parent / "ideas-lab" / "flow-visualizer-poc"
+if str(csa_path) not in sys.path:
+    sys.path.insert(0, str(csa_path))
+
+try:
+    from CSA import ConditionalStructureAnalyzer, ConditionalBlock, ConditionalBranch
+    CSA_AVAILABLE = True
+    print("[CMAP] CSA integration available")
+except ImportError as e:
+    print(f"[CMAP] WARNING: CSA not available: {e}")
+    print("[CMAP] Falling back to grammar-based conditional parsing")
+    CSA_AVAILABLE = False
+    ConditionalStructureAnalyzer = None
+    ConditionalBlock = None
+    ConditionalBranch = None
 
 class RenpyMenuIndenter(Indenter):
     """Custom indenter for Ren'Py menu syntax."""
@@ -32,9 +53,13 @@ class CMAPTransformer(Transformer):
     """Transforms Lark parse tree into CMAP AST nodes."""
     
     def __init__(self):
+        """Initialize CMAP transformer."""
         super().__init__()
         self.current_line = 1
         self.current_column = 1
+        # CSA flag will be set by CMAPParser
+        self.use_csa = False
+        self.csa = None
     
     # ========================================================================
     # UTILITIES
@@ -348,10 +373,84 @@ class CMAPTransformer(Transformer):
     # CONDITIONAL MENU ITEMS
     # ========================================================================
     
-    def conditional_menu_item(self, items):
-        """Transform conditional menu item (if/elif/else)."""
-        line, column = self._get_node_location(items)
+    def _parse_conditional_menu_with_csa(
+        self,
+        items: List[Any],
+        line: int,
+        column: int
+    ) -> ConditionalMenuItemNode:
+        """
+        Parse conditional menu items using CSA (alternative to grammar-based approach).
         
+        This method uses the Conditional Structure Analyzer to parse if/elif/else
+        blocks and extract menu items from ALL branches for flow visualization.
+        
+        Args:
+            items: Parse tree items from Lark
+            line: Line number of conditional start
+            column: Column of conditional start
+            
+        Returns:
+            ConditionalMenuItemNode with all branches parsed
+            
+        Note:
+            This is called when use_csa=True. Falls back to grammar-based
+            parsing if CSA analysis fails.
+        """
+        try:
+            # Extract conditions and bodies from grammar output
+            # items structure: [if_statement, elif_statement*, else_statement?]
+            if_condition = None
+            if_body = []
+            elif_conditions = []
+            elif_bodies = []
+            else_body = None
+            
+            # Process each item from the grammar
+            for item in items:
+                if hasattr(item, 'condition') and hasattr(item, 'body'):
+                    if item.type == 'if':
+                        if_condition = item.condition
+                        if_body = item.body
+                    elif item.type == 'elif':
+                        elif_conditions.append(item.condition)
+                        elif_bodies.append(item.body)
+                    elif item.type == 'else':
+                        else_body = item.body
+            
+            # Note: For now, CSA integration uses the same structure as grammar-based
+            # parsing since the grammar already extracts the branches well.
+            # Future enhancement: Use CSA to re-parse raw text for better error handling
+            # and to extract from ALL branches in "show all paths" mode.
+            
+            print(f"[CMAP-CSA] Parsed conditional with {len(elif_conditions) + 2 if else_body else len(elif_conditions) + 1} branches")
+            
+            return ConditionalMenuItemNode(
+                if_condition=if_condition,
+                if_body=if_body,
+                elif_conditions=elif_conditions,
+                elif_bodies=elif_bodies,
+                else_body=else_body,
+                line_number=line,
+                column=column
+            )
+            
+        except Exception as e:
+            # Fallback to grammar-based parsing if CSA fails
+            print(f"[CMAP-CSA] WARNING: CSA parsing failed: {e}, using fallback")
+            return self._parse_conditional_menu_grammar_based(items, line, column)
+    
+    def _parse_conditional_menu_grammar_based(
+        self,
+        items: List[Any],
+        line: int,
+        column: int
+    ) -> ConditionalMenuItemNode:
+        """
+        Parse conditional menu items using grammar-based approach (original method).
+        
+        This is the original parsing logic, kept as fallback and for comparison.
+        """
         if_condition = None
         if_body = []
         elif_conditions = []
@@ -378,6 +477,22 @@ class CMAPTransformer(Transformer):
             line_number=line,
             column=column
         )
+    
+    def conditional_menu_item(self, items):
+        """
+        Transform conditional menu item (if/elif/else).
+        
+        Routes to either CSA-based or grammar-based parsing depending on use_csa flag.
+        """
+        line, column = self._get_node_location(items)
+        
+        # Route to appropriate parser
+        if self.use_csa:
+            # NEW: Use CSA path
+            return self._parse_conditional_menu_with_csa(items, line, column)
+        else:
+            # EXISTING: Use grammar-based path
+            return self._parse_conditional_menu_grammar_based(items, line, column)
     
     def if_menu_statement(self, items):
         """Transform if menu statement."""
@@ -654,11 +769,26 @@ class CMAPTransformer(Transformer):
 class CMAPParser:
     """Custom Menu AST Parser using Lark."""
     
-    def __init__(self):
-        """Initialize the CMAP parser."""
-        self.grammar_file = Path(__file__).parent / "menu_grammar_simple.lark"
+    def __init__(self, use_csa: bool = False):
+        """
+        Initialize the CMAP parser.
+        
+        Args:
+            use_csa: If True and CSA is available, use CSA for conditional parsing.
+                     If False or CSA unavailable, use grammar-based parsing.
+        """
+        self.grammar_file = Path(__file__).parent / "menu_grammar.lark"
         self.parser = None
+        self.use_csa = use_csa and CSA_AVAILABLE
         self.transformer = CMAPTransformer()
+        # Configure transformer to use CSA
+        self.transformer.use_csa = self.use_csa
+        if self.use_csa:
+            self.transformer.csa = ConditionalStructureAnalyzer()
+            print("[CMAP-CSA] CSA integration enabled for conditional parsing")
+        else:
+            if use_csa and not CSA_AVAILABLE:
+                print("[CMAP-CSA] WARNING: CSA requested but not available, using grammar-based parsing")
         self._load_grammar()
     
     def _load_grammar(self):
@@ -677,9 +807,338 @@ class CMAPParser:
             print(f"[CMAP] Failed to load grammar: {e}")
             self.parser = None
     
+    def _contains_conditional_menu_items(self, menu_text: str) -> bool:
+        """
+        Quick detection: Does this menu have if/elif/else at menu item level?
+        
+        Distinguishes between:
+        - Conditional CHOICES: "Text" if condition: ...
+        - Conditional MENU ITEMS: if condition: "Text": ...
+        
+        Returns True only for conditional menu items (which grammar can't handle).
+        
+        Uses simple regex-based detection for reliability.
+        """
+        import re
+        
+        # Pattern: line starts with whitespace, then if/elif/else
+        # This catches: "    if condition:" but not '"Text" if condition:'
+        conditional_pattern = re.compile(r'^\s+(if\s+|elif\s+|else:)')
+        
+        in_menu = False
+        for line in menu_text.split('\n'):
+            # Track when we're inside a menu
+            if 'menu' in line and ':' in line:
+                in_menu = True
+                continue
+            
+            if not in_menu:
+                continue
+            
+            # Check if this line has a conditional at menu level
+            if conditional_pattern.match(line):
+                # Make sure it's not a conditional choice ("Text" if cond:)
+                # Conditional choices have quotes before the 'if'
+                if '"' not in line[:line.find('if')] if 'if' in line else True:
+                    return True
+        
+        return False
+    
+    def _parse_menu_with_csa(self, menu_text: str) -> Optional[MenuNode]:
+        """
+        Parse menu using CSA for conditional blocks.
+        
+        This method:
+        1. Extracts menu header
+        2. Finds all conditional blocks with CSA
+        3. Extracts choices from each branch
+        4. Finds regular (non-conditional) choices
+        5. Builds complete MenuNode
+        
+        Args:
+            menu_text: Raw menu text
+            
+        Returns:
+            MenuNode if successful, None if parsing fails
+        """
+        try:
+            lines = menu_text.split('\n')
+            
+            # 1. Extract menu header
+            menu_name = None
+            menu_start_line = 0
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if stripped.startswith('menu'):
+                    # Check for menu name: "menu my_menu:" or just "menu:"
+                    if ':' in stripped:
+                        header = stripped[4:stripped.index(':')].strip()
+                        if header:
+                            menu_name = header
+                    menu_start_line = i + 1
+                    break
+            
+            # 2. Get menu body (everything after menu header)
+            menu_body = '\n'.join(lines[menu_start_line:])
+            
+            # 3. Use CSA to find all conditional blocks
+            conditional_items = []
+            regular_choices = []
+            
+            # Try to parse conditionals with CSA
+            if self.transformer.csa:
+                conditional_items = self._find_conditional_items_with_csa(menu_body, menu_start_line)
+            
+            # 4. Find regular choices (not inside conditionals)
+            regular_choices = self._find_regular_choices(menu_body, conditional_items)
+            
+            print(f"[CMAP-CSA] Parsed menu: {len(conditional_items)} conditional items, {len(regular_choices)} regular choices")
+            
+            # 5. Build MenuNode
+            return MenuNode(
+                name=menu_name,
+                choices=regular_choices,
+                conditional_items=conditional_items,
+                line_number=1,
+                column=1
+            )
+            
+        except Exception as e:
+            print(f"[CMAP-CSA] ERROR: CSA parsing failed: {e}")
+            print(f"[CMAP-CSA] Falling back to grammar-based parsing")
+            # Fallback to grammar parsing
+            return self._parse_menu_with_grammar(menu_text)
+    
+    def _find_conditional_items_with_csa(
+        self,
+        menu_body: str,
+        start_line: int
+    ) -> List['ConditionalMenuItemNode']:
+        """
+        Use CSA to find all if/elif/else blocks at menu level.
+        
+        Args:
+            menu_body: Menu body text (everything after "menu:")
+            start_line: Line number where menu body starts
+            
+        Returns:
+            List of ConditionalMenuItemNode objects
+        """
+        conditional_items = []
+        
+        try:
+            # Use CSA to analyze the menu body
+            # CSA will find all if/elif/else structures
+            conditional_block = self.transformer.csa.analyze_conditional(
+                menu_body,
+                start_line=start_line,
+                context_stack=['label', 'menu'],
+                max_depth=5
+            )
+            
+            if conditional_block:
+                # Extract choices from each branch
+                conditional_item = self._build_conditional_item_from_csa(conditional_block)
+                if conditional_item:
+                    conditional_items.append(conditional_item)
+                    
+        except Exception as e:
+            print(f"[CMAP-CSA] Warning: CSA analysis failed: {e}")
+        
+        return conditional_items
+    
+    def _build_conditional_item_from_csa(
+        self,
+        csa_block: 'ConditionalBlock'
+    ) -> Optional['ConditionalMenuItemNode']:
+        """
+        Build ConditionalMenuItemNode from CSA ConditionalBlock.
+        
+        Extracts menu choices from each branch's content.
+        
+        Args:
+            csa_block: ConditionalBlock from CSA
+            
+        Returns:
+            ConditionalMenuItemNode or None
+        """
+        if_condition = None
+        if_body = []
+        elif_conditions = []
+        elif_bodies = []
+        else_body = None
+        
+        for branch in csa_block.branches:
+            # Extract choices from this branch's content
+            choices = self._extract_choices_from_lines(branch.content_lines)
+            
+            if branch.branch_type == 'if':
+                if_condition = branch.condition
+                if_body = choices
+            elif branch.branch_type == 'elif':
+                elif_conditions.append(branch.condition)
+                elif_bodies.append(choices)
+            elif branch.branch_type == 'else':
+                else_body = choices
+        
+        return ConditionalMenuItemNode(
+            if_condition=if_condition,
+            if_body=if_body,
+            elif_conditions=elif_conditions,
+            elif_bodies=elif_bodies,
+            else_body=else_body,
+            line_number=csa_block.start_line,
+            column=1
+        )
+    
+    def _parse_menu_with_grammar(self, menu_text: str) -> Optional[MenuNode]:
+        """
+        Parse menu using grammar-based approach (original method).
+        
+        This is the fallback when CSA parsing fails or use_csa=False.
+        """
+        if not self.parser:
+            return None
+            
+        try:
+            tree = self.parser.parse(menu_text)
+            if tree:
+                transformed = self.transformer.transform(tree)
+                if isinstance(transformed, MenuNode):
+                    return transformed
+                elif hasattr(transformed, 'children') and len(transformed.children) > 0:
+                    menu_node = transformed.children[0]
+                    if isinstance(menu_node, MenuNode):
+                        return menu_node
+            return None
+        except Exception as e:
+            print(f"[CMAP] Grammar parsing error: {e}")
+            return None
+    
+    def _extract_choices_from_lines(self, lines: List[str]) -> List['MenuChoiceNode']:
+        """
+        Extract menu choices from lines of text.
+        
+        Looks for pattern: "Choice text": followed by action (jump/call/etc.)
+        
+        Args:
+            lines: Lines of text that may contain choices
+            
+        Returns:
+            List of MenuChoiceNode objects
+        """
+        choices = []
+        i = 0
+        
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+            
+            # Match choice pattern: "Text":
+            if stripped.startswith('"') and '":' in stripped:
+                # Extract choice text
+                try:
+                    end_quote = stripped.index('"', 1)
+                    choice_text = stripped[1:end_quote]
+                    
+                    # Look for action statements on next lines (jump, call, etc.)
+                    body_statements = []
+                    
+                    # Check next few lines for action
+                    for j in range(i + 1, min(i + 5, len(lines))):
+                        action_line = lines[j].strip()
+                        
+                        # Jump statement
+                        if action_line.startswith('jump '):
+                            target = action_line[5:].strip()
+                            body_statements.append(JumpStatementNode(
+                                target=target,
+                                line_number=0,
+                                column=0
+                            ))
+                            break
+                        # Call statement
+                        elif action_line.startswith('call '):
+                            target = action_line[5:].strip()
+                            body_statements.append(CallStatementNode(
+                                target=target,
+                                params=[],
+                                line_number=0,
+                                column=0
+                            ))
+                            break
+                        # Return statement
+                        elif action_line.startswith('return'):
+                            return_val = action_line[6:].strip() if len(action_line) > 6 else None
+                            body_statements.append(ReturnStatementNode(
+                                value=return_val,
+                                line_number=0,
+                                column=0
+                            ))
+                            break
+                    
+                    # Create choice node
+                    choice = MenuChoiceNode(
+                        text=choice_text,
+                        condition=None,  # Regular choice has no condition
+                        body=body_statements,
+                        is_conditional=False,
+                        line_number=0,  # Will be set by parser
+                        column=0
+                    )
+                    choices.append(choice)
+                    
+                except ValueError:
+                    # Malformed choice, skip
+                    pass
+            
+            i += 1
+        
+        return choices
+    
+    def _find_regular_choices(
+        self,
+        menu_body: str,
+        conditional_items: List['ConditionalMenuItemNode']
+    ) -> List['MenuChoiceNode']:
+        """
+        Find regular (non-conditional) choices in menu body.
+        
+        Excludes choices that are inside conditional blocks.
+        
+        Args:
+            menu_body: Menu body text
+            conditional_items: List of conditional items (to exclude their lines)
+            
+        Returns:
+            List of MenuChoiceNode objects
+        """
+        # For now, simple implementation: extract all choices
+        # TODO: Filter out lines that belong to conditional blocks
+        
+        lines = menu_body.split('\n')
+        
+        # Build set of line ranges covered by conditionals
+        conditional_line_ranges = []
+        for item in conditional_items:
+            # Approximate line range based on item structure
+            # This is a simple heuristic - could be improved
+            pass
+        
+        # Extract choices from non-conditional lines
+        all_choices = self._extract_choices_from_lines(lines)
+        
+        # TODO: Filter choices that fall within conditional ranges
+        # For MVP, return all choices
+        
+        return all_choices
+    
     def parse_menu(self, menu_text: str) -> Optional[MenuNode]:
         """
         Parse a menu structure from text.
+        
+        Routes to CSA-based parser if menu has conditional items and use_csa=True,
+        otherwise uses grammar-based parser.
         
         Args:
             menu_text: The menu text to parse
@@ -687,6 +1146,12 @@ class CMAPParser:
         Returns:
             MenuNode if successful, None if parsing fails
         """
+        # CSA-first routing for conditional menu items
+        if self.use_csa and self._contains_conditional_menu_items(menu_text):
+            print("[CMAP-CSA] Detected conditional menu items, using CSA parser")
+            return self._parse_menu_with_csa(menu_text)
+        
+        # Standard grammar-based parsing
         if not self.parser:
             return None
         

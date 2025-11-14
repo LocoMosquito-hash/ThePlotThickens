@@ -11,7 +11,7 @@ menu_name: IDENTIFIER
 
 menu_body: menu_item+
 
-menu_item: menu_set_statement | menu_choice
+menu_item: conditional_menu_item | menu_set_statement | menu_choice
 
 // ============================================================================
 // MENU CHOICES: Basic and conditional choices
