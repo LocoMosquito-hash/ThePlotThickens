@@ -5,6 +5,7 @@
 ## When to Google
 
 ✅ **Search for:**
+
 - Language/framework syntax you're uncertain about
 - Best practices for a specific technology
 - Design patterns and architectural approaches
@@ -84,6 +85,7 @@ Examples:
 ### 3. **Search for Multiple Perspectives**
 
 When facing a design decision, search for:
+
 - Official documentation
 - Stack Overflow discussions
 - Blog posts with real-world examples
@@ -146,6 +148,7 @@ IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
 **Situation:** Encountering Ren'Py syntax you haven't seen before
 
 **Action:**
+
 ```
 1. Search: "Ren'Py [specific syntax] documentation"
 2. Search: "Ren'Py [syntax] examples"
@@ -158,6 +161,7 @@ IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
 **Situation:** Parsing is slow for large games
 
 **Action:**
+
 ```
 1. Search: "Python parser performance optimization"
 2. Search: "[specific tool] performance best practices"
@@ -170,6 +174,7 @@ IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
 **Situation:** Choosing between multiple approaches
 
 **Action:**
+
 ```
 1. Search: "[approach A] vs [approach B] pros cons"
 2. Search: "when to use [approach A]"
@@ -182,6 +187,7 @@ IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
 **Situation:** Encountering unexpected behavior
 
 **Action:**
+
 ```
 1. Search: exact error message in quotes
 2. Search: "[tool] [specific scenario] not working"
@@ -194,6 +200,7 @@ IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/
 **Situation:** Need to design a system component
 
 **Action:**
+
 ```
 1. Search: "[pattern name] design pattern Python"
 2. Search: "[use case] architecture best practices"
@@ -229,6 +236,7 @@ IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/  # Default priority
 ## Common Search Patterns
 
 ### For Syntax
+
 ```
 "[technology] [feature] syntax"
 "[technology] [feature] documentation"
@@ -236,6 +244,7 @@ IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/  # Default priority
 ```
 
 ### For Best Practices
+
 ```
 "[technology] best practices [year]"
 "[technology] [use case] patterns"
@@ -243,6 +252,7 @@ IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/  # Default priority
 ```
 
 ### For Troubleshooting
+
 ```
 "[tool] [error message]"
 "[tool] not working [scenario]"
@@ -250,6 +260,7 @@ IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/  # Default priority
 ```
 
 ### For Comparisons
+
 ```
 "[option A] vs [option B]"
 "when to use [option A]"
@@ -257,6 +268,7 @@ IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/  # Default priority
 ```
 
 ### For Implementation
+
 ```
 "[technology] [feature] tutorial"
 "[technology] [feature] step by step"
@@ -277,5 +289,3 @@ IDENTIFIER: /[a-zA-Z_][a-zA-Z0-9_]*/  # Default priority
 **Philosophy:** It's better to spend 2 minutes Googling than 20 minutes debugging incorrect assumptions.
 
 **Frequency:** Google liberally throughout development - it's a core skill, not a weakness.
-
-

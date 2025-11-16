@@ -5,6 +5,7 @@
 ## The Problem
 
 When tasks run in the background:
+
 - ❌ The model cannot see the output
 - ❌ The model makes assumptions about success/failure
 - ❌ The model continues without verifying results
@@ -263,5 +264,3 @@ run_terminal_cmd(
 **Bottom Line:** When debugging, testing, or diagnosing - ALWAYS foreground, ALWAYS wait, ALWAYS analyze output before continuing.
 
 **Mantra:** "See first, decide second."
-
-
