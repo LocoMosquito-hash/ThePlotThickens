@@ -20,6 +20,7 @@ Key responsibilities:
 """
 
 from typing import Dict, List, Any, Optional, Tuple, Set
+from types import SimpleNamespace
 import sys
 from pathlib import Path
 
@@ -37,27 +38,21 @@ try:
     # Add the app/renpy-source-api directory to the path
     import sys
     from pathlib import Path
+
     app_dir = Path(__file__).parent.parent.parent / "app" / "renpy-source-api"
     if str(app_dir) not in sys.path:
         sys.path.insert(0, str(app_dir))
-    
-    from sdk_integration import HybridRenpyParser, ComplexityDetector
-    from parser import RenpyParser
+
+    from sdk_flow_graph_builder import SDKFlowGraphBuilder
+    from sdk_flow_builder import SDKFlowBuilderError
+
     SDK_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: SDK integration not available: {e}")
-    # Fallback: try to import just the parser
-    try:
-        import sys
-        from pathlib import Path
-        app_dir = Path(__file__).parent.parent.parent / "app" / "renpy-source-api"
-        if str(app_dir) not in sys.path:
-            sys.path.insert(0, str(app_dir))
-        from parser import RenpyParser
-    except ImportError:
-        print("Error: Cannot import RenpyParser")
-        RenpyParser = None
+    RenpyParser = None
     SDK_AVAILABLE = False
+    SDKFlowGraphBuilder = None  # type: ignore
+    SDKFlowBuilderError = RuntimeError  # type: ignore
 
 
 class RenpyFlowDataAdapter(FlowDataProvider):
@@ -70,55 +65,26 @@ class RenpyFlowDataAdapter(FlowDataProvider):
     
     def __init__(self, use_hybrid: bool = True):
         """
-        Initialize the adapter.
-        
-        Args:
-            use_hybrid: Whether to use hybrid parser (regex + SDK) or just regex
+        Initialize the adapter. The `use_hybrid` flag is retained for backwards
+        compatibility but SDK parsing is now mandatory and authoritative.
         """
-        self.use_hybrid = use_hybrid and SDK_AVAILABLE
-        
-        if self.use_hybrid:
-            self.parser = HybridRenpyParser()
-            self.complexity_detector = ComplexityDetector()
+        self.sdk_flow_graph_builder: Optional[SDKFlowGraphBuilder] = None
+
+        if SDK_AVAILABLE:
+            try:
+                self.sdk_flow_graph_builder = SDKFlowGraphBuilder()
+                if not self.sdk_flow_graph_builder.is_available:
+                    reason = self.sdk_flow_graph_builder.initialization_error or "unknown reason"
+                    print(f"[SDK FLOW BUILDER] ⚠️ Unavailable: {reason}")
+            except SDKFlowBuilderError as exc:
+                print(f"[SDK FLOW BUILDER] ⚠️ Initialization failed: {exc}")
+                self.sdk_flow_graph_builder = None
         else:
-            self.parser = RenpyParser()
-        
-        # Try to enhance with CSAP for screen parsing (non-intrusive approach)
-        self.csap_integrated_parser = None
-        try:
-            from csap.csap_integration import CSAPIntegratedParser
-            self.csap_integrated_parser = CSAPIntegratedParser()
-            print("[CSAP DEPLOYMENT] ✅ CSAP integration successful - enhanced screen parsing available")
-        except ImportError as e:
-            print(f"[CSAP DEPLOYMENT] ⚠️ CSAP not available: {e}")
-        except Exception as e:
-            print(f"[CSAP DEPLOYMENT] ⚠️ CSAP initialization failed: {e}")
-            
+            print("[SDK FLOW BUILDER] ⚠️ SDK modules unavailable in this environment.")
+
         self.last_analysis_metadata = {}
         self.last_project_path = None
-    
-    def _enhanced_find_all_screens(self, project_path: str):
-        """Enhanced screen finding with CSAP integration."""
-        if self.csap_integrated_parser:
-            try:
-                print("[CSAP ENHANCED] Using CSAP for screen parsing...")
-                screens = self.csap_integrated_parser.find_all_screens(project_path)
-                print(f"[CSAP ENHANCED] ✅ CSAP parsed {len(screens)} screens successfully")
-                
-                # Debug: Check for parlourfuckcum screen specifically
-                for screen in screens:
-                    if 'parlourfuckcum' in screen.screen_name.lower():
-                        print(f"[CSAP DEBUG] Found parlourfuckcum screen with {len(screen.elements)} elements")
-                        for i, element in enumerate(screen.elements):
-                            print(f"[CSAP DEBUG]   Element {i}: {element.element_type} -> {getattr(element, 'destination', 'NO DEST')}")
-                
-                return screens
-            except Exception as e:
-                print(f"[CSAP ENHANCED] ⚠️ CSAP failed, falling back to regex: {e}")
-        
-        # Fallback to original parser
-        print("[CSAP ENHANCED] Using original regex parser for screens...")
-        return self.parser.find_all_screens(project_path)
+        self._last_flow_graph: Dict[str, Any] = {}
     
     def analyze_project(self, project_path: str, use_sdk: bool = False) -> VisualizationData:
         """
@@ -139,59 +105,28 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             f.flush()
         
         self.last_project_path = project_path
-        
-        if self.use_hybrid:
-            overview = self.parser.analyze_project(
-                project_path, 
-                force_sdk=False, 
-                verbose=True
-            )
-            
-            # Get analysis stats if available
-            if hasattr(self.parser, 'get_analysis_stats'):
-                self.last_analysis_metadata = self.parser.get_analysis_stats()
-                
-            # Add complexity detection info
-            if self.complexity_detector:
-                needs_sdk, reasons = self.complexity_detector.needs_sdk_analysis(project_path, overview)
-                self.last_analysis_metadata.update({
-                    'complexity_detected': needs_sdk,
-                    'complexity_reasons': reasons,
-                    'parser_type': 'hybrid'
-                })
-        else:
-            overview = self.parser.analyze_project(project_path)
-            self.last_analysis_metadata = {
-                'parser_type': 'regex_only',
-                'sdk_available': False
-            }
-        
-        # Build flow graph using parser
-        flow_graph = self.parser.build_flow_graph(project_path)
-        
+
+        flow_graph = self._build_sdk_flow_graph(project_path)
+        overview = self._derive_project_overview(flow_graph, project_path)
+
         # Store flow graph for named menu resolution
         self._last_flow_graph = flow_graph
+
+        label_entries = [node for key, node in flow_graph.items() if not key.startswith('_') and hasattr(node, 'outgoing_flows')]
+        dynamic_flows = sum(
+            1
+            for node in label_entries
+            for flow in getattr(node, 'outgoing_flows', [])
+            if isinstance(flow.flow_type, str) and flow.flow_type.endswith('_expression')
+        )
+        self.last_analysis_metadata['flow_graph_total_labels'] = len(label_entries)
+        self.last_analysis_metadata['dynamic_flow_edges'] = dynamic_flows
         
-        # Integrate AST-enhanced menus into flow graph
-        print(f"[ADAPTER DEBUG] use_hybrid={self.use_hybrid}, has enhanced_menus={hasattr(overview, 'enhanced_menus')}")
-        if hasattr(overview, 'enhanced_menus'):
-            print(f"[ADAPTER DEBUG] enhanced_menus count={len(overview.enhanced_menus) if overview.enhanced_menus else 0}")
-        
-        if self.use_hybrid and hasattr(overview, 'enhanced_menus') and overview.enhanced_menus:
-            print(f"[ADAPTER] Integrating {len(overview.enhanced_menus)} AST-enhanced menus into flow graph...")
-            self._integrate_enhanced_menus_into_flow_graph(flow_graph, overview.enhanced_menus)
-        
-        # Enhance with CSAP screen parsing if available
-        if self.csap_integrated_parser:
-            try:
-                print("[CSAP ENHANCED] Enhancing flow graph with CSAP screen parsing...")
-                enhanced_screens = self._enhanced_find_all_screens(project_path)
-                if enhanced_screens:
-                    # Replace the screen structures with CSAP-enhanced ones
-                    flow_graph['_screen_structures'] = {screen.screen_name: screen for screen in enhanced_screens}
-                    print(f"[CSAP ENHANCED] ✅ Enhanced flow graph with {len(enhanced_screens)} CSAP-parsed screens")
-            except Exception as e:
-                print(f"[CSAP ENHANCED] ⚠️ Screen enhancement failed: {e}")
+        using_sdk_flow = self.last_analysis_metadata.get("flow_graph_source") == "sdk"
+        if using_sdk_flow:
+            print("[AHS PIPELINE] ✅ Using SDK-backed flow graph as hierarchy input.")
+        else:
+            print("[AHS PIPELINE] ⚠️ SDK flow graph missing; this should not happen.")
         
         # PHASE 1: Build authoritative hierarchy (NEW!)
         print(f"[ADAPTER] Building authoritative hierarchy alongside current system...")
@@ -268,6 +203,66 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             },
             analysis_metadata=self.last_analysis_metadata
         )
+        
+    def _build_sdk_flow_graph(self, project_path: str) -> Dict[str, Any]:
+        if not self.sdk_flow_graph_builder or not self.sdk_flow_graph_builder.is_available:
+            reason = (
+                self.sdk_flow_graph_builder.initialization_error
+                if self.sdk_flow_graph_builder
+                else "SDK builder not initialized"
+            )
+            raise SDKFlowBuilderError(f"Ren'Py SDK flow builder unavailable: {reason}")
+
+        print("[SDK FLOW BUILDER] Attempting authoritative AST flow graph...")
+        try:
+            flow_graph = self.sdk_flow_graph_builder.build_flow_graph(project_path)
+            print("[SDK FLOW BUILDER] ✅ Flow graph built via Ren'Py SDK")
+        except Exception as exc:
+            raise SDKFlowBuilderError(f"Ren'Py SDK flow builder failed: {exc}") from exc
+
+        self.last_analysis_metadata = {
+            "flow_graph_source": "sdk",
+            "parser_type": "sdk",
+            "project_path": project_path,
+        }
+        return flow_graph
+
+    def _derive_project_overview(self, flow_graph: Dict[str, Any], project_path: str) -> SimpleNamespace:
+        label_entries = [
+            node
+            for key, node in flow_graph.items()
+            if not key.startswith("_") and hasattr(node, "menu_nodes")
+        ]
+        menu_count = sum(len(getattr(node, "menu_nodes", [])) for node in label_entries)
+        file_count, file_list = self._collect_rpy_files(project_path)
+
+        return SimpleNamespace(
+            total_labels=len(label_entries),
+            total_characters=0,
+            total_menus=menu_count,
+            total_rpy_files=file_count,
+            file_list=file_list,
+        )
+
+    def _collect_rpy_files(self, project_path: str, exclude_token: str = "0x52") -> Tuple[int, List[str]]:
+        base_path = Path(project_path)
+        game_dir = base_path / "game" if (base_path / "game").is_dir() else base_path
+        files: List[str] = []
+
+        if not game_dir.exists():
+            return 0, files
+
+        for rpy_path in game_dir.rglob("*.rpy"):
+            if exclude_token and any(exclude_token.lower() in part.lower() for part in rpy_path.parts):
+                continue
+            try:
+                rel_path = rpy_path.relative_to(game_dir)
+            except ValueError:
+                rel_path = rpy_path
+            files.append(str(rel_path))
+
+        files.sort()
+        return len(files), files
         
     def get_analysis_metadata(self) -> Dict[str, Any]:
         """

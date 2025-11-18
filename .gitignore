@@ -54,3 +54,6 @@ app/renpy-source-api/renpy_sdk/cache/f0fb6cbadc3de1cf82cb7938b65ffbad.json
 ideas-lab/flow-visualizer-poc/*.txt
 .venv/
 app/renpy-source-api/renpy_sdk/cache/aa05179af5d2ebc363e86b0d5ff9e58b.json
+lastcall_start_label.json
+start_label_err.txt
+ideas-lab/flow-visualizer-poc/renpy_sdk_tests_nov/temp_label.json

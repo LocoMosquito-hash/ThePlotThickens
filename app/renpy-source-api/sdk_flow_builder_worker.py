@@ -1,0 +1,392 @@
+#!/usr/bin/env python3
+"""
+Worker script executed by the official Ren'Py SDK python interpreter.
+
+This scripts boots the Ren'Py runtime, walks the AST, and emits a JSON payload
+with the flow graph structure that mirrors the legacy regex-based output.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+ROOT_DIR = Path(__file__).parent
+SDK_DIR = ROOT_DIR / "renpy_sdk" / "renpy-8.4.0-sdk"
+PYTHON_STDLIB = SDK_DIR / "lib" / "python3.12"
+SITE_PACKAGES = PYTHON_STDLIB / "site-packages"
+STATE: Optional["_ExtractionState"] = None
+DEBUG_ENABLED = os.environ.get("SDK_FLOW_DEBUG") == "1"
+
+
+def _prepare_environment() -> None:
+    sys.path.insert(0, str(SDK_DIR))
+    if PYTHON_STDLIB.exists():
+        sys.path.insert(0, str(PYTHON_STDLIB))
+    if SITE_PACKAGES.exists():
+        sys.path.insert(0, str(SITE_PACKAGES))
+
+
+def _load_launcher_module():
+    launcher_path = SDK_DIR / "renpy.py"
+    spec = importlib.util.spec_from_file_location("renpy_sdk_launcher", launcher_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Unable to load Ren'Py launcher module.")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class _ExtractionState:
+    def __init__(self, project_root: Path):
+        self.project_root = project_root
+        self.result: Optional[Dict[str, Any]] = None
+        self.error: Optional[str] = None
+
+
+class ASTFlowExtractor:
+    def __init__(self, project_root: Path):
+        import renpy  # type: ignore
+
+        self.project_root = project_root
+        self.script = renpy.game.script  # type: ignore[attr-defined]
+
+    def build_payload(self) -> Dict[str, Any]:
+        labels: List[Dict[str, Any]] = []
+
+        if DEBUG_ENABLED:
+            import sys
+
+            try:
+                namemap_size = len(self.script.namemap)  # type: ignore[attr-defined]
+            except Exception:
+                namemap_size = -1
+            sample = []
+            string_keys = 0
+            try:
+                for idx, (key, value) in enumerate(self.script.namemap.items()):  # type: ignore[attr-defined]
+                    if isinstance(key, str):
+                        string_keys += 1
+                    if idx >= 5:
+                        break
+                    sample.append((repr(key), type(key).__name__, type(value).__name__))
+            except Exception:
+                sample = []
+            try:
+                if string_keys == 0:
+                    string_keys = sum(1 for key in self.script.namemap.keys() if isinstance(key, str))  # type: ignore[attr-defined]
+            except Exception:
+                string_keys = -1
+            print(
+                f"[SDK_WORKER] namemap size: {namemap_size} string_keys: {string_keys} sample: {sample}",
+                file=sys.stderr,
+            )
+
+        for node in self.script.namemap.values():  # type: ignore[attr-defined]
+            if node is None:
+                continue
+            if self._is_label_node(node):
+                analyzer = LabelAnalyzer(node.name, node)
+                labels.append(analyzer.analyze())
+
+        screens = self._collect_screens()
+        return {"labels": labels, "screens": screens}
+
+    def _is_label_node(self, node: Any) -> bool:
+        import renpy.ast  # type: ignore
+
+        return isinstance(node, renpy.ast.Label)
+
+    def _collect_screens(self) -> List[Dict[str, Any]]:
+        try:
+            import renpy.display.screen  # type: ignore
+        except Exception:
+            return []
+
+        payload: List[Dict[str, Any]] = []
+        for screen_name, screen in renpy.display.screen.screens.items():  # type: ignore[attr-defined]
+            if not hasattr(screen, "ast"):
+                continue
+            payload.append(
+                {
+                    "screen_name": screen_name,
+                    "file_path": self._normalize_source(getattr(screen.ast, "filename", "")),
+                    "line_number": getattr(screen.ast, "linenumber", 0),
+                    "elements": [],
+                }
+            )
+        return payload
+
+    @staticmethod
+    def _normalize_source(filename: Optional[str]) -> str:
+        if not filename:
+            return ""
+        path = Path(filename)
+        try:
+            return str(path.resolve())
+        except OSError:
+            return filename
+
+
+class LabelAnalyzer:
+    def __init__(self, label_name: str, label_ast: Any):
+        self.label_name = label_name
+        self.label_ast = label_ast
+        self.menu_counter = 0
+
+        self.outgoing_flows: List[Dict[str, Any]] = []
+        self.menu_nodes: List[Dict[str, Any]] = []
+        self.has_dialogue = False
+
+    def analyze(self) -> Dict[str, Any]:
+        block = getattr(self.label_ast, "block", None)
+        if block:
+            self._walk_block(block, current_choice=None, nesting_level=0)
+
+        return {
+            "name": self.label_name,
+            "file_path": self._normalize_filename(getattr(self.label_ast, "filename", "")),
+            "line_number": getattr(self.label_ast, "linenumber", 0),
+            "has_dialogue": self.has_dialogue,
+            "is_dead_end": len(self.outgoing_flows) == 0,
+            "flow_complexity": len(self.outgoing_flows),
+            "screen_calls": [],
+            "outgoing_flows": self.outgoing_flows,
+            "menu_nodes": self.menu_nodes,
+        }
+
+    def _walk_block(
+        self,
+        statements: List[Any],
+        current_choice: Optional[Dict[str, Any]],
+        nesting_level: int,
+    ) -> None:
+        import renpy.ast  # type: ignore
+
+        for stmt in statements:
+            if isinstance(stmt, renpy.ast.Say):
+                self.has_dialogue = True
+            elif isinstance(stmt, renpy.ast.Jump):
+                self._record_flow(stmt, flow_type="jump", context="label_block")
+            elif isinstance(stmt, renpy.ast.Call):
+                flow_type = "call"
+                if getattr(stmt, "expression", False):
+                    flow_type = "call_expression"
+                self._record_flow(stmt, flow_type=flow_type, context="label_block")
+            elif isinstance(stmt, renpy.ast.Return):
+                self.outgoing_flows.append(
+                    {
+                        "source_label": self.label_name,
+                        "target_label": "<return>",
+                        "flow_type": "return",
+                        "file_path": self._normalize_filename(getattr(stmt, "filename", "")),
+                        "line_number": getattr(stmt, "linenumber", 0),
+                        "context": "label_block",
+                        "condition": None,
+                    }
+                )
+            elif isinstance(stmt, renpy.ast.Menu):
+                self._process_menu(stmt, current_choice, nesting_level)
+            elif isinstance(stmt, renpy.ast.If):
+                for _, block in stmt.entries:
+                    if block:
+                        self._walk_block(block, current_choice, nesting_level)
+                else_block = getattr(stmt, "else_", None)
+                if else_block:
+                    self._walk_block(else_block, current_choice, nesting_level)
+            elif hasattr(stmt, "block") and isinstance(stmt.block, list):
+                self._walk_block(stmt.block, current_choice, nesting_level)
+
+    def _record_flow(self, stmt: Any, flow_type: str, context: str) -> None:
+        target = getattr(stmt, "target", None)
+        if target is None and hasattr(stmt, "label"):
+            target = getattr(stmt, "label")
+
+        self.outgoing_flows.append(
+            {
+                "source_label": self.label_name,
+                "target_label": target or "",
+                "flow_type": flow_type
+                if not getattr(stmt, "expression", False)
+                else f"{flow_type}_expression",
+                "file_path": self._normalize_filename(getattr(stmt, "filename", "")),
+                "line_number": getattr(stmt, "linenumber", 0),
+                "context": context,
+                "condition": None,
+            }
+        )
+
+    def _process_menu(
+        self,
+        menu_stmt: Any,
+        parent_choice: Optional[Dict[str, Any]],
+        nesting_level: int,
+    ) -> None:
+        menu_payload = {
+            "node_id": f"{self.label_name}_menu_{self.menu_counter}",
+            "name": f"Menu {self.menu_counter + 1}",
+            "parent_label": self.label_name,
+            "menu_index": self.menu_counter,
+            "file_path": self._normalize_filename(getattr(menu_stmt, "filename", "")),
+            "line_number": getattr(menu_stmt, "linenumber", 0),
+            "prompt": None,
+            "is_nested": parent_choice is not None,
+            "nesting_level": nesting_level,
+            "choices": [],
+        }
+        self.menu_counter += 1
+
+        for idx, (label, condition, block) in enumerate(menu_stmt.items):
+            if label is None:
+                continue
+
+            choice_payload = {
+                "text": label,
+                "condition": None if condition == "True" else condition,
+                "file_path": menu_payload["file_path"],
+                "line_number": menu_payload["line_number"],
+                "choice_index": idx,
+                "destination": None,
+                "all_destinations": [],
+                "action_type": None,
+                "leads_to_label": False,
+                "leads_to_return": False,
+                "nested_labels": [],
+                "nested_menus": [],
+            }
+            self._analyze_choice_block(choice_payload, block)
+            menu_payload["choices"].append(choice_payload)
+
+        if parent_choice is not None:
+            parent_choice["nested_menus"].append(menu_payload)
+        else:
+            self.menu_nodes.append(menu_payload)
+
+    def _analyze_choice_block(self, choice: Dict[str, Any], block: Optional[List[Any]]) -> None:
+        if not block:
+            return
+
+        import renpy.ast  # type: ignore
+
+        for stmt in block:
+            if isinstance(stmt, renpy.ast.Jump):
+                target = getattr(stmt, "target", "")
+                if target:
+                    choice["all_destinations"].append(target)
+                    if choice["destination"] is None:
+                        choice["destination"] = target
+                    choice["action_type"] = "jump"
+                    choice["leads_to_label"] = True
+            elif isinstance(stmt, renpy.ast.Call):
+                target = getattr(stmt, "label", "")
+                if target:
+                    choice["all_destinations"].append(target)
+                    if choice["destination"] is None:
+                        choice["destination"] = target
+                    choice["action_type"] = "call"
+                    choice["leads_to_label"] = True
+            elif isinstance(stmt, renpy.ast.Return):
+                choice["all_destinations"].append("<return>")
+                choice["destination"] = choice["destination"] or "<return>"
+                choice["action_type"] = "return"
+                choice["leads_to_return"] = True
+            elif isinstance(stmt, renpy.ast.Label):
+                choice["nested_labels"].append(getattr(stmt, "name", ""))
+            elif isinstance(stmt, renpy.ast.Menu):
+                self._process_menu(stmt, choice, nesting_level=1)
+            elif isinstance(stmt, renpy.ast.If):
+                for _, block in stmt.entries:
+                    if block:
+                        self._analyze_choice_block(choice, block)
+                else_block = getattr(stmt, "else_", None)
+                if else_block:
+                    self._analyze_choice_block(choice, else_block)
+
+            if hasattr(stmt, "block") and isinstance(stmt.block, list):
+                self._analyze_choice_block(choice, stmt.block)
+
+        if not choice["action_type"] and choice["destination"]:
+            choice["action_type"] = "jump"
+
+    @staticmethod
+    def _normalize_filename(filename: Optional[str]) -> str:
+        if not filename:
+            return ""
+        path = Path(filename)
+        try:
+            return str(path.resolve())
+        except OSError:
+            return filename
+
+
+def _sdk_flow_command() -> bool:
+    import renpy.arguments  # type: ignore
+
+    if STATE is None:
+        return False
+
+    parser = renpy.arguments.ArgumentParser(require_command=False)  # type: ignore
+    parser.parse_args()
+    try:
+        extractor = ASTFlowExtractor(STATE.project_root)
+        STATE.result = extractor.build_payload()
+    except Exception as exc:
+        STATE.error = str(exc)
+    return False
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        print("{}", end="")
+        return
+
+    project_root = Path(sys.argv[1]).resolve()
+    _prepare_environment()
+
+    import renpy  # type: ignore
+    import renpy.bootstrap  # type: ignore
+    import renpy.arguments  # type: ignore
+
+    launcher_module = _load_launcher_module()
+    renpy.__main__ = launcher_module  # type: ignore[attr-defined]
+    main_module = sys.modules.get("__main__")
+    if main_module:
+        for attr in (
+            "path_to_gamedir",
+            "path_to_common",
+            "path_to_saves",
+            "path_to_logdir",
+            "predefined_searchpath",
+        ):
+            if hasattr(launcher_module, attr):
+                setattr(main_module, attr, getattr(launcher_module, attr))
+
+    global STATE
+    STATE = _ExtractionState(project_root)
+    renpy.arguments.register_command("sdk_flow_worker", _sdk_flow_command, uses_display=False)  # type: ignore
+
+    sys.argv = [
+        str(SDK_DIR / "renpy.py"),
+        str(project_root),
+        "sdk_flow_worker",
+    ]
+
+    try:
+        renpy.bootstrap.bootstrap(str(SDK_DIR))  # type: ignore
+    except SystemExit as exc:  # pragma: no cover - Ren'Py uses SystemExit for flow control
+        if exc.code not in (0, None):
+            raise
+
+    if STATE.error:
+        raise RuntimeError(STATE.error)
+
+    print(json.dumps(STATE.result or {}), flush=True)
+
+
+if __name__ == "__main__":
+    main()
+
