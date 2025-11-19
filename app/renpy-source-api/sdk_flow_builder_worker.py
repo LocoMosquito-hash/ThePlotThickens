@@ -54,6 +54,7 @@ class ASTFlowExtractor:
 
         self.project_root = project_root
         self.script = renpy.game.script  # type: ignore[attr-defined]
+        self._excluded_roots = self._build_exclusion_roots()
 
     def build_payload(self) -> Dict[str, Any]:
         labels: List[Dict[str, Any]] = []
@@ -89,8 +90,10 @@ class ASTFlowExtractor:
         for node in self.script.namemap.values():  # type: ignore[attr-defined]
             if node is None:
                 continue
+            if self._is_excluded_source(getattr(node, "filename", None)):
+                continue
             if self._is_label_node(node):
-                analyzer = LabelAnalyzer(node.name, node)
+                analyzer = LabelAnalyzer(node.name, node, self.project_root)
                 labels.append(analyzer.analyze())
 
         screens = self._collect_screens()
@@ -110,6 +113,9 @@ class ASTFlowExtractor:
         payload: List[Dict[str, Any]] = []
         for screen_name, screen in renpy.display.screen.screens.items():  # type: ignore[attr-defined]
             if not hasattr(screen, "ast"):
+                continue
+            filename = getattr(screen.ast, "filename", "")
+            if self._is_excluded_source(filename) or not self._is_project_screen(screen_name, filename):
                 continue
             payload.append(
                 {
@@ -131,12 +137,76 @@ class ASTFlowExtractor:
         except OSError:
             return filename
 
+    def _build_exclusion_roots(self) -> List[Path]:
+        roots: List[Path] = []
+        candidates = [
+            self.project_root / "renpy",
+            self.project_root / "game" / "0x52-URM",
+            self.project_root / "0x52-URM",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                try:
+                    roots.append(candidate.resolve())
+                except OSError:
+                    roots.append(candidate)
+        return roots
+
+    def _is_excluded_source(self, filename: Optional[str]) -> bool:
+        if not filename:
+            return False
+        path = Path(filename)
+        try:
+            if not path.is_absolute():
+                path = (self.project_root / path).resolve()
+            else:
+                path = path.resolve()
+        except OSError:
+            return False
+
+        for root in self._excluded_roots:
+            try:
+                path.relative_to(root)
+                return True
+            except ValueError:
+                continue
+
+        lower_parts = [part.lower() for part in path.parts]
+        if "0x52-urm" in lower_parts:
+            return True
+        return False
+
+    def _is_project_screen(self, screen_name: str, filename: Optional[str]) -> bool:
+        if not filename:
+            return False
+        path = Path(filename)
+        try:
+            if not path.is_absolute():
+                path = (self.project_root / path).resolve()
+            else:
+                path = path.resolve()
+        except OSError:
+            return False
+
+        # Only allow screens under game/
+        try:
+            path.relative_to(self.project_root / "game")
+        except ValueError:
+            return False
+
+        # Skip stock UI helpers (starts with "screen_" and live in renpy/common)
+        if screen_name.startswith("screen_") or screen_name.startswith("director_") or screen_name.startswith("load_") or screen_name.startswith("save_"):
+            return False
+
+        return True
+
 
 class LabelAnalyzer:
-    def __init__(self, label_name: str, label_ast: Any):
+    def __init__(self, label_name: str, label_ast: Any, project_root: Path):
         self.label_name = label_name
         self.label_ast = label_ast
         self.menu_counter = 0
+        self.project_root = project_root
 
         self.outgoing_flows: List[Dict[str, Any]] = []
         self.menu_nodes: List[Dict[str, Any]] = []
@@ -400,15 +470,18 @@ class LabelAnalyzer:
         if not choice["action_type"] and choice["destination"]:
             choice["action_type"] = "jump"
 
-    @staticmethod
-    def _normalize_filename(filename: Optional[str]) -> str:
+    def _normalize_filename(self, filename: Optional[str]) -> str:
         if not filename:
             return ""
         path = Path(filename)
         try:
-            return str(path.resolve())
+            if not path.is_absolute():
+                candidate = (self.project_root / path).resolve()
+            else:
+                candidate = path.resolve()
+            return str(candidate)
         except OSError:
-            return filename
+            return str(path)
 
 
 def _sdk_flow_command() -> bool:
