@@ -59,6 +59,80 @@ def _relativize(path: Optional[str]) -> Optional[str]:
     return str(path_obj)
 
 
+def _detect_sdk_from_executable() -> Optional[Path]:
+    exe_path = Path(sys.executable).resolve()
+    for parent in exe_path.parents:
+        if (parent / "renpy.py").is_file():
+            return parent
+    return None
+
+
+def _remove_other_sdk_paths(paths: List[str], target_sdk: Path) -> List[str]:
+    cleaned: List[str] = []
+    target_sdk = target_sdk.resolve()
+
+    for entry in paths:
+        try:
+            resolved = Path(entry).resolve()
+        except Exception:
+            cleaned.append(entry)
+            continue
+
+        if resolved == target_sdk or target_sdk in resolved.parents:
+            cleaned.append(entry)
+            continue
+
+        if "renpy_sdk" in resolved.parts and any(part.startswith("renpy-") for part in resolved.parts):
+            # Skip other SDK versions.
+            continue
+
+        cleaned.append(entry)
+
+    return cleaned
+
+
+def _describe_ast_node(node: Any) -> Optional[Dict[str, Any]]:
+    if node is None:
+        return None
+
+    description: Dict[str, Any] = {
+        "node_type": type(node).__name__,
+        "location": _format_location(node),
+        "attrs": _collect_attrs(node, skip=["block", "next"]),
+    }
+    return description
+
+
+def _summarize_if_branches(if_node: Any) -> List[Dict[str, Any]]:
+    branches: List[Dict[str, Any]] = []
+    entries = getattr(if_node, "entries", []) or []
+
+    for condition, block in entries:
+        block_statements = block or []
+        branch_info: Dict[str, Any] = {
+            "condition": _simple_value(condition),
+            "statement_count": len(block_statements),
+        }
+        if block_statements:
+            branch_info["first_statement"] = _describe_ast_node(block_statements[0])
+            branch_info["tail_next"] = _describe_ast_node(getattr(block_statements[-1], "next", None))
+        branches.append(branch_info)
+
+    else_block = getattr(if_node, "else_", None)
+    if else_block:
+        block_statements = else_block or []
+        branch_info = {
+            "condition": "else",
+            "statement_count": len(block_statements),
+        }
+        if block_statements:
+            branch_info["first_statement"] = _describe_ast_node(block_statements[0])
+            branch_info["tail_next"] = _describe_ast_node(getattr(block_statements[-1], "next", None))
+        branches.append(branch_info)
+
+    return branches
+
+
 def _simple_value(value: Any, depth: int = 0) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
@@ -142,6 +216,13 @@ def _summarize_statement(stmt: Any, index: int) -> Dict[str, Any]:
         child_stmts = getattr(block, "statements", [])
         summary["nested_statement_count"] = len(child_stmts)
 
+    summary["next_pointer"] = _describe_ast_node(getattr(stmt, "next", None))
+
+    import renpy.ast  # type: ignore
+
+    if isinstance(stmt, renpy.ast.If):
+        summary["branches"] = _summarize_if_branches(stmt)
+
     return summary
 
 
@@ -185,6 +266,8 @@ def _gather_label_info(label_name: str, max_statements: int) -> Dict[str, Any]:
     else:
         info["block_statement_count"] = 0
         info["block_statements"] = []
+
+    info["next_pointer"] = _describe_ast_node(getattr(node, "next", None))
 
     return info
 
@@ -245,13 +328,24 @@ def _resolve_project_base(path: Path) -> Path:
 
 
 def inspect_label(game_path: Path, label_name: str, sdk_path: Optional[Path] = None, *, max_statements: int = 20) -> str:
-    sdk_base = (sdk_path or DEFAULT_SDK).resolve()
+    if sdk_path:
+        sdk_base = sdk_path.resolve()
+    else:
+        detected = _detect_sdk_from_executable()
+        sdk_base = (detected or DEFAULT_SDK).resolve()
+
+    print(f"[INSPECT] Using SDK base: {sdk_base}", file=sys.stderr)
+
     if not sdk_base.exists():
         raise FileNotFoundError(f"Ren'Py SDK path does not exist: {sdk_base}")
 
     project_base = _resolve_project_base(game_path)
+    print(f"[INSPECT] Project base: {project_base}", file=sys.stderr)
 
-    python_stdlib = sdk_base / "lib" / "python3.12"
+    py_major = sys.version_info.major
+    py_minor = sys.version_info.minor
+    python_stdlib = sdk_base / "lib" / f"python{py_major}.{py_minor}"
+    print(f"[INSPECT] Python stdlib: {python_stdlib}", file=sys.stderr)
     python_site_packages = python_stdlib / "site-packages"
 
     sys_path_backup = list(sys.path)
@@ -259,6 +353,7 @@ def inspect_label(game_path: Path, label_name: str, sdk_path: Optional[Path] = N
     cwd_backup = Path.cwd()
     original_env_path = os.environ.get("PATH", "")
 
+    sys.path = _remove_other_sdk_paths(sys.path, sdk_base)
     sys.path.insert(0, str(sdk_base))
     if python_site_packages.exists():
         sys.path.insert(0, str(python_site_packages))
@@ -280,7 +375,12 @@ def inspect_label(game_path: Path, label_name: str, sdk_path: Optional[Path] = N
 
     os.chdir(sdk_base)
 
+    for module_name in list(sys.modules):
+        if module_name.startswith("renpy"):
+            del sys.modules[module_name]
+
     launcher_module = _load_launcher_module(sdk_base)
+    print(f"[INSPECT] Using launcher: {sdk_base / 'renpy.py'}", file=sys.stderr)
     current_main = sys.modules[__name__]
 
     for attr in (
@@ -292,6 +392,9 @@ def inspect_label(game_path: Path, label_name: str, sdk_path: Optional[Path] = N
     ):
         if hasattr(launcher_module, attr):
             setattr(current_main, attr, getattr(launcher_module, attr))
+
+    if os.environ.get("INSPECT_LABEL_DEBUG"):
+        print(f"[INSPECT] sys.path before import: {sys.path}", file=sys.stderr)
 
     import renpy.bootstrap  # type: ignore
     import renpy  # type: ignore
@@ -347,8 +450,8 @@ def main() -> None:
     parser.add_argument(
         "--sdk-path",
         type=Path,
-        default=DEFAULT_SDK,
-        help="Path to the unpacked Ren'Py SDK to use (default: %(default)s).",
+        default=None,
+        help="Optional path to a specific Ren'Py SDK. Defaults to the SDK bundled with this script, or autodetects from the running interpreter.",
     )
     parser.add_argument(
         "--max-statements",

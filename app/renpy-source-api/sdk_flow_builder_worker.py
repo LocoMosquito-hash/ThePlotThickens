@@ -13,7 +13,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 ROOT_DIR = Path(__file__).parent
 SDK_DIR = ROOT_DIR / "renpy_sdk" / "renpy-8.4.0-sdk"
@@ -141,11 +141,13 @@ class LabelAnalyzer:
         self.outgoing_flows: List[Dict[str, Any]] = []
         self.menu_nodes: List[Dict[str, Any]] = []
         self.has_dialogue = False
+        self._visited_statements: Set[int] = set()
 
     def analyze(self) -> Dict[str, Any]:
         block = getattr(self.label_ast, "block", None)
         if block:
-            self._walk_block(block, current_choice=None, nesting_level=0)
+            self._walk_block(block, current_choice=None, nesting_level=0, active_condition=None)
+        self._follow_pointer(getattr(self.label_ast, "next", None), current_choice=None, nesting_level=0, active_condition=None)
 
         return {
             "name": self.label_name,
@@ -161,47 +163,82 @@ class LabelAnalyzer:
 
     def _walk_block(
         self,
-        statements: List[Any],
+        statements: Any,
         current_choice: Optional[Dict[str, Any]],
         nesting_level: int,
+        active_condition: Optional[str],
     ) -> None:
+        iterable: List[Any]
+        if hasattr(statements, "statements"):
+            iterable = getattr(statements, "statements") or []
+        else:
+            iterable = statements or []
+
+        for stmt in iterable:
+            continue_scan = self._visit_statement(stmt, current_choice, nesting_level, active_condition)
+            if not continue_scan:
+                break
+            next_stmt = getattr(stmt, "next", None)
+            if next_stmt:
+                self._follow_pointer(next_stmt, current_choice, nesting_level, active_condition)
+
+    def _visit_statement(
+        self,
+        stmt: Any,
+        current_choice: Optional[Dict[str, Any]],
+        nesting_level: int,
+        active_condition: Optional[str],
+    ) -> bool:
         import renpy.ast  # type: ignore
 
-        for stmt in statements:
-            if isinstance(stmt, renpy.ast.Say):
-                self.has_dialogue = True
-            elif isinstance(stmt, renpy.ast.Jump):
-                self._record_flow(stmt, flow_type="jump", context="label_block")
-            elif isinstance(stmt, renpy.ast.Call):
-                flow_type = "call"
-                if getattr(stmt, "expression", False):
-                    flow_type = "call_expression"
-                self._record_flow(stmt, flow_type=flow_type, context="label_block")
-            elif isinstance(stmt, renpy.ast.Return):
-                self.outgoing_flows.append(
-                    {
-                        "source_label": self.label_name,
-                        "target_label": "<return>",
-                        "flow_type": "return",
-                        "file_path": self._normalize_filename(getattr(stmt, "filename", "")),
-                        "line_number": getattr(stmt, "linenumber", 0),
-                        "context": "label_block",
-                        "condition": None,
-                    }
-                )
-            elif isinstance(stmt, renpy.ast.Menu):
-                self._process_menu(stmt, current_choice, nesting_level)
-            elif isinstance(stmt, renpy.ast.If):
-                for _, block in stmt.entries:
-                    if block:
-                        self._walk_block(block, current_choice, nesting_level)
-                else_block = getattr(stmt, "else_", None)
-                if else_block:
-                    self._walk_block(else_block, current_choice, nesting_level)
-            elif hasattr(stmt, "block") and isinstance(stmt.block, list):
-                self._walk_block(stmt.block, current_choice, nesting_level)
+        stmt_id = id(stmt)
+        if stmt_id in self._visited_statements:
+            return True
+        self._visited_statements.add(stmt_id)
 
-    def _record_flow(self, stmt: Any, flow_type: str, context: str) -> None:
+        if isinstance(stmt, renpy.ast.Say):
+            self.has_dialogue = True
+        elif isinstance(stmt, renpy.ast.Jump):
+            self._record_flow(stmt, flow_type="jump", context="label_block", condition=active_condition)
+        elif isinstance(stmt, renpy.ast.Call):
+            flow_type = "call_expression" if getattr(stmt, "expression", False) else "call"
+            self._record_flow(stmt, flow_type=flow_type, context="label_block", condition=active_condition)
+        elif isinstance(stmt, renpy.ast.Return):
+            self.outgoing_flows.append(
+                {
+                    "source_label": self.label_name,
+                    "target_label": "<return>",
+                    "flow_type": "return",
+                    "file_path": self._normalize_filename(getattr(stmt, "filename", "")),
+                    "line_number": getattr(stmt, "linenumber", 0),
+                    "context": "label_block",
+                    "condition": active_condition,
+                }
+            )
+        elif isinstance(stmt, renpy.ast.Menu):
+            self._process_menu(stmt, current_choice, nesting_level)
+        elif isinstance(stmt, renpy.ast.If):
+            for condition_expr, block in stmt.entries:
+                if not block:
+                    continue
+                cond_label = self._stringify_condition(condition_expr)
+                combined = self._combine_conditions(active_condition, cond_label)
+                self._walk_block(block, current_choice, nesting_level, combined)
+            else_block = getattr(stmt, "else_", None)
+            if else_block:
+                combined = self._combine_conditions(active_condition, "else")
+                self._walk_block(else_block, current_choice, nesting_level, combined)
+        elif isinstance(stmt, renpy.ast.Label):
+            if getattr(stmt, "name", None) != self.label_name:
+                self._record_fallthrough_transition(stmt, active_condition)
+                return False
+            return True
+        elif getattr(stmt, "block", None):
+            self._walk_block(stmt.block, current_choice, nesting_level, active_condition)
+
+        return True
+
+    def _record_flow(self, stmt: Any, flow_type: str, context: str, condition: Optional[str]) -> None:
         target = getattr(stmt, "target", None)
         if target is None and hasattr(stmt, "label"):
             target = getattr(stmt, "label")
@@ -216,7 +253,58 @@ class LabelAnalyzer:
                 "file_path": self._normalize_filename(getattr(stmt, "filename", "")),
                 "line_number": getattr(stmt, "linenumber", 0),
                 "context": context,
-                "condition": None,
+                "condition": condition,
+            }
+        )
+
+    def _follow_pointer(
+        self,
+        stmt: Optional[Any],
+        current_choice: Optional[Dict[str, Any]],
+        nesting_level: int,
+        active_condition: Optional[str],
+    ) -> None:
+        import renpy.ast  # type: ignore
+
+        while stmt is not None:
+            if id(stmt) in self._visited_statements:
+                break
+            if isinstance(stmt, renpy.ast.Label):
+                if getattr(stmt, "name", None) != self.label_name:
+                    self._record_fallthrough_transition(stmt, active_condition)
+                break
+            self._visit_statement(stmt, current_choice, nesting_level, active_condition)
+            stmt = getattr(stmt, "next", None)
+
+    @staticmethod
+    def _stringify_condition(condition: Any) -> str:
+        try:
+            text = getattr(condition, "text", None)
+            if text is not None:
+                return str(text)
+        except Exception:
+            pass
+        if isinstance(condition, bool):
+            return "True" if condition else "False"
+        return str(condition)
+
+    @staticmethod
+    def _combine_conditions(parent: Optional[str], child: Optional[str]) -> Optional[str]:
+        if parent and child:
+            return f"({parent}) and ({child})"
+        return child or parent
+
+    def _record_fallthrough_transition(self, target_label_ast: Any, condition: Optional[str]) -> None:
+        target_name = getattr(target_label_ast, "name", "")
+        self.outgoing_flows.append(
+            {
+                "source_label": self.label_name,
+                "target_label": target_name or "",
+                "flow_type": "fallthrough",
+                "file_path": self._normalize_filename(getattr(target_label_ast, "filename", "")),
+                "line_number": getattr(target_label_ast, "linenumber", 0),
+                "context": "implicit_follow",
+                "condition": condition,
             }
         )
 
