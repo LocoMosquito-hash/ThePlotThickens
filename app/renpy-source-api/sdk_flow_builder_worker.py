@@ -14,10 +14,8 @@ import os
 import sys
 from pathlib import Path
 import textwrap
+import traceback
 from typing import Any, Dict, List, Optional, Set, Tuple
-import re
-import io
-import contextlib
 
 ROOT_DIR = Path(__file__).parent
 SDK_DIR = ROOT_DIR / "renpy_sdk" / "renpy-8.4.0-sdk"
@@ -227,22 +225,36 @@ class LabelAnalyzer:
         self._visited_statements: Set[int] = set()
 
     def analyze(self) -> Dict[str, Any]:
-        block = getattr(self.label_ast, "block", None)
-        if block:
-            self._walk_block(block, current_choice=None, nesting_level=0, active_condition=None)
-        self._follow_pointer(getattr(self.label_ast, "next", None), current_choice=None, nesting_level=0, active_condition=None)
+        try:
+            block = getattr(self.label_ast, "block", None)
+            if block:
+                self._walk_block(block, current_choice=None, nesting_level=0, active_condition=None)
+            self._follow_pointer(
+                getattr(self.label_ast, "next", None),
+                current_choice=None,
+                nesting_level=0,
+                active_condition=None,
+            )
 
-        return {
-            "name": self.label_name,
-            "file_path": self._normalize_filename(getattr(self.label_ast, "filename", "")),
-            "line_number": getattr(self.label_ast, "linenumber", 0),
-            "has_dialogue": self.has_dialogue,
-            "is_dead_end": len(self.outgoing_flows) == 0,
-            "flow_complexity": len(self.outgoing_flows),
-            "screen_calls": [],
-            "outgoing_flows": self.outgoing_flows,
-            "menu_nodes": self.menu_nodes,
-        }
+            return {
+                "name": self.label_name,
+                "file_path": self._normalize_filename(getattr(self.label_ast, "filename", "")),
+                "line_number": getattr(self.label_ast, "linenumber", 0),
+                "has_dialogue": self.has_dialogue,
+                "is_dead_end": len(self.outgoing_flows) == 0,
+                "flow_complexity": len(self.outgoing_flows),
+                "screen_calls": [],
+                "outgoing_flows": self.outgoing_flows,
+                "menu_nodes": self.menu_nodes,
+            }
+        except RecursionError as exc:
+            context = self._format_label_context()
+            raise RecursionError(f"Recursion while analyzing label '{self.label_name}' ({context})") from exc
+        except Exception as exc:
+            context = self._format_label_context()
+            raise RuntimeError(
+                f"Failed while analyzing label '{self.label_name}' ({context}): {exc}"
+            ) from exc
 
     def _walk_block(
         self,
@@ -496,6 +508,13 @@ class LabelAnalyzer:
         except OSError:
             return str(path)
 
+    def _format_label_context(self) -> str:
+        file_path = self._normalize_filename(getattr(self.label_ast, "filename", ""))
+        line_number = getattr(self.label_ast, "linenumber", 0)
+        if file_path:
+            return f"{file_path}:{line_number}"
+        return f"line {line_number}"
+
 
 def _sdk_flow_command() -> bool:
     import renpy.arguments  # type: ignore
@@ -508,8 +527,11 @@ def _sdk_flow_command() -> bool:
     try:
         extractor = ASTFlowExtractor(STATE.project_root)
         STATE.result = extractor.build_payload()
-    except Exception as exc:
-        STATE.error = str(exc)
+    except Exception:
+        error_text = traceback.format_exc()
+        STATE.error = error_text
+        if DEBUG_ENABLED:
+            print(f"[SDK_WORKER] Flow extraction failed:\n{error_text}", file=sys.stderr)
     return False
 
 
@@ -517,6 +539,10 @@ def main() -> None:
     if len(sys.argv) < 2:
         print("{}", end="")
         return
+
+    current_limit = sys.getrecursionlimit()
+    if current_limit < 10000:
+        sys.setrecursionlimit(10000)
 
     project_root = Path(sys.argv[1]).resolve()
     _load_flowviz_config(project_root)
@@ -565,11 +591,13 @@ def main() -> None:
         "sdk_flow_worker",
     ]
 
-    dynamic_hidden: List[Tuple[Path, Path]] = []
     try:
-        dynamic_hidden = _bootstrap_with_retries()
+        try:
+            renpy.bootstrap.bootstrap(str(SDK_DIR))  # type: ignore
+        except SystemExit as exc:  # pragma: no cover
+            if exc.code not in (0, None):
+                raise
     finally:
-        _restore_hidden_files(dynamic_hidden)
         _restore_sanitized_scripts(sanitized_backups)
         _restore_hidden_files(hidden_files)
         _restore_hidden_files(hidden_force)
@@ -578,6 +606,7 @@ def main() -> None:
         raise RuntimeError(STATE.error)
 
     print(json.dumps(STATE.result or {}), flush=True)
+
 def _swap_in_sanitized_scripts(project_root: Path) -> List[Tuple[Path, Path]]:
     backups: List[Tuple[Path, Path]] = []
     game_dir = project_root / "game"
@@ -657,101 +686,6 @@ def _restore_hidden_files(hidden: List[Tuple[Path, Path]]) -> None:
             continue
 
 
-def _bootstrap_with_retries(max_attempts: int = 5) -> List[Tuple[Path, Path]]:
-    import renpy.bootstrap  # type: ignore
-
-    hidden_dynamic: List[Tuple[Path, Path]] = []
-    attempts = 0
-
-    while True:
-        attempts += 1
-        stdout_buffer = io.StringIO()
-        stderr_buffer = io.StringIO()
-        try:
-            with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
-                renpy.bootstrap.bootstrap(str(SDK_DIR))  # type: ignore
-            _flush_captured(stdout_buffer, stderr_buffer)
-            return hidden_dynamic
-        except SystemExit as exc:  # pragma: no cover
-            _flush_captured(stdout_buffer, stderr_buffer)
-            if exc.code in (0, None):
-                return hidden_dynamic
-
-            offending = _extract_error_paths(stdout_buffer.getvalue(), stderr_buffer.getvalue())
-            if DEBUG_ENABLED and offending:
-                pretty = ", ".join(str(p) for p in offending)
-                print(f"[SDK_WORKER] Parse errors detected in: {pretty}", file=sys.stderr)
-            new_hidden = _hide_problem_files(offending)
-            if not new_hidden or attempts >= max_attempts:
-                hidden_dynamic.extend(new_hidden)
-                raise
-            hidden_dynamic.extend(new_hidden)
-            if DEBUG_ENABLED:
-                print(f"[SDK_WORKER] Retrying bootstrap after hiding {len(new_hidden)} problem file(s).", file=sys.stderr)
-
-
-def _flush_captured(stdout_buffer: io.StringIO, stderr_buffer: io.StringIO) -> None:
-    stdout_value = stdout_buffer.getvalue()
-    stderr_value = stderr_buffer.getvalue()
-    if stdout_value:
-        print(stdout_value, end="")
-    if stderr_value:
-        print(stderr_value, end="", file=sys.stderr)
-
-
-def _extract_error_paths(stdout_text: str, stderr_text: str) -> List[Path]:
-    combined = f"{stdout_text}\n{stderr_text}"
-    matches = _PARSE_ERROR_RE.findall(combined)
-    paths: List[Path] = []
-    for filename, _line in matches:
-        candidate = Path(filename)
-        try:
-            if not candidate.is_absolute():
-                base = PROJECT_ROOT if PROJECT_ROOT is not None else Path.cwd()
-                candidate = (base / candidate).resolve()
-            else:
-                candidate = candidate.resolve()
-        except Exception:
-            pass
-        paths.append(candidate)
-    # preserve order but remove duplicates
-    dedup: List[Path] = []
-    seen: Set[Path] = set()
-    for path in paths:
-        if path in seen:
-            continue
-        seen.add(path)
-        dedup.append(path)
-    return dedup
-
-
-def _hide_problem_files(paths: List[Path]) -> List[Tuple[Path, Path]]:
-    hidden: List[Tuple[Path, Path]] = []
-    for path in paths:
-        if not path.suffix.lower().endswith(".rpy"):
-            continue
-        if _is_ignored_absolute(path) or _is_force_rpyc_absolute(path) or path in _HIDDEN_SOURCE_ORIGINALS:
-            continue
-        if not _is_within_game_dir(path):
-            continue
-        if not path.exists():
-            continue
-        compiled = path.with_suffix(path.suffix + "c")
-        if not compiled.exists():
-            continue
-        hidden_path = _next_available_suffix(path, ".flowignore")
-        try:
-            path.rename(hidden_path)
-            _HIDDEN_SOURCE_ORIGINALS.add(path)
-            hidden.append((path, hidden_path))
-        except Exception:
-            continue
-    if hidden and DEBUG_ENABLED:
-        pretty = ", ".join(str(p) for p, _ in hidden)
-        print(f"[SDK_WORKER] Switching to .rpyc for: {pretty}", file=sys.stderr)
-    return hidden
-
-
 def _temporarily_hide_force_rpyc_files() -> List[Tuple[Path, Path]]:
     hidden: List[Tuple[Path, Path]] = []
     for target in FORCE_RPYC_PATHS:
@@ -788,19 +722,30 @@ def _load_flowviz_config(project_root: Path) -> None:
     FORCE_RPYC_PATHS = set()
 
     if not config_path.exists():
+        if DEBUG_ENABLED:
+            print(f"[SDK_WORKER] No flowviz_config.json found at {config_path}", file=sys.stderr)
         return
 
     try:
         with config_path.open("r", encoding="utf-8") as fh:
             FLOW_CONFIG = json.load(fh)
-    except Exception:
+    except Exception as exc:
         FLOW_CONFIG = {}
+        if DEBUG_ENABLED:
+            print(f"[SDK_WORKER] Failed to load flowviz_config.json ({exc}). Using defaults.", file=sys.stderr)
         return
 
     ignore_entries = FLOW_CONFIG.get("ignore_files", [])
     IGNORED_PATHS = _resolve_config_paths(game_dir, ignore_entries)
     force_entries = FLOW_CONFIG.get("force_rpyc_files", [])
     FORCE_RPYC_PATHS = _resolve_config_paths(game_dir, force_entries)
+
+    if DEBUG_ENABLED:
+        ignore_list = ", ".join(str(path) for path in sorted(IGNORED_PATHS)) or "<none>"
+        force_list = ", ".join(str(path) for path in sorted(FORCE_RPYC_PATHS)) or "<none>"
+        print(f"[SDK_WORKER] flowviz_config.json loaded from {config_path}", file=sys.stderr)
+        print(f"[SDK_WORKER] Ignored files: {ignore_list}", file=sys.stderr)
+        print(f"[SDK_WORKER] Forced .rpyc files: {force_list}", file=sys.stderr)
 
 
 def _resolve_config_paths(game_dir: Path, entries: Any) -> Set[Path]:

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import subprocess
+import os
+import re
+import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from parser import (
     LabelNode,
@@ -14,6 +17,20 @@ from parser import (
     MenuChoice,
     ScreenElement,
     ScreenStructure,
+)
+
+
+_PARSE_ERROR_RE = re.compile(
+    r"""
+    (?:
+        File\s+"(?P<file1>[^"]+\.rpy)"\s*,\s*line\s+(?P<line1>\d+)
+        |
+        \((?P<file2>[^)]+\.rpy)\s*,\s*line\s+(?P<line2>\d+)\)
+        |
+        in\s+file\s+(?P<file3>[^\s,:]+\.rpy)
+    )
+    """,
+    re.IGNORECASE | re.MULTILINE,
 )
 
 
@@ -41,6 +58,9 @@ class SDKFlowBuilder:
         if not self.worker_script.exists():
             raise SDKFlowBuilderError(f"SDK worker script missing: {self.worker_script}")
 
+        self._debug_enabled = os.environ.get("SDK_FLOW_DEBUG") == "1"
+        self._max_attempts = 5
+
     # Public -----------------------------------------------------------------
 
     def build(self, project_path: str) -> Dict[str, LabelNode]:
@@ -51,18 +71,49 @@ class SDKFlowBuilder:
             str(project_root),
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise SDKFlowBuilderError(
-                f"SDK worker failed (exit {result.returncode}).\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-            )
+        hidden_sources: List[Tuple[Path, Path]] = []
+        hidden_originals: Set[Path] = set()
+        attempts = 0
+        last_error: Optional[str] = None
 
         try:
-            payload = json.loads(result.stdout or "{}")
-        except json.JSONDecodeError as exc:
-            raise SDKFlowBuilderError(f"Invalid JSON from SDK worker: {exc}\nOutput:\n{result.stdout}") from exc
+            while attempts < self._max_attempts:
+                attempts += 1
+                result = subprocess.run(cmd, capture_output=True, text=True)
 
-        return self._construct_flow_graph(payload)
+                if result.returncode == 0:
+                    try:
+                        payload = json.loads(result.stdout or "{}")
+                    except json.JSONDecodeError as exc:
+                        raise SDKFlowBuilderError(f"Invalid JSON from SDK worker: {exc}\nOutput:\n{result.stdout}") from exc
+                    return self._construct_flow_graph(payload)
+
+                error_message = self._format_worker_failure(result, attempts)
+                last_error = error_message
+
+                offending = self._extract_error_paths(result.stdout, result.stderr, project_root)
+                if offending:
+                    game_dir = project_root / "game"
+                    new_hidden = self._hide_problem_sources(
+                        offending,
+                        game_dir,
+                        hidden_sources,
+                        hidden_originals,
+                    )
+                    if new_hidden:
+                        continue
+                    offender_list = ", ".join(str(path) for path, _ in offending)
+                    raise SDKFlowBuilderError(
+                        f"Parse errors reported in: {offender_list}\n{error_message}"
+                    )
+
+                raise SDKFlowBuilderError(error_message)
+
+            raise SDKFlowBuilderError(
+                f"SDK worker failed after {self._max_attempts} attempts.\nLast error:\n{last_error or 'unknown'}"
+            )
+        finally:
+            self._restore_hidden_files(hidden_sources, hidden_originals)
 
     # Deserialization helpers -----------------------------------------------
 
@@ -205,5 +256,114 @@ class SDKFlowBuilder:
         if resolved.name.lower() == "game" and resolved.is_dir():
             return resolved.parent
         raise SDKFlowBuilderError(f"Expected Ren'Py project or its /game directory, got: {path}")
+
+    # Retry helpers ---------------------------------------------------------
+
+    def _format_worker_failure(self, result: subprocess.CompletedProcess[str], attempt: int) -> str:
+        return (
+            f"SDK worker failed (exit {result.returncode}) on attempt {attempt}.\n"
+            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        )
+
+    def _extract_error_paths(
+        self,
+        stdout_text: str,
+        stderr_text: str,
+        project_root: Path,
+    ) -> List[Tuple[Path, int]]:
+        combined = f"{stdout_text}\n{stderr_text}"
+        matches = _PARSE_ERROR_RE.finditer(combined)
+        paths: List[Tuple[Path, int]] = []
+        seen: Set[Path] = set()
+        for match in matches:
+            filename = match.group("file1") or match.group("file2") or match.group("file3")
+            if not filename:
+                continue
+            line_text = match.group("line1") or match.group("line2")
+            line_number = int(line_text) if line_text and line_text.isdigit() else 0
+            candidate = Path(filename)
+            try:
+                if not candidate.is_absolute():
+                    candidate = (project_root / candidate).resolve()
+                else:
+                    candidate = candidate.resolve()
+            except OSError:
+                continue
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            paths.append((candidate, line_number))
+        return paths
+
+    def _hide_problem_sources(
+        self,
+        offending: List[Tuple[Path, int]],
+        game_dir: Path,
+        hidden_pairs: List[Tuple[Path, Path]],
+        hidden_set: Set[Path],
+    ) -> List[Tuple[Path, Path]]:
+        new_hidden: List[Tuple[Path, Path]] = []
+        for path, _ in offending:
+            if path in hidden_set:
+                continue
+            if path.suffix.lower() != ".rpy":
+                continue
+            if not self._is_within_directory(path, game_dir):
+                continue
+            if not path.exists():
+                continue
+            compiled = path.with_suffix(path.suffix + "c")
+            if not compiled.exists():
+                continue
+            hidden_path = self._next_available_suffix(path, ".flowignore")
+            try:
+                path.rename(hidden_path)
+            except OSError:
+                continue
+            hidden_pairs.append((path, hidden_path))
+            hidden_set.add(path)
+            new_hidden.append((path, hidden_path))
+        if new_hidden:
+            self._log_switch(new_hidden)
+        return new_hidden
+
+    def _restore_hidden_files(
+        self,
+        hidden_pairs: List[Tuple[Path, Path]],
+        hidden_set: Set[Path],
+    ) -> None:
+        for original, temp in reversed(hidden_pairs):
+            try:
+                if original.exists():
+                    original.unlink()
+                if temp.exists():
+                    temp.rename(original)
+            except OSError:
+                continue
+            finally:
+                hidden_set.discard(original)
+
+    @staticmethod
+    def _next_available_suffix(path: Path, suffix: str) -> Path:
+        candidate = path.with_suffix(path.suffix + suffix)
+        counter = 1
+        while candidate.exists():
+            candidate = path.with_suffix(path.suffix + f"{suffix}{counter}")
+            counter += 1
+        return candidate
+
+    @staticmethod
+    def _is_within_directory(path: Path, directory: Path) -> bool:
+        try:
+            path.resolve().relative_to(directory)
+            return True
+        except Exception:
+            return False
+
+    def _log_switch(self, hidden: List[Tuple[Path, Path]]) -> None:
+        if not self._debug_enabled:
+            return
+        pretty = ", ".join(str(original) for original, _ in hidden)
+        print(f"[SDK_HOST] Switching to .rpyc for: {pretty}", file=sys.stderr)
 
 

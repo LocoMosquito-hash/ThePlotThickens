@@ -43,12 +43,15 @@ Place the config file next to the rest of the VN scripts:
   compiled `.rpyc` instead. Those files _do_ appear in the final flow graph, but
   their source code is never parsed, which avoids syntax traps in “protected”
   builds.
-- All hidden files are restored immediately after analysis (even on errors).
-- During bootstrap the worker now watches for Ren'Py parse errors; when an
-  offending `.rpy` is detected it is automatically moved aside so its `.rpyc`
-  counterpart is used, then the bootstrap restarts. If no compiled file exists,
-  or if repeated errors occur, the analysis still aborts so you know the flow
-  graph would be incomplete.
+- The host process now retries the SDK worker in a **fresh Ren'Py interpreter**
+  whenever a parse error bubbles up. Offending `.rpy` files are moved aside—only
+  if their `.rpyc` counterparts exist—so the subsequent attempt loads the
+  compiled bytecode without touching the source.
+- If the compiled file is missing or the same error repeats, the retry loop
+  stops immediately and the error message identifies the blocking script. We
+  never ship a partial graph when Ren'Py refuses to load a module.
+- All hidden files (ignored, forced, or auto-hidden) are restored immediately
+  after analysis, even when the run fails.
 
 ## Notes
 
