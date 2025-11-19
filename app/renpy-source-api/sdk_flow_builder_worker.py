@@ -205,9 +205,12 @@ class ASTFlowExtractor:
         except ValueError:
             return False
 
-        # Skip stock UI helpers (starts with "screen_" and live in renpy/common)
-        if screen_name.startswith("screen_") or screen_name.startswith("director_") or screen_name.startswith("load_") or screen_name.startswith("save_"):
-            return False
+        # Previously we skipped stock UI helpers by name (screen_, director_, load_, save_),
+        # but that also hid project-specific narrative screens that follow those naming
+        # conventions. Keep the code around for quick reactivation if needed.
+        # if screen_name.startswith("screen_") or screen_name.startswith("director_") \
+        #         or screen_name.startswith("load_") or screen_name.startswith("save_"):
+        #     return False
 
         return True
 
