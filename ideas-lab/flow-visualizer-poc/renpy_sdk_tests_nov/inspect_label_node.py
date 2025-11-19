@@ -9,6 +9,46 @@ import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+def _next_available_suffix(path: Path, suffix: str) -> Path:
+    candidate = path.with_suffix(path.suffix + suffix)
+    counter = 1
+    while candidate.exists():
+        candidate = path.with_suffix(path.suffix + f"{suffix}{counter}")
+        counter += 1
+    return candidate
+
+
+def _hide_source_files(game_dir: Path, entries: List[str]) -> List[Tuple[Path, Path]]:
+    hidden: List[Tuple[Path, Path]] = []
+    for entry in entries:
+        clean = entry.strip()
+        if not clean:
+            continue
+        target = Path(clean)
+        if not target.is_absolute():
+            target = game_dir / target
+        if not target.exists():
+            continue
+        hidden_path = _next_available_suffix(target, ".flowignore")
+        try:
+            target.rename(hidden_path)
+            hidden.append((target, hidden_path))
+        except Exception as err:
+            print(f"[INSPECT] Failed to hide {target}: {err}", file=sys.stderr)
+    if hidden:
+        print(f"[INSPECT] Temporarily hiding {len(hidden)} source files to force .rpyc usage.", file=sys.stderr)
+    return hidden
+
+
+def _restore_hidden_sources(hidden: List[Tuple[Path, Path]]) -> None:
+    for original, temp in reversed(hidden):
+        try:
+            if original.exists():
+                original.unlink()
+            if temp.exists():
+                temp.rename(original)
+        except Exception as err:
+            print(f"[INSPECT] Failed to restore {original} from {temp}: {err}", file=sys.stderr)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SDK = PROJECT_ROOT / "app/renpy-source-api/renpy_sdk/renpy-8.4.0-sdk"
@@ -17,6 +57,7 @@ _TARGET_LABEL: Optional[str] = None
 _PROJECT_BASE: Optional[Path] = None
 _CAPTURED_LABEL_DETAILS: Optional[str] = None
 _MAX_STATEMENTS: int = 20
+_HIDDEN_SOURCES: List[Tuple[Path, Path]] = []
 
 
 class LabelInspectionError(RuntimeError):
@@ -327,7 +368,14 @@ def _resolve_project_base(path: Path) -> Path:
     )
 
 
-def inspect_label(game_path: Path, label_name: str, sdk_path: Optional[Path] = None, *, max_statements: int = 20) -> str:
+def inspect_label(
+    game_path: Path,
+    label_name: str,
+    sdk_path: Optional[Path] = None,
+    *,
+    max_statements: int = 20,
+    ignore_sources: Optional[List[str]] = None,
+) -> str:
     if sdk_path:
         sdk_base = sdk_path.resolve()
     else:
@@ -341,6 +389,7 @@ def inspect_label(game_path: Path, label_name: str, sdk_path: Optional[Path] = N
 
     project_base = _resolve_project_base(game_path)
     print(f"[INSPECT] Project base: {project_base}", file=sys.stderr)
+    game_dir = project_base / "game"
 
     py_major = sys.version_info.major
     py_minor = sys.version_info.minor
@@ -415,6 +464,10 @@ def inspect_label(game_path: Path, label_name: str, sdk_path: Optional[Path] = N
         f"--max-statements={max_statements}",
     ]
 
+    hidden_sources: List[Tuple[Path, Path]] = []
+    if ignore_sources:
+        hidden_sources = _hide_source_files(game_dir, ignore_sources)
+
     try:
         try:
             renpy.bootstrap.bootstrap(str(sdk_base))
@@ -426,6 +479,7 @@ def inspect_label(game_path: Path, label_name: str, sdk_path: Optional[Path] = N
         sys.argv = argv_backup
         os.chdir(cwd_backup)
         os.environ["PATH"] = original_env_path
+        _restore_hidden_sources(hidden_sources)
 
     if _CAPTURED_LABEL_DETAILS is None:
         raise LabelInspectionError("SDK finished without returning label information.")
@@ -464,6 +518,12 @@ def main() -> None:
         type=Path,
         help="Optional file to write the inspection JSON to (useful for GUI-only Python builds).",
     )
+    parser.add_argument(
+        "--ignore-source",
+        action="append",
+        default=[],
+        help="Relative path (from game/) of a .rpy source file to hide so its compiled .rpyc is used instead. Repeat to add multiple entries.",
+    )
 
     args = parser.parse_args()
     details = inspect_label(
@@ -471,6 +531,7 @@ def main() -> None:
         args.label,
         args.sdk_path,
         max_statements=args.max_statements,
+        ignore_sources=args.ignore_source,
     )
 
     if args.output:

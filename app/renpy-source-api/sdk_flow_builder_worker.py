@@ -13,7 +13,11 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+import textwrap
+from typing import Any, Dict, List, Optional, Set, Tuple
+import re
+import io
+import contextlib
 
 ROOT_DIR = Path(__file__).parent
 SDK_DIR = ROOT_DIR / "renpy_sdk" / "renpy-8.4.0-sdk"
@@ -21,6 +25,12 @@ PYTHON_STDLIB = SDK_DIR / "lib" / "python3.12"
 SITE_PACKAGES = PYTHON_STDLIB / "site-packages"
 STATE: Optional["_ExtractionState"] = None
 DEBUG_ENABLED = os.environ.get("SDK_FLOW_DEBUG") == "1"
+FLOW_CONFIG: Dict[str, Any] = {}
+IGNORED_PATHS: Set[Path] = set()
+FORCE_RPYC_PATHS: Set[Path] = set()
+PROJECT_ROOT: Optional[Path] = None
+GAME_DIR: Optional[Path] = None
+_HIDDEN_SOURCE_ORIGINALS: Set[Path] = set()
 
 
 def _prepare_environment() -> None:
@@ -163,6 +173,9 @@ class ASTFlowExtractor:
                 path = path.resolve()
         except OSError:
             return False
+
+        if _is_ignored_absolute(path):
+            return True
 
         for root in self._excluded_roots:
             try:
@@ -506,11 +519,27 @@ def main() -> None:
         return
 
     project_root = Path(sys.argv[1]).resolve()
+    _load_flowviz_config(project_root)
+    hidden_force = _temporarily_hide_force_rpyc_files()
+    hidden_files = _temporarily_hide_ignored_files()
+    sanitized_backups = _swap_in_sanitized_scripts(project_root)
     _prepare_environment()
 
     import renpy  # type: ignore
     import renpy.bootstrap  # type: ignore
     import renpy.arguments  # type: ignore
+    import renpy.config as renpy_config  # type: ignore
+
+    try:
+        import codecs
+
+        # Allow UTF-8 with BOM and other utf-8 variants transparently.
+        renpy_config.script_encoding = "utf-8-sig"  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+    search_dir = GAME_DIR if GAME_DIR is not None else project_root / "game"
+    renpy_config.searchpath = [str(search_dir)]  # type: ignore[attr-defined]
 
     launcher_module = _load_launcher_module()
     renpy.__main__ = launcher_module  # type: ignore[attr-defined]
@@ -536,16 +565,297 @@ def main() -> None:
         "sdk_flow_worker",
     ]
 
+    dynamic_hidden: List[Tuple[Path, Path]] = []
     try:
-        renpy.bootstrap.bootstrap(str(SDK_DIR))  # type: ignore
-    except SystemExit as exc:  # pragma: no cover - Ren'Py uses SystemExit for flow control
-        if exc.code not in (0, None):
-            raise
+        dynamic_hidden = _bootstrap_with_retries()
+    finally:
+        _restore_hidden_files(dynamic_hidden)
+        _restore_sanitized_scripts(sanitized_backups)
+        _restore_hidden_files(hidden_files)
+        _restore_hidden_files(hidden_force)
 
     if STATE.error:
         raise RuntimeError(STATE.error)
 
     print(json.dumps(STATE.result or {}), flush=True)
+def _swap_in_sanitized_scripts(project_root: Path) -> List[Tuple[Path, Path]]:
+    backups: List[Tuple[Path, Path]] = []
+    game_dir = project_root / "game"
+    if not game_dir.exists():
+        return backups
+
+    for script_path in game_dir.rglob("*.rpy"):
+        if _is_ignored_absolute(script_path) or _is_force_rpyc_absolute(script_path):
+            continue
+        try:
+            text = script_path.read_text(encoding="utf-8-sig")
+        except Exception:
+            continue
+        if not text.startswith((" ", "\t")):
+            continue
+
+        sanitized_text = textwrap.dedent(text)
+        backup_path = script_path.with_suffix(script_path.suffix + ".sdkbak")
+        suffix_index = 1
+        while backup_path.exists():
+            backup_path = script_path.with_suffix(script_path.suffix + f".sdkbak{suffix_index}")
+            suffix_index += 1
+
+        try:
+            script_path.rename(backup_path)
+            script_path.write_text(sanitized_text, encoding="utf-8")
+            backups.append((script_path, backup_path))
+        except Exception:
+            if backup_path.exists():
+                backup_path.rename(script_path)
+
+    if backups and DEBUG_ENABLED:
+        print(f"[SDK_WORKER] Sanitized {len(backups)} script files in-place for analysis.", file=sys.stderr)
+
+    return backups
+
+
+def _restore_sanitized_scripts(backups: List[Tuple[Path, Path]]) -> None:
+    for original, backup in reversed(backups):
+        try:
+            if original.exists():
+                original.unlink()
+            if backup.exists():
+                backup.rename(original)
+        except Exception:
+            continue
+
+
+def _temporarily_hide_ignored_files() -> List[Tuple[Path, Path]]:
+    hidden: List[Tuple[Path, Path]] = []
+    for ignored in IGNORED_PATHS:
+        if not ignored.exists():
+            continue
+        if not _is_within_game_dir(ignored):
+            continue
+        hidden_path = _next_available_suffix(ignored, ".flowignore")
+        try:
+            ignored.rename(hidden_path)
+            _HIDDEN_SOURCE_ORIGINALS.add(ignored)
+            hidden.append((ignored, hidden_path))
+        except Exception:
+            continue
+    if hidden and DEBUG_ENABLED:
+        print(f"[SDK_WORKER] Temporarily hiding {len(hidden)} ignored files.", file=sys.stderr)
+    return hidden
+
+
+def _restore_hidden_files(hidden: List[Tuple[Path, Path]]) -> None:
+    for original, temp in reversed(hidden):
+        try:
+            if original.exists():
+                original.unlink()
+            if temp.exists():
+                temp.rename(original)
+            _HIDDEN_SOURCE_ORIGINALS.discard(original)
+        except Exception:
+            continue
+
+
+def _bootstrap_with_retries(max_attempts: int = 5) -> List[Tuple[Path, Path]]:
+    import renpy.bootstrap  # type: ignore
+
+    hidden_dynamic: List[Tuple[Path, Path]] = []
+    attempts = 0
+
+    while True:
+        attempts += 1
+        stdout_buffer = io.StringIO()
+        stderr_buffer = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
+                renpy.bootstrap.bootstrap(str(SDK_DIR))  # type: ignore
+            _flush_captured(stdout_buffer, stderr_buffer)
+            return hidden_dynamic
+        except SystemExit as exc:  # pragma: no cover
+            _flush_captured(stdout_buffer, stderr_buffer)
+            if exc.code in (0, None):
+                return hidden_dynamic
+
+            offending = _extract_error_paths(stdout_buffer.getvalue(), stderr_buffer.getvalue())
+            if DEBUG_ENABLED and offending:
+                pretty = ", ".join(str(p) for p in offending)
+                print(f"[SDK_WORKER] Parse errors detected in: {pretty}", file=sys.stderr)
+            new_hidden = _hide_problem_files(offending)
+            if not new_hidden or attempts >= max_attempts:
+                hidden_dynamic.extend(new_hidden)
+                raise
+            hidden_dynamic.extend(new_hidden)
+            if DEBUG_ENABLED:
+                print(f"[SDK_WORKER] Retrying bootstrap after hiding {len(new_hidden)} problem file(s).", file=sys.stderr)
+
+
+def _flush_captured(stdout_buffer: io.StringIO, stderr_buffer: io.StringIO) -> None:
+    stdout_value = stdout_buffer.getvalue()
+    stderr_value = stderr_buffer.getvalue()
+    if stdout_value:
+        print(stdout_value, end="")
+    if stderr_value:
+        print(stderr_value, end="", file=sys.stderr)
+
+
+def _extract_error_paths(stdout_text: str, stderr_text: str) -> List[Path]:
+    combined = f"{stdout_text}\n{stderr_text}"
+    matches = _PARSE_ERROR_RE.findall(combined)
+    paths: List[Path] = []
+    for filename, _line in matches:
+        candidate = Path(filename)
+        try:
+            if not candidate.is_absolute():
+                base = PROJECT_ROOT if PROJECT_ROOT is not None else Path.cwd()
+                candidate = (base / candidate).resolve()
+            else:
+                candidate = candidate.resolve()
+        except Exception:
+            pass
+        paths.append(candidate)
+    # preserve order but remove duplicates
+    dedup: List[Path] = []
+    seen: Set[Path] = set()
+    for path in paths:
+        if path in seen:
+            continue
+        seen.add(path)
+        dedup.append(path)
+    return dedup
+
+
+def _hide_problem_files(paths: List[Path]) -> List[Tuple[Path, Path]]:
+    hidden: List[Tuple[Path, Path]] = []
+    for path in paths:
+        if not path.suffix.lower().endswith(".rpy"):
+            continue
+        if _is_ignored_absolute(path) or _is_force_rpyc_absolute(path) or path in _HIDDEN_SOURCE_ORIGINALS:
+            continue
+        if not _is_within_game_dir(path):
+            continue
+        if not path.exists():
+            continue
+        compiled = path.with_suffix(path.suffix + "c")
+        if not compiled.exists():
+            continue
+        hidden_path = _next_available_suffix(path, ".flowignore")
+        try:
+            path.rename(hidden_path)
+            _HIDDEN_SOURCE_ORIGINALS.add(path)
+            hidden.append((path, hidden_path))
+        except Exception:
+            continue
+    if hidden and DEBUG_ENABLED:
+        pretty = ", ".join(str(p) for p, _ in hidden)
+        print(f"[SDK_WORKER] Switching to .rpyc for: {pretty}", file=sys.stderr)
+    return hidden
+
+
+def _temporarily_hide_force_rpyc_files() -> List[Tuple[Path, Path]]:
+    hidden: List[Tuple[Path, Path]] = []
+    for target in FORCE_RPYC_PATHS:
+        if not target.exists():
+            continue
+        if target in _HIDDEN_SOURCE_ORIGINALS:
+            continue
+        if not _is_within_game_dir(target):
+            continue
+        if target.suffix.lower().endswith(".rpy"):
+            compiled = target.with_suffix(target.suffix + "c")
+            if not compiled.exists():
+                continue
+        hidden_path = _next_available_suffix(target, ".flowignore")
+        try:
+            target.rename(hidden_path)
+            _HIDDEN_SOURCE_ORIGINALS.add(target)
+            hidden.append((target, hidden_path))
+        except Exception:
+            continue
+    if hidden and DEBUG_ENABLED:
+        print(f"[SDK_WORKER] Forcing .rpyc usage for {len(hidden)} files.", file=sys.stderr)
+    return hidden
+
+
+def _load_flowviz_config(project_root: Path) -> None:
+    global FLOW_CONFIG, IGNORED_PATHS, FORCE_RPYC_PATHS, GAME_DIR, PROJECT_ROOT
+    PROJECT_ROOT = project_root
+    game_dir = (project_root / "game").resolve()
+    GAME_DIR = game_dir
+    config_path = game_dir / "flowviz_config.json"
+    FLOW_CONFIG = {}
+    IGNORED_PATHS = set()
+    FORCE_RPYC_PATHS = set()
+
+    if not config_path.exists():
+        return
+
+    try:
+        with config_path.open("r", encoding="utf-8") as fh:
+            FLOW_CONFIG = json.load(fh)
+    except Exception:
+        FLOW_CONFIG = {}
+        return
+
+    ignore_entries = FLOW_CONFIG.get("ignore_files", [])
+    IGNORED_PATHS = _resolve_config_paths(game_dir, ignore_entries)
+    force_entries = FLOW_CONFIG.get("force_rpyc_files", [])
+    FORCE_RPYC_PATHS = _resolve_config_paths(game_dir, force_entries)
+
+
+def _resolve_config_paths(game_dir: Path, entries: Any) -> Set[Path]:
+    resolved: Set[Path] = set()
+    if not isinstance(entries, list):
+        return resolved
+
+    for entry in entries:
+        if not isinstance(entry, str) or not entry.strip():
+            continue
+        entry_path = Path(entry.strip())
+        if not entry_path.is_absolute():
+            candidate = game_dir / entry_path
+        else:
+            candidate = entry_path
+        try:
+            resolved.add(candidate.resolve())
+        except OSError:
+            resolved.add(candidate)
+    return resolved
+
+
+def _is_ignored_absolute(path: Path) -> bool:
+    try:
+        candidate = path.resolve()
+    except OSError:
+        candidate = path
+    return candidate in IGNORED_PATHS
+
+
+def _is_force_rpyc_absolute(path: Path) -> bool:
+    try:
+        candidate = path.resolve()
+    except OSError:
+        candidate = path
+    return candidate in FORCE_RPYC_PATHS
+
+
+def _is_within_game_dir(path: Path) -> bool:
+    if GAME_DIR is None:
+        return True
+    try:
+        path.resolve().relative_to(GAME_DIR)
+        return True
+    except Exception:
+        return False
+
+
+def _next_available_suffix(path: Path, suffix: str) -> Path:
+    candidate = path.with_suffix(path.suffix + suffix)
+    counter = 1
+    while candidate.exists():
+        candidate = path.with_suffix(path.suffix + f"{suffix}{counter}")
+        counter += 1
+    return candidate
 
 
 if __name__ == "__main__":
