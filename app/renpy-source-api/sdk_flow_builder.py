@@ -8,7 +8,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from parser import (
     LabelNode,
@@ -32,6 +32,9 @@ _PARSE_ERROR_RE = re.compile(
     """,
     re.IGNORECASE | re.MULTILINE,
 )
+
+_LABEL_DEF_RE = re.compile(r"^\s*label\s+([A-Za-z_][\w.]*)\s*:")
+_SCREEN_CALL_RE = re.compile(r"^\s*(call|show)\s+screen\s+([A-Za-z_][\w.]+)")
 
 
 class SDKFlowBuilderError(RuntimeError):
@@ -86,7 +89,9 @@ class SDKFlowBuilder:
                         payload = json.loads(result.stdout or "{}")
                     except json.JSONDecodeError as exc:
                         raise SDKFlowBuilderError(f"Invalid JSON from SDK worker: {exc}\nOutput:\n{result.stdout}") from exc
-                    return self._construct_flow_graph(payload)
+                    flow_graph = self._construct_flow_graph(payload)
+                    self._augment_screen_calls(flow_graph, project_root)
+                    return flow_graph
 
                 error_message = self._format_worker_failure(result, attempts)
                 last_error = error_message
@@ -210,21 +215,13 @@ class SDKFlowBuilder:
         structures: List[ScreenStructure] = []
         for screen in items:
             screen_name = self._normalize_screen_name(screen.get("screen_name"))
+            elements = self._convert_screen_elements(screen)
             structure = ScreenStructure(
                 screen_name=screen_name,
                 file_path=screen.get("file_path", ""),
                 line_number=screen.get("line_number", 0),
-                elements=[
-                    ScreenElement(
-                        element_type=elem.get("element_type", ""),
-                        text=elem.get("text"),
-                        destination=elem.get("destination"),
-                        action_type=elem.get("action_type"),
-                        file_path=elem.get("file_path", ""),
-                        line_number=elem.get("line_number", 0),
-                    )
-                    for elem in screen.get("elements", [])
-                ],
+                screen_type=screen.get("screen_type") or "standard",
+                elements=elements,
             )
             structures.append(structure)
         return structures
@@ -236,6 +233,77 @@ class SDKFlowBuilder:
         if isinstance(raw_name, (list, tuple)):
             return ":".join(str(part) for part in raw_name if part)
         return str(raw_name or "")
+
+    def _convert_screen_elements(self, screen_payload: Dict[str, Any]) -> List[ScreenElement]:
+        elements: List[ScreenElement] = []
+        raw_elements = screen_payload.get("elements", [])
+        for raw_element in raw_elements:
+            actions = raw_element.get("actions") or []
+            if not actions:
+                continue
+            coordinates = self._bounds_to_tuple(raw_element.get("coordinates") or raw_element.get("bounds"))
+            text_value = raw_element.get("text")
+            keywords = raw_element.get("keywords", [])
+            condition = raw_element.get("condition")
+
+            for action_payload in actions:
+                destination = self._derive_screen_destination(action_payload)
+                if not destination or not isinstance(destination, str):
+                    continue
+
+                screen_element = ScreenElement(
+                    element_type=self._normalize_element_type(raw_element.get("element_type")),
+                    text=text_value,
+                    coordinates=coordinates,
+                    destination=destination,
+                    action_type=action_payload.get("action_type"),
+                    file_path=raw_element.get("file_path", ""),
+                    line_number=raw_element.get("line_number", 0),
+                )
+                screen_element.element_index = len(elements)
+                screen_element.condition = condition
+                screen_element.trigger = action_payload.get("trigger")
+                screen_element.raw_expression = action_payload.get("raw_expression")
+                screen_element.target_screen = action_payload.get("target_screen")
+                screen_element.target_url = action_payload.get("target_url")
+                screen_element.target_value = action_payload.get("target_value")
+                screen_element.keywords = keywords
+                elements.append(screen_element)
+        return elements
+
+    @staticmethod
+    def _bounds_to_tuple(bounds: Any) -> Optional[Tuple[int, int, int, int]]:
+        def _validate(candidate: Iterable[Any]) -> Optional[Tuple[int, int, int, int]]:
+            values: List[int] = []
+            for value in candidate:
+                if isinstance(value, (int, float)):
+                    values.append(int(value))
+            if len(values) >= 4:
+                return values[0], values[1], values[2], values[3]
+            return None
+
+        if isinstance(bounds, dict):
+            ordered = [bounds.get("x"), bounds.get("y"), bounds.get("width"), bounds.get("height")]
+            return _validate(ordered)
+        if isinstance(bounds, (list, tuple)):
+            return _validate(bounds)
+        return None
+
+    @staticmethod
+    def _normalize_element_type(value: Any) -> str:
+        if isinstance(value, str):
+            return value.lstrip("_") or "unknown"
+        if value is None:
+            return "unknown"
+        return str(value)
+
+    @staticmethod
+    def _derive_screen_destination(action_payload: Dict[str, Any]) -> Optional[str]:
+        action_type = action_payload.get("action_type")
+        target_label = action_payload.get("target_label")
+        if action_type in {"jump_label", "call_label"} and isinstance(target_label, str):
+            return target_label
+        return None
 
     def _populate_incoming_flows(self, flow_graph: Dict[str, LabelNode]) -> None:
         for node in flow_graph.values():
@@ -264,6 +332,77 @@ class SDKFlowBuilder:
             f"SDK worker failed (exit {result.returncode}) on attempt {attempt}.\n"
             f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
         )
+
+    def _augment_screen_calls(self, flow_graph: Dict[str, LabelNode], project_root: Path) -> None:
+        try:
+            screen_calls = self._scan_screen_calls(project_root)
+        except Exception as exc:
+            if self._debug_enabled:
+                print(f"[SDK_HOST] Failed to scan screen calls: {exc}", file=sys.stderr)
+            return
+
+        for label_name, screens in screen_calls.items():
+            node = flow_graph.get(label_name)
+            if not node:
+                continue
+            deduped: List[str] = []
+            seen: Set[str] = set()
+            for screen in screens:
+                if screen not in seen:
+                    seen.add(screen)
+                    deduped.append(screen)
+            node.screen_calls = deduped
+            node.has_screen_calls = bool(deduped)
+
+    def _scan_screen_calls(self, project_root: Path) -> Dict[str, List[str]]:
+        search_root = project_root / "game"
+        if not search_root.is_dir():
+            search_root = project_root
+
+        calls: Dict[str, List[str]] = {}
+        for rpy_path in search_root.rglob("*.rpy"):
+            if self._should_skip_screen_file(rpy_path, search_root):
+                continue
+            current_label: Optional[str] = None
+            try:
+                content = rpy_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                content = rpy_path.read_text(encoding="latin-1")
+            except OSError:
+                continue
+
+            for raw_line in content.splitlines():
+                label_match = _LABEL_DEF_RE.match(raw_line)
+                if label_match:
+                    current_label = label_match.group(1)
+                    continue
+
+                if not current_label:
+                    continue
+
+                stripped = raw_line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+
+                call_match = _SCREEN_CALL_RE.match(stripped)
+                if call_match:
+                    screen_name = call_match.group(2)
+                    calls.setdefault(current_label, []).append(screen_name)
+
+        return calls
+
+    @staticmethod
+    def _should_skip_screen_file(path: Path, root: Path) -> bool:
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            relative = path
+        lowered_parts = [part.lower() for part in relative.parts]
+        if "renpy" in lowered_parts:
+            return True
+        if "0x52-urm" in lowered_parts:
+            return True
+        return False
 
     def _extract_error_paths(
         self,

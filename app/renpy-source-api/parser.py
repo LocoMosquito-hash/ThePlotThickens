@@ -137,6 +137,12 @@ class ScreenElement:
     element_index: int = 0  # Order within the screen (0-based)
     has_condition: bool = False  # If element has conditional display
     condition: Optional[str] = None
+    trigger: Optional[str] = None  # Action trigger, e.g., clicked/hovered
+    raw_expression: Optional[str] = None  # Original Ren'Py expression
+    target_screen: Optional[str] = None  # Target screen name for Show/Call screen
+    target_url: Optional[str] = None  # External URLs (OpenURL)
+    target_value: Optional[str] = None  # Generic value targets (preferences, vars)
+    keywords: List[str] = field(default_factory=list)  # Keyword arguments attached to element
     
     def __post_init__(self):
         """Compute derived fields after initialization."""

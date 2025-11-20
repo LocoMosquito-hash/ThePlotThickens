@@ -113,37 +113,45 @@ class ASTFlowExtractor:
         return isinstance(node, renpy.ast.Label)
 
     def _collect_screens(self) -> List[Dict[str, Any]]:
-        try:
-            import renpy.display.screen  # type: ignore
-        except Exception:
-            return []
+        import renpy.ast  # type: ignore
 
         payload: List[Dict[str, Any]] = []
-        for screen_name, screen in renpy.display.screen.screens.items():  # type: ignore[attr-defined]
-            if not hasattr(screen, "ast"):
-                continue
-            filename = getattr(screen.ast, "filename", "")
-            if self._is_excluded_source(filename) or not self._is_project_screen(screen_name, filename):
-                continue
-            payload.append(
-                {
-                    "screen_name": screen_name,
-                    "file_path": self._normalize_source(getattr(screen.ast, "filename", "")),
-                    "line_number": getattr(screen.ast, "linenumber", 0),
-                    "elements": [],
-                }
-            )
-        return payload
+        seen_keys: Set[str] = set()
 
-    @staticmethod
-    def _normalize_source(filename: Optional[str]) -> str:
-        if not filename:
-            return ""
-        path = Path(filename)
-        try:
-            return str(path.resolve())
-        except OSError:
-            return filename
+        if DEBUG_ENABLED:
+            total_screens = sum(1 for node in self.script.namemap.values() if isinstance(node, renpy.ast.Screen))  # type: ignore[attr-defined]
+            print(f"[SDK_WORKER][SCREENS] AST reported {total_screens} screen nodes.", file=sys.stderr)
+
+        for node in self.script.namemap.values():  # type: ignore[attr-defined]
+            if not isinstance(node, renpy.ast.Screen):
+                continue
+            if self._is_excluded_source(getattr(node, "filename", None)):
+                continue
+            screen_key = (getattr(node.screen, "name", ""), getattr(node, "filename", ""))
+            if screen_key in seen_keys:
+                continue
+            try:
+                analyzer = ScreenAnalyzer(node, self.project_root)
+                screen_payload = analyzer.analyze()
+            except Exception as exc:
+                if DEBUG_ENABLED:
+                    name_hint = getattr(node.screen, "name", None) if getattr(node, "screen", None) else None
+                    print(
+                        f"[SDK_WORKER] Failed to analyze screen '{name_hint}': {exc}",
+                        file=sys.stderr,
+                    )
+                continue
+            seen_keys.add(screen_key)
+            if not self._is_project_screen(screen_payload.get("screen_name", ""), screen_payload.get("file_path", "")):
+                continue
+            if DEBUG_ENABLED:
+                print(
+                    f"[SDK_WORKER][SCREENS] Captured screen '{screen_payload.get('screen_name')}' "
+                    f"from {screen_payload.get('file_path')}",
+                    file=sys.stderr,
+                )
+            payload.append(screen_payload)
+        return payload
 
     def _build_exclusion_roots(self) -> List[Path]:
         roots: List[Path] = []
@@ -517,6 +525,394 @@ class LabelAnalyzer:
         if file_path:
             return f"{file_path}:{line_number}"
         return f"line {line_number}"
+
+
+class ScreenAnalyzer:
+    def __init__(self, screen_ast: Any, project_root: Path):
+        import renpy.sl2.slast  # type: ignore
+
+        self.screen_ast = screen_ast
+        self.project_root = project_root
+        self.sl2 = renpy.sl2.slast  # type: ignore
+        self.elements: List[Dict[str, Any]] = []
+        self._debug_target: Optional[str] = None
+        self.screen_name: str = ""
+
+    def analyze(self) -> Dict[str, Any]:
+        screen_obj = getattr(self.screen_ast, "screen", None)
+        self.screen_name = getattr(screen_obj, "name", "") if screen_obj else ""
+        file_path = self._normalize_filename(getattr(self.screen_ast, "filename", ""))
+        line_number = getattr(self.screen_ast, "linenumber", 0)
+
+        if DEBUG_ENABLED and file_path.lower().endswith("myscreens.rpy"):
+            self._debug_target = self.screen_name or "<unknown>"
+            print(
+                f"[SDK_WORKER][SCREENS] Inspecting screen '{self._debug_target}' at {file_path}:{line_number}",
+                file=sys.stderr,
+            )
+
+        if screen_obj is not None:
+            self._walk_block(screen_obj, active_condition=None)
+
+        return {
+            "screen_name": self.screen_name,
+            "file_path": file_path,
+            "line_number": line_number,
+            "elements": self.elements,
+        }
+
+    def _walk_block(self, block: Any, active_condition: Optional[str]) -> None:
+        children = getattr(block, "children", None) or []
+        for child in children:
+            self._visit_node(child, active_condition)
+
+    def _visit_node(self, node: Any, active_condition: Optional[str]) -> None:
+        if DEBUG_ENABLED and self._debug_target is not None:
+            is_disp = False
+            try:
+                is_disp = isinstance(node, self.sl2.SLDisplayable)
+            except Exception:
+                is_disp = False
+            print(
+                f"[SDK_WORKER][SCREENS] node type={type(node).__name__} condition={active_condition} is_displayable={is_disp}",
+                file=sys.stderr,
+            )
+
+        if isinstance(node, self.sl2.SLIf):
+            for cond_expr, block in node.entries:
+                combined = active_condition
+                if cond_expr is not None:
+                    cond_text = self._stringify_sl_condition(cond_expr)
+                    combined = (
+                        cond_text
+                        if active_condition is None
+                        else f"({active_condition}) and ({cond_text})"
+                    )
+                self._walk_block(block, combined)
+            return
+
+        if isinstance(node, self.sl2.SLDisplayable):
+            self._process_displayable(node, active_condition)
+            return
+
+        if isinstance(node, self.sl2.SLBlock):
+            self._walk_block(node, active_condition)
+            return
+
+        nested_block = getattr(node, "block", None)
+        if nested_block is not None:
+            self._walk_block(nested_block, active_condition)
+
+    def _process_displayable(self, displayable: Any, active_condition: Optional[str]) -> None:
+        if not DEBUG_ENABLED or self._debug_target is None:
+            pass
+
+        keyword_names = [name for name, _expr in getattr(displayable, "keyword", [])]
+
+        if DEBUG_ENABLED and self._debug_target is not None:
+            keyword_list = ", ".join(keyword_names) if keyword_names else "<no keywords>"
+            disp_obj = getattr(displayable, "displayable", None)
+            if hasattr(disp_obj, "__name__"):
+                disp_name = getattr(disp_obj, "__name__")
+            else:
+                disp_name = getattr(displayable, "name", "") or repr(disp_obj)
+
+            print(
+                f"[SDK_WORKER][SCREENS] screen={self._debug_target} displayable={disp_name} keywords={keyword_list}",
+                file=sys.stderr,
+            )
+
+            for key, expr in getattr(displayable, "keyword", []):
+                expr_desc = self._describe_keyword_expr(expr)
+                text_attr = getattr(expr, "text", None)
+                source_attr = getattr(expr, "source", None)
+                expr_type = type(expr).__name__
+                print(
+                    f"    -> keyword '{key}' (type={expr_type}) expr={expr_desc} text_attr={text_attr!r} source_attr={source_attr!r}",
+                    file=sys.stderr,
+                )
+
+        element_type = self._derive_element_type(displayable)
+        element_payload: Dict[str, Any] = {
+            "screen_name": self.screen_name,
+            "element_type": element_type,
+            "condition": active_condition,
+            "keywords": keyword_names,
+            "file_path": self._normalize_filename(self._safe_get_location(displayable, index=0)),
+            "line_number": self._safe_get_location(displayable, index=1),
+            "text": self._extract_display_text(displayable),
+        }
+
+        coordinates = self._extract_bounds(displayable)
+        if coordinates:
+            element_payload["coordinates"] = coordinates
+
+        actions = self._extract_actions(displayable)
+        if actions:
+            element_payload["actions"] = actions
+            self.elements.append(element_payload)
+
+        for child in getattr(displayable, "children", []) or []:
+            self._visit_node(child, active_condition)
+
+    @staticmethod
+    def _stringify_sl_condition(condition: Any) -> str:
+        try:
+            import ast
+
+            if isinstance(condition, ast.AST):
+                return ast.unparse(condition)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        return str(condition)
+
+    @staticmethod
+    def _describe_keyword_expr(expr: Any) -> str:
+        try:
+            import ast
+
+            if isinstance(expr, ast.AST):
+                try:
+                    return ast.unparse(expr)  # type: ignore[attr-defined]
+                except Exception:
+                    return ast.dump(expr, include_attributes=False)
+            text = getattr(expr, "text", None)
+            if text:
+                return text
+        except Exception:
+            pass
+        return repr(expr)
+
+    def _normalize_filename(self, filename: Optional[str]) -> str:
+        if not filename:
+            return ""
+        path = Path(filename)
+        try:
+            if not path.is_absolute():
+                candidate = (self.project_root / path).resolve()
+            else:
+                candidate = path.resolve()
+            return str(candidate)
+        except OSError:
+            return str(path)
+
+    @staticmethod
+    def _safe_get_location(displayable: Any, index: int) -> Any:
+        location = getattr(displayable, "location", None)
+        if isinstance(location, tuple) and len(location) > index:
+            return location[index]
+        return None
+
+    @staticmethod
+    def _derive_element_type(displayable: Any) -> str:
+        disp_obj = getattr(displayable, "displayable", None)
+        if hasattr(disp_obj, "__name__"):
+            return getattr(disp_obj, "__name__")
+        name_attr = getattr(displayable, "name", None)
+        if name_attr:
+            return str(name_attr)
+        return "unknown"
+
+    def _extract_display_text(self, displayable: Any) -> Optional[str]:
+        text_attr = getattr(displayable, "text", None)
+        if isinstance(text_attr, str):
+            return text_attr
+        label_attr = getattr(displayable, "label", None)
+        if isinstance(label_attr, str):
+            return label_attr
+
+        for key, expr in getattr(displayable, "keyword", []) or []:
+            if key in {"text", "label"}:
+                literal = self._literal_from_expr(expr)
+                if isinstance(literal, str):
+                    return literal
+
+        positional = getattr(displayable, "positional", None) or []
+        for arg in positional:
+            literal = self._literal_from_ast(arg)
+            if isinstance(literal, str):
+                return literal
+        return None
+
+    def _extract_bounds(self, displayable: Any) -> Optional[Tuple[int, int, int, int]]:
+        positional = getattr(displayable, "positional", None)
+        if not positional:
+            return None
+
+        coords: List[int] = []
+        for arg in positional:
+            value = self._literal_from_ast(arg)
+            if isinstance(value, (list, tuple)):
+                coords.extend([int(v) for v in value if isinstance(v, (int, float))])
+            elif isinstance(value, (int, float)):
+                coords.append(int(value))
+
+        if len(coords) >= 4:
+            return (coords[0], coords[1], coords[2], coords[3])
+        return None
+
+    def _literal_from_expr(self, expr: Any) -> Any:
+        ast_node = self._coerce_expr_to_ast(expr)
+        if ast_node is not None:
+            return self._literal_from_ast(ast_node)
+        text_attr = getattr(expr, "text", None)
+        if text_attr is not None:
+            return text_attr
+        source_attr = getattr(expr, "source", None)
+        if isinstance(source_attr, str):
+            return source_attr
+        return None
+
+    def _extract_actions(self, displayable: Any) -> List[Dict[str, Any]]:
+        actions: List[Dict[str, Any]] = []
+        keyword_pairs = getattr(displayable, "keyword", []) or []
+        for key, expr in keyword_pairs:
+            if key not in {"action", "clicked", "hovered", "selected", "unhovered", "alternate"}:
+                continue
+            parsed_actions = self._parse_action_expression(expr)
+            if not parsed_actions and DEBUG_ENABLED and self._debug_target is not None:
+                expr_repr = self._describe_keyword_expr(expr)
+                print(
+                    f"[SDK_WORKER][SCREENS] Unable to parse action for key='{key}' expr={expr_repr}",
+                    file=sys.stderr,
+                )
+            for parsed in parsed_actions:
+                parsed["trigger"] = key
+                actions.append(parsed)
+        return actions
+
+    def _parse_action_expression(self, expr: Any) -> List[Dict[str, Any]]:
+        ast_node = self._coerce_expr_to_ast(expr)
+        if ast_node is None:
+            if DEBUG_ENABLED and self._debug_target is not None:
+                expr_repr = self._describe_keyword_expr(expr)
+                print(
+                    f"[SDK_WORKER][SCREENS] Failed to build AST from expr={expr_repr}",
+                    file=sys.stderr,
+                )
+            return []
+
+        return self._interpret_action_ast(ast_node)
+
+    def _coerce_expr_to_ast(self, expr: Any) -> Any:
+        import ast
+
+        if isinstance(expr, ast.AST):
+            return expr
+
+        for source in self._gather_expr_sources(expr):
+            try:
+                parsed = ast.parse(source, mode="eval")
+                return parsed.body  # type: ignore[attr-defined]
+            except Exception:
+                continue
+        return None
+
+    @staticmethod
+    def _gather_expr_sources(expr: Any) -> List[str]:
+        sources: List[str] = []
+        seen: Set[str] = set()
+
+        def _add(candidate: Optional[str]) -> None:
+            if not isinstance(candidate, str):
+                return
+            cleaned = candidate.strip()
+            if not cleaned or cleaned in seen:
+                return
+            seen.add(cleaned)
+            sources.append(cleaned)
+
+        if isinstance(expr, str):
+            _add(expr)
+
+        for attr in ("text", "source", "expr"):
+            _add(getattr(expr, attr, None))
+
+        code_attr = getattr(expr, "code", None)
+        if isinstance(code_attr, str):
+            _add(code_attr)
+        elif code_attr is not None:
+            _add(getattr(code_attr, "source", None))
+
+        return sources
+
+    def _interpret_action_ast(self, node: Any) -> List[Dict[str, Any]]:
+        import ast
+
+        if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+            results: List[Dict[str, Any]] = []
+            for child in node.elts:  # type: ignore[attr-defined]
+                results.extend(self._interpret_action_ast(child))
+            return results
+
+        if isinstance(node, ast.Call):
+            target_name = self._resolve_call_name(node.func)
+            raw_expr = self._safe_unparse(node)
+            first_arg = node.args[0] if node.args else None
+            target_value = self._literal_from_ast(first_arg) if first_arg is not None else None
+
+            action_type = "custom"
+            payload: Dict[str, Any] = {"action_type": action_type, "raw_expression": raw_expr}
+
+            if target_name in {"Jump", "renpy.jump"} and isinstance(target_value, str):
+                action_type = "jump_label"
+                payload.update({"action_type": action_type, "target_label": target_value})
+            elif target_name in {"Call", "renpy.call"} and isinstance(target_value, str):
+                action_type = "call_label"
+                payload.update({"action_type": action_type, "target_label": target_value})
+            elif target_name in {"ShowMenu", "CallScreen"} and isinstance(target_value, str):
+                action_type = "show_screen" if target_name == "ShowMenu" else "call_screen"
+                payload.update({"action_type": action_type, "target_screen": target_value})
+            elif target_name == "Return":
+                payload["action_type"] = "return"
+            elif target_name == "OpenURL" and isinstance(target_value, str):
+                payload.update({"action_type": "open_url", "target_url": target_value})
+            elif isinstance(target_value, str):
+                payload["target_value"] = target_value
+
+            return [payload]
+
+        return []
+
+    @staticmethod
+    def _resolve_call_name(func: Any) -> str:
+        import ast
+
+        if isinstance(func, ast.Name):
+            return func.id
+        if isinstance(func, ast.Attribute):
+            parts: List[str] = []
+            current = func
+            while isinstance(current, ast.Attribute):
+                parts.append(current.attr)
+                current = current.value
+            if isinstance(current, ast.Name):
+                parts.append(current.id)
+            return ".".join(reversed(parts))
+        return ""
+
+    @staticmethod
+    def _safe_unparse(node: Any) -> str:
+        try:
+            import ast
+
+            return ast.unparse(node)  # type: ignore[attr-defined]
+        except Exception:
+            return repr(node)
+
+    @staticmethod
+    def _literal_from_ast(node: Any) -> Any:
+        import ast
+
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+            values = [ScreenAnalyzer._literal_from_ast(child) for child in node.elts]
+            if all(v is not None for v in values):
+                return tuple(values) if isinstance(node, ast.Tuple) else values
+        if hasattr(node, "value"):
+            return getattr(node, "value")
+        return None
 
 
 def _sdk_flow_command() -> bool:

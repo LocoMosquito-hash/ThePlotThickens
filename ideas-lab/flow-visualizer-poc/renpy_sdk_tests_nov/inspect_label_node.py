@@ -8,7 +8,75 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+
+def _load_flowviz_config(game_dir: Path) -> Tuple[List[str], List[str]]:
+    """
+    Read flowviz_config.json (if present) and return ignore/force entries.
+    """
+    config_path = game_dir / "flowviz_config.json"
+    if not config_path.exists():
+        return [], []
+
+    try:
+        with config_path.open("r", encoding="utf-8") as fh:
+            config = json.load(fh)
+    except Exception as exc:
+        print(
+            f"[INSPECT][CONFIG] Failed to parse {config_path}: {exc}",
+            file=sys.stderr,
+        )
+        return [], []
+
+    def _string_list(key: str) -> List[str]:
+        entries = config.get(key, [])
+        if not isinstance(entries, list):
+            return []
+        result: List[str] = []
+        for entry in entries:
+            if isinstance(entry, str):
+                stripped = entry.strip()
+                if stripped:
+                    result.append(stripped)
+        return result
+
+    ignore_entries = _string_list("ignore_files")
+    force_entries = _string_list("force_rpyc_files")
+
+    if ignore_entries or force_entries:
+        print(
+            f"[INSPECT][CONFIG] Loaded flowviz_config.json from {config_path}",
+            file=sys.stderr,
+        )
+        if ignore_entries:
+            print(
+                f"[INSPECT][CONFIG] Ignored files: {ignore_entries}",
+                file=sys.stderr,
+            )
+        if force_entries:
+            print(
+                f"[INSPECT][CONFIG] Forced .rpyc files: {force_entries}",
+                file=sys.stderr,
+            )
+
+    return ignore_entries, force_entries
+
+
+def _dedupe_entries(entries: List[str]) -> List[str]:
+    deduped: List[str] = []
+    seen: set[str] = set()
+    for entry in entries:
+        stripped = entry.strip()
+        if not stripped:
+            continue
+        if stripped in seen:
+            continue
+        seen.add(stripped)
+        deduped.append(stripped)
+    return deduped
+
+
 def _next_available_suffix(path: Path, suffix: str) -> Path:
     candidate = path.with_suffix(path.suffix + suffix)
     counter = 1
@@ -464,9 +532,15 @@ def inspect_label(
         f"--max-statements={max_statements}",
     ]
 
+    config_ignore, config_force = _load_flowviz_config(game_dir)
+    combined_ignore = _dedupe_entries(list(ignore_sources or []) + config_ignore)
+    forced_sources = _dedupe_entries(config_force)
+
     hidden_sources: List[Tuple[Path, Path]] = []
-    if ignore_sources:
-        hidden_sources = _hide_source_files(game_dir, ignore_sources)
+    if combined_ignore:
+        hidden_sources.extend(_hide_source_files(game_dir, combined_ignore))
+    if forced_sources:
+        hidden_sources.extend(_hide_source_files(game_dir, forced_sources))
 
     try:
         try:
