@@ -1125,13 +1125,15 @@ def _load_flowviz_config(project_root: Path) -> None:
             print(f"[SDK_WORKER] No flowviz_config.json found at {config_path}", file=sys.stderr)
         return
 
+    print(f"[SDK_WORKER] flowviz_config.json file found at {config_path}", file=sys.stderr)
+
     try:
         with config_path.open("r", encoding="utf-8") as fh:
             FLOW_CONFIG = json.load(fh)
+        print("[SDK_WORKER] flowviz_config.json parsed successfully.", file=sys.stderr)
     except Exception as exc:
         FLOW_CONFIG = {}
-        if DEBUG_ENABLED:
-            print(f"[SDK_WORKER] Failed to load flowviz_config.json ({exc}). Using defaults.", file=sys.stderr)
+        print(f"[SDK_WORKER] flowviz_config.json parse error: {exc}", file=sys.stderr)
         return
 
     ignore_entries = FLOW_CONFIG.get("ignore_files", [])
@@ -1139,12 +1141,10 @@ def _load_flowviz_config(project_root: Path) -> None:
     force_entries = FLOW_CONFIG.get("force_rpyc_files", [])
     FORCE_RPYC_PATHS = _resolve_config_paths(game_dir, force_entries)
 
-    if DEBUG_ENABLED:
-        ignore_list = ", ".join(str(path) for path in sorted(IGNORED_PATHS)) or "<none>"
-        force_list = ", ".join(str(path) for path in sorted(FORCE_RPYC_PATHS)) or "<none>"
-        print(f"[SDK_WORKER] flowviz_config.json loaded from {config_path}", file=sys.stderr)
-        print(f"[SDK_WORKER] Ignored files: {ignore_list}", file=sys.stderr)
-        print(f"[SDK_WORKER] Forced .rpyc files: {force_list}", file=sys.stderr)
+    ignore_list = ", ".join(str(path) for path in sorted(IGNORED_PATHS)) or "<none>"
+    force_list = ", ".join(str(path) for path in sorted(FORCE_RPYC_PATHS)) or "<none>"
+    print(f"[SDK_WORKER] Ignored files: {ignore_list}", file=sys.stderr)
+    print(f"[SDK_WORKER] Forced .rpyc files: {force_list}", file=sys.stderr)
 
 
 def _resolve_config_paths(game_dir: Path, entries: Any) -> Set[Path]:
