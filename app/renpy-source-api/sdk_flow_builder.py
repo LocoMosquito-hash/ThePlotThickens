@@ -251,6 +251,7 @@ class SDKFlowBuilder:
                 if not destination or not isinstance(destination, str):
                     continue
 
+                element_condition = action_payload.get("condition") or condition
                 screen_element = ScreenElement(
                     element_type=self._normalize_element_type(raw_element.get("element_type")),
                     text=text_value,
@@ -259,9 +260,9 @@ class SDKFlowBuilder:
                     action_type=action_payload.get("action_type"),
                     file_path=raw_element.get("file_path", ""),
                     line_number=raw_element.get("line_number", 0),
+                    condition=element_condition,
                 )
                 screen_element.element_index = len(elements)
-                screen_element.condition = condition
                 screen_element.trigger = action_payload.get("trigger")
                 screen_element.raw_expression = action_payload.get("raw_expression")
                 screen_element.target_screen = action_payload.get("target_screen")

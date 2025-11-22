@@ -610,7 +610,8 @@ class ScreenAnalyzer:
         if not DEBUG_ENABLED or self._debug_target is None:
             pass
 
-        keyword_names = [name for name, _expr in getattr(displayable, "keyword", [])]
+        keyword_entries = self._collect_keyword_entries(displayable, active_condition)
+        keyword_names = sorted({entry["key"] for entry in keyword_entries})
 
         if DEBUG_ENABLED and self._debug_target is not None:
             keyword_list = ", ".join(keyword_names) if keyword_names else "<no keywords>"
@@ -650,7 +651,7 @@ class ScreenAnalyzer:
         if coordinates:
             element_payload["coordinates"] = coordinates
 
-        actions = self._extract_actions(displayable)
+        actions = self._extract_actions(keyword_entries)
         if actions:
             element_payload["actions"] = actions
             self.elements.append(element_payload)
@@ -766,10 +767,39 @@ class ScreenAnalyzer:
             return source_attr
         return None
 
-    def _extract_actions(self, displayable: Any) -> List[Dict[str, Any]]:
+    def _collect_keyword_entries(
+        self,
+        block: Any,
+        inherited_condition: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        entries: List[Dict[str, Any]] = []
+        for key, expr in getattr(block, "keyword", []) or []:
+            entries.append({"key": key, "expr": expr, "condition": inherited_condition})
+
+        for child in getattr(block, "children", []) or []:
+            if isinstance(child, self.sl2.SLIf):
+                for cond_expr, branch in getattr(child, "entries", []):
+                    combined = self._combine_conditions(inherited_condition, cond_expr)
+                    entries.extend(self._collect_keyword_entries(branch, combined))
+
+        return entries
+
+    def _combine_conditions(self, base_condition: Optional[str], new_condition_ast: Any) -> Optional[str]:
+        branch_condition: Optional[str] = None
+        if new_condition_ast is not None:
+            branch_condition = self._stringify_sl_condition(new_condition_ast)
+
+        if base_condition and branch_condition:
+            return f"({base_condition}) and ({branch_condition})"
+        return branch_condition or base_condition
+
+    def _extract_actions(self, keyword_entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         actions: List[Dict[str, Any]] = []
-        keyword_pairs = getattr(displayable, "keyword", []) or []
-        for key, expr in keyword_pairs:
+        for entry in keyword_entries:
+            key = entry["key"]
+            expr = entry["expr"]
+            condition = entry.get("condition")
+
             if key not in {"action", "clicked", "hovered", "selected", "unhovered", "alternate"}:
                 continue
             parsed_actions = self._parse_action_expression(expr)
@@ -781,6 +811,8 @@ class ScreenAnalyzer:
                 )
             for parsed in parsed_actions:
                 parsed["trigger"] = key
+                if condition:
+                    parsed["condition"] = condition
                 actions.append(parsed)
         return actions
 
@@ -962,8 +994,6 @@ def main() -> None:
     import renpy.config as renpy_config  # type: ignore
 
     try:
-        import codecs
-
         # Allow UTF-8 with BOM and other utf-8 variants transparently.
         renpy_config.script_encoding = "utf-8-sig"  # type: ignore[attr-defined]
     except Exception:
