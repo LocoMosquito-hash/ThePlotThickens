@@ -174,11 +174,12 @@ class AuthoritativeHierarchy:
     - Convert to visualization format without string parsing
     """
     
-    def __init__(self):
+    def __init__(self, include_helper_labels: bool = False):
         self.root_nodes: List[HierarchyNode] = []
         self.node_index: Dict[str, HierarchyNode] = {}  # content_hash -> node
         self.semantic_index: Dict[str, HierarchyNode] = {}  # semantic_id -> node
         self.node_count = 0
+        self.include_helper_labels = include_helper_labels
         
     def build_from_flow_graph(self, flow_graph: Dict[str, Any]) -> None:
         """
@@ -211,8 +212,7 @@ class AuthoritativeHierarchy:
         
         # flow_graph keys are label names directly, not nested under 'labels'
         for label_name, label_data in flow_graph.items():
-            # Skip non-LabelNode entries (like _screen_structures)
-            if label_name.startswith('_') or not hasattr(label_data, 'has_dialogue'):
+            if self._should_skip_label_entry(label_name, label_data):
                 continue
             # Generate content-based ID for the label
             content_hash = self._generate_content_hash({
@@ -246,6 +246,15 @@ class AuthoritativeHierarchy:
         
         print(f"[HIERARCHY] Created {len(label_nodes)} label nodes")
         return label_nodes
+
+    def _should_skip_label_entry(self, label_name: str, label_data: Any) -> bool:
+        if not hasattr(label_data, 'has_dialogue'):
+            return True
+        if not label_name.startswith('_'):
+            return False
+        if self.include_helper_labels and label_name.startswith("_call_"):
+            return False
+        return True
     
     def _process_menu_structures(self, flow_graph: Dict[str, Any], label_nodes: Dict[str, HierarchyNode]) -> None:
         """
@@ -261,8 +270,7 @@ class AuthoritativeHierarchy:
         
         # flow_graph keys are label names directly
         for label_name, label_data in flow_graph.items():
-            # Skip non-LabelNode entries (like _screen_structures)
-            if label_name.startswith('_') or not hasattr(label_data, 'has_dialogue'):
+            if self._should_skip_label_entry(label_name, label_data):
                 continue
             
             total_labels_checked += 1
@@ -546,8 +554,7 @@ class AuthoritativeHierarchy:
         menu_choice_destinations = self._get_menu_choice_destinations_from_hierarchy(flow_graph)
         
         for label_name, label_node in flow_graph.items():
-            # Skip non-LabelNode entries (like _screen_structures)
-            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+            if self._should_skip_label_entry(label_name, label_node):
                 continue
                 
             source_node = self.get_node_by_label_name(label_name)

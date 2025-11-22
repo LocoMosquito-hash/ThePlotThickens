@@ -21,6 +21,7 @@ Key responsibilities:
 
 from typing import Dict, List, Any, Optional, Tuple, Set
 from types import SimpleNamespace
+import json
 import sys
 from pathlib import Path
 
@@ -85,6 +86,8 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         self.last_analysis_metadata = {}
         self.last_project_path = None
         self._last_flow_graph: Dict[str, Any] = {}
+        self._flow_config: Dict[str, Any] = {}
+        self._show_helper_labels = False
     
     def analyze_project(self, project_path: str, use_sdk: bool = False) -> VisualizationData:
         """
@@ -105,6 +108,8 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             f.flush()
         
         self.last_project_path = project_path
+        self._flow_config = self._load_flowviz_config(project_path)
+        self._show_helper_labels = bool(self._flow_config.get("show_helper_labels", False))
 
         flow_graph = self._build_sdk_flow_graph(project_path)
         overview = self._derive_project_overview(flow_graph, project_path)
@@ -112,7 +117,11 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         # Store flow graph for named menu resolution
         self._last_flow_graph = flow_graph
 
-        label_entries = [node for key, node in flow_graph.items() if not key.startswith('_') and hasattr(node, 'outgoing_flows')]
+        label_entries = [
+            node
+            for key, node in flow_graph.items()
+            if not self._should_skip_label_entry(key, node)
+        ]
         dynamic_flows = sum(
             1
             for node in label_entries
@@ -130,7 +139,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         
         # PHASE 1: Build authoritative hierarchy (NEW!)
         print(f"[ADAPTER] Building authoritative hierarchy alongside current system...")
-        hierarchy = AuthoritativeHierarchy()
+        hierarchy = AuthoritativeHierarchy(include_helper_labels=self._show_helper_labels)
         hierarchy.build_from_flow_graph(flow_graph)
         
         # Store hierarchy for comparison/debugging  
@@ -263,6 +272,53 @@ class RenpyFlowDataAdapter(FlowDataProvider):
 
         files.sort()
         return len(files), files
+
+    def _should_skip_label_entry(self, label_name: str, label_data: Any) -> bool:
+        if not hasattr(label_data, 'has_dialogue'):
+            return True
+        if not label_name.startswith('_'):
+            return False
+        if self._show_helper_labels and label_name.startswith("_call_"):
+            return False
+        return True
+
+    def _load_flowviz_config(self, project_path: str) -> Dict[str, Any]:
+        base_dir = self._resolve_project_base(Path(project_path))
+        config_path = base_dir / "game" / "flowviz_config.json"
+        if not config_path.exists():
+            print(f"[FLOWVIZ CONFIG] No flowviz_config.json found at {config_path}")
+            return {}
+
+        print(f"[FLOWVIZ CONFIG] flowviz_config.json found at {config_path}")
+
+        try:
+            with config_path.open("r", encoding="utf-8") as fh:
+                config = json.load(fh)
+            print("[FLOWVIZ CONFIG] flowviz_config.json parsed successfully.")
+        except Exception as exc:
+            print(f"[FLOWVIZ CONFIG] Failed to read {config_path}: {exc}")
+            return {}
+
+        ignore_list = config.get("ignore_files", [])
+        force_list = config.get("force_rpyc_files", [])
+        ignore_display = ignore_list or ["<none>"]
+        force_display = force_list or ["<none>"]
+        print(f"[FLOWVIZ CONFIG] Ignored files: {ignore_display}")
+        print(f"[FLOWVIZ CONFIG] Forced .rpyc files: {force_display}")
+
+        if config.get("show_helper_labels"):
+            print("[FLOWVIZ CONFIG] Helper label filtering disabled for this project.")
+
+        return config
+
+    @staticmethod
+    def _resolve_project_base(path: Path) -> Path:
+        path = path.resolve()
+        if (path / "game").is_dir():
+            return path
+        if path.name.lower() == "game":
+            return path.parent
+        return path
         
     def get_analysis_metadata(self) -> Dict[str, Any]:
         """
@@ -303,8 +359,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
             nested_label_names = self._authoritative_hierarchy.get_nested_label_names()
         
         for label_name, label_node in flow_graph.items():
-            # Skip non-LabelNode entries (like _screen_structures)
-            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+            if self._should_skip_label_entry(label_name, label_node):
                 continue
                 
             # CRITICAL FIX: Skip labels that are handled as nested labels by AHS
@@ -437,8 +492,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         label_menu_names = self._get_label_menu_names(flow_graph)
         
         for label_name, label_node in flow_graph.items():
-            # Skip non-LabelNode entries (like _screen_structures)
-            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+            if self._should_skip_label_entry(label_name, label_node):
                 continue
                 
             # Process all flows from all labels (including those with menus)
@@ -536,8 +590,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         menu_destinations = set()
         
         for label_name, label_node in flow_graph.items():
-            # Skip non-LabelNode entries (like _screen_structures)
-            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+            if self._should_skip_label_entry(label_name, label_node):
                 continue
                 
             # Check if label has menus
@@ -569,8 +622,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         print(f"[LABEL MENUS] Starting search across {len(flow_graph)} labels")
         
         for label_name, label_node in flow_graph.items():
-            # Skip non-LabelNode entries (like _screen_structures)
-            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+            if self._should_skip_label_entry(label_name, label_node):
                 continue
                 
             print(f"[LABEL MENUS] Checking label: {label_name}")
@@ -604,8 +656,7 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         choice_connections = []
         
         for label_name, label_node in flow_graph.items():
-            # Skip non-LabelNode entries (like _screen_structures)
-            if label_name.startswith('_') or not hasattr(label_node, 'has_dialogue'):
+            if self._should_skip_label_entry(label_name, label_node):
                 continue
                 
             if not label_node.has_menu:
