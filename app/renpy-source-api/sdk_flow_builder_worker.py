@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 import textwrap
 import traceback
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 ROOT_DIR = Path(__file__).parent
@@ -23,12 +24,14 @@ PYTHON_STDLIB = SDK_DIR / "lib" / "python3.12"
 SITE_PACKAGES = PYTHON_STDLIB / "site-packages"
 STATE: Optional["_ExtractionState"] = None
 DEBUG_ENABLED = os.environ.get("SDK_FLOW_DEBUG") == "1"
+FREEZE_RPY_TIMESTAMPS = True
 FLOW_CONFIG: Dict[str, Any] = {}
 IGNORED_PATHS: Set[Path] = set()
 FORCE_RPYC_PATHS: Set[Path] = set()
 PROJECT_ROOT: Optional[Path] = None
 GAME_DIR: Optional[Path] = None
 _HIDDEN_SOURCE_ORIGINALS: Set[Path] = set()
+_FREEZE_REFERENCE_TS = datetime(2005, 1, 1, 0, 0).timestamp()
 
 
 def _prepare_environment() -> None:
@@ -948,6 +951,9 @@ def main() -> None:
     hidden_force = _temporarily_hide_force_rpyc_files()
     hidden_files = _temporarily_hide_ignored_files()
     sanitized_backups = _swap_in_sanitized_scripts(project_root)
+
+    if FREEZE_RPY_TIMESTAMPS:
+        _freeze_rpy_sources(GAME_DIR if GAME_DIR is not None else project_root / "game")
     _prepare_environment()
 
     import renpy  # type: ignore
@@ -1108,6 +1114,35 @@ def _temporarily_hide_force_rpyc_files() -> List[Tuple[Path, Path]]:
     if hidden and DEBUG_ENABLED:
         print(f"[SDK_WORKER] Forcing .rpyc usage for {len(hidden)} files.", file=sys.stderr)
     return hidden
+
+
+def _freeze_rpy_sources(game_dir: Path) -> None:
+    if not game_dir.exists():
+        if DEBUG_ENABLED:
+            print(f"[SDK_WORKER] Freeze requested but game dir missing: {game_dir}", file=sys.stderr)
+        return
+
+    total = 0
+    for rpy_file in game_dir.rglob("*.rpy"):
+        if not rpy_file.is_file():
+            continue
+        try:
+            stat_result = rpy_file.stat()
+            if stat_result.st_mtime <= _FREEZE_REFERENCE_TS:
+                continue
+            os.utime(rpy_file, (_FREEZE_REFERENCE_TS, _FREEZE_REFERENCE_TS))
+            total += 1
+        except OSError as exc:
+            if DEBUG_ENABLED:
+                print(f"[SDK_WORKER] Failed to freeze timestamp for {rpy_file}: {exc}", file=sys.stderr)
+            continue
+
+    if FREEZE_RPY_TIMESTAMPS:
+        freeze_date = datetime.fromtimestamp(_FREEZE_REFERENCE_TS).date()
+        print(
+            f"[SDK_WORKER] Freeze timestamps enabled: adjusted {total} .rpy files to {freeze_date}",
+            file=sys.stderr,
+        )
 
 
 def _load_flowviz_config(project_root: Path) -> None:
