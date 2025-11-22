@@ -302,7 +302,7 @@ class SDKFlowBuilder:
     def _derive_screen_destination(action_payload: Dict[str, Any]) -> Optional[str]:
         action_type = action_payload.get("action_type")
         target_label = action_payload.get("target_label")
-        if action_type in {"jump_label", "call_label"} and isinstance(target_label, str):
+        if action_type in {"jump_label", "call_label", "replay_label"} and isinstance(target_label, str):
             return target_label
         return None
 

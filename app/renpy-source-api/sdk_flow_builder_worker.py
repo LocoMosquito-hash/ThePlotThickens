@@ -895,6 +895,9 @@ class ScreenAnalyzer:
             elif target_name in {"Call", "renpy.call"} and isinstance(target_value, str):
                 action_type = "call_label"
                 payload.update({"action_type": action_type, "target_label": target_value})
+            elif target_name in {"Replay", "renpy.Replay"} and isinstance(target_value, str):
+                action_type = "replay_label"
+                payload.update({"action_type": action_type, "target_label": target_value})
             elif target_name in {"ShowMenu", "CallScreen"} and isinstance(target_value, str):
                 action_type = "show_screen" if target_name == "ShowMenu" else "call_screen"
                 payload.update({"action_type": action_type, "target_screen": target_value})
