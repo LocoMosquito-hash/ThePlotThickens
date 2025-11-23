@@ -162,6 +162,7 @@ class ASTFlowExtractor:
             self.project_root / "renpy",
             self.project_root / "game" / "0x52-URM",
             self.project_root / "0x52-URM",
+            self.project_root / "game" / "tl",
         ]
         for candidate in candidates:
             if candidate.exists():

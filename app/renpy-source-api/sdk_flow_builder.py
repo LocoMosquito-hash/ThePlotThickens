@@ -403,6 +403,8 @@ class SDKFlowBuilder:
             return True
         if "0x52-urm" in lowered_parts:
             return True
+        if "tl" in lowered_parts:
+            return True
         return False
 
     def _extract_error_paths(
