@@ -180,6 +180,11 @@ class AuthoritativeHierarchy:
         self.semantic_index: Dict[str, HierarchyNode] = {}  # semantic_id -> node
         self.node_count = 0
         self.include_helper_labels = include_helper_labels
+    
+    @staticmethod
+    def _is_call_helper_label(label_name: Optional[str]) -> bool:
+        """Return True when the label represents a Ren'Py call helper (_call_*)."""
+        return isinstance(label_name, str) and label_name.startswith("_call_")
         
     def build_from_flow_graph(self, flow_graph: Dict[str, Any]) -> None:
         """
@@ -250,11 +255,11 @@ class AuthoritativeHierarchy:
     def _should_skip_label_entry(self, label_name: str, label_data: Any) -> bool:
         if not hasattr(label_data, 'has_dialogue'):
             return True
+        if self._is_call_helper_label(label_name):
+            return True
         if not label_name.startswith('_'):
             return False
-        if self.include_helper_labels and label_name.startswith("_call_"):
-            return False
-        return True
+        return not self.include_helper_labels
     
     def _process_menu_structures(self, flow_graph: Dict[str, Any], label_nodes: Dict[str, HierarchyNode]) -> None:
         """
@@ -386,6 +391,8 @@ class AuthoritativeHierarchy:
                 # NEW: Process nested labels using semantic data
                 nested_labels = getattr(choice, 'nested_labels', [])
                 for nested_label_name in nested_labels:
+                    if self._is_call_helper_label(nested_label_name):
+                        continue
                     nested_label_node = self._create_nested_label_node(
                         nested_label_name, choice_node
                     )
@@ -552,6 +559,82 @@ class AuthoritativeHierarchy:
         
         # CRITICAL: Build set of destinations handled by menu choices to avoid duplicates
         menu_choice_destinations = self._get_menu_choice_destinations_from_hierarchy(flow_graph)
+        helper_flow_map: Dict[str, List[Any]] = {
+            label_name: getattr(label_node, 'outgoing_flows', [])
+            for label_name, label_node in flow_graph.items()
+            if self._is_call_helper_label(label_name)
+        }
+        helper_passthrough_cache: Dict[str, List[Dict[str, Any]]] = {}
+        
+        def _resolve_helper_chain(helper_label: str, visited: Optional[Set[str]] = None) -> List[Dict[str, Any]]:
+            """Expand a helper label into concrete destinations (memoized)."""
+            if helper_label in helper_passthrough_cache:
+                return helper_passthrough_cache[helper_label]
+            
+            if visited is None:
+                visited = set()
+            if helper_label in visited:
+                return []
+            visited.add(helper_label)
+            
+            resolved: List[Dict[str, Any]] = []
+            for helper_flow in helper_flow_map.get(helper_label, []):
+                target = getattr(helper_flow, 'target_label', None)
+                if not target or target == '<return>':
+                    continue
+                
+                base_info = {
+                    'source_file': getattr(helper_flow, 'file_path', getattr(helper_flow, 'source_file', None)),
+                    'source_line': getattr(helper_flow, 'line_number', getattr(helper_flow, 'source_line', None)),
+                }
+                
+                if self._is_call_helper_label(target):
+                    child_flows = _resolve_helper_chain(target, visited)
+                    for child in child_flows:
+                        resolved.append({
+                            'target_label': child['target_label'],
+                            'flow_type': child['flow_type'],
+                            'source_file': child.get('source_file', base_info['source_file']),
+                            'source_line': child.get('source_line', base_info['source_line']),
+                            'collapsed_helper_chain': [helper_label] + child.get('collapsed_helper_chain', []),
+                        })
+                else:
+                    resolved.append({
+                        'target_label': target,
+                        'flow_type': getattr(helper_flow, 'flow_type', 'jump'),
+                        'source_file': base_info['source_file'],
+                        'source_line': base_info['source_line'],
+                        'collapsed_helper_chain': [helper_label],
+                    })
+            
+            visited.remove(helper_label)
+            helper_passthrough_cache[helper_label] = resolved
+            return resolved
+        
+        def _expand_flow_targets(flow: Any) -> List[Dict[str, Any]]:
+            """Return concrete targets for a flow, collapsing helper labels transparently."""
+            target_label = getattr(flow, 'target_label', None)
+            if not target_label or target_label == '<return>':
+                return []
+            
+            if not self._is_call_helper_label(target_label):
+                return [{
+                    'target_label': target_label,
+                    'flow_type': getattr(flow, 'flow_type', 'jump'),
+                    'source_file': getattr(flow, 'file_path', getattr(flow, 'source_file', None)),
+                    'source_line': getattr(flow, 'line_number', getattr(flow, 'source_line', None)),
+                    'collapsed_helper_chain': [],
+                    'collapsed_from_flow_type': None,
+                }]
+            
+            collapsed_targets = _resolve_helper_chain(target_label)
+            expanded: List[Dict[str, Any]] = []
+            for item in collapsed_targets:
+                expanded.append({
+                    **item,
+                    'collapsed_from_flow_type': getattr(flow, 'flow_type', 'jump'),
+                })
+            return expanded
         
         for label_name, label_node in flow_graph.items():
             if self._should_skip_label_entry(label_name, label_node):
@@ -564,29 +647,40 @@ class AuthoritativeHierarchy:
             # Process outgoing flows from this label
             outgoing_flows = getattr(label_node, 'outgoing_flows', [])
             for flow in outgoing_flows:
-                target_label = getattr(flow, 'target_label', None)
-                flow_type = getattr(flow, 'flow_type', 'jump')
-                
-                if target_label and target_label != '<return>':
-                    # INTELLIGENT FILTERING: Only skip flows that would truly duplicate menu choice functionality
-                    should_filter_flow = self._should_filter_flow(label_name, target_label, flow_type, menu_choice_destinations, flow_graph)
+                expanded_targets = _expand_flow_targets(flow)
+                for target_info in expanded_targets:
+                    target_label = target_info.get('target_label')
+                    flow_type = target_info.get('flow_type', getattr(flow, 'flow_type', 'jump'))
+                    
+                    if not target_label or target_label == '<return>':
+                        continue
+                    
+                    should_filter_flow = self._should_filter_flow(
+                        label_name, target_label, flow_type, menu_choice_destinations, flow_graph
+                    )
                     if should_filter_flow:
                         print(f"[FLOW FILTER] Skipping label-to-label flow {label_name} -> {target_label} (truly handled by menu choice from same source)")
                         continue
-                        
+                    
                     target_node = self.get_node_by_label_name(target_label)
-                    if target_node:
-                        # Create flow relationship
-                        flow_metadata = {
-                            'source_label': label_name,
-                            'target_label': target_label,
-                            'original_flow_type': flow_type,
-                            'source_file': getattr(flow, 'source_file', None),
-                            'source_line': getattr(flow, 'source_line', None)
-                        }
-                        
-                        source_node.add_flow_to(target_node, flow_type, flow_metadata)
-                        print(f"[FLOW] Created {flow_type} connection: {label_name} -> {target_label}")
+                    if not target_node:
+                        continue
+                    
+                    flow_metadata = {
+                        'source_label': label_name,
+                        'target_label': target_label,
+                        'original_flow_type': flow_type,
+                        'source_file': target_info.get('source_file'),
+                        'source_line': target_info.get('source_line'),
+                    }
+                    helper_chain = target_info.get('collapsed_helper_chain') or []
+                    if helper_chain:
+                        flow_metadata['collapsed_helper_chain'] = helper_chain
+                        if target_info.get('collapsed_from_flow_type'):
+                            flow_metadata['collapsed_from_flow_type'] = target_info['collapsed_from_flow_type']
+                    
+                    source_node.add_flow_to(target_node, flow_type, flow_metadata)
+                    print(f"[FLOW] Created {flow_type} connection: {label_name} -> {target_label}")
         
         print(f"[HIERARCHY] Flow connections created successfully")
     

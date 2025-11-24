@@ -55,6 +55,13 @@ except ImportError as e:
     SDKFlowGraphBuilder = None  # type: ignore
     SDKFlowBuilderError = RuntimeError  # type: ignore
 
+# Toggle helper-label visibility without editing flowviz_config.
+#   True  -> always show helper labels
+#   False -> always hide helper labels
+#   None  -> defer to flowviz_config.json (defaulting to True when unset)
+FORCE_HELPER_LABEL_VISIBILITY: Optional[bool] = True
+CALL_HELPER_PREFIX = "_call_"
+
 
 class RenpyFlowDataAdapter(FlowDataProvider):
     """
@@ -109,7 +116,13 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         
         self.last_project_path = project_path
         self._flow_config = self._load_flowviz_config(project_path)
-        self._show_helper_labels = bool(self._flow_config.get("show_helper_labels", False))
+        config_pref = self._flow_config.get("show_helper_labels")
+        if FORCE_HELPER_LABEL_VISIBILITY is not None:
+            self._show_helper_labels = FORCE_HELPER_LABEL_VISIBILITY
+        elif config_pref is not None:
+            self._show_helper_labels = bool(config_pref)
+        else:
+            self._show_helper_labels = True
 
         flow_graph = self._build_sdk_flow_graph(project_path)
         overview = self._derive_project_overview(flow_graph, project_path)
@@ -273,14 +286,19 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         files.sort()
         return len(files), files
 
+    @staticmethod
+    def _is_call_helper_label(label_name: Optional[str]) -> bool:
+        """Return True for Ren'Py helper labels automatically created for calls."""
+        return isinstance(label_name, str) and label_name.startswith(CALL_HELPER_PREFIX)
+    
     def _should_skip_label_entry(self, label_name: str, label_data: Any) -> bool:
         if not hasattr(label_data, 'has_dialogue'):
             return True
+        if self._is_call_helper_label(label_name):
+            return True
         if not label_name.startswith('_'):
             return False
-        if self._show_helper_labels and label_name.startswith("_call_"):
-            return False
-        return True
+        return not self._show_helper_labels
 
     def _load_flowviz_config(self, project_path: str) -> Dict[str, Any]:
         base_dir = self._resolve_project_base(Path(project_path))
