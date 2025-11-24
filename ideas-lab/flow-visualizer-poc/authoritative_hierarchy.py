@@ -20,8 +20,8 @@ Parser → AuthoritativeHierarchy → Visualization
 import copy
 import hashlib
 import json
-from collections import defaultdict
-from typing import Dict, List, Optional, Tuple, Any, Set
+from collections import defaultdict, deque
+from typing import Dict, List, Optional, Tuple, Any, Set, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -285,6 +285,49 @@ class AuthoritativeHierarchy:
         if not self.helper_label_callers:
             return
         
+        def _helper_has_menus(label: str) -> bool:
+            data = flow_graph.get(label)
+            if not data:
+                return False
+            return bool(getattr(data, 'menu_nodes', []))
+        
+        processing_queue = deque(
+            helper_label
+            for helper_label in self.helper_label_callers.keys()
+            if _helper_has_menus(helper_label)
+        )
+        visited_helpers: Set[str] = set()
+        
+        while processing_queue:
+            helper_label = processing_queue.popleft()
+            if helper_label in visited_helpers:
+                continue
+            visited_helpers.add(helper_label)
+            
+            helper_data = flow_graph.get(helper_label)
+            if helper_data is None:
+                continue
+            helper_menus = getattr(helper_data, 'menu_nodes', [])
+            if not helper_menus:
+                continue
+            
+            callers = self.helper_label_callers.get(helper_label, set())
+            if not callers:
+                continue
+            
+            for caller_label in callers:
+                caller_data = flow_graph.get(caller_label)
+                if caller_data is None:
+                    continue
+                self._attach_helper_menus_to_caller(
+                    caller_label=caller_label,
+                    caller_data=caller_data,
+                    helper_label=helper_label,
+                    helper_menus=helper_menus,
+                )
+                if self._is_call_helper_label(caller_label):
+                    processing_queue.append(caller_label)
+    
         for helper_label, callers in self.helper_label_callers.items():
             helper_data = flow_graph.get(helper_label)
             if helper_data is None:
