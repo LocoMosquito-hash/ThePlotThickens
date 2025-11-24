@@ -339,10 +339,15 @@ class LabelAnalyzer:
                 combined = self._combine_conditions(active_condition, "else")
                 self._walk_block(else_block, current_choice, nesting_level, combined)
         elif isinstance(stmt, renpy.ast.Label):
-            if getattr(stmt, "name", None) != self.label_name:
-                self._record_fallthrough_transition(stmt, active_condition)
-                return False
-            return True
+            label_name = getattr(stmt, "name", None)
+            if label_name == self.label_name:
+                return True
+            if isinstance(label_name, str) and label_name.startswith("_call_"):
+                # Inline helper labels inserted by Ren'Py for `call ... from _call_*`.
+                # These labels conceptually belong to the current block, so keep scanning.
+                return True
+            self._record_fallthrough_transition(stmt, active_condition)
+            return False
         elif getattr(stmt, "block", None):
             self._walk_block(stmt.block, current_choice, nesting_level, active_condition)
 
