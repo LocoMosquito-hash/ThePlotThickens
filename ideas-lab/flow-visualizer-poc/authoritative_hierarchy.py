@@ -17,8 +17,10 @@ Parser → AuthoritativeHierarchy → Visualization
          ↑ SINGLE SOURCE OF TRUTH
 """
 
+import copy
 import hashlib
 import json
+from collections import defaultdict
 from typing import Dict, List, Optional, Tuple, Any, Set
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -180,6 +182,8 @@ class AuthoritativeHierarchy:
         self.semantic_index: Dict[str, HierarchyNode] = {}  # semantic_id -> node
         self.node_count = 0
         self.include_helper_labels = include_helper_labels
+        self.helper_label_callers: Dict[str, Set[str]] = defaultdict(set)
+        self._helper_menus_propagated: Set[str] = set()
     
     @staticmethod
     def _is_call_helper_label(label_name: Optional[str]) -> bool:
@@ -199,8 +203,14 @@ class AuthoritativeHierarchy:
         """
         print("[HIERARCHY] Building authoritative hierarchy from semantic data...")
         
+        # Phase 0: Collect helper label caller relationships
+        self._collect_helper_label_callers(flow_graph)
+        
         # Phase 1: Create all label nodes (flow_graph keys are label names directly)
         label_nodes = self._create_label_nodes(flow_graph)
+        
+        # Phase 1b: Propagate helper label menu structures to their callers before processing menus
+        self._propagate_helper_menu_nodes(flow_graph)
         
         # Phase 2: Process menu structures with semantic relationships
         self._process_menu_structures(flow_graph, label_nodes)
@@ -261,6 +271,68 @@ class AuthoritativeHierarchy:
             return False
         return not self.include_helper_labels
     
+    def _collect_helper_label_callers(self, flow_graph: Dict[str, Any]) -> None:
+        helper_map: Dict[str, Set[str]] = defaultdict(set)
+        for label_name, label_data in flow_graph.items():
+            outgoing = getattr(label_data, 'outgoing_flows', [])
+            for flow in outgoing:
+                target_label = getattr(flow, 'target_label', None)
+                if self._is_call_helper_label(target_label):
+                    helper_map[target_label].add(label_name)
+        self.helper_label_callers = helper_map
+    
+    def _propagate_helper_menu_nodes(self, flow_graph: Dict[str, Any]) -> None:
+        if not self.helper_label_callers:
+            return
+        
+        for helper_label, callers in self.helper_label_callers.items():
+            helper_data = flow_graph.get(helper_label)
+            if helper_data is None:
+                continue
+            helper_menus = getattr(helper_data, 'menu_nodes', [])
+            if not helper_menus:
+                continue
+            
+            for caller_label in callers:
+                caller_data = flow_graph.get(caller_label)
+                if caller_data is None:
+                    continue
+                self._attach_helper_menus_to_caller(
+                    caller_label=caller_label,
+                    caller_data=caller_data,
+                    helper_label=helper_label,
+                    helper_menus=helper_menus,
+                )
+    
+    def _attach_helper_menus_to_caller(
+        self,
+        caller_label: str,
+        caller_data: Any,
+        helper_label: str,
+        helper_menus: List[Any],
+    ) -> None:
+        applied_helpers: Set[str] = getattr(caller_data, "_helper_menu_sources", set())
+        if helper_label in applied_helpers:
+            return
+        
+        caller_menu_nodes = list(getattr(caller_data, "menu_nodes", []))
+        next_index = len(caller_menu_nodes)
+        
+        for menu in helper_menus:
+            cloned_menu = copy.deepcopy(menu)
+            cloned_menu.parent_label = caller_label
+            cloned_menu.menu_index = next_index
+            cloned_menu.node_id = f"{caller_label}_menu_{next_index}_from_{helper_label}"
+            caller_menu_nodes.append(cloned_menu)
+            next_index += 1
+        
+        caller_data.menu_nodes = caller_menu_nodes
+        caller_data.menu_count = len(caller_menu_nodes)
+        caller_data.has_menu = len(caller_menu_nodes) > 0
+        applied_helpers.add(helper_label)
+        caller_data._helper_menu_sources = applied_helpers
+        self._helper_menus_propagated.add(helper_label)
+    
     def _process_menu_structures(self, flow_graph: Dict[str, Any], label_nodes: Dict[str, HierarchyNode]) -> None:
         """
         Process MenuStructure objects to build menu hierarchy.
@@ -276,6 +348,8 @@ class AuthoritativeHierarchy:
         # flow_graph keys are label names directly
         for label_name, label_data in flow_graph.items():
             if self._should_skip_label_entry(label_name, label_data):
+                if self._is_call_helper_label(label_name):
+                    continue
                 continue
             
             total_labels_checked += 1
