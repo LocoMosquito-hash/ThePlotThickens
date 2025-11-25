@@ -1663,18 +1663,28 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 
             # Get all destinations from choice content (both primary and conditional)
             primary_destination = choice_node.content.get('destination', '')
-            all_destinations = choice_node.content.get('all_destinations', [])
+            all_destinations = list(choice_node.content.get('all_destinations', []) or [])
+            nested_label_targets = choice_node.content.get('nested_labels', [])
             
-            # If no all_destinations list, fall back to primary destination
-            if not all_destinations and primary_destination:
-                all_destinations = [primary_destination]
+            if primary_destination:
+                all_destinations.insert(0, primary_destination)
+            if nested_label_targets:
+                all_destinations.extend(nested_label_targets)
             
-            if not all_destinations:
+            # Deduplicate while preserving order
+            seen_destinations: Set[str] = set()
+            unique_destinations: List[str] = []
+            for dest in all_destinations:
+                if isinstance(dest, str) and dest and dest not in seen_destinations:
+                    seen_destinations.add(dest)
+                    unique_destinations.append(dest)
+            
+            if not unique_destinations:
                 print(f"[CHOICE DESTINATION] Warning: Choice {choice_node.semantic_id} has no destination")
                 continue
             
-            # Create connections for ALL destinations (handles conditional jumps)
-            for dest_idx, destination_label_name in enumerate(all_destinations):
+            # Create connections for ALL destinations (handles conditional jumps and nested labels)
+            for dest_idx, destination_label_name in enumerate(unique_destinations):
                 # NAMED MENU FIX: Resolve named menu references to their containing labels
                 resolved_destination = self._resolve_named_menu_reference(destination_label_name)
                 if resolved_destination != destination_label_name:

@@ -551,6 +551,7 @@ class AuthoritativeHierarchy:
                 'full_text': choice_text,
                 'destination': getattr(choice, 'destination', ''),
                 'all_destinations': getattr(choice, 'all_destinations', []),  # NEW: Support multiple conditional destinations
+                'nested_labels': getattr(choice, 'nested_labels', []),
                 'condition': getattr(choice, 'condition', ''),
                 'action_type': getattr(choice, 'action_type', 'jump'),
                 'has_condition': bool(getattr(choice, 'condition', '')),
@@ -618,6 +619,13 @@ class AuthoritativeHierarchy:
             label_name: Name of the nested label
             parent_choice: Parent choice node that contains this label
         """
+        # If this nested label has a fully materialized label node already, we skip
+        # creating a duplicate placeholder. The choice will connect directly to the
+        # canonical label node via flow wiring.
+        existing_label = self.get_node_by_label_name(label_name)
+        if existing_label and not existing_label.content.get("is_nested", False):
+            return None
+
         # Generate content-based ID
         content_hash = self._generate_content_hash({
             'type': 'nested_label',
@@ -665,6 +673,9 @@ class AuthoritativeHierarchy:
                 node.content.get('is_nested', False)):
                 label_name = node.content.get('label_name')
                 if label_name:
+                    # skip if this nested label maps to an actual label node
+                    if self.get_node_by_label_name(label_name):
+                        continue
                     nested_label_names.add(label_name)
                     
         print(f"[HIERARCHY] Found {len(nested_label_names)} nested labels: {nested_label_names}")
@@ -922,9 +933,17 @@ class AuthoritativeHierarchy:
         for semantic_id, node in self.semantic_index.items():
             if (node.node_type == 'label' and 
                 semantic_id.startswith(label_semantic_id) and 
+                node.content.get('label_name') == label_name and
+                not node.content.get('is_nested', False)):
+                return node
+
+        # Fallback: use nested node only if a real label node doesn't exist
+        for semantic_id, node in self.semantic_index.items():
+            if (node.node_type == 'label' and
+                node.content.get('is_nested', False) and
                 node.content.get('label_name') == label_name):
                 return node
-        
+
         return None
     
     def search_nodes(self, query: str) -> List[HierarchyNode]:
