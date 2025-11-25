@@ -1994,14 +1994,28 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         
         print(f"[SCREEN NODES] Creating nodes for {len(screen_structures)} screens")
         print("🔧 [ADAPTER] About to loop through screen structures...")
+        screen_items = list(screen_structures.items())
+        screen_node_ids: Dict[str, str] = {}
+        screen_elements_cache: Dict[str, List[Any]] = {}
+        label_hash_cache: Dict[str, str] = {}
         
-        # Create screen container nodes and screen element nodes
-        for screen_idx, (screen_name, screen_structure) in enumerate(screen_structures.items()):
+        def _get_label_hash(label_name: str) -> Optional[str]:
+            if label_name in label_hash_cache:
+                return label_hash_cache[label_name]
+            node = self._authoritative_hierarchy.get_node_by_label_name(label_name)
+            if not node:
+                return None
+            label_hash_cache[label_name] = node.content_hash
+            return node.content_hash
+        
+        # Pass 1: create screen containers
+        total_screens = len(screen_items)
+        for screen_idx, (screen_name, screen_structure) in enumerate(screen_items):
             if screen_idx % 10 == 0:
-                print(f"🔧 [ADAPTER] Processing screen {screen_idx}/{len(screen_structures)}...")
+                print(f"🔧 [ADAPTER] Processing screen {screen_idx}/{total_screens}...")
             screen_elements = getattr(screen_structure, 'elements', [])
+            screen_elements_cache[screen_name] = screen_elements
             
-            # Create screen container node (like menu container)
             screen_container_node = VisualizationNode(
                 node_id=f"screen_{screen_name}",
                 node_type='screen_container',
@@ -2018,88 +2032,117 @@ class RenpyFlowDataAdapter(FlowDataProvider):
                 }
             )
             screen_nodes.append(screen_container_node)
+            screen_node_ids[screen_name] = screen_container_node.node_id
             print(f"[SCREEN NODES] Created screen container: {screen_container_node.display_name}")
             
             # Debug: Check if this is where QPainter errors occur
             if 'gallery' in screen_name.lower():
                 print(f"🔧 [ADAPTER] Created gallery screen: {screen_name}, about to process {len(screen_elements)} elements")
-            
-            # Create screen element nodes (like choice buttons)
+        
+        # Pass 2: create screen elements and connections (requires all screen IDs)
+        for screen_name, screen_structure in screen_items:
+            screen_elements = screen_elements_cache.get(screen_name, [])
             for i, element in enumerate(screen_elements):
                 print(f"[SCREEN DEBUG] Processing element {i}: type={getattr(element, 'element_type', 'unknown')}, dest={getattr(element, 'destination', 'none')}")
-                if hasattr(element, 'destination') and element.destination:
-                    print(f"[SCREEN DEBUG] Element {i} passes condition - creating screen element node")
-                    # Create element text from available information
-                    element_text = getattr(element, 'text', '')
-                    if not element_text:
-                        # Use coordinates or element type as fallback
-                        coords = getattr(element, 'coordinates', '')
-                        element_text = f"{element.element_type} {coords}" if coords else element.element_type
-                    
-                    screen_element_node = VisualizationNode(
-                        node_id=f"screen_{screen_name}_element_{i}",
-                        node_type='screen_element',
-                        display_name=element_text,
-                        color_hint='#DDA0DD',  # Plum color for screen elements
-                        size_hint=(180, 35),
+                destination_label = getattr(element, 'destination', None)
+                target_screen_name = getattr(element, 'target_screen', None)
+                if not destination_label and not target_screen_name:
+                    print(f"[SCREEN DEBUG] Element {i} has no destination or target_screen, skipping")
+                    continue
+                
+                element_text = getattr(element, 'text', '')
+                if not element_text:
+                    coords = getattr(element, 'coordinates', '')
+                    element_text = f"{element.element_type} {coords}" if coords else element.element_type
+                
+                element_node_id = f"screen_{screen_name}_element_{i}"
+                screen_element_node = VisualizationNode(
+                    node_id=element_node_id,
+                    node_type='screen_element',
+                    display_name=element_text,
+                    color_hint='#DDA0DD',
+                    size_hint=(180, 35),
+                    metadata={
+                        'screen_name': screen_name,
+                        'parent_screen': f"screen_{screen_name}",
+                        'element_type': getattr(element, 'element_type', 'unknown'),
+                        'element_text': element_text,
+                        'action_type': getattr(element, 'action_type', 'unknown'),
+                        'destination': destination_label,
+                        'target_screen': target_screen_name,
+                        'element_index': i,
+                        'coordinates': str(getattr(element, 'coordinates', '')),
+                        'generated_by': 'screen_system'
+                    }
+                )
+                screen_nodes.append(screen_element_node)
+                print(f"[SCREEN NODES] Created screen element: {element_text}")
+                
+                containment_connection = VisualizationConnection(
+                    connection_id=f"screen_{screen_name}_contains_element_{i}",
+                    source_node_id=screen_node_ids.get(screen_name, f"screen_{screen_name}"),
+                    target_node_id=element_node_id,
+                    connection_type='screen_containment',
+                    color_hint='#9370DB',
+                    metadata={
+                        'relationship_type': 'containment',
+                        'screen_name': screen_name
+                    }
+                )
+                screen_connections.append(containment_connection)
+                
+                destination_hash = None
+                target_node_id = None
+                target_kind = None
+                
+                if destination_label:
+                    destination_hash = _get_label_hash(destination_label)
+                    target_kind = 'label'
+                elif target_screen_name:
+                    target_node_id = screen_node_ids.get(target_screen_name)
+                    target_kind = 'screen'
+                
+                if destination_hash:
+                    action_connection = VisualizationConnection(
+                        connection_id=f"{element_node_id}_to_{destination_label}",
+                        source_node_id=element_node_id,
+                        target_node_id=destination_hash,
+                        connection_type='screen_action',
+                        color_hint='#8A2BE2',
                         metadata={
-                            'screen_name': screen_name,
-                            'parent_screen': f"screen_{screen_name}",
+                            'flow_type': 'screen_action',
                             'element_type': getattr(element, 'element_type', 'unknown'),
                             'element_text': element_text,
                             'action_type': getattr(element, 'action_type', 'unknown'),
-                            'destination': element.destination,
-                            'element_index': i,
-                            'coordinates': str(getattr(element, 'coordinates', '')),
-                            'generated_by': 'screen_system'
+                            'screen_name': screen_name,
+                            'destination_label_name': destination_label,
+                            'target_type': target_kind,
                         }
                     )
-                    screen_nodes.append(screen_element_node)
-                    print(f"[SCREEN NODES] Created screen element: {element_text}")
-                    
-                    # Create containment connection (screen container -> element)
-                    containment_connection = VisualizationConnection(
-                        connection_id=f"screen_{screen_name}_contains_element_{i}",
-                        source_node_id=f"screen_{screen_name}",
-                        target_node_id=f"screen_{screen_name}_element_{i}",
-                        connection_type='screen_containment',
-                        color_hint='#9370DB',  # Medium purple for containment
+                    screen_connections.append(action_connection)
+                    print(f"[SCREEN CONNECTIONS] Created action: {element_text} -> {destination_label} ({destination_hash})")
+                elif target_node_id:
+                    action_connection = VisualizationConnection(
+                        connection_id=f"{element_node_id}_to_screen_{target_screen_name}",
+                        source_node_id=element_node_id,
+                        target_node_id=target_node_id,
+                        connection_type='screen_action',
+                        color_hint='#8A2BE2',
                         metadata={
-                            'relationship_type': 'containment',
-                            'screen_name': screen_name
+                            'flow_type': 'screen_action',
+                            'element_type': getattr(element, 'element_type', 'unknown'),
+                            'element_text': element_text,
+                            'action_type': getattr(element, 'action_type', 'unknown'),
+                            'screen_name': screen_name,
+                            'target_screen_name': target_screen_name,
+                            'target_type': target_kind,
                         }
                     )
-                    screen_connections.append(containment_connection)
-                    
-                    # Find the content hash for the destination label from AHS
-                    destination_hash = None
-                    for node in self._authoritative_hierarchy.node_index.values():
-                        if (node.node_type == 'label' and 
-                            node.content.get('label_name') == element.destination):
-                            destination_hash = node.content_hash
-                            break
-                    
-                    if destination_hash:
-                        # Create action connection (element -> destination) using content hash
-                        action_connection = VisualizationConnection(
-                            connection_id=f"screen_{screen_name}_element_{i}_to_{element.destination}",
-                            source_node_id=f"screen_{screen_name}_element_{i}",
-                            target_node_id=destination_hash,  # Use content hash from AHS
-                            connection_type='screen_action',
-                            color_hint='#8A2BE2',  # Blue violet for screen actions
-                            metadata={
-                                'flow_type': 'screen_action',
-                                'element_type': getattr(element, 'element_type', 'unknown'),
-                                'element_text': element_text,
-                                'action_type': getattr(element, 'action_type', 'unknown'),
-                                'screen_name': screen_name,
-                                'destination_label_name': element.destination  # Keep for debugging
-                            }
-                        )
-                        screen_connections.append(action_connection)
-                        print(f"[SCREEN CONNECTIONS] Created action: {element_text} -> {element.destination} ({destination_hash})")
-                    else:
-                        print(f"[SCREEN CONNECTIONS] Warning: Could not find hash for destination '{element.destination}'")
+                    screen_connections.append(action_connection)
+                    print(f"[SCREEN CONNECTIONS] Created action: {element_text} -> Screen {target_screen_name}")
+                else:
+                    missing_target = destination_label or target_screen_name or "<unknown>"
+                    print(f"[SCREEN CONNECTIONS] Warning: Could not resolve target '{missing_target}' for screen element {element_text}")
         
         # Create connections from labels that call screens to screen containers
         for label_name, label_node in flow_graph.items():

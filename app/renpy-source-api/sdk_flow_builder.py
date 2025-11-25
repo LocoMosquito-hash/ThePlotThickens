@@ -35,6 +35,21 @@ _PARSE_ERROR_RE = re.compile(
 
 _LABEL_DEF_RE = re.compile(r"^\s*label\s+([A-Za-z_][\w.]*)\s*:")
 _SCREEN_CALL_RE = re.compile(r"^\s*(call|show)\s+screen\s+([A-Za-z_][\w.]+)")
+_SHOW_MENU_CALL_RE = re.compile(
+    r"""^\s*
+        (?:\$|python:)?
+        \s*
+        (?:
+            renpy\.(?:ShowMenu|show_menu)
+            |
+            ShowMenu
+        )
+        \s*\(\s*
+        ["'](?P<screen>[A-Za-z_][\w.]*)["']
+        \s*\)
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 
 
 class SDKFlowBuilderError(RuntimeError):
@@ -248,7 +263,10 @@ class SDKFlowBuilder:
 
             for action_payload in actions:
                 destination = self._derive_screen_destination(action_payload)
-                if not destination or not isinstance(destination, str):
+                target_screen = action_payload.get("target_screen")
+                has_label_target = isinstance(destination, str) and destination
+                has_screen_target = isinstance(target_screen, str) and target_screen
+                if not has_label_target and not has_screen_target:
                     continue
 
                 element_condition = action_payload.get("condition") or condition
@@ -256,7 +274,7 @@ class SDKFlowBuilder:
                     element_type=self._normalize_element_type(raw_element.get("element_type")),
                     text=text_value,
                     coordinates=coordinates,
-                    destination=destination,
+                    destination=destination if has_label_target else None,
                     action_type=action_payload.get("action_type"),
                     file_path=raw_element.get("file_path", ""),
                     line_number=raw_element.get("line_number", 0),
@@ -389,6 +407,13 @@ class SDKFlowBuilder:
                 if call_match:
                     screen_name = call_match.group(2)
                     calls.setdefault(current_label, []).append(screen_name)
+                    continue
+
+                showmenu_match = _SHOW_MENU_CALL_RE.match(raw_line)
+                if showmenu_match:
+                    screen_name = showmenu_match.group("screen")
+                    if screen_name:
+                        calls.setdefault(current_label, []).append(screen_name)
 
         return calls
 

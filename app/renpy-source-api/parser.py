@@ -169,7 +169,11 @@ class ScreenStructure:
     def __post_init__(self):
         """Compute derived fields after initialization."""
         self.total_elements = len(self.elements)
-        self.interactive_elements = sum(1 for elem in self.elements if elem.destination)
+        self.interactive_elements = sum(
+            1
+            for elem in self.elements
+            if getattr(elem, "destination", None) or getattr(elem, "target_screen", None)
+        )
         if any(elem.element_type == 'hotspot' for elem in self.elements):
             self.has_imagemap = True
             self.screen_type = 'imagemap'

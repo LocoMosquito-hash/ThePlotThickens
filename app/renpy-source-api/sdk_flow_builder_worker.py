@@ -553,7 +553,14 @@ class ScreenAnalyzer:
         file_path = self._normalize_filename(getattr(self.screen_ast, "filename", ""))
         line_number = getattr(self.screen_ast, "linenumber", 0)
 
-        if DEBUG_ENABLED and file_path.lower().endswith("myscreens.rpy"):
+        debug_screen = os.environ.get("SDK_SCREEN_DEBUG")
+        should_debug = False
+        if DEBUG_ENABLED:
+            if file_path.lower().endswith("myscreens.rpy"):
+                should_debug = True
+            elif debug_screen and self.screen_name and self.screen_name == debug_screen:
+                should_debug = True
+        if should_debug:
             self._debug_target = self.screen_name or "<unknown>"
             print(
                 f"[SDK_WORKER][SCREENS] Inspecting screen '{self._debug_target}' at {file_path}:{line_number}",
