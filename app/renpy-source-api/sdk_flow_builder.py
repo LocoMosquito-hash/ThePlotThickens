@@ -78,6 +78,7 @@ class SDKFlowBuilder:
 
         self._debug_enabled = os.environ.get("SDK_FLOW_DEBUG") == "1"
         self._max_attempts = 5
+        self._process_rpyc_only = False
 
     # Public -----------------------------------------------------------------
 
@@ -104,6 +105,7 @@ class SDKFlowBuilder:
                         payload = json.loads(result.stdout or "{}")
                     except json.JSONDecodeError as exc:
                         raise SDKFlowBuilderError(f"Invalid JSON from SDK worker: {exc}\nOutput:\n{result.stdout}") from exc
+                    self._process_rpyc_only = bool(payload.get("process_rpyc_only", False))
                     flow_graph = self._construct_flow_graph(payload)
                     self._augment_screen_calls(flow_graph, project_root)
                     return flow_graph
@@ -353,6 +355,10 @@ class SDKFlowBuilder:
         )
 
     def _augment_screen_calls(self, flow_graph: Dict[str, LabelNode], project_root: Path) -> None:
+        if getattr(self, "_process_rpyc_only", False):
+            if self._debug_enabled:
+                print("[SDK_HOST] Skipping .rpy screen scan due to process_rpyc_only.", file=sys.stderr)
+            return
         try:
             screen_calls = self._scan_screen_calls(project_root)
         except Exception as exc:

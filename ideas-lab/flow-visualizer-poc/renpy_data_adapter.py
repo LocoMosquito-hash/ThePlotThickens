@@ -323,6 +323,8 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         force_display = force_list or ["<none>"]
         print(f"[FLOWVIZ CONFIG] Ignored files: {ignore_display}")
         print(f"[FLOWVIZ CONFIG] Forced .rpyc files: {force_display}")
+        if config.get("process_rpyc_only"):
+            print("[FLOWVIZ CONFIG] process_rpyc_only = True (binary-only parsing)")
 
         if config.get("show_helper_labels"):
             print("[FLOWVIZ CONFIG] Helper label filtering disabled for this project.")
