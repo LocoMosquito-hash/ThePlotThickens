@@ -10,6 +10,7 @@ This module provides utilities for managing and switching application themes.
 import os
 import json
 from typing import Literal, Optional
+
 from qt_material import apply_stylesheet
 from PyQt6.QtWidgets import QApplication
 
@@ -22,6 +23,7 @@ class ThemeManager:
     
     CONFIG_FILE = "theme_config.json"
     ThemeType = Literal["dark", "light", "auto"]
+    DEFAULT_DENSITY_SCALE: float = 0.85
     
     # Qt-Material theme mappings
     THEME_MAP = {
@@ -39,6 +41,7 @@ class ThemeManager:
         self.app_dir = app_dir
         self.config_path = os.path.join(app_dir, self.CONFIG_FILE)
         self.current_theme = self._load_theme_config()
+        self.density_scale: float = self.DEFAULT_DENSITY_SCALE
     
     def _load_theme_config(self) -> ThemeType:
         """Load theme configuration from file.
@@ -67,6 +70,16 @@ class ThemeManager:
         except Exception as e:
             print(f"Error saving theme configuration: {e}")
     
+    def set_density_scale(self, scale: float) -> None:
+        """Set the density scale used by Qt-Material.
+        
+        Args:
+            scale: Multiplier applied to widget metrics; values under 1.0 create denser UIs.
+        """
+        if scale <= 0:
+            raise ValueError("Density scale must be greater than zero.")
+        self.density_scale = scale
+    
     def apply_theme(self, theme: Optional[ThemeType] = None) -> None:
         """Apply the specified theme or the current theme if none specified.
         
@@ -80,7 +93,14 @@ class ThemeManager:
         # Apply the theme using Qt-Material
         app = QApplication.instance()
         if app:
-            apply_stylesheet(app, theme=self.THEME_MAP[self.current_theme])
+            extra_options = {
+                "density_scale": self.density_scale,
+            }
+            apply_stylesheet(
+                app,
+                theme=self.THEME_MAP[self.current_theme],
+                extra=extra_options,
+            )
             
             # Apply custom CSS to make UI elements more compact
             extra_css = """
