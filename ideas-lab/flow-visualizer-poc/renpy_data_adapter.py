@@ -237,7 +237,9 @@ class RenpyFlowDataAdapter(FlowDataProvider):
 
         print("[SDK FLOW BUILDER] Attempting authoritative AST flow graph...")
         try:
-            flow_graph = self.sdk_flow_graph_builder.build_flow_graph(project_path)
+            flow_graph = self.sdk_flow_graph_builder.build_flow_graph(
+                project_path, flow_config=self._flow_config
+            )
             print("[SDK FLOW BUILDER] ✅ Flow graph built via Ren'Py SDK")
         except Exception as exc:
             raise SDKFlowBuilderError(f"Ren'Py SDK flow builder failed: {exc}") from exc
@@ -325,6 +327,8 @@ class RenpyFlowDataAdapter(FlowDataProvider):
         print(f"[FLOWVIZ CONFIG] Forced .rpyc files: {force_display}")
         if config.get("process_rpyc_only"):
             print("[FLOWVIZ CONFIG] process_rpyc_only = True (binary-only parsing)")
+        if config.get("use_bundled_runtimes"):
+            print("[FLOWVIZ CONFIG] use_bundled_runtimes = True (prefer packaged engine)")
 
         if config.get("show_helper_labels"):
             print("[FLOWVIZ CONFIG] Helper label filtering disabled for this project.")

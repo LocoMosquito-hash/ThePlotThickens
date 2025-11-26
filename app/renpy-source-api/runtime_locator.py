@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 
 WINDOWS_RUNTIME_FOLDERS: Sequence[str] = (
@@ -53,6 +53,9 @@ class BundledPythonRuntime:
     renpy_engine_dir: Optional[Path] = None
     """Absolute path to the bundled `renpy/` engine directory if it exists."""
 
+    launcher_path: Optional[Path] = None
+    """Path to the launcher script (<GameName>.py / renpy.py) if detected."""
+
 
 def _resolve_game_root(path: Path) -> Path:
     """
@@ -82,6 +85,27 @@ def _find_python_binary(platform_dir: Path) -> Optional[Path]:
     return None
 
 
+def _find_launcher_script(root_dir: Path) -> Optional[Path]:
+    python_files = list(root_dir.glob("*.py"))
+    if not python_files:
+        return None
+
+    root_name = root_dir.name.lower().replace(" ", "")
+
+    def _score(candidate: Path) -> Tuple[int, str]:
+        stem = candidate.stem.lower()
+        if stem == "renpy":
+            return (0, candidate.name)
+        if stem == root_name:
+            return (1, candidate.name)
+        if stem.startswith("renpy"):
+            return (2, candidate.name)
+        return (10, candidate.name)
+
+    best = min(python_files, key=_score)
+    return best
+
+
 def locate_bundled_python(game_path: Path | str) -> Optional[BundledPythonRuntime]:
     """
     Locate the Python interpreter shipped with a packaged Ren'Py game.
@@ -98,6 +122,8 @@ def locate_bundled_python(game_path: Path | str) -> Optional[BundledPythonRuntim
     if not lib_dir.is_dir():
         return None
 
+    launcher_path = _find_launcher_script(root_dir)
+
     for platform_dir in _iter_windows_runtime_dirs(lib_dir):
         python_binary = _find_python_binary(platform_dir)
         if python_binary is None:
@@ -111,6 +137,7 @@ def locate_bundled_python(game_path: Path | str) -> Optional[BundledPythonRuntim
             python_executable=python_binary,
             descriptor=platform_dir.name,
             renpy_engine_dir=renpy_engine if renpy_engine.is_dir() else None,
+            launcher_path=launcher_path,
         )
 
     return None
@@ -129,6 +156,8 @@ def locate_all_bundled_pythons(game_path: Path | str) -> List[BundledPythonRunti
     if not lib_dir.is_dir():
         return runtimes
 
+    launcher_path = _find_launcher_script(root_dir)
+
     for platform_dir in _iter_windows_runtime_dirs(lib_dir):
         python_binary = _find_python_binary(platform_dir)
         if python_binary is None:
@@ -143,6 +172,7 @@ def locate_all_bundled_pythons(game_path: Path | str) -> List[BundledPythonRunti
                 python_executable=python_binary,
                 descriptor=platform_dir.name,
                 renpy_engine_dir=renpy_engine if renpy_engine.is_dir() else None,
+                launcher_path=launcher_path,
             )
         )
 
@@ -159,8 +189,14 @@ def _print_result(game_path: str) -> None:
         if runtime.renpy_engine_dir is not None
         else ", renpy: <missing>"
     )
+    launcher_info = (
+        f", launcher: {runtime.launcher_path}"
+        if runtime.launcher_path is not None
+        else ", launcher: <missing>"
+    )
     print(
-        f"{game_path} -> {runtime.descriptor} (python: {runtime.python_executable}{renpy_info})"
+        f"{game_path} -> {runtime.descriptor} (python: {runtime.python_executable}"
+        f"{renpy_info}{launcher_info})"
     )
 
 

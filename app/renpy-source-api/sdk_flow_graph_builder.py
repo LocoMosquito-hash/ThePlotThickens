@@ -32,11 +32,13 @@ class SDKFlowGraphBuilder:
     def initialization_error(self) -> Optional[str]:
         return self._initialization_error
 
-    def build_flow_graph(self, project_path: str) -> Dict[str, LabelNode]:
+    def build_flow_graph(
+        self, project_path: str, flow_config: Optional[Dict[str, object]] = None
+    ) -> Dict[str, LabelNode]:
         if not self._builder:
             raise SDKFlowBuilderError(
                 self._initialization_error or "SDK flow builder unavailable."
             )
 
-        return self._builder.build(project_path)
+        return self._builder.build(project_path, flow_config=flow_config)
 

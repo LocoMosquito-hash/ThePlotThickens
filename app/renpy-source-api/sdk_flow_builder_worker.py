@@ -19,8 +19,10 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 ROOT_DIR = Path(__file__).parent
-SDK_DIR = ROOT_DIR / "renpy_sdk" / "renpy-8.4.0-sdk"
-PYTHON_STDLIB = SDK_DIR / "lib" / "python3.12"
+_SDK_OVERRIDE = os.environ.get("FLOW_BUNDLED_RENPY_BASE")
+SDK_DIR = Path(_SDK_OVERRIDE) if _SDK_OVERRIDE else ROOT_DIR / "renpy_sdk" / "renpy-8.4.0-sdk"
+_PYTHON_STDLIB_OVERRIDE = os.environ.get("FLOW_PYTHON_STDLIB")
+PYTHON_STDLIB = Path(_PYTHON_STDLIB_OVERRIDE) if _PYTHON_STDLIB_OVERRIDE else SDK_DIR / "lib" / "python3.12"
 SITE_PACKAGES = PYTHON_STDLIB / "site-packages"
 STATE: Optional["_ExtractionState"] = None
 DEBUG_ENABLED = os.environ.get("SDK_FLOW_DEBUG") == "1"
@@ -37,6 +39,9 @@ _FREEZE_REFERENCE_TS = datetime(2005, 1, 1, 0, 0).timestamp()
 
 def _prepare_environment() -> None:
     sys.path.insert(0, str(SDK_DIR))
+    zip_path = SDK_DIR / "renpy.zip"
+    if zip_path.exists():
+        sys.path.insert(0, str(zip_path))
     if PYTHON_STDLIB.exists():
         sys.path.insert(0, str(PYTHON_STDLIB))
     if SITE_PACKAGES.exists():
@@ -44,7 +49,8 @@ def _prepare_environment() -> None:
 
 
 def _load_launcher_module():
-    launcher_path = SDK_DIR / "renpy.py"
+    override_path = os.environ.get("FLOW_BUNDLED_LAUNCHER")
+    launcher_path = Path(override_path) if override_path else SDK_DIR / "renpy.py"
     spec = importlib.util.spec_from_file_location("renpy_sdk_launcher", launcher_path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Unable to load Ren'Py launcher module.")

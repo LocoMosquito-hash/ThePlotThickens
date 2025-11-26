@@ -18,6 +18,7 @@ from parser import (
     ScreenElement,
     ScreenStructure,
 )
+from runtime_locator import BundledPythonRuntime, locate_bundled_python
 
 
 _PARSE_ERROR_RE = re.compile(
@@ -82,13 +83,26 @@ class SDKFlowBuilder:
 
     # Public -----------------------------------------------------------------
 
-    def build(self, project_path: str) -> Dict[str, LabelNode]:
+    def build(
+        self, project_path: str, flow_config: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, LabelNode]:
         project_root = self._resolve_project_root(Path(project_path))
+
+        want_bundled_runtime = bool(flow_config and flow_config.get("use_bundled_runtimes"))
+        if want_bundled_runtime:
+            print("[SDK FLOW BUILDER] Attempting bundled runtime discovery...", file=sys.stderr)
+
+        runtime_override = self._resolve_runtime_override(project_root, flow_config)
+        if runtime_override is None and want_bundled_runtime:
+            print("[SDK FLOW BUILDER] Falling back to default Ren'Py 8.4.0 SDK runtime.", file=sys.stderr)
+
+        active_python = runtime_override.python_executable if runtime_override else self.sdk_python
         cmd = [
-            str(self.sdk_python),
+            str(active_python),
             str(self.worker_script),
             str(project_root),
         ]
+        env = self._build_worker_env(runtime_override)
 
         hidden_sources: List[Tuple[Path, Path]] = []
         hidden_originals: Set[Path] = set()
@@ -98,7 +112,7 @@ class SDKFlowBuilder:
         try:
             while attempts < self._max_attempts:
                 attempts += 1
-                result = subprocess.run(cmd, capture_output=True, text=True)
+                result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
                 if result.returncode == 0:
                     try:
@@ -111,6 +125,20 @@ class SDKFlowBuilder:
                     return flow_graph
 
                 error_message = self._format_worker_failure(result, attempts)
+                if runtime_override is not None:
+                    print(
+                        "[SDK FLOW BUILDER] Bundled runtime invocation failed; retrying with Ren'Py 8.4 SDK.",
+                        file=sys.stderr,
+                    )
+                    runtime_override = None
+                    active_python = self.sdk_python
+                    cmd = [
+                        str(active_python),
+                        str(self.worker_script),
+                        str(project_root),
+                    ]
+                    env = self._build_worker_env(None)
+                    continue
                 last_error = error_message
 
                 offending = self._extract_error_paths(result.stdout, result.stderr, project_root)
@@ -345,6 +373,57 @@ class SDKFlowBuilder:
         if resolved.name.lower() == "game" and resolved.is_dir():
             return resolved.parent
         raise SDKFlowBuilderError(f"Expected Ren'Py project or its /game directory, got: {path}")
+
+    def _resolve_runtime_override(
+        self, project_root: Path, flow_config: Optional[Dict[str, Any]]
+    ) -> Optional[BundledPythonRuntime]:
+        if not flow_config or not flow_config.get("use_bundled_runtimes"):
+            return None
+
+        runtime = locate_bundled_python(project_root)
+        if runtime is None:
+            print(
+                "[SDK FLOW BUILDER] use_bundled_runtimes enabled, but no packaged runtime was found.",
+                file=sys.stderr,
+            )
+            return None
+        if runtime.renpy_engine_dir is None:
+            print(
+                "[SDK FLOW BUILDER] Packaged runtime missing 'renpy/' directory; falling back to SDK 8.4.",
+                file=sys.stderr,
+            )
+            return None
+        if runtime.launcher_path is None:
+            print(
+                "[SDK FLOW BUILDER] Packaged runtime missing launcher script (*.py); falling back to SDK 8.4.",
+                file=sys.stderr,
+            )
+            return None
+
+        print(
+            f"[SDK FLOW BUILDER] Using bundled runtime '{runtime.descriptor}' ({runtime.python_executable})",
+            file=sys.stderr,
+        )
+        return runtime
+
+    def _build_worker_env(
+        self, runtime_override: Optional[BundledPythonRuntime]
+    ) -> Dict[str, str]:
+        env = os.environ.copy()
+        if runtime_override is None:
+            env.pop("FLOW_BUNDLED_RUNTIME", None)
+            env.pop("FLOW_BUNDLED_RENPY_BASE", None)
+            env.pop("FLOW_BUNDLED_RENPY_DIR", None)
+            env.pop("FLOW_BUNDLED_LAUNCHER", None)
+            return env
+
+        env["FLOW_BUNDLED_RUNTIME"] = "1"
+        env["FLOW_BUNDLED_RENPY_BASE"] = str(runtime_override.root_dir)
+        if runtime_override.renpy_engine_dir is not None:
+            env["FLOW_BUNDLED_RENPY_DIR"] = str(runtime_override.renpy_engine_dir)
+        if runtime_override.launcher_path is not None:
+            env["FLOW_BUNDLED_LAUNCHER"] = str(runtime_override.launcher_path)
+        return env
 
     # Retry helpers ---------------------------------------------------------
 

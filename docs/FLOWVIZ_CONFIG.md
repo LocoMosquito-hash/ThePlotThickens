@@ -43,6 +43,11 @@ Place the config file next to the rest of the VN scripts:
   compiled `.rpyc` instead. Those files _do_ appear in the final flow graph, but
   their source code is never parsed, which avoids syntax traps in “protected”
   builds.
+- `use_bundled_runtimes`: when `true`, the visualizer looks for the packaged
+  Python interpreter under `<game root>/lib/` and runs the SDK worker inside
+  that environment. This keeps Python 2-era `.rpyc` files compatible with our
+  AST extractor. If the runtime is missing or broken, we automatically fall
+  back to the built-in Ren'Py 8.4.0 SDK.
 - The host process now retries the SDK worker in a **fresh Ren'Py interpreter**
   whenever a parse error bubbles up. Offending `.rpy` files are moved aside—only
   if their `.rpyc` counterparts exist—so the subsequent attempt loads the
