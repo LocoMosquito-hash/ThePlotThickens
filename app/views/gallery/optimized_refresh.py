@@ -430,6 +430,10 @@ class SmartRefreshManager(QObject):
             
         # Call the actual legacy method
         self.gallery_widget.load_images()
+        try:
+            self.gallery_widget._apply_video_playback_mode()
+        except AttributeError:
+            logging.debug("Gallery widget missing _apply_video_playback_mode during standard refresh")
         
         # Complete status message
         if status_bar:
@@ -472,6 +476,12 @@ class SmartRefreshManager(QObject):
                 
         # Process events to keep UI responsive during updates
         QApplication.processEvents()
+        
+        # Re-apply the current video playback policy so newly updated thumbnails honor it
+        try:
+            self.gallery_widget._apply_video_playback_mode()
+        except Exception as exc:
+            logging.debug(f"Unable to re-apply video playback mode: {exc}")
     
     def _on_optimized_refresh_completed(self) -> None:
         """Handle optimized refresh completion."""
@@ -484,6 +494,7 @@ class SmartRefreshManager(QObject):
         try:
             self.gallery_widget.update_thumbnail_visibility()
             self.gallery_widget.update_filter_status()
+            self.gallery_widget._apply_video_playback_mode()
             
             # Set focus back to gallery for keyboard navigation
             self.gallery_widget.setFocus()

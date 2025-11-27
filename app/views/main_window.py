@@ -7,6 +7,7 @@ Main window for The Plot Thickens application.
 This module defines the main window of the application.
 """
 
+import logging
 import os
 import sys
 from typing import Optional, List, Dict, Any
@@ -40,6 +41,16 @@ from app.utils.character_completer import CharacterCompleter
 from app.utils.character_references import convert_mentions_to_char_refs, convert_char_refs_to_mentions
 from app.utils.quick_event_utils import show_quick_event_dialog
 from app.utils.icons import icon_manager
+from app.utils.video_utils import is_video_file
+
+VIDEO_AUTOPLAY_DISABLE_THRESHOLD = 20
+VIDEO_PLAYBACK_MODE_NAMES = [
+    "Auto-play all video thumbnails",
+    "Auto-play only on-screen videos",
+    "Auto-play disabled",
+]
+
+logger = logging.getLogger(__name__)
 
 
 class QuickEventDialog(QDialog):
@@ -373,6 +384,8 @@ class MainWindow(QMainWindow):
         
         # Add gallery widget
         self.gallery = GalleryWidget(self.db_conn)
+        # Make sure the gallery reflects the persisted playback preference on startup
+        self._apply_video_playback_mode(saved_mode, show_message=False)
         gallery_layout.addWidget(self.gallery)
         
         self.gallery_tab_index = self.tab_widget.addTab(gallery_container, "Gallery")
@@ -530,6 +543,7 @@ class MainWindow(QMainWindow):
             story_data: Data of the selected story
         """
         self.current_story_id = story_id
+        self._maybe_force_disable_video_playback(story_id)
         self.story_board.set_story(story_id, story_data)
         self.gallery.set_story(story_id, story_data)
         self.timeline.story_id = story_id
@@ -787,26 +801,30 @@ class MainWindow(QMainWindow):
         """
         return self.manual_refresh_checkbox.isChecked() if hasattr(self, 'manual_refresh_checkbox') else False
     
-    def on_video_playback_mode_changed(self, index: int) -> None:
-        """Handle video playback mode change.
+    def _apply_video_playback_mode(self, index: int, show_message: bool = True) -> None:
+        """Persist and apply the selected video playback mode.
         
         Args:
-            index: Selected index (0=auto-play all, 1=auto-play visible, 2=disabled)
+            index: Playback mode index.
+            show_message: Whether to show a status bar confirmation.
         """
-        # Save the setting
+        if index not in (0, 1, 2):
+            return
+        
         self.settings.setValue("gallery/video_playback_mode", index)
         
-        # Show status message
-        mode_names = [
-            "Auto-play all video thumbnails",
-            "Auto-play only on-screen videos", 
-            "Auto-play disabled"
-        ]
-        self.status_bar.showMessage(f"Video playback mode: {mode_names[index]}", 3000)
-        
-        # Apply the setting immediately to the gallery
         if hasattr(self, 'gallery') and self.gallery:
             self.gallery.set_video_playback_mode(index)
+        
+        if show_message and hasattr(self, 'status_bar') and self.status_bar:
+            self.status_bar.showMessage(
+                f"Video playback mode: {VIDEO_PLAYBACK_MODE_NAMES[index]}",
+                3000
+            )
+    
+    def on_video_playback_mode_changed(self, index: int) -> None:
+        """Handle video playback mode change initiated by the user."""
+        self._apply_video_playback_mode(index, show_message=True)
     
     def get_video_playback_mode(self) -> int:
         """Get the current video playback mode.
@@ -817,3 +835,38 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'video_playback_combo'):
             return self.video_playback_combo.currentIndex()
         return 0  # Default to auto-play all 
+    
+    def _maybe_force_disable_video_playback(self, story_id: int) -> None:
+        """Disable video thumbnail autoplay when a story exceeds the video threshold.
+        
+        Args:
+            story_id: ID of the story being loaded.
+        """
+        if not hasattr(self, 'video_playback_combo'):
+            return
+        
+        try:
+            cursor = self.db_conn.cursor()
+            cursor.execute("SELECT filename FROM images WHERE story_id = ?", (story_id,))
+            rows = cursor.fetchall()
+            video_count = sum(
+                1
+                for row in rows
+                if row and row["filename"] and is_video_file(row["filename"])
+            )
+        except Exception as exc:
+            logger.warning("Unable to evaluate video autoplay policy: %s", exc)
+            return
+        
+        if video_count <= VIDEO_AUTOPLAY_DISABLE_THRESHOLD:
+            return
+        
+        self.video_playback_combo.blockSignals(True)
+        self.video_playback_combo.setCurrentIndex(2)
+        self.video_playback_combo.blockSignals(False)
+        logger.info(
+            "Forced video thumbnail autoplay off for story %s (%s videos)",
+            story_id,
+            video_count
+        )
+        self._apply_video_playback_mode(2, show_message=False)
