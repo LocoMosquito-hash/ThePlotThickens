@@ -263,6 +263,7 @@ class SlotItemWidget(QFrame):
     """Card-style widget that displays a slot entry."""
 
     edit_requested = pyqtSignal(str)
+    clone_requested = pyqtSignal(str)
     delete_requested = pyqtSignal(str)
     move_up_requested = pyqtSignal(str)
     move_down_requested = pyqtSignal(str)
@@ -365,13 +366,25 @@ class SlotItemWidget(QFrame):
         self.delete_button.setToolTip("Delete slot")
         self.delete_button.clicked.connect(lambda: self.delete_requested.emit(self.slot.slot_id))
 
-        for button in (self.move_up_button, self.move_down_button, self.edit_button, self.delete_button):
+        self.clone_button = QPushButton()
+        self.clone_button.setIcon(icon_manager.get_icon("copy"))
+        self.clone_button.setToolTip("Clone slot")
+        self.clone_button.clicked.connect(lambda: self.clone_requested.emit(self.slot.slot_id))
+
+        for button in (
+            self.move_up_button,
+            self.move_down_button,
+            self.edit_button,
+            self.clone_button,
+            self.delete_button,
+        ):
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.setMaximumWidth(32)
 
         edit_delete_layout = QHBoxLayout()
         edit_delete_layout.setSpacing(6)
         edit_delete_layout.addWidget(self.edit_button)
+        edit_delete_layout.addWidget(self.clone_button)
         edit_delete_layout.addWidget(self.delete_button)
 
         move_layout = QVBoxLayout()
@@ -921,6 +934,69 @@ class RenpyOptionsTab(QWidget):
         self.slots[index], self.slots[new_index] = self.slots[new_index], self.slots[index]
         self._refresh_slot_views()
 
+    def _handle_clone_slot(self, slot_id: str) -> None:
+        if self.story_id is None or not self.current_story_data:
+            QMessageBox.warning(self, "No Story Selected", "Select a story to manage slots.")
+            return
+
+        slot = self._find_slot(slot_id)
+        if not slot:
+            return
+
+        slots_root = self._get_slots_root()
+        if not slots_root:
+            QMessageBox.critical(
+                self,
+                "Missing Story Folder",
+                "The selected story does not have a valid data folder. Please configure the story folder before cloning slots.",
+            )
+            return
+
+        if not os.path.isdir(slot.destination_path):
+            QMessageBox.warning(
+                self,
+                "Source Missing",
+                "The original slot folder no longer exists. Please repair it before cloning.",
+            )
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Clone Slot",
+            f"Create a copy of Slot {slot.slot_number}?\nA new slot will be added with identical contents.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+
+        os.makedirs(slots_root, exist_ok=True)
+        new_slot_number = self._get_next_slot_number()
+        destination_path = os.path.normpath(os.path.join(slots_root, str(new_slot_number)))
+
+        if not self._copy_directory_slot(slot.destination_path, destination_path, overwrite=False):
+            return
+
+        db_slot_id = db_create_story_slot(
+            self.db_conn,
+            self.story_id,
+            new_slot_number,
+            slot.source_type,
+            destination_path,
+            slot.original_source_path,
+        )
+        row = db_get_story_slot(self.db_conn, db_slot_id)
+        new_slot = self._slot_from_row(row) if row else RenpySlot(
+            slot_id=str(db_slot_id),
+            slot_number=new_slot_number,
+            source_type=slot.source_type,
+            destination_path=destination_path,
+            original_source_path=slot.original_source_path,
+            date_added=datetime.now(),
+        )
+        self.slots.append(new_slot)
+        self._update_slot_cache()
+        self._refresh_slot_views()
+
     # Helpers --------------------------------------------------------------
     def _refresh_slot_views(self) -> None:
         while self.slot_list_layout.count():
@@ -941,6 +1017,7 @@ class RenpyOptionsTab(QWidget):
             card.update_positioning(index, total_slots)
             card.update_slot(slot)
             card.edit_requested.connect(self._handle_edit_slot)
+            card.clone_requested.connect(self._handle_clone_slot)
             card.delete_requested.connect(self._handle_delete_slot)
             card.move_up_requested.connect(partial(self._handle_move_slot, direction=-1))
             card.move_down_requested.connect(partial(self._handle_move_slot, direction=1))
