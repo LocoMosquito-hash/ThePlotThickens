@@ -340,10 +340,10 @@ class SlotItemWidget(QFrame):
         info_layout.addWidget(self.path_label)
         info_layout.addWidget(self.date_label)
 
-        # Actions
-        button_column = QVBoxLayout()
-        button_column.setSpacing(6)
-        button_column.setAlignment(Qt.AlignmentFlag.AlignTop)
+        # Actions (edit/delete horizontally, move controls to the far right)
+        actions_layout = QHBoxLayout()
+        actions_layout.setSpacing(12)
+        actions_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.move_up_button = QPushButton()
         self.move_up_button.setIcon(icon_manager.get_icon("chevron_up"))
@@ -365,23 +365,25 @@ class SlotItemWidget(QFrame):
         self.delete_button.setToolTip("Delete slot")
         self.delete_button.clicked.connect(lambda: self.delete_requested.emit(self.slot.slot_id))
 
-        for button in (
-            self.move_up_button,
-            self.move_down_button,
-            self.edit_button,
-            self.delete_button,
-        ):
+        for button in (self.move_up_button, self.move_down_button, self.edit_button, self.delete_button):
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.setMaximumWidth(32)
 
-        button_column.addWidget(self.move_up_button)
-        button_column.addWidget(self.move_down_button)
-        button_column.addSpacing(8)
-        button_column.addWidget(self.edit_button)
-        button_column.addWidget(self.delete_button)
+        edit_delete_layout = QHBoxLayout()
+        edit_delete_layout.setSpacing(6)
+        edit_delete_layout.addWidget(self.edit_button)
+        edit_delete_layout.addWidget(self.delete_button)
+
+        move_layout = QVBoxLayout()
+        move_layout.setSpacing(4)
+        move_layout.addWidget(self.move_up_button)
+        move_layout.addWidget(self.move_down_button)
+
+        actions_layout.addLayout(edit_delete_layout)
+        actions_layout.addLayout(move_layout)
 
         main_layout.addLayout(info_layout, stretch=1)
-        main_layout.addLayout(button_column)
+        main_layout.addLayout(actions_layout)
 
         self.update_positioning(0, 1)
         self._refresh(slot)
