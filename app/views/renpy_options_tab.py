@@ -13,6 +13,8 @@ in-memory while offering fully wired file dialogs and drag-and-drop helpers.
 from __future__ import annotations
 
 import os
+import shutil
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -23,6 +25,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QButtonGroup,
+    QApplication,
     QDialog,
     QFrame,
     QGridLayout,
@@ -30,10 +33,10 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QRadioButton,
     QScrollArea,
-    QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -41,6 +44,14 @@ from PyQt6.QtWidgets import (
 )
 
 from app.utils.icons import icon_manager
+
+
+def _format_path_for_display(path: str) -> str:
+    """Ensure Windows-friendly path formatting for UI display."""
+    if not path:
+        return ""
+    normalized = os.path.normpath(path)
+    return normalized.replace("/", "\\")
 
 SourceType = Literal["directory", "compressed"]
 
@@ -50,8 +61,10 @@ class RenpySlot:
     """Represents a configured source slot."""
 
     slot_id: str
-    path: str
+    slot_number: int
     source_type: SourceType
+    destination_path: str
+    original_source_path: str
     date_added: datetime
 
 
@@ -59,8 +72,10 @@ class RenpySlot:
 class SlotFormData:
     """Data returned from the slot modal form."""
 
-    path: str
+    source_path: str
     source_type: SourceType
+    destination_path: str
+    slot_number: int
 
 
 class SlotDropArea(QFrame):
@@ -290,10 +305,12 @@ class SlotItemWidget(QFrame):
         path_title = QLabel("Path:")
         path_title.setStyleSheet("color: rgba(255, 255, 255, 0.6); font-size: 9pt;")
 
-        self.path_label = QLabel(slot.path)
+        self.path_label = QLabel(_format_path_for_display(slot.destination_path))
         self.path_label.setWordWrap(True)
         self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.path_label.setStyleSheet("font-family: Consolas, 'Fira Code', monospace;")
+        origin_display = _format_path_for_display(slot.original_source_path)
+        self.path_label.setToolTip(f"Copied from: {origin_display}")
 
         self.date_label = QLabel()
         self.date_label.setStyleSheet("color: rgba(255, 255, 255, 0.5); font-size: 9pt;")
@@ -353,7 +370,7 @@ class SlotItemWidget(QFrame):
         """Enable or disable movement buttons based on current order."""
         self.move_up_button.setEnabled(index > 0)
         self.move_down_button.setEnabled(index < total - 1)
-        self.slot_label.setText(f"Slot {index + 1}")
+        self.slot_label.setText(f"Slot {self.slot.slot_number}")
 
     def update_slot(self, slot: RenpySlot) -> None:
         """Update textual information after edits."""
@@ -363,7 +380,8 @@ class SlotItemWidget(QFrame):
     def _refresh(self, slot: RenpySlot) -> None:
         source_text = "Directory" if slot.source_type == "directory" else "Compressed"
         self.type_label.setText(source_text)
-        self.path_label.setText(slot.path)
+        self.path_label.setText(_format_path_for_display(slot.destination_path))
+        self.path_label.setToolTip(f"Copied from: {_format_path_for_display(slot.original_source_path)}")
         self.date_label.setText(f"Added: {slot.date_added.strftime('%b %d, %Y %H:%M')}")
 
 
@@ -375,12 +393,14 @@ class SlotModal(QDialog):
         parent: Optional[QWidget] = None,
         slot: Optional[RenpySlot] = None,
         slot_number: int = 1,
+        destination_path: Optional[str] = None,
     ):
         super().__init__(parent)
         self.setWindowTitle("Ren'Py Slot")
         self.setModal(True)
         self._slot = slot
         self._slot_number = slot_number
+        self._destination_path = destination_path or ""
         self._form_data: Optional[SlotFormData] = None
         self._allowed_extensions = {".zip", ".7z", ".rar"}
 
@@ -438,7 +458,8 @@ class SlotModal(QDialog):
         )
         path_layout.addWidget(self.path_caption_label, 0, 0, 1, 2)
 
-        self.path_edit = QLineEdit(self._slot.path if self._slot else "")
+        initial_path = self._slot.original_source_path if self._slot else ""
+        self.path_edit = QLineEdit(initial_path)
         self.path_edit.setPlaceholderText("C:/games/MyVisualNovel" if self.dir_radio.isChecked() else "C:/archives/MyVisualNovel.zip")
         path_layout.addWidget(self.path_edit, 1, 0)
 
@@ -478,7 +499,9 @@ class SlotModal(QDialog):
         preview_title = QLabel("Will be saved to:")
         preview_title.setStyleSheet("color: rgba(255, 255, 255, 0.5); font-size: 9pt;")
 
-        self.destination_label = QLabel(f"D:/Stories/CurrentStory/slots/{self._slot_number}")
+        raw_destination = self._slot.destination_path if self._slot else (self._destination_path or "")
+        destination_text = _format_path_for_display(raw_destination)
+        self.destination_label = QLabel(destination_text)
         self.destination_label.setStyleSheet("font-family: Consolas, 'Fira Code', monospace;")
 
         preview_layout.addWidget(preview_title)
@@ -590,7 +613,30 @@ class SlotModal(QDialog):
                 )
                 return None
 
-        return SlotFormData(path=path, source_type=source_type)
+        destination_path = self._slot.destination_path if self._slot else self._destination_path
+        if not destination_path:
+            QMessageBox.warning(self, "Missing Destination", "Unable to resolve a slot destination path.")
+            return None
+
+        if source_type == "directory":
+            confirm = QMessageBox.question(
+                self,
+                "Copy Slot",
+                f"Copy the source directory into:\n{destination_path}?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if confirm != QMessageBox.StandardButton.Yes:
+                return None
+
+        normalized_source = os.path.normpath(path)
+        normalized_destination = os.path.normpath(destination_path)
+
+        return SlotFormData(
+            source_path=normalized_source,
+            source_type=source_type,
+            destination_path=normalized_destination,
+            slot_number=self._slot.slot_number if self._slot else self._slot_number,
+        )
 
 
 class RenpyOptionsTab(QWidget):
@@ -600,6 +646,7 @@ class RenpyOptionsTab(QWidget):
         super().__init__(parent)
         self.db_conn = db_conn
         self.story_id: Optional[int] = None
+        self.current_story_data: Optional[Dict[str, object]] = None
         self.story_slots: Dict[int, List[RenpySlot]] = {}
         self.slots: List[RenpySlot] = []
         self._init_ui()
@@ -608,11 +655,32 @@ class RenpyOptionsTab(QWidget):
     def set_story(self, story_id: int, story_data: Dict[str, object]) -> None:
         """Load slots for the given story (in-memory only for now)."""
         self.story_id = story_id
+        self.current_story_data = story_data
+
         story_slot_list = self.story_slots.setdefault(story_id, [])
         self.slots = story_slot_list
+
+        slots_root = self._get_slots_root()
+        if slots_root:
+            os.makedirs(slots_root, exist_ok=True)
+
         self._refresh_slot_views()
-        self.add_slot_button.setEnabled(True)
-        self.empty_state.add_button.setEnabled(True)
+        can_manage = bool(slots_root)
+        self.add_slot_button.setEnabled(can_manage)
+        self.empty_state.add_button.setEnabled(can_manage)
+
+    def _get_slots_root(self) -> Optional[str]:
+        if not self.current_story_data:
+            return None
+        folder_path = self.current_story_data.get("folder_path")
+        if not folder_path:
+            return None
+        return os.path.normpath(os.path.join(str(folder_path), "slots"))
+
+    def _get_next_slot_number(self) -> int:
+        if not self.slots:
+            return 1
+        return max(slot.slot_number for slot in self.slots) + 1
 
     # UI -------------------------------------------------------------------
     def _init_ui(self) -> None:
@@ -697,32 +765,82 @@ class RenpyOptionsTab(QWidget):
 
     # Slots ----------------------------------------------------------------
     def _handle_add_slot_clicked(self) -> None:
-        if self.story_id is None:
+        if self.story_id is None or not self.current_story_data:
             QMessageBox.warning(self, "No Story Selected", "Select a story to manage slots.")
             return
-        next_number = len(self.slots) + 1
-        dialog = SlotModal(self, slot_number=next_number)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            data = dialog.get_form_data()
-            new_slot = RenpySlot(
-                slot_id=uuid.uuid4().hex,
-                path=data.path,
-                source_type=data.source_type,
-                date_added=datetime.now(),
+
+        slots_root = self._get_slots_root()
+        if not slots_root:
+            QMessageBox.critical(
+                self,
+                "Missing Story Folder",
+                "The selected story does not have a valid data folder. Please configure the story folder before adding slots.",
             )
-            self.slots.append(new_slot)
-            self.story_slots[self.story_id] = self.slots
-            self._refresh_slot_views()
+            return
+
+        os.makedirs(slots_root, exist_ok=True)
+        next_number = self._get_next_slot_number()
+        destination_path = os.path.normpath(os.path.join(slots_root, str(next_number)))
+
+        dialog = SlotModal(self, slot_number=next_number, destination_path=destination_path)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        data = dialog.get_form_data()
+        if data.source_type == "directory":
+            if not self._copy_directory_slot(data.source_path, data.destination_path, overwrite=False):
+                return
+        else:
+            QMessageBox.information(
+                self,
+                "Coming Soon",
+                "Compressed slot imports will be implemented soon.",
+            )
+            return
+
+        new_slot = RenpySlot(
+            slot_id=uuid.uuid4().hex,
+            slot_number=data.slot_number,
+            source_type=data.source_type,
+            destination_path=data.destination_path,
+            original_source_path=data.source_path,
+            date_added=datetime.now(),
+        )
+        self.slots.append(new_slot)
+        self.story_slots[self.story_id] = self.slots
+        self._refresh_slot_views()
 
     def _handle_edit_slot(self, slot_id: str) -> None:
         slot = self._find_slot(slot_id)
         if not slot:
             return
-        dialog = SlotModal(self, slot=slot, slot_number=self.slots.index(slot) + 1)
+        dialog = SlotModal(
+            self,
+            slot=slot,
+            slot_number=slot.slot_number,
+            destination_path=os.path.normpath(slot.destination_path),
+        )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             data = dialog.get_form_data()
-            slot.path = data.path
+            if data.source_type == "directory":
+                if not self._copy_directory_slot(
+                    data.source_path,
+                    data.destination_path,
+                    overwrite=True,
+                ):
+                    return
+            else:
+                QMessageBox.information(
+                    self,
+                    "Coming Soon",
+                    "Compressed slot updates are not available yet.",
+                )
+                return
+
             slot.source_type = data.source_type
+            slot.destination_path = data.destination_path
+            slot.original_source_path = data.source_path
+            slot.date_added = datetime.now()
             self._refresh_slot_views()
 
     def _handle_delete_slot(self, slot_id: str) -> None:
@@ -786,4 +904,89 @@ class RenpyOptionsTab(QWidget):
             if slot.slot_id == slot_id:
                 return index
         return None
+
+    def _copy_directory_slot(self, source: str, destination: str, overwrite: bool) -> bool:
+        if not os.path.isdir(source):
+            QMessageBox.warning(self, "Invalid Source", "The selected directory no longer exists.")
+            return False
+
+        if os.path.exists(destination):
+            if not overwrite:
+                QMessageBox.warning(
+                    self,
+                    "Destination Exists",
+                    f"The slot destination already exists:\n{destination}\nPlease remove it or choose another slot number.",
+                )
+                return False
+            if not self._cleanup_failed_copy(destination):
+                QMessageBox.critical(
+                    self,
+                    "Cleanup Failed",
+                    "Could not prepare the destination folder for copying. Please close files inside that folder and try again.",
+                )
+                return False
+
+        file_count = 0
+        for _, _, files in os.walk(source):
+            file_count += len(files)
+        max_value = max(file_count, 1)
+
+        progress = QProgressDialog("Copying slot files...", "Cancel", 0, max_value, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setWindowTitle("Copying Slot")
+        progress.setAutoClose(False)
+        progress.setValue(0)
+
+        copied = 0
+        cancelled = False
+        try:
+            for root, dirs, files in os.walk(source):
+                rel_path = os.path.relpath(root, source)
+                target_dir = destination if rel_path in (".", "") else os.path.join(destination, rel_path)
+                os.makedirs(target_dir, exist_ok=True)
+
+                for directory in dirs:
+                    os.makedirs(os.path.join(target_dir, directory), exist_ok=True)
+
+                for file_name in files:
+                    if progress.wasCanceled():
+                        cancelled = True
+                        raise RuntimeError("Copy cancelled by user.")
+                    src_file = os.path.join(root, file_name)
+                    dst_file = os.path.join(target_dir, file_name)
+                    shutil.copy2(src_file, dst_file)
+                    copied += 1
+                    progress.setValue(min(copied, max_value))
+                    QApplication.processEvents()
+
+            progress.setValue(max_value)
+            return True
+        except Exception as exc:
+            self._cleanup_failed_copy(destination)
+            if cancelled:
+                QMessageBox.information(
+                    self,
+                    "Copy Cancelled",
+                    "The copy operation was cancelled. The destination slot folder has been cleaned up.",
+                )
+            else:
+                QMessageBox.critical(
+                    self,
+                    "Copy Failed",
+                    f"Could not copy slot files:\n{exc}",
+                )
+            return False
+        finally:
+            progress.close()
+
+    def _cleanup_failed_copy(self, folder_path: str, retries: int = 3) -> bool:
+        for attempt in range(retries):
+            if not os.path.exists(folder_path):
+                return True
+            try:
+                shutil.rmtree(folder_path)
+                return True
+            except Exception:
+                time.sleep(0.25)
+        return False
 
