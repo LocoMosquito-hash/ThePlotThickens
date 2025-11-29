@@ -88,6 +88,27 @@ def create_tables(conn: sqlite3.Connection) -> None:
         year INTEGER
     )
     ''')
+
+    # Create story_slots table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS story_slots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        story_id INTEGER NOT NULL,
+        slot_number INTEGER NOT NULL,
+        source_type TEXT NOT NULL CHECK (source_type IN ('directory', 'compressed')),
+        destination_path TEXT NOT NULL,
+        original_source_path TEXT,
+        metadata_json TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (story_id) REFERENCES stories (id) ON DELETE CASCADE,
+        UNIQUE (story_id, slot_number)
+    )
+    ''')
+    cursor.execute('''
+    CREATE INDEX IF NOT EXISTS idx_story_slots_story_id
+    ON story_slots (story_id)
+    ''')
     
     # Create characters table
     cursor.execute('''
@@ -457,6 +478,99 @@ def update_story_folder_path(conn: sqlite3.Connection, story_id: int, folder_pat
     
     # Get the updated story
     return get_story(conn, story_id)
+
+
+def create_story_slot(conn: sqlite3.Connection, story_id: int, slot_number: int, source_type: str,
+                      destination_path: str, original_source_path: str,
+                      metadata_json: Optional[str] = None) -> int:
+    """Persist a new Ren'Py source slot for a story."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO story_slots (
+            story_id, slot_number, source_type, destination_path, original_source_path, metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (story_id, slot_number, source_type, destination_path, original_source_path, metadata_json),
+    )
+    conn.commit()
+    return cursor.lastrowid
+
+
+def get_story_slots(conn: sqlite3.Connection, story_id: int) -> List[Dict[str, Any]]:
+    """Fetch all slots for a story ordered by slot number."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT *
+        FROM story_slots
+        WHERE story_id = ?
+        ORDER BY slot_number ASC
+        """,
+        (story_id,),
+    )
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def get_story_slot(conn: sqlite3.Connection, slot_id: int) -> Optional[Dict[str, Any]]:
+    """Fetch a single story slot by its ID."""
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM story_slots WHERE id = ?",
+        (slot_id,),
+    )
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+
+def update_story_slot_record(conn: sqlite3.Connection, slot_id: int, **updates: Any) -> None:
+    """Update a story slot with the provided column values."""
+    if not updates:
+        return
+    cursor = conn.cursor()
+    set_parts = []
+    values: List[Any] = []
+    for column, value in updates.items():
+        set_parts.append(f"{column} = ?")
+        values.append(value)
+    set_parts.append("updated_at = CURRENT_TIMESTAMP")
+    set_clause = ", ".join(set_parts)
+    cursor.execute(
+        f"UPDATE story_slots SET {set_clause} WHERE id = ?",
+        (*values, slot_id),
+    )
+    conn.commit()
+
+
+def delete_story_slot(conn: sqlite3.Connection, slot_id: int) -> None:
+    """Remove a story slot permanently."""
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM story_slots WHERE id = ?",
+        (slot_id,),
+    )
+    conn.commit()
+
+
+def update_story_slot_numbers(conn: sqlite3.Connection, updates: List[Tuple[int, int]]) -> None:
+    """Bulk update slot numbers for a story.
+
+    Args:
+        updates: List of (slot_id, new_slot_number)
+    """
+    if not updates:
+        return
+    cursor = conn.cursor()
+    for slot_id, slot_number in updates:
+        cursor.execute(
+            """
+            UPDATE story_slots
+            SET slot_number = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (slot_number, slot_id),
+        )
+    conn.commit()
 
 
 def get_story(conn: sqlite3.Connection, story_id: int) -> Dict[str, Any]:

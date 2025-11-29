@@ -16,12 +16,11 @@ import os
 import shutil
 import tempfile
 import time
-import uuid
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -45,6 +44,13 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from app.db_sqlite import (
+    create_story_slot as db_create_story_slot,
+    delete_story_slot as db_delete_story_slot,
+    get_story_slot as db_get_story_slot,
+    get_story_slots as db_get_story_slots,
+    update_story_slot_record as db_update_story_slot,
+)
 from app.utils.icons import icon_manager
 
 
@@ -54,6 +60,18 @@ def _format_path_for_display(path: str) -> str:
         return ""
     normalized = os.path.normpath(path)
     return normalized.replace("/", "\\")
+
+
+def _parse_db_timestamp(value: Optional[str]) -> datetime:
+    if not value:
+        return datetime.now()
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        try:
+            return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return datetime.now()
 
 SourceType = Literal["directory", "compressed"]
 
@@ -668,8 +686,9 @@ class RenpyOptionsTab(QWidget):
         self.story_id = story_id
         self.current_story_data = story_data
 
-        story_slot_list = self.story_slots.setdefault(story_id, [])
-        self.slots = story_slot_list
+        loaded_slots = self._load_slots_from_db(story_id)
+        self.story_slots[story_id] = loaded_slots
+        self.slots = loaded_slots
 
         slots_root = self._get_slots_root()
         if slots_root:
@@ -767,6 +786,8 @@ class RenpyOptionsTab(QWidget):
         self.slot_list_layout = QVBoxLayout(self.scroll_content)
         self.slot_list_layout.setSpacing(12)
         self.slot_list_layout.addStretch()
+        if self.story_id is not None:
+            self.story_slots[self.story_id] = self.slots
 
         self.slot_scroll_area.setWidget(self.scroll_content)
         self.content_stack.addWidget(self.slot_scroll_area)
@@ -805,16 +826,28 @@ class RenpyOptionsTab(QWidget):
             if not self._extract_zip_slot(data.source_path, data.destination_path):
                 return
 
-        new_slot = RenpySlot(
-            slot_id=uuid.uuid4().hex,
-            slot_number=data.slot_number,
-            source_type=data.source_type,
-            destination_path=data.destination_path,
-            original_source_path=data.source_path,
-            date_added=datetime.now(),
+        db_slot_id = db_create_story_slot(
+            self.db_conn,
+            self.story_id,
+            data.slot_number,
+            data.source_type,
+            data.destination_path,
+            data.source_path,
         )
+        row = db_get_story_slot(self.db_conn, db_slot_id)
+        if row:
+            new_slot = self._slot_from_row(row)
+        else:
+            new_slot = RenpySlot(
+                slot_id=str(db_slot_id),
+                slot_number=data.slot_number,
+                source_type=data.source_type,
+                destination_path=data.destination_path,
+                original_source_path=data.source_path,
+                date_added=datetime.now(),
+            )
         self.slots.append(new_slot)
-        self.story_slots[self.story_id] = self.slots
+        self._update_slot_cache()
         self._refresh_slot_views()
 
     def _handle_edit_slot(self, slot_id: str) -> None:
@@ -842,11 +875,20 @@ class RenpyOptionsTab(QWidget):
                     data.destination_path,
                 ):
                     return
+            db_slot_id = self._slot_db_id(slot)
+            if db_slot_id is not None:
+                db_update_story_slot(
+                    self.db_conn,
+                    db_slot_id,
+                    source_type=data.source_type,
+                    destination_path=data.destination_path,
+                    original_source_path=data.source_path,
+                )
 
             slot.source_type = data.source_type
             slot.destination_path = data.destination_path
             slot.original_source_path = data.source_path
-            slot.date_added = datetime.now()
+            self._update_slot_cache()
             self._refresh_slot_views()
 
     def _handle_delete_slot(self, slot_id: str) -> None:
@@ -860,9 +902,11 @@ class RenpyOptionsTab(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if confirm == QMessageBox.StandardButton.Yes:
+            db_slot_id = self._slot_db_id(slot)
+            if db_slot_id is not None:
+                db_delete_story_slot(self.db_conn, db_slot_id)
             self.slots.remove(slot)
-            if self.story_id is not None:
-                self.story_slots[self.story_id] = self.slots
+            self._update_slot_cache()
             self._refresh_slot_views()
 
     def _handle_move_slot(self, slot_id: str, direction: int) -> None:
@@ -1074,4 +1118,31 @@ class RenpyOptionsTab(QWidget):
             except PermissionError:
                 continue
         return None
+
+    def _load_slots_from_db(self, story_id: int) -> List[RenpySlot]:
+        if not story_id:
+            return []
+        rows = db_get_story_slots(self.db_conn, story_id)
+        return [self._slot_from_row(row) for row in rows]
+
+    def _slot_from_row(self, row: Dict[str, Any]) -> RenpySlot:
+        date_added = _parse_db_timestamp(row.get("created_at"))
+        return RenpySlot(
+            slot_id=str(row["id"]),
+            slot_number=row["slot_number"],
+            source_type=row["source_type"],
+            destination_path=row["destination_path"],
+            original_source_path=row.get("original_source_path") or "",
+            date_added=date_added,
+        )
+
+    def _slot_db_id(self, slot: RenpySlot) -> Optional[int]:
+        try:
+            return int(slot.slot_id)
+        except (TypeError, ValueError):
+            return None
+
+    def _update_slot_cache(self) -> None:
+        if self.story_id is not None:
+            self.story_slots[self.story_id] = self.slots
 
