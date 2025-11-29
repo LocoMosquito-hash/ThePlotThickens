@@ -12,6 +12,7 @@ in-memory while offering fully wired file dialogs and drag-and-drop helpers.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
@@ -22,7 +23,7 @@ from datetime import datetime
 from functools import partial
 from typing import Any, Dict, List, Literal, Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -34,6 +35,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QProgressDialog,
     QPushButton,
@@ -86,6 +88,7 @@ class RenpySlot:
     destination_path: str
     original_source_path: str
     date_added: datetime
+    tags: List[str]
 
 
 @dataclass
@@ -267,10 +270,18 @@ class SlotItemWidget(QFrame):
     delete_requested = pyqtSignal(str)
     move_up_requested = pyqtSignal(str)
     move_down_requested = pyqtSignal(str)
+    tag_add_requested = pyqtSignal(str, QPoint)
+    tag_remove_requested = pyqtSignal(str, str)
 
-    def __init__(self, slot: RenpySlot, parent: Optional[QWidget] = None):
+    def __init__(
+        self,
+        slot: RenpySlot,
+        tag_definitions: Dict[str, str],
+        parent: Optional[QWidget] = None,
+    ):
         super().__init__(parent)
         self.slot = slot
+        self.tag_definitions = tag_definitions
         self.setObjectName("SlotItemWidget")
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setStyleSheet(
@@ -321,6 +332,10 @@ class SlotItemWidget(QFrame):
 
         badges_layout.addWidget(self.slot_label)
         badges_layout.addWidget(self.type_label)
+        self.tags_layout = QHBoxLayout()
+        self.tags_layout.setSpacing(6)
+        self.tags_layout.setContentsMargins(0, 0, 0, 0)
+        badges_layout.addLayout(self.tags_layout)
         badges_layout.addStretch()
 
         path_title = QLabel("Path:")
@@ -387,6 +402,29 @@ class SlotItemWidget(QFrame):
         edit_delete_layout.addWidget(self.clone_button)
         edit_delete_layout.addWidget(self.delete_button)
 
+        self.add_tag_button = QPushButton("+")
+        self.add_tag_button.setFixedWidth(28)
+        self.add_tag_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.add_tag_button.setToolTip("Add tag")
+        self.add_tag_button.setStyleSheet(
+            """
+            QPushButton {
+                border: 1px dashed rgba(220, 231, 255, 0.6);
+                border-radius: 6px;
+                color: rgba(220, 231, 255, 0.8);
+                background-color: transparent;
+                padding: 2px 6px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                border-color: rgba(77, 171, 247, 0.9);
+                color: rgba(77, 171, 247, 0.9);
+                background-color: rgba(77, 171, 247, 0.08);
+            }
+            """
+        )
+        self.add_tag_button.clicked.connect(self._emit_add_tag_requested)
+
         move_layout = QVBoxLayout()
         move_layout.setSpacing(4)
         move_layout.addWidget(self.move_up_button)
@@ -418,6 +456,45 @@ class SlotItemWidget(QFrame):
         self.path_label.setText(_format_path_for_display(slot.destination_path))
         self.path_label.setToolTip(f"Copied from: {_format_path_for_display(slot.original_source_path)}")
         self.date_label.setText(f"Added: {slot.date_added.strftime('%b %d, %Y %H:%M')}")
+        self._render_tags()
+
+    def _render_tags(self) -> None:
+        while self.tags_layout.count():
+            item = self.tags_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                if widget is self.add_tag_button:
+                    widget.setParent(None)
+                else:
+                    widget.deleteLater()
+
+        for tag_key in self.slot.tags:
+            label = self.tag_definitions.get(tag_key, tag_key)
+            tag_button = QPushButton(label)
+            tag_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            tag_button.setStyleSheet(
+                """
+                QPushButton {
+                    background-color: rgba(77, 171, 247, 0.15);
+                    color: #dce7ff;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 2px 8px;
+                    font-size: 9pt;
+                }
+                QPushButton:hover {
+                    background-color: rgba(77, 171, 247, 0.25);
+                }
+                """
+            )
+            tag_button.clicked.connect(lambda _, key=tag_key: self.tag_remove_requested.emit(self.slot.slot_id, key))
+            self.tags_layout.addWidget(tag_button)
+
+        self.tags_layout.addWidget(self.add_tag_button)
+
+    def _emit_add_tag_requested(self) -> None:
+        pos = self.add_tag_button.mapToGlobal(self.add_tag_button.rect().bottomLeft())
+        self.tag_add_requested.emit(self.slot.slot_id, pos)
 
 
 class SlotModal(QDialog):
@@ -686,6 +763,12 @@ class SlotModal(QDialog):
 class RenpyOptionsTab(QWidget):
     """Main widget for the Ren'Py Options tab."""
 
+    TAG_DEFINITIONS: Dict[str, str] = {
+        "intact": "Intact",
+        "unren": "UnRen",
+        "urm": "URM",
+    }
+
     def __init__(self, db_conn, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.db_conn = db_conn
@@ -841,6 +924,7 @@ class RenpyOptionsTab(QWidget):
             if not self._extract_zip_slot(data.source_path, data.destination_path):
                 return
 
+        metadata_json = self._serialize_tags([])
         db_slot_id = db_create_story_slot(
             self.db_conn,
             self.story_id,
@@ -848,6 +932,7 @@ class RenpyOptionsTab(QWidget):
             data.source_type,
             data.destination_path,
             data.source_path,
+            metadata_json=metadata_json,
         )
         row = db_get_story_slot(self.db_conn, db_slot_id)
         if row:
@@ -860,6 +945,7 @@ class RenpyOptionsTab(QWidget):
                 destination_path=data.destination_path,
                 original_source_path=data.source_path,
                 date_added=datetime.now(),
+                tags=[],
             )
         self.slots.append(new_slot)
         self._update_slot_cache()
@@ -898,11 +984,13 @@ class RenpyOptionsTab(QWidget):
                     source_type=data.source_type,
                     destination_path=data.destination_path,
                     original_source_path=data.source_path,
+                    metadata_json=self._serialize_tags(slot.tags),
                 )
 
             slot.source_type = data.source_type
             slot.destination_path = data.destination_path
             slot.original_source_path = data.source_path
+            self._persist_slot_metadata(slot)
             self._update_slot_cache()
             self._refresh_slot_views()
 
@@ -976,6 +1064,7 @@ class RenpyOptionsTab(QWidget):
         if not self._copy_directory_slot(slot.destination_path, destination_path, overwrite=False):
             return
 
+        metadata_json = self._serialize_tags(slot.tags)
         db_slot_id = db_create_story_slot(
             self.db_conn,
             self.story_id,
@@ -983,6 +1072,7 @@ class RenpyOptionsTab(QWidget):
             slot.source_type,
             destination_path,
             slot.original_source_path,
+            metadata_json=metadata_json,
         )
         row = db_get_story_slot(self.db_conn, db_slot_id)
         new_slot = self._slot_from_row(row) if row else RenpySlot(
@@ -992,6 +1082,7 @@ class RenpyOptionsTab(QWidget):
             destination_path=destination_path,
             original_source_path=slot.original_source_path,
             date_added=datetime.now(),
+            tags=list(slot.tags),
         )
         self.slots.append(new_slot)
         self._update_slot_cache()
@@ -1013,12 +1104,14 @@ class RenpyOptionsTab(QWidget):
         self.content_stack.setCurrentIndex(1)
         total_slots = len(self.slots)
         for index, slot in enumerate(self.slots):
-            card = SlotItemWidget(slot)
+            card = SlotItemWidget(slot, self.TAG_DEFINITIONS)
             card.update_positioning(index, total_slots)
             card.update_slot(slot)
             card.edit_requested.connect(self._handle_edit_slot)
             card.clone_requested.connect(self._handle_clone_slot)
             card.delete_requested.connect(self._handle_delete_slot)
+            card.tag_add_requested.connect(self._handle_add_tag_menu)
+            card.tag_remove_requested.connect(self._handle_remove_tag)
             card.move_up_requested.connect(partial(self._handle_move_slot, direction=-1))
             card.move_down_requested.connect(partial(self._handle_move_slot, direction=1))
             self.slot_list_layout.addWidget(card)
@@ -1033,6 +1126,58 @@ class RenpyOptionsTab(QWidget):
             if slot.slot_id == slot_id:
                 return index
         return None
+
+    def _handle_add_tag_menu(self, slot_id: str, global_pos: QPoint) -> None:
+        slot = self._find_slot(slot_id)
+        if not slot:
+            return
+
+        menu = QMenu(self)
+        added_action = False
+        for tag_key, label in self.TAG_DEFINITIONS.items():
+            if tag_key in slot.tags:
+                continue
+            action = menu.addAction(label)
+            action.triggered.connect(lambda _, key=tag_key, target=slot: self._add_tag_to_slot(target, key))
+            added_action = True
+
+        if not added_action:
+            action = menu.addAction("All tags applied")
+            action.setEnabled(False)
+
+        menu.exec(global_pos)
+
+    def _handle_remove_tag(self, slot_id: str, tag_key: str) -> None:
+        slot = self._find_slot(slot_id)
+        if not slot:
+            return
+        self._remove_tag_from_slot(slot, tag_key)
+
+    def _add_tag_to_slot(self, slot: RenpySlot, tag_key: str) -> None:
+        if tag_key in slot.tags:
+            return
+        slot.tags.append(tag_key)
+        self._persist_slot_metadata(slot)
+        self._update_slot_cache()
+        self._refresh_slot_views()
+
+    def _remove_tag_from_slot(self, slot: RenpySlot, tag_key: str) -> None:
+        if tag_key not in slot.tags:
+            return
+        slot.tags.remove(tag_key)
+        self._persist_slot_metadata(slot)
+        self._update_slot_cache()
+        self._refresh_slot_views()
+
+    def _serialize_tags(self, tags: List[str]) -> str:
+        return json.dumps({"tags": tags})
+
+    def _persist_slot_metadata(self, slot: RenpySlot) -> None:
+        db_slot_id = self._slot_db_id(slot)
+        if db_slot_id is None:
+            return
+        metadata_json = self._serialize_tags(slot.tags)
+        db_update_story_slot(self.db_conn, db_slot_id, metadata_json=metadata_json)
 
     def _copy_directory_slot(self, source: str, destination: str, overwrite: bool) -> bool:
         if not os.path.isdir(source):
@@ -1206,6 +1351,14 @@ class RenpyOptionsTab(QWidget):
 
     def _slot_from_row(self, row: Dict[str, Any]) -> RenpySlot:
         date_added = _parse_db_timestamp(row.get("created_at"))
+        tags: List[str] = []
+        metadata = row.get("metadata_json")
+        if metadata:
+            try:
+                payload = json.loads(metadata)
+                tags = list(payload.get("tags") or [])
+            except (ValueError, TypeError):
+                tags = []
         return RenpySlot(
             slot_id=str(row["id"]),
             slot_number=row["slot_number"],
@@ -1213,6 +1366,7 @@ class RenpyOptionsTab(QWidget):
             destination_path=row["destination_path"],
             original_source_path=row.get("original_source_path") or "",
             date_added=date_added,
+            tags=tags,
         )
 
     def _slot_db_id(self, slot: RenpySlot) -> Optional[int]:
