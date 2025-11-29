@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import os
 import shutil
+import tempfile
 import time
 import uuid
+import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
@@ -27,6 +29,7 @@ from PyQt6.QtWidgets import (
     QButtonGroup,
     QApplication,
     QDialog,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -40,7 +43,6 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QVBoxLayout,
     QWidget,
-    QFileDialog,
 )
 
 from app.utils.icons import icon_manager
@@ -627,6 +629,15 @@ class SlotModal(QDialog):
             )
             if confirm != QMessageBox.StandardButton.Yes:
                 return None
+        else:
+            confirm = QMessageBox.question(
+                self,
+                "Extract Slot",
+                f"Extract the ZIP contents into:\n{destination_path}?\nExisting files will be replaced.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if confirm != QMessageBox.StandardButton.Yes:
+                return None
 
         normalized_source = os.path.normpath(path)
         normalized_destination = os.path.normpath(destination_path)
@@ -791,12 +802,8 @@ class RenpyOptionsTab(QWidget):
             if not self._copy_directory_slot(data.source_path, data.destination_path, overwrite=False):
                 return
         else:
-            QMessageBox.information(
-                self,
-                "Coming Soon",
-                "Compressed slot imports will be implemented soon.",
-            )
-            return
+            if not self._extract_zip_slot(data.source_path, data.destination_path):
+                return
 
         new_slot = RenpySlot(
             slot_id=uuid.uuid4().hex,
@@ -830,12 +837,11 @@ class RenpyOptionsTab(QWidget):
                 ):
                     return
             else:
-                QMessageBox.information(
-                    self,
-                    "Coming Soon",
-                    "Compressed slot updates are not available yet.",
-                )
-                return
+                if not self._extract_zip_slot(
+                    data.source_path,
+                    data.destination_path,
+                ):
+                    return
 
             slot.source_type = data.source_type
             slot.destination_path = data.destination_path
@@ -989,4 +995,83 @@ class RenpyOptionsTab(QWidget):
             except Exception:
                 time.sleep(0.25)
         return False
+
+    def _extract_zip_slot(self, zip_path: str, destination: str) -> bool:
+        if not zip_path.lower().endswith(".zip"):
+            QMessageBox.warning(self, "Unsupported Archive", "Only .zip files are supported.")
+            return False
+
+        if not os.path.isfile(zip_path):
+            QMessageBox.warning(self, "Invalid File", "The selected ZIP file cannot be found.")
+            return False
+
+        temp_dir = tempfile.mkdtemp(prefix="tpt_slot_zip_")
+        try:
+            progress = QProgressDialog("Extracting ZIP contents...", "Cancel", 0, 0, self)
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+            progress.setWindowTitle("Extracting Slot")
+            progress.setRange(0, 0)  # Busy indicator
+            progress.show()
+            QApplication.processEvents()
+
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                members = archive.infolist()
+                progress.setRange(0, len(members))
+                for index, member in enumerate(members, start=1):
+                    if progress.wasCanceled():
+                        raise RuntimeError("Extraction cancelled by user.")
+                    archive.extract(member, temp_dir)
+                    progress.setValue(index)
+                    QApplication.processEvents()
+
+            candidate_root = self._locate_renpy_root(temp_dir)
+            if not candidate_root:
+                raise RuntimeError(
+                    "Extracted archive does not contain Ren'Py 'game', 'renpy', and 'lib' folders at the same level."
+                )
+
+            if os.path.exists(destination):
+                if not self._cleanup_failed_copy(destination):
+                    raise RuntimeError("Unable to prepare destination folder. Close files in that slot and try again.")
+            shutil.move(candidate_root, destination)
+            self._cleanup_failed_copy(temp_dir)
+            progress.close()
+            return True
+        except Exception as exc:
+            self._cleanup_failed_copy(destination)
+            self._cleanup_failed_copy(temp_dir)
+            QMessageBox.critical(
+                self,
+                "ZIP Extraction Failed",
+                f"Could not import the ZIP file:\n{exc}",
+            )
+            return False
+        finally:
+            try:
+                progress.close()
+            except Exception:
+                pass
+
+    def _locate_renpy_root(self, extracted_path: str) -> Optional[str]:
+        required = {"game", "renpy", "lib"}
+
+        def has_required(sub_path: str) -> bool:
+            try:
+                contents = {entry.name.lower() for entry in os.scandir(sub_path) if entry.is_dir()}
+            except PermissionError:
+                return False
+            return required.issubset(contents)
+
+        queue = [extracted_path]
+        while queue:
+            current = queue.pop(0)
+            if has_required(current):
+                return current
+            try:
+                for entry in os.scandir(current):
+                    if entry.is_dir():
+                        queue.append(entry.path)
+            except PermissionError:
+                continue
+        return None
 
