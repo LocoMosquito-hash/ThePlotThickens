@@ -1,7 +1,8 @@
-"""Utilities to inspect and validate slot cache databases."""
+"""Utilities to inspect, validate, and export slot cache databases."""
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -18,9 +19,11 @@ def run_cache_inspector(args) -> int:
 
     with sqlite3.connect(cache_db) as conn:
         conn.row_factory = sqlite3.Row
-        if args.label:
+        if getattr(args, "label", None):
             return _inspect_label(conn, args.label)
-        return _print_cache_summary(conn, limit=args.limit)
+        if getattr(args, "screen", None):
+            return _inspect_screen(conn, args.screen)
+        return _print_cache_summary(conn, label_limit=args.limit, screen_limit=args.screen_limit)
 
 
 def run_cache_validator(args) -> int:
@@ -48,6 +51,31 @@ def run_cache_validator(args) -> int:
     return 0
 
 
+def run_cache_export(args) -> int:
+    """Entry point for `flowviz-cache-export`."""
+
+    project_root = Path(__file__).resolve().parents[2]
+    cache_db = _resolve_cache_db(project_root, args.slot_id)
+    if cache_db is None:
+        print(f"[export] metadata.db not found for slot {args.slot_id}")
+        return 1
+
+    output_path = (
+        Path(args.output).expanduser()
+        if getattr(args, "output", None)
+        else Path(cache_db).parent / "graph_export.json"
+    )
+
+    with sqlite3.connect(cache_db) as conn:
+        conn.row_factory = sqlite3.Row
+        export_data = _build_graph_export(conn)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(export_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"[export] Graph data written to {output_path}")
+    return 0
+
+
 def _resolve_cache_db(project_root: Path, slot_id: int) -> Optional[Path]:
     db_path = project_root / "the_plot_thickens.db"
     if not db_path.exists():
@@ -72,7 +100,12 @@ def _resolve_cache_db(project_root: Path, slot_id: int) -> Optional[Path]:
     return cache_db
 
 
-def _print_cache_summary(conn: sqlite3.Connection, limit: int) -> int:
+def _print_cache_summary(
+    conn: sqlite3.Connection,
+    *,
+    label_limit: int,
+    screen_limit: int,
+) -> int:
     cursor = conn.cursor()
     cursor.execute("SELECT value FROM cache_meta WHERE key='story_title'")
     story_title = cursor.fetchone()
@@ -91,12 +124,22 @@ def _print_cache_summary(conn: sqlite3.Connection, limit: int) -> int:
 
     cursor.execute(
         "SELECT name, file_path, line_number FROM labels ORDER BY name LIMIT ?",
-        (limit,),
+        (label_limit,),
     )
     rows = cursor.fetchall()
     if rows:
         print(f"\nFirst {len(rows)} labels:")
         for name, file_path, line in rows:
+            print(f" - {name} ({file_path}:{line})")
+
+    cursor.execute(
+        "SELECT screen_name, file_path, line_number FROM screens ORDER BY screen_name LIMIT ?",
+        (screen_limit,),
+    )
+    screens = cursor.fetchall()
+    if screens:
+        print(f"\nFirst {len(screens)} screens:")
+        for name, file_path, line in screens:
             print(f" - {name} ({file_path}:{line})")
     return 0
 
@@ -116,9 +159,10 @@ def _inspect_label(conn: sqlite3.Connection, label_name: str) -> int:
     print(f"Label: {label_name}")
     print(f" File: {label_row[1]}:{label_row[2]}")
     print(" Menus:")
+    slot_id = _get_meta_value(conn, "slot_id")
     cursor.execute(
         "SELECT id, menu_index, prompt FROM menus WHERE slot_id = ? AND label_name = ?",
-        (conn.execute("SELECT value FROM cache_meta WHERE key='slot_id'").fetchone()[0], label_name),
+        (slot_id, label_name),
     )
     menus = cursor.fetchall()
     if not menus:
@@ -156,6 +200,46 @@ def _inspect_label(conn: sqlite3.Connection, label_name: str) -> int:
     for edge in edges:
         condition = f" if {edge[2]}" if edge[2] else ""
         print(f"  -> {edge[0] or '<return>'} [{edge[1]}]{condition}")
+    return 0
+
+
+def _inspect_screen(conn: sqlite3.Connection, screen_name: str) -> int:
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT screen_name, file_path, line_number, metadata_json
+        FROM screens
+        WHERE screen_name = ?
+        """,
+        (screen_name,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        print(f"[inspect] Screen '{screen_name}' not found in cache.")
+        return 1
+
+    print(f"Screen: {row[0]}")
+    print(f" File: {row[1]}:{row[2]}")
+    metadata = _parse_json(row[3])
+    elements = metadata.get("elements", [])
+    if not elements:
+        print(" Elements: (none)")
+        return 0
+
+    print(" Elements:")
+    for idx, element in enumerate(elements):
+        text = element.get("text") or ""
+        coordinates = element.get("coordinates")
+        actions = element.get("actions") or []
+        print(f"  • Element {idx} text={text!r} coords={coordinates or '-'}")
+        for action in actions:
+            action_type = action.get("action_type") or action.get("type")
+            destination = action.get("destination") or action.get("target_label") or action.get("target_screen")
+            condition = action.get("condition")
+            print(
+                f"     - action={action_type} target={destination or '<none>'}"
+                f"{' if ' + condition if condition else ''}"
+            )
     return 0
 
 
@@ -215,4 +299,141 @@ def _validate_menu_references(conn: sqlite3.Connection) -> List[str]:
     if orphans:
         issues.append(f"{len(orphans)} menu choices reference missing menus.")
     return issues
+
+
+def _build_graph_export(conn: sqlite3.Connection) -> Dict[str, Any]:
+    metadata = {row["key"]: row["value"] for row in conn.execute("SELECT key, value FROM cache_meta")}
+    nodes: List[Dict[str, Any]] = []
+    edges: List[Dict[str, Any]] = []
+
+    label_nodes: Dict[str, str] = {}
+    for row in conn.execute("SELECT name, file_path, line_number FROM labels"):
+        node_id = f"label:{row['name']}"
+        label_nodes[row["name"]] = node_id
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "label",
+                "name": row["name"],
+                "file_path": row["file_path"],
+                "line_number": row["line_number"],
+            }
+        )
+
+    menu_nodes: Dict[int, str] = {}
+    for row in conn.execute("SELECT id, label_name, menu_index, prompt FROM menus"):
+        node_id = f"menu:{row['id']}"
+        menu_nodes[row["id"]] = node_id
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "menu",
+                "label_name": row["label_name"],
+                "menu_index": row["menu_index"],
+                "prompt": row["prompt"],
+            }
+        )
+        source_id = label_nodes.get(row["label_name"])
+        if source_id:
+            edges.append(
+                {
+                    "id": f"edge:{source_id}->{node_id}",
+                    "kind": "label-menu",
+                    "source": source_id,
+                    "target": node_id,
+                }
+            )
+
+    for row in conn.execute(
+        """
+        SELECT menu_choices.menu_id, menu_choices.choice_index, menu_choices.text,
+               menu_choices.destination, menu_choices.has_condition
+        FROM menu_choices
+        """
+    ):
+        menu_node_id = menu_nodes.get(row["menu_id"])
+        if not menu_node_id:
+            continue
+        target_label = row["destination"]
+        target_node = label_nodes.get(target_label) if target_label else None
+        edges.append(
+            {
+                "id": f"choice:{row['menu_id']}:{row['choice_index']}",
+                "kind": "menu-choice",
+                "source": menu_node_id,
+                "target": target_node or f"label:{target_label}" if target_label else "<return>",
+                "text": row["text"],
+                "condition": bool(row["has_condition"]),
+            }
+        )
+
+    for row in conn.execute(
+        "SELECT source_label, target_label, flow_type, condition FROM edges"
+    ):
+        source_id = label_nodes.get(row["source_label"])
+        target_id = label_nodes.get(row["target_label"]) if row["target_label"] else "<return>"
+        if not source_id:
+            continue
+        edges.append(
+            {
+                "id": f"flow:{row['source_label']}->{row['target_label'] or 'return'}",
+                "kind": "label-flow",
+                "source": source_id,
+                "target": target_id,
+                "flow_type": row["flow_type"],
+                "condition": row["condition"],
+            }
+        )
+
+    for row in conn.execute("SELECT screen_name, file_path, line_number, metadata_json FROM screens"):
+        node_id = f"screen:{row['screen_name']}"
+        nodes.append(
+            {
+                "id": node_id,
+                "type": "screen",
+                "name": row["screen_name"],
+                "file_path": row["file_path"],
+                "line_number": row["line_number"],
+            }
+        )
+        metadata_json = _parse_json(row["metadata_json"])
+        for element in metadata_json.get("elements", []):
+            for action in element.get("actions", []):
+                destination = (
+                    action.get("destination")
+                    or action.get("target_label")
+                    or action.get("target_screen")
+                )
+                if not destination:
+                    continue
+                target_id = (
+                    label_nodes.get(destination)
+                    or f"label:{destination}"
+                )
+                edges.append(
+                    {
+                        "id": f"screen:{row['screen_name']}->{destination}",
+                        "kind": "screen-action",
+                        "source": node_id,
+                        "target": target_id,
+                        "action_type": action.get("action_type") or action.get("type"),
+                    }
+                )
+
+    return {"metadata": metadata, "nodes": nodes, "edges": edges}
+
+
+def _get_meta_value(conn: sqlite3.Connection, key: str) -> Optional[str]:
+    cursor = conn.execute("SELECT value FROM cache_meta WHERE key = ?", (key,))
+    row = cursor.fetchone()
+    return row[0] if row else None
+
+
+def _parse_json(raw: Optional[str]) -> Dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
 

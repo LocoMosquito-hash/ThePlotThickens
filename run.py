@@ -91,12 +91,34 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         default=5,
         help="Maximum number of labels to list when no label is specified.",
     )
+    inspect.add_argument(
+        "--screen",
+        type=str,
+        help="Screen name to inspect.",
+    )
+    inspect.add_argument(
+        "--screen-limit",
+        type=int,
+        default=5,
+        help="Maximum number of screens to list in the summary.",
+    )
 
     validate = subparsers.add_parser(
         "flowviz-cache-validate",
         help="Validate cache integrity for a slot.",
     )
     validate.add_argument("--slot-id", type=int, required=True, help="Slot ID to validate.")
+
+    export = subparsers.add_parser(
+        "flowviz-cache-export",
+        help="Export graph-oriented data for FlowViz UI consumption.",
+    )
+    export.add_argument("--slot-id", type=int, required=True, help="Slot ID to export.")
+    export.add_argument(
+        "--output",
+        type=str,
+        help="Optional output path (defaults to slots/<n>/cache/graph_export.json).",
+    )
 
     return parser
 
@@ -141,6 +163,10 @@ def main() -> None:
         from app.flowviz.cache_reader import run_cache_validator
 
         raise SystemExit(run_cache_validator(args))
+    if args.command == "flowviz-cache-export":
+        from app.flowviz.cache_reader import run_cache_export
+
+        raise SystemExit(run_cache_export(args))
 
     parser.print_help()
 
