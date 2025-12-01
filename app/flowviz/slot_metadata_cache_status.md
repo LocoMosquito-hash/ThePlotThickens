@@ -32,7 +32,10 @@ This log captures the current state of the slot-cache plan as of December 1, 202
 
 ### Pending / Open Questions (from plan)
 
-1. **Schema fidelity vs. AHS alignment** – need to confirm whether additional tables (AHS node hashes, helper-label metadata) are required before downstream features consume the cache.
+1. **AHS-Core vs AHS-View alignment** – decided to split responsibilities:
+   - **AHS-Core (cache phase)** will persist canonical node hashes, stable menu/choice IDs, and base adjacency edges inside `metadata.db`.
+   - **AHS-View (UI phase)** will handle helper-label visibility, per-game overrides, and presentation tweaks without forcing cache regeneration.
+     Remaining work: extend the schema to store AHS-Core data and document how AHS-View consumes it.
 2. **Automatic cache staleness detection** – no hashing or mtime tracking yet. Re-runs overwrite caches manually.
 3. **Performance guardrails** – no runtime/memory thresholds or progress reporting yet.
 4. **Tooling roadmap** – inspector/validator exist, but BOM tester, AST chunk dumper, and standalone analyzer CLI ergonomics still need outlining.
