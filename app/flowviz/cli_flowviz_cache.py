@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from app import db_sqlite
+from app.flowviz.cache_writer import write_cache_database
 
 FlowSourceMode = Literal["rpyc_only", "rpy_only", "auto"]
 RuntimePreference = Literal["prefer", "require", "disable"]
@@ -96,6 +97,21 @@ def run_flowviz_cache(options: FlowvizCacheCLIOptions) -> int:
     payload_path = cache_dir / "sdk_payload.json"
     payload_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     logger.info("SDK payload saved to %s", payload_path)
+
+    runtime_descriptor = (
+        runtime.bundled.descriptor if runtime.bundled is not None else "embedded-sdk"
+    )
+    cache_db_path = write_cache_database(
+        cache_dir=cache_dir,
+        payload=payload,
+        story_record=story_record,
+        slot_record=slot_record,
+        source_mode=options.source_mode,
+        runtime_mode=runtime.mode,
+        runtime_descriptor=runtime_descriptor,
+        runtime_executable=str(runtime.python_executable),
+    )
+    logger.info("Cache database written to %s", cache_db_path)
 
     logger.info("flowviz-cache CLI invocation completed successfully.")
     return 0
