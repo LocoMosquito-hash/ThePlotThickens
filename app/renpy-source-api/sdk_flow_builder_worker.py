@@ -33,6 +33,7 @@ FORCE_RPYC_PATHS: Set[Path] = set()
 PROJECT_ROOT: Optional[Path] = None
 GAME_DIR: Optional[Path] = None
 PROCESS_RPYC_ONLY: bool = False
+PROCESS_RPY_ONLY: bool = False
 _HIDDEN_SOURCE_ORIGINALS: Set[Path] = set()
 _FREEZE_REFERENCE_TS = datetime(2005, 1, 1, 0, 0).timestamp()
 
@@ -1006,6 +1007,8 @@ def main() -> None:
     binary_hidden: List[Tuple[Path, Path]] = []
     if PROCESS_RPYC_ONLY:
         binary_hidden = _temporarily_hide_all_rpy_sources()
+    elif PROCESS_RPY_ONLY:
+        binary_hidden = _temporarily_hide_all_rpyc_files()
     hidden_force = _temporarily_hide_force_rpyc_files()
     hidden_files = _temporarily_hide_ignored_files()
     sanitized_backups = _swap_in_sanitized_scripts(project_root)
@@ -1213,6 +1216,34 @@ def _temporarily_hide_all_rpy_sources() -> List[Tuple[Path, Path]]:
     return hidden
 
 
+def _temporarily_hide_all_rpyc_files() -> List[Tuple[Path, Path]]:
+    hidden: List[Tuple[Path, Path]] = []
+    if GAME_DIR is None:
+        return hidden
+
+    for rpyc_file in GAME_DIR.rglob("*.rpyc"):
+        if not rpyc_file.exists():
+            continue
+        if rpyc_file in _HIDDEN_SOURCE_ORIGINALS:
+            continue
+        if not _is_within_game_dir(rpyc_file):
+            continue
+        hidden_path = _next_available_suffix(rpyc_file, ".rpyonly")
+        try:
+            rpyc_file.rename(hidden_path)
+            _HIDDEN_SOURCE_ORIGINALS.add(rpyc_file)
+            hidden.append((rpyc_file, hidden_path))
+        except Exception as exc:
+            print(f"[SDK_WORKER] rpy_only: failed to hide {rpyc_file}: {exc}", file=sys.stderr)
+            continue
+
+    print(
+        f"[SDK_WORKER] rpy_only: hid {len(hidden)} .rpyc compiled files before bootstrap.",
+        file=sys.stderr,
+    )
+    return hidden
+
+
 def _freeze_rpy_sources(game_dir: Path) -> None:
     if not game_dir.exists():
         if DEBUG_ENABLED:
@@ -1243,7 +1274,7 @@ def _freeze_rpy_sources(game_dir: Path) -> None:
 
 
 def _load_flowviz_config(project_root: Path) -> None:
-    global FLOW_CONFIG, IGNORED_PATHS, FORCE_RPYC_PATHS, GAME_DIR, PROJECT_ROOT, PROCESS_RPYC_ONLY
+    global FLOW_CONFIG, IGNORED_PATHS, FORCE_RPYC_PATHS, GAME_DIR, PROJECT_ROOT, PROCESS_RPYC_ONLY, PROCESS_RPY_ONLY
     PROJECT_ROOT = project_root
     game_dir = (project_root / "game").resolve()
     GAME_DIR = game_dir
@@ -1251,6 +1282,8 @@ def _load_flowviz_config(project_root: Path) -> None:
     FLOW_CONFIG = {}
     IGNORED_PATHS = set()
     FORCE_RPYC_PATHS = set()
+    PROCESS_RPYC_ONLY = False
+    PROCESS_RPY_ONLY = False
 
     if not config_path.exists():
         if DEBUG_ENABLED:
@@ -1277,7 +1310,15 @@ def _load_flowviz_config(project_root: Path) -> None:
     force_list = ", ".join(str(path) for path in sorted(FORCE_RPYC_PATHS)) or "<none>"
     print(f"[SDK_WORKER] Ignored files: {ignore_list}", file=sys.stderr)
     print(f"[SDK_WORKER] Forced .rpyc files: {force_list}", file=sys.stderr)
-    PROCESS_RPYC_ONLY = bool(FLOW_CONFIG.get("process_rpyc_only", False))
+    source_mode = os.environ.get("FLOW_SOURCE_MODE") or FLOW_CONFIG.get("source_mode")
+    normalized_mode = str(source_mode).strip().lower() if isinstance(source_mode, str) else None
+    if normalized_mode == "rpy_only":
+        PROCESS_RPY_ONLY = True
+    elif normalized_mode == "rpyc_only":
+        PROCESS_RPYC_ONLY = True
+    else:
+        PROCESS_RPYC_ONLY = bool(FLOW_CONFIG.get("process_rpyc_only", False))
+
     if PROCESS_RPYC_ONLY:
         print("[SDK_WORKER] process_rpyc_only enabled: only .rpyc files will be processed.", file=sys.stderr)
         try:
@@ -1285,6 +1326,8 @@ def _load_flowviz_config(project_root: Path) -> None:
         except Exception:
             all_sources = set(game_dir.rglob("*.rpy"))
         FORCE_RPYC_PATHS.update(all_sources)
+    if PROCESS_RPY_ONLY:
+        print("[SDK_WORKER] rpy_only mode enabled: ignoring compiled .rpyc files.", file=sys.stderr)
 
 
 def _resolve_config_paths(game_dir: Path, entries: Any) -> Set[Path]:

@@ -4,14 +4,23 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from app import db_sqlite
 
 FlowSourceMode = Literal["rpyc_only", "rpy_only", "auto"]
 RuntimePreference = Literal["prefer", "require", "disable"]
+
+RENPY_API_DIR = Path(__file__).resolve().parents[1] / "renpy-source-api"
+if str(RENPY_API_DIR) not in sys.path:
+    sys.path.insert(0, str(RENPY_API_DIR))
+
+from runtime_locator import BundledPythonRuntime, locate_bundled_python  # type: ignore  # noqa: E402
 
 
 @dataclass
@@ -70,8 +79,36 @@ def run_flowviz_cache(options: FlowvizCacheCLIOptions) -> int:
         options=options,
     )
 
-    logger.info("flowviz-cache CLI scaffold completed successfully.")
+    runtime = _select_runtime(slot_path, options.bundled_runtime, logger)
+    if runtime is None:
+        return 1
+
+    payload = _run_sdk_worker(
+        project_root=slot_path,
+        cache_dir=cache_dir,
+        runtime=runtime,
+        source_mode=options.source_mode,
+        logger=logger,
+    )
+    if payload is None:
+        return 1
+
+    payload_path = cache_dir / "sdk_payload.json"
+    payload_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    logger.info("SDK payload saved to %s", payload_path)
+
+    logger.info("flowviz-cache CLI invocation completed successfully.")
     return 0
+
+
+@dataclass
+class RuntimeSelection:
+    """Active runtime information for SDK worker execution."""
+
+    mode: Literal["bundled", "sdk"]
+    python_executable: Path
+    sdk_base: Path
+    bundled: Optional[BundledPythonRuntime] = None
 
 
 def _load_slot_and_story(
@@ -198,4 +235,175 @@ def _print_summary(
     ]
 
     print("\n".join(summary_lines))
+
+
+def _select_runtime(
+    slot_path: Path,
+    preference: RuntimePreference,
+    logger: logging.Logger,
+) -> Optional[RuntimeSelection]:
+    """Determine whether to use the bundled runtime or fallback SDK."""
+
+    project_root = slot_path
+    if preference != "disable":
+        runtime = locate_bundled_python(project_root)
+        if runtime:
+            major_version = _probe_python_major(runtime)
+            if major_version is not None and major_version < 3:
+                if preference == "require":
+                    logger.error(
+                        "Bundled runtime is Python %s, but only Python 3 runtimes are supported right now.",
+                        major_version,
+                    )
+                    return None
+                logger.info(
+                    "Detected Python %s bundled runtime; falling back to embedded SDK until Py2 worker parity is ready.",
+                    major_version,
+                )
+            elif runtime.renpy_engine_dir is None:
+                logger.warning(
+                    "Bundled runtime found (%s) but missing 'renpy/' directory; falling back to SDK.",
+                    runtime.descriptor,
+                )
+            elif major_version is None or major_version >= 3:
+                logger.info(
+                    "Using bundled runtime '%s' at %s",
+                    runtime.descriptor,
+                    runtime.python_executable,
+                )
+                return RuntimeSelection(
+                    mode="bundled",
+                    python_executable=runtime.python_executable,
+                    sdk_base=runtime.root_dir,
+                    bundled=runtime,
+                )
+        elif preference == "require":
+            logger.error(
+                "Bundled runtime required but not found under %s.",
+                project_root,
+            )
+            return None
+
+    elif preference == "require":
+        logger.error("Bundled runtime required but not found under %s.", project_root)
+        return None
+
+    sdk_base = RENPY_API_DIR / "renpy_sdk" / "renpy-8.4.0-sdk"
+    python_executable = sdk_base / "lib" / "py3-windows-x86_64" / "python.exe"
+    if not python_executable.exists():
+        logger.error("Embedded Ren'Py SDK python executable missing: %s", python_executable)
+        return None
+    logger.info("Using embedded Ren'Py SDK runtime at %s", python_executable)
+    return RuntimeSelection(mode="sdk", python_executable=python_executable, sdk_base=sdk_base)
+
+
+def _run_sdk_worker(
+    project_root: Path,
+    cache_dir: Path,
+    runtime: RuntimeSelection,
+    source_mode: FlowSourceMode,
+    logger: logging.Logger,
+) -> Optional[Dict[str, Any]]:
+    """Invoke the SDK worker and return the parsed JSON payload."""
+
+    worker_script = RENPY_API_DIR / "sdk_flow_builder_worker.py"
+    if not worker_script.exists():
+        logger.error("SDK worker script not found at %s", worker_script)
+        return None
+
+    cmd = [str(runtime.python_executable), str(worker_script), str(project_root)]
+    env = os.environ.copy()
+    env["FLOW_SOURCE_MODE"] = source_mode
+    if runtime.mode == "bundled" and runtime.bundled is not None:
+        _apply_bundled_runtime_env(runtime.bundled, env)
+    else:
+        env.pop("FLOW_BUNDLED_RUNTIME", None)
+        env.pop("FLOW_BUNDLED_RENPY_BASE", None)
+        env.pop("FLOW_BUNDLED_RENPY_DIR", None)
+        env.pop("FLOW_BUNDLED_LAUNCHER", None)
+        env.pop("PYTHONHOME", None)
+        env.pop("FLOW_PYTHON_STDLIB", None)
+
+    logger.debug("Executing SDK worker: %s", " ".join(cmd))
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(project_root))
+    log_stdout = cache_dir / "sdk_worker_stdout.log"
+    log_stderr = cache_dir / "sdk_worker_stderr.log"
+    log_stdout.write_text(result.stdout or "", encoding="utf-8", errors="ignore")
+    log_stderr.write_text(result.stderr or "", encoding="utf-8", errors="ignore")
+    logger.debug("SDK worker wrote stdout to %s and stderr to %s", log_stdout, log_stderr)
+
+    if result.returncode != 0:
+        logger.error(
+            "SDK worker failed with exit code %s. See %s for details.",
+            result.returncode,
+            log_stderr,
+        )
+        return None
+
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        logger.error("Failed to parse SDK worker output: %s", exc)
+        return None
+
+    logger.info(
+        "SDK worker completed successfully (%d labels, %d screens).",
+        len(payload.get("labels", [])),
+        len(payload.get("screens", [])),
+    )
+    return payload
+
+
+def _apply_bundled_runtime_env(runtime: BundledPythonRuntime, env: Dict[str, str]) -> None:
+    """Populate environment variables required for bundled runtimes."""
+
+    env["FLOW_BUNDLED_RUNTIME"] = "1"
+    env["FLOW_BUNDLED_RENPY_BASE"] = str(runtime.root_dir)
+    if runtime.renpy_engine_dir:
+        env["FLOW_BUNDLED_RENPY_DIR"] = str(runtime.renpy_engine_dir)
+    if runtime.launcher_path:
+        env["FLOW_BUNDLED_LAUNCHER"] = str(runtime.launcher_path)
+    if runtime.platform_dir.exists():
+        env["PYTHONHOME"] = str(runtime.platform_dir)
+        env["PATH"] = str(runtime.platform_dir) + os.pathsep + env.get("PATH", "")
+        env.setdefault("PYTHONOPTIMIZE", "2")
+
+    stdlib_candidates: List[Path] = []
+    platform_lib = runtime.platform_dir / "Lib"
+    if platform_lib.exists():
+        stdlib_candidates.append(platform_lib)
+        site_packages = platform_lib / "site-packages"
+        if site_packages.exists():
+            stdlib_candidates.append(site_packages)
+    legacy_stdlib = runtime.root_dir / "pythonlib2.7"
+    if legacy_stdlib.exists():
+        stdlib_candidates.append(legacy_stdlib)
+
+    if stdlib_candidates:
+        combined = os.pathsep.join(str(path) for path in stdlib_candidates)
+        existing_pythonpath = env.get("PYTHONPATH")
+        env["PYTHONPATH"] = (
+            f"{combined}{os.pathsep}{existing_pythonpath}" if existing_pythonpath else combined
+        )
+        env["FLOW_PYTHON_STDLIB"] = str(stdlib_candidates[0])
+
+
+def _probe_python_major(runtime: BundledPythonRuntime) -> Optional[int]:
+    """Determine the major version of a bundled runtime."""
+
+    env = os.environ.copy()
+    _apply_bundled_runtime_env(runtime, env)
+    probe = subprocess.run(
+        [str(runtime.python_executable), "-c", "import sys; print(sys.version_info[0])"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if probe.returncode != 0:
+        return None
+    text = (probe.stdout or "").strip()
+    try:
+        return int(text)
+    except ValueError:
+        return None
 
