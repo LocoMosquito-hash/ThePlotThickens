@@ -75,6 +75,29 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         help="Console log level for the CLI run.",
     )
 
+    inspect = subparsers.add_parser(
+        "flowviz-cache-inspect",
+        help="Inspect cached labels or menus for a slot.",
+    )
+    inspect.add_argument("--slot-id", type=int, required=True, help="Slot ID to inspect.")
+    inspect.add_argument(
+        "--label",
+        type=str,
+        help="Label name to inspect; omit to show cache summary.",
+    )
+    inspect.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="Maximum number of labels to list when no label is specified.",
+    )
+
+    validate = subparsers.add_parser(
+        "flowviz-cache-validate",
+        help="Validate cache integrity for a slot.",
+    )
+    validate.add_argument("--slot-id", type=int, required=True, help="Slot ID to validate.")
+
     return parser
 
 
@@ -110,6 +133,14 @@ def main() -> None:
 
     if args.command == "flowviz-cache":
         raise SystemExit(_run_flowviz_cache(args))
+    if args.command == "flowviz-cache-inspect":
+        from app.flowviz.cache_reader import run_cache_inspector
+
+        raise SystemExit(run_cache_inspector(args))
+    if args.command == "flowviz-cache-validate":
+        from app.flowviz.cache_reader import run_cache_validator
+
+        raise SystemExit(run_cache_validator(args))
 
     parser.print_help()
 
