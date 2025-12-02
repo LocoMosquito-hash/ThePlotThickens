@@ -246,7 +246,7 @@ def _inspect_screen(conn: sqlite3.Connection, screen_name: str) -> int:
 def _validate_required_tables(conn: sqlite3.Connection) -> List[str]:
     """Ensure the core tables exist."""
 
-    required = {"cache_meta", "labels", "menus", "menu_choices", "edges", "screens"}
+    required = {"cache_meta", "labels", "menus", "menu_choices", "edges", "screens", "ahs_nodes", "ahs_edges"}
     cursor = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name IN ({placeholders})".format(
             placeholders=",".join("?" for _ in required)

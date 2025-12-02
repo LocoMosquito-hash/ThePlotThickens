@@ -26,16 +26,14 @@ This log captures the current state of the slot-cache plan as of December 1, 202
 
    - `flowviz-cache-inspect` summary view plus per-label drilldown (menus, choices, outgoing edges).
    - `flowviz-cache-validate` ensures schema presence, cache_meta completeness, and basic relational integrity.
+   - Added screen/action inspector, graph export, and AHS-Core aware schema validation.
 
 5. **Runtime logs & artifacts**
    - Each slot run writes `cache/flowviz_cache.log`, `sdk_worker_stdout.log`, `sdk_worker_stderr.log`, and `sdk_payload.json` alongside `metadata.db`.
 
 ### Pending / Open Questions (from plan)
 
-1. **AHS-Core vs AHS-View alignment** – decided to split responsibilities:
-   - **AHS-Core (cache phase)** will persist canonical node hashes, stable menu/choice IDs, and base adjacency edges inside `metadata.db`.
-   - **AHS-View (UI phase)** will handle helper-label visibility, per-game overrides, and presentation tweaks without forcing cache regeneration.
-     Remaining work: extend the schema to store AHS-Core data and document how AHS-View consumes it.
+1. **AHS-Core vs AHS-View alignment** – AHS-Core is now persisted in cache generation (hashes + adjacency). Next phase is AHS-View: design FlowViz/UI consumption, helper-label policies, and top-down wiring (build visualization mockups/UI first, then connect to AHS-Core so both ends meet halfway).
 2. **Automatic cache staleness detection** – no hashing or mtime tracking yet. Re-runs overwrite caches manually.
 3. **Performance guardrails** – no runtime/memory thresholds or progress reporting yet.
 4. **Tooling roadmap** – inspector/validator exist, but BOM tester, AST chunk dumper, and standalone analyzer CLI ergonomics still need outlining.
@@ -45,8 +43,10 @@ This log captures the current state of the slot-cache plan as of December 1, 202
 
 ### Next Suggested Steps
 
-1. Expand inspector tooling to include screen/action views and graph-oriented exports for FlowViz UI consumption.
-2. Decide on schema alignment with Authoritative Hierarchy System before wiring Dialog Search / Decision Points to the cache.
-3. Design staleness detection (hash-based or timestamp-based) so the validator can warn users when slot sources changed after last extraction.
+1. Expand inspector tooling to include screen/action views and graph-oriented exports for FlowViz UI consumption. ✅
+2. Decide on schema alignment with Authoritative Hierarchy System before wiring Dialog Search / Decision Points to the cache. ✅ (AHS-Core implemented; AHS-View design pending.)
+3. Design staleness detection (hash-based or timestamp-based) so the validator can warn users when slot sources changed after last extraction. ⏳
+4. Implement AHS-Core schema additions (hash tables/columns + writer integration). ✅
+5. Update extraction pipeline to compute AHS-Core data before writing `metadata.db`, and document how AHS-View will consume these hashes for FlowViz/UI layers. ✅ (Core side done; AHS-View documentation/consumption remains.)
 
 Please update this log whenever key plan milestones are reached or open questions are resolved.
