@@ -25,6 +25,7 @@ from app.views.window_selector_tab import WindowSelectorTab
 from app.views.screenshots_tab import ScreenshotsTab
 from app.views.dialog_search_tab import DialogSearchTab
 from app.views.renpy_options_tab import RenpyOptionsTab
+from app.flowviz.tab import FlowVizTab
 
 
 class SourceAnalysisWorker(QThread):
@@ -512,12 +513,17 @@ class SourceAnalysisTab(QWidget):
         self.renpy_options_tab = RenpyOptionsTab(self.db_conn)
         self.sub_tabs.addTab(self.renpy_options_tab, "Ren'Py Options")
         
+        # FlowViz pre-alpha tab
+        self.flowviz_tab = FlowVizTab()
+        self.sub_tabs.addTab(self.flowviz_tab, "FlowViz")
+        
         # Add icons to tabs
         self.sub_tabs.setTabIcon(0, icon_manager.get_icon("settings"))
         self.sub_tabs.setTabIcon(1, icon_manager.get_icon("window"))
         self.sub_tabs.setTabIcon(2, icon_manager.get_icon("camera"))
         self.sub_tabs.setTabIcon(3, icon_manager.get_icon("search"))
         self.sub_tabs.setTabIcon(4, icon_manager.get_icon("folder_open"))
+        self.sub_tabs.setTabIcon(5, icon_manager.get_icon("git-branch"))
         
         # Connect window selection between Window Selector and Screenshots tabs
         self.window_selector_tab.window_selected.connect(self.screenshots_tab.set_selected_window)
@@ -539,3 +545,4 @@ class SourceAnalysisTab(QWidget):
         self.screenshots_tab.set_story(story_id, story_data)
         self.dialog_search_tab.set_story(story_id, story_data) 
         self.renpy_options_tab.set_story(story_id, story_data)
+        self.flowviz_tab.set_story(story_id, story_data)
