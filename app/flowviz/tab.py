@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Dict, Optional, Any
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QSplitter, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QSplitter, QVBoxLayout, QWidget, QFrame, QSizePolicy
 
 from .models import DummyGraphFactory, FlowVizGraph
 from .ui import FlowVizCanvasWidget, FlowVizInspectorPanel, FlowVizToolbar
@@ -41,8 +41,34 @@ class FlowVizTab(QWidget):
         self.canvas_widget = FlowVizCanvasWidget()
         splitter.addWidget(self.canvas_widget)
 
+        self.side_panel = QWidget()
+        side_layout = QVBoxLayout(self.side_panel)
+        side_layout.setContentsMargins(12, 12, 12, 12)
+        side_layout.setSpacing(12)
+
+        self.inspector_box = QFrame()
+        self.inspector_box.setObjectName("FlowVizInspectorBox")
+        self.inspector_box.setStyleSheet(
+            """
+            #FlowVizInspectorBox {
+                background-color: #0f1116;
+                border: 1px solid #1f2937;
+                border-radius: 8px;
+            }
+            """
+        )
+        self.inspector_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        inspector_box_layout = QVBoxLayout(self.inspector_box)
+        inspector_box_layout.setContentsMargins(0, 0, 0, 0)
+
         self.inspector = FlowVizInspectorPanel()
-        splitter.addWidget(self.inspector)
+        self.inspector.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        inspector_box_layout.addWidget(self.inspector)
+
+        side_layout.addWidget(self.inspector_box)
+        side_layout.addStretch()
+
+        splitter.addWidget(self.side_panel)
         splitter.setStretchFactor(0, 4)
         splitter.setStretchFactor(1, 1)
 
