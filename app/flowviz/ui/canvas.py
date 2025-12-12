@@ -289,10 +289,22 @@ class FlowVizEdgeItem(QGraphicsPathItem):
         self.edge = edge
         self.source_item = source_item
         self.target_item = target_item
+        self._arrow_size = 10.0
         self.setZValue(0)
         self.setPen(self._build_pen())
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
         self.update_path()
+
+    def boundingRect(self) -> QRectF:
+        """
+        Ensure the arrowhead is not clipped.
+
+        QGraphicsPathItem's bounding rect only accounts for the path + pen width,
+        but our arrowhead triangle is drawn on top and may extend beyond that.
+        """
+        base = super().boundingRect()
+        pad = max(self._arrow_size, self.pen().widthF()) + 6.0
+        return base.adjusted(-pad, -pad, pad, pad)
 
     def _build_pen(self) -> QPen:
         pen = QPen(FlowVizPalette.EDGE_COLORS[self.edge.type], 2.2)
@@ -302,20 +314,29 @@ class FlowVizEdgeItem(QGraphicsPathItem):
         return pen
 
     def update_path(self) -> None:
-        start, end = self._calculate_anchors()
+        (start, start_dock), (end, end_dock) = self._calculate_anchors()
         path = QPainterPath(start)
-        mid_y = (start.y() + end.y()) / 2
-        control1 = QPointF(start.x(), mid_y)
-        control2 = QPointF(end.x(), mid_y)
+        control_distance = self._control_distance(start, end)
+        start_dir = self._dock_direction_vector(start_dock)
+        end_dir = self._dock_direction_vector(end_dock)
+        control1 = start + (start_dir * control_distance)
+        control2 = end + (end_dir * control_distance)
         path.cubicTo(control1, control2, end)
         self.setPath(path)
 
-    def _calculate_anchors(self) -> tuple[QPointF, QPointF]:
+    def _calculate_anchors(self) -> tuple[tuple[QPointF, str], tuple[QPointF, str]]:
+        # Use other-node center points for stable angle selection.
         start = self._anchor_for_item(
-            self.source_item, self.target_item.scenePos(), True, self.edge.choice_index
+            self.source_item,
+            self.target_item.center_point(),
+            True,
+            self.edge.choice_index,
         )
         end = self._anchor_for_item(
-            self.target_item, self.source_item.scenePos(), False, None
+            self.target_item,
+            self.source_item.center_point(),
+            False,
+            None,
         )
         return start, end
 
@@ -325,32 +346,68 @@ class FlowVizEdgeItem(QGraphicsPathItem):
         other_pos: QPointF,
         is_source: bool,
         choice_index: Optional[int],
-    ) -> QPointF:
+    ) -> tuple[QPointF, str]:
+        # Menu/Screen incoming edges should always dock on the top-center.
+        if not is_source and item.node.type in {NodeType.MENU, NodeType.SCREEN}:
+            return QPointF(item.scenePos().x() + item.width / 2.0, item.scenePos().y()), "n"
         # Special case for menu/screen rows.
         if item.node.type in {NodeType.MENU, NodeType.SCREEN} and choice_index is not None:
             side = "right" if other_pos.x() > item.scenePos().x() else "left"
-            return item.choice_anchor(choice_index, side)
+            dock = "e" if side == "right" else "w"
+            return item.choice_anchor(choice_index, side), dock
         # Standard 8-direction docking using best-fit angle.
         center = item.center_point()
         vector = other_pos - center
         angle = math.degrees(math.atan2(vector.y(), vector.x()))
         if -22.5 <= angle < 22.5:
-            return QPointF(item.scenePos().x() + item.width, center.y())
+            return QPointF(item.scenePos().x() + item.width, center.y()), "e"
         if 22.5 <= angle < 67.5:
-            return QPointF(item.scenePos().x() + item.width, item.scenePos().y() + item.height)
+            return (
+                QPointF(item.scenePos().x() + item.width, item.scenePos().y() + item.height),
+                "se",
+            )
         if 67.5 <= angle < 112.5:
-            return QPointF(center.x(), item.scenePos().y() + item.height)
+            return QPointF(center.x(), item.scenePos().y() + item.height), "s"
         if 112.5 <= angle < 157.5:
-            return QPointF(item.scenePos().x(), item.scenePos().y() + item.height)
+            return QPointF(item.scenePos().x(), item.scenePos().y() + item.height), "sw"
         if 157.5 <= angle < 202.5:
-            return QPointF(item.scenePos().x(), center.y())
+            return QPointF(item.scenePos().x(), center.y()), "w"
         if 202.5 <= angle < 247.5:
-            return QPointF(item.scenePos().x(), item.scenePos().y())
+            return QPointF(item.scenePos().x(), item.scenePos().y()), "nw"
         if 247.5 <= angle < 292.5:
-            return QPointF(center.x(), item.scenePos().y())
+            return QPointF(center.x(), item.scenePos().y()), "n"
         if 292.5 <= angle < 337.5:
-            return QPointF(item.scenePos().x() + item.width, item.scenePos().y())
-        return QPointF(center.x(), item.scenePos().y() if is_source else item.scenePos().y() + item.height)
+            return QPointF(item.scenePos().x() + item.width, item.scenePos().y()), "ne"
+        # Fallback: align with vertical flow.
+        if is_source:
+            return QPointF(center.x(), item.scenePos().y() + item.height), "s"
+        return QPointF(center.x(), item.scenePos().y()), "n"
+
+    def _dock_direction_vector(self, dock: str) -> QPointF:
+        """
+        Return the outward-pointing normal for a docking point.
+
+        This is used to shape the curve so it leaves/approaches nodes along the
+        docking direction, ensuring arrowheads sit outside node borders.
+        """
+        vectors = {
+            "n": QPointF(0.0, -1.0),
+            "s": QPointF(0.0, 1.0),
+            "e": QPointF(1.0, 0.0),
+            "w": QPointF(-1.0, 0.0),
+            "ne": QPointF(0.7071, -0.7071),
+            "nw": QPointF(-0.7071, -0.7071),
+            "se": QPointF(0.7071, 0.7071),
+            "sw": QPointF(-0.7071, 0.7071),
+        }
+        return vectors.get(dock, QPointF(0.0, 1.0))
+
+    def _control_distance(self, start: QPointF, end: QPointF) -> float:
+        """Scale control point distance to keep curves smooth at different spans."""
+        dx = abs(end.x() - start.x())
+        dy = abs(end.y() - start.y())
+        span = max(dx, dy)
+        return max(60.0, min(220.0, span * 0.35))
 
     def paint(self, painter: QPainter, option, widget=None) -> None:
         super().paint(painter, option, widget)
@@ -358,8 +415,10 @@ class FlowVizEdgeItem(QGraphicsPathItem):
 
     def _paint_arrowhead(self, painter: QPainter) -> None:
         end_point = self.path().pointAtPercent(1.0)
+        # QPainterPath.angleAtPercent returns degrees. Build a direction vector
+        # for the tangent and derive the arrow triangle around it.
         angle = math.radians(-self.path().angleAtPercent(1.0))
-        arrow_size = 10.0
+        arrow_size = self._arrow_size
         sin_a = math.sin(angle)
         cos_a = math.cos(angle)
         p1 = QPointF(
@@ -371,7 +430,7 @@ class FlowVizEdgeItem(QGraphicsPathItem):
             end_point.y() - arrow_size * sin_a + (arrow_size / 2) * cos_a,
         )
         painter.setBrush(self.pen().color())
-        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setPen(QPen(Qt.PenStyle.NoPen))
         path = QPainterPath()
         path.moveTo(end_point)
         path.lineTo(p1)
