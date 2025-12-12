@@ -27,11 +27,14 @@ class LayeredLayoutEngine:
 
     def __init__(
         self,
-        vertical_spacing: float = 180.0,
+        min_vertical_gap: float = 80.0,
         horizontal_padding: float = 120.0,
         top_margin: float = 40.0,
     ) -> None:
-        self.vertical_spacing = vertical_spacing
+        # Minimum distance (in pixels) between the *borders* of nodes in
+        # consecutive layers. This prevents tall nodes (menus/screens) from
+        # overlapping the next layer.
+        self.min_vertical_gap = min_vertical_gap
         self.horizontal_padding = horizontal_padding
         self.top_margin = top_margin
 
@@ -145,9 +148,15 @@ class LayeredLayoutEngine:
     def _assign_coordinates(
         self, layers: List[List[str]], node_map: Dict[str, FlowVizNode]
     ) -> None:
-        """Compute concrete coordinates for each node."""
-        for layer_index, layer in enumerate(layers):
-            y = self.top_margin + layer_index * self.vertical_spacing
+        """Compute concrete coordinates for each node without overlaps."""
+        current_y = self.top_margin
+        for layer in layers:
+            heights = [
+                FlowVizGeometry.node_dimensions(node_map[node_id])[1]
+                for node_id in layer
+            ]
+            max_height = max(heights, default=0.0)
+            y = current_y
             widths = [FlowVizGeometry.node_dimensions(node_map[node_id])[0] for node_id in layer]
             total_spacing = self.horizontal_padding * max(len(layer) - 1, 0)
             layer_width = sum(widths) + total_spacing
@@ -157,6 +166,7 @@ class LayeredLayoutEngine:
                 node = node_map[node_id]
                 node.position = FlowVizPosition(x=current_x, y=y)
                 current_x += width + self.horizontal_padding
+            current_y += max_height + self.min_vertical_gap
 
     def _normalize_positions(self, node_map: Dict[str, FlowVizNode]) -> None:
         """Shift nodes so the minimum x/y anchors at zero."""
